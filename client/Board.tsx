@@ -152,62 +152,49 @@ export default function Board({
             board.players[activePlayerIndex].stacks.map((stack, index) => {
               const [px, py] = getPlayerPosition(activePlayerIndex);
               return (
-                <div
-                  style={{
-                    position: "absolute",
-                    left: px + index * 60,
-                    top: py + 50,
-                    zIndex: 10000,
-                  }}
+                <StackDragTarget
                   key={index}
-                >
-                  <StackDragTarget
-                    card={stack[stack.length - 1]}
-                    stackHeight={stack.length}
-                    onDrop={(item: CardDnDItem) => {
-                      if (item.source.type === "solitaire") {
-                        executeMove({
-                          type: "s2s",
-                          source: item.source.pileIndex,
-                          dest: index,
-                          count:
-                            board.players[activePlayerIndex].stacks[
-                              item.source.pileIndex
-                            ].length - item.source.slotIndex,
-                        });
-                      } else {
-                        executeMove({
-                          type: "c2s",
-                          source:
-                            item.source.type === "pounce" ? "pounce" : "deck",
-                          dest: index,
-                        });
-                      }
-                    }}
-                  />
-                </div>
+                  left={px + index * 60}
+                  top={py + 50}
+                  rotate={0}
+                  card={stack[stack.length - 1]}
+                  stackHeight={stack.length}
+                  onDrop={(item: CardDnDItem) => {
+                    if (item.source.type === "solitaire") {
+                      executeMove({
+                        type: "s2s",
+                        source: item.source.pileIndex,
+                        dest: index,
+                        count:
+                          board.players[activePlayerIndex].stacks[
+                            item.source.pileIndex
+                          ].length - item.source.slotIndex,
+                      });
+                    } else {
+                      executeMove({
+                        type: "c2s",
+                        source:
+                          item.source.type === "pounce" ? "pounce" : "deck",
+                        dest: index,
+                      });
+                    }
+                  }}
+                />
               );
             })}
           <div style={{ position: "absolute", left: 600, top: 50 }}>
             <FieldDragTarget onDrop={executeMoveCardToCenter} />
           </div>
           {board.piles.map((pile, index) => (
-            <div
-              style={{
-                position: "absolute",
-                left: getBoardPilePosition(board, index)[0],
-                top: getBoardPilePosition(board, index)[1],
-                transform: `rotate(${board.pileLocs[index][2] * 360}deg)`,
-                zIndex: 10000,
-              }}
+            <FieldStackDragTarget
               key={index}
-            >
-              <FieldStackDragTarget
-                card={pile[pile.length - 1]}
-                stackHeight={pile.length}
-                onDrop={executeMoveCardToCenter}
-              />
-            </div>
+              card={pile[pile.length - 1]}
+              stackHeight={pile.length}
+              onDrop={executeMoveCardToCenter}
+              left={getBoardPilePosition(board, index)[0]}
+              top={getBoardPilePosition(board, index)[1]}
+              rotate={board.pileLocs[index][2] * 360}
+            />
           ))}
           {board.players.map((p, i) => (
             <Player player={p} index={i} key={i} />

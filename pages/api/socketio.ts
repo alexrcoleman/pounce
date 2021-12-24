@@ -1,15 +1,13 @@
 import {
-  BoardState,
   addPlayer,
-  createBoard,
-  isGameOver,
   removePlayer,
   resetBoard,
   startGame,
 } from "../../shared/GameUtils";
-import { executeMove, handleAIMove } from "../../shared/PlayerUtils";
+import { createRoom, deleteRoom, getRoom } from "../../server/Rooms";
 
 import { Server } from "socket.io";
+import { executeMove } from "../../shared/PlayerUtils";
 
 export const config = {
   api: {
@@ -17,47 +15,10 @@ export const config = {
   },
 };
 
-const rooms: Record<string, { board: BoardState; interval: NodeJS.Timer }> = {};
-const speed = 5;
-
-function createRoom(io: Server, roomId: string) {
-  const board = createBoard(0);
-  let aiCooldowns = board.players.map(() => 0);
-  const interval = setInterval(() => {
-    let hasUpdate = false;
-    if (!board.isActive) {
-      //no-op
-    } else if (isGameOver(board)) {
-      const pouncer = board.players.findIndex((p) => p.pounceDeck.length === 0);
-      board.isActive = false;
-      board.pouncer = pouncer;
-      hasUpdate = true;
-    } else {
-      hasUpdate =
-        board.players
-          .map((player, index) => {
-            if (aiCooldowns[index] > Date.now() || player.socketId != null) {
-              return false;
-            }
-            handleAIMove(board, index);
-            aiCooldowns[index] =
-              Date.now() + (Math.random() * 2000 + 5000) / speed;
-            return true;
-          })
-          .find(Boolean) != null;
-    }
-    if (hasUpdate) {
-      io.to(roomId).emit("update", { board, time: Date.now() });
-    }
-  }, 100);
-  rooms[roomId] = { board, interval };
-  io.to(roomId).emit("update", {
-    board,
-    time: Date.now(),
-  });
-}
-
-const socketData: Record<string, { name: string }> = {};
+const socketData: Record<
+  string,
+  { name?: string; currentRoom?: string; currentPlayerId?: number }
+> = {};
 
 export default function (req: any, res: any) {
   if (!res.socket.server.io) {
@@ -66,7 +27,7 @@ export default function (req: any, res: any) {
     const io = new Server(res.socket.server);
     const broadcastUpdate = (roomId: string) =>
       io.to(roomId).emit("update", {
-        board: rooms[roomId].board,
+        board: getRoom(roomId).board,
         time: Date.now(),
       });
     io.of("/").adapter.on("create-room", (id) => {
@@ -78,7 +39,7 @@ export default function (req: any, res: any) {
     io.of("/").adapter.on("leave-room", (id, userId) => {
       if (id.startsWith("pounce:")) {
         console.log(userId + " left " + id);
-        const board = rooms[id].board;
+        const board = getRoom(id).board;
         const index = board.players.findIndex((p) => p.socketId === userId);
         removePlayer(board, index);
         broadcastUpdate(id);
@@ -89,80 +50,87 @@ export default function (req: any, res: any) {
         console.log(
           userId + " entered " + id + " name=" + socketData[userId].name
         );
-        addPlayer(rooms[id].board, userId, socketData[userId].name);
+        addPlayer(getRoom(id).board, userId, socketData[userId].name);
         broadcastUpdate(id);
       }
     });
     io.of("/").adapter.on("delete-room", (id) => {
       if (id.startsWith("pounce:")) {
         console.log("Delete room: " + id);
-        const room = rooms[id];
-        clearInterval(room.interval);
-        delete rooms[id];
+        deleteRoom(id);
       }
     });
     io.on("connection", (socket) => {
-      let currentRoom: string | null = null;
-      let currentPlayerId: number | null = null;
+      socketData[socket.id] = {};
+      const user = socketData[socket.id];
       socket.on("join_room", async (args) => {
-        socketData[socket.id] = socketData[socket.id] ?? {};
-        socketData[socket.id].name = String(args.name);
+        user.name = String(args.name);
         const roomId = "pounce:" + args.roomId;
-        if (currentRoom != null) {
-          socket.leave(currentRoom);
+        if (user.currentRoom != null) {
+          socket.leave(user.currentRoom);
         }
-        currentRoom = roomId;
+        user.currentRoom = roomId;
         await socket.join(roomId);
-        currentPlayerId = rooms[currentRoom].board.players.findIndex(
-          (p) => p.socketId === socket.id
-        );
-        socket.emit("assign", currentPlayerId);
+        user.currentPlayerId = getRoom(
+          user.currentRoom
+        ).board.players.findIndex((p) => p.socketId === socket.id);
+        socket.emit("assign", user.currentPlayerId);
       });
       socket.on("move", (args) => {
-        if (currentPlayerId == null || currentRoom == null) {
+        if (user.currentPlayerId == null || user.currentRoom == null) {
           return;
         }
-        const room = rooms[currentRoom];
+        const room = getRoom(user.currentRoom);
         const board = room.board;
-        executeMove(board, currentPlayerId, args);
-        broadcastUpdate(currentRoom);
+        executeMove(board, user.currentPlayerId, args);
+        broadcastUpdate(user.currentRoom);
       });
       socket.on("add_ai", () => {
-        if (currentPlayerId == null || currentRoom == null) {
+        if (user.currentPlayerId == null || user.currentRoom == null) {
           return;
         }
 
-        const room = rooms[currentRoom];
+        const room = getRoom(user.currentRoom);
         addPlayer(room.board, null);
-        broadcastUpdate(currentRoom);
+        broadcastUpdate(user.currentRoom);
       });
       socket.on("remove_ai", () => {
-        if (currentPlayerId == null || currentRoom == null) {
+        if (user.currentPlayerId == null || user.currentRoom == null) {
           return;
         }
 
-        const { board } = rooms[currentRoom];
+        const { board } = getRoom(user.currentRoom);
         const aiIndex = board.players.findIndex((p) => p.socketId == null);
         removePlayer(board, aiIndex);
-        broadcastUpdate(currentRoom);
+        broadcastUpdate(user.currentRoom);
       });
       socket.on("start_game", () => {
-        if (currentPlayerId == null || currentRoom == null) {
+        if (user.currentPlayerId == null || user.currentRoom == null) {
           return;
         }
 
-        const room = rooms[currentRoom];
+        const room = getRoom(user.currentRoom);
         startGame(room.board);
-        broadcastUpdate(currentRoom);
+        broadcastUpdate(user.currentRoom);
       });
       socket.on("restart_game", () => {
-        if (currentPlayerId == null || currentRoom == null) {
+        if (user.currentPlayerId == null || user.currentRoom == null) {
           return;
         }
 
-        const room = rooms[currentRoom];
+        const room = getRoom(user.currentRoom);
         resetBoard(room.board);
-        broadcastUpdate(currentRoom);
+        broadcastUpdate(user.currentRoom);
+      });
+      socket.on("set_ai_speed", (args) => {
+        if (user.currentPlayerId == null || user.currentRoom == null) {
+          return;
+        }
+        const speed = Math.max(
+          3,
+          Math.min(8, typeof args.speed === "number" ? args.speed : 3)
+        );
+        getRoom(user.currentRoom).aiSpeed = speed;
       });
       socket.on("disconnect", () => {
         delete socketData[socket.id];

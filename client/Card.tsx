@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import React from "react";
 import { SourceType } from "./CardDnDItem";
+import joinClasses from "./joinClasses";
 import styles from "./Card.module.css";
 import { useDrag } from "react-dnd";
 import usePrevious from "./usePrevious";
@@ -83,8 +84,9 @@ const CardContentMemo = React.memo(function CardContent({
         isDragging: !!monitor.isDragging(),
       }),
       canDrag: () => canDrag,
+      // options: { dropEffect: "move" },
     }),
-    [source, card]
+    [source, card, positionX, positionY]
   );
 
   // For variance:
@@ -104,20 +106,23 @@ const CardContentMemo = React.memo(function CardContent({
   }, [positionX, positionY, zIndex]);
   return (
     <div
-      className={styles.root}
+      className={joinClasses(
+        styles.root,
+        onClick != null && styles.clickable,
+        canDrag && styles.draggable
+      )}
       style={
         {
-          left: positionX + offset.current * 2,
-          top: positionY,
-          transform: `rotate(${
-            rotation * 360 + rotationOffset.current * (rotation != 0 ? 10 : 2)
-          }deg)`,
           zIndex: zIndex + (isAnimating ? 1000 : 0),
           color: suitColor,
           "--c": color,
-          cursor: onClick != null ? "pointer" : canDrag ? "grab" : undefined,
-          // outline: isDragging ? "2px solid #FFE80088" : "",
-          opacity: isDragging ? 0.3 : 1,
+          "--r":
+            rotation * 360 +
+            rotationOffset.current * (rotation != 0 ? 10 : 2) +
+            "deg",
+          "--x": positionX + offset.current * 2 + "px",
+          "--y": positionY + "px",
+          opacity: isDragging ? 0.4 : 1,
         } as any
       }
       title={`${zIndex + 1} card(s)`}
@@ -204,6 +209,7 @@ const CardFace = React.memo(function CardFace({
                     style={{
                       gridColumn: colIndex + 1,
                       gridRow: row,
+                      marginLeft: colIndex === 1 ? -5 : undefined,
                       transform:
                         row > gridRowCount / 2 + 1 ? "scale(1, -1)" : "",
                     }}

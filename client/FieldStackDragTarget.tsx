@@ -6,14 +6,20 @@ type Props = {
   card: CardState | null;
   stackHeight: number;
   onDrop: (source: CardDnDItem) => void;
+  left: number;
+  top: number;
+  rotate: number;
 };
 
-const buffer = 4;
+const buffer = 15;
 
 export default function FieldStackDragTarget({
   card,
   onDrop,
   stackHeight,
+  left,
+  top,
+  rotate,
 }: Props) {
   const [{ isOver, canDrop }, drop] = useDrop(
     () => ({
@@ -41,9 +47,11 @@ export default function FieldStackDragTarget({
         zIndex: 1000000,
         backgroundColor: isOver && canDrop ? "rgba(255,255,0,.5)" : "",
         outline: canDrop ? "1px solid yellow" : "",
-        marginTop: -buffer,
-        borderRadius: 2,
-        marginLeft: -buffer,
+        borderRadius: 4,
+        position: "absolute",
+        transform: `translate(${left - buffer}px, ${
+          top - buffer
+        }px) rotate(${rotate}deg)`,
       }}
       ref={drop}
     />
