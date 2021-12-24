@@ -132,7 +132,7 @@ const CardContentMemo = React.memo(function CardContent({
       <div
         className={styles.body}
         style={{
-          transform: faceUp ? "rotateY(-180deg)" : "",
+          transform: faceUp ? "rotateY(180deg)" : "",
         }}
       >
         <div

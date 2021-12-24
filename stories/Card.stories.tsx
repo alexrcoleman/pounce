@@ -52,20 +52,22 @@ export const Draggable: ComponentStory<typeof Card> = (args) => {
           source={{ type: "pounce" }}
           boardState={board}
         />
-        <div style={{ position: "absolute", top: 0, left: 100 }}>
-          <FieldStackDragTarget
-            card={{ suit: "hearts", value: 2, player: 0 }}
-            stackHeight={1}
-            onDrop={() => console.log("Drop")}
-          />
-        </div>
-        <div style={{ position: "absolute", top: 0, left: 200 }}>
-          <StackDragTarget
-            card={{ suit: "clubs", value: 4, player: 0 }}
-            stackHeight={1}
-            onDrop={() => console.log("Drop")}
-          />
-        </div>
+        <FieldStackDragTarget
+          card={{ suit: "hearts", value: 2, player: 0 }}
+          stackHeight={1}
+          onDrop={() => console.log("Drop")}
+          left={100}
+          top={0}
+          rotate={0}
+        />
+        <StackDragTarget
+          card={{ suit: "clubs", value: 4, player: 0 }}
+          stackHeight={1}
+          onDrop={() => console.log("Drop")}
+          left={200}
+          top={0}
+          rotate={0}
+        />
       </div>
     </DndProvider>
   );
