@@ -1,0 +1,54 @@
+.root {
+  position: absolute;
+  border-radius: 3px;
+  height: 77px;
+  width: 55px;
+  transition: top 0.5s ease-in-out, left 0.5s ease-in-out,
+    transform 0.25s linear;
+  overflow: hidden;
+  perspective: 1000px;
+  box-shadow: 1px 1px 2px 0px rgba(0, 0, 0, 0.1);
+  user-select: none;
+}
+.body {
+  width: 100%;
+  height: 100%;
+  text-align: center;
+  transition: transform 0.25s;
+  background-color: white;
+  transform-style: preserve-3d;
+}
+.front,
+.back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  -webkit-backface-visibility: hidden; /* Safari */
+  backface-visibility: hidden;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background-color: white;
+}
+.front {
+  transform: rotateY(-180deg);
+}
+.back {
+  background-image: linear-gradient(135deg, var(--c) 25%, transparent 25%),
+    linear-gradient(225deg, var(--c) 25%, transparent 25%),
+    linear-gradient(45deg, var(--c) 25%, transparent 25%),
+    linear-gradient(315deg, var(--c) 25%, #e5e5f7 25%);
+  background-position: 7px 0, 7px 0, 0 0, 0 0;
+  background-size: 7px 7px;
+  background-repeat: repeat;
+}
+
+.frontGrid {
+  display: grid;
+  font-size: 14px;
+  height: 100%;
+  padding: 6px 0px;
+  align-items: center;
+  justify-content: center;
+  grid-template-columns: 12px 8px 12px;
+}
