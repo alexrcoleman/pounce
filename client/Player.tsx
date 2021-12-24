@@ -15,8 +15,7 @@ export default function Player({ player, index }: Props) {
         top: index * 175 + 15,
       }}
     >
-      Player {player.name}: {player.totalPoints} (+
-      {player.currentPoints})
+      {player.name}: {player.currentPoints} ({player.totalPoints} total)
     </div>
   );
 }

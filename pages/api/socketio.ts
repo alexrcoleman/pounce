@@ -66,6 +66,13 @@ export default function (req: any, res: any) {
       socket.on("join_room", async (args) => {
         user.name = String(args.name);
         const roomId = "pounce:" + args.roomId;
+        if (getRoom(roomId)?.board?.isActive) {
+          socket.emit(
+            "alert",
+            "Room currently has in progress game, join once the game is over"
+          );
+          return;
+        }
         if (user.currentRoom != null) {
           socket.leave(user.currentRoom);
         }
@@ -101,8 +108,10 @@ export default function (req: any, res: any) {
 
         const { board } = getRoom(user.currentRoom);
         const aiIndex = board.players.findIndex((p) => p.socketId == null);
-        removePlayer(board, aiIndex);
-        broadcastUpdate(user.currentRoom);
+        if (aiIndex >= 0) {
+          removePlayer(board, aiIndex);
+          broadcastUpdate(user.currentRoom);
+        }
       });
       socket.on("start_game", () => {
         if (user.currentPlayerId == null || user.currentRoom == null) {

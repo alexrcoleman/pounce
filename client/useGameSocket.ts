@@ -29,6 +29,9 @@ export default function useGameSocket(
       socket.on("assign", (id) => {
         setPlayerIndex(id);
       });
+      socket.on("alert", (message) => {
+        alert(message);
+      });
       socket.on("update", (data) => {
         setBoard(data.board);
         setLatency(Date.now() - data.time);

@@ -118,7 +118,8 @@ export function addPlayer(
   name?: string
 ) {
   if (board.isActive) {
-    throw new Error("Game is active, cannot add player");
+    console.warn("Game is active, cannot add player");
+    return -1;
   }
   board.players.push(
     createPlayer(socketId, board.players.length, name ?? randomName())

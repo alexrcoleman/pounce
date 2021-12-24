@@ -1,5 +1,5 @@
 import type { BoardState, CardState } from "../shared/GameUtils";
-import { RefObject, useCallback } from "react";
+import { RefObject, useCallback, useEffect, useState } from "react";
 
 import Card from "./Card";
 import { CardDnDItem } from "./CardDnDItem";
@@ -11,6 +11,8 @@ import { Move } from "../shared/PlayerUtils";
 import Player from "./Player";
 import { Socket } from "socket.io-client";
 import StackDragTarget from "./StackDragTarget";
+import { TouchBackend } from "react-dnd-touch-backend";
+import isTouchDevice from "./isTouchDevice";
 import styles from "./Board.module.css";
 
 type Props = {
@@ -27,7 +29,7 @@ export default function Board({
     executeMove({ type: "cycle" });
   }, [executeMove]);
   const executeMoveCardToCenter = useCallback(
-    (item: CardDnDItem) => {
+    (item: CardDnDItem, targetPile: number, position?: [number, number]) => {
       executeMove({
         type: "c2c",
         source:
@@ -38,6 +40,8 @@ export default function Board({
             : item.source.type === "solitaire"
             ? { type: "solitaire", index: item.source.pileIndex }
             : { type: "deck" /* invalid */ },
+        dest: targetPile,
+        position,
       });
     },
     [executeMove]
@@ -142,8 +146,13 @@ export default function Board({
       })
     );
 
+  const firstOpenStack = board.piles.findIndex((pile) => pile.length === 0);
+  const [useTouch, setUseTouch] = useState(false);
+  useEffect(() => {
+    setUseTouch(isTouchDevice());
+  }, []);
   return (
-    <DndProvider backend={HTML5Backend}>
+    <DndProvider backend={useTouch ? TouchBackend : HTML5Backend}>
       <div className={styles.root}>
         <div className={styles.rootInside}>
           <div className={styles.pileSection} />
@@ -183,14 +192,18 @@ export default function Board({
               );
             })}
           <div style={{ position: "absolute", left: 600, top: 50 }}>
-            <FieldDragTarget onDrop={executeMoveCardToCenter} />
+            <FieldDragTarget
+              onDrop={(item, position) =>
+                executeMoveCardToCenter(item, firstOpenStack, position)
+              }
+            />
           </div>
           {board.piles.map((pile, index) => (
             <FieldStackDragTarget
               key={index}
               card={pile[pile.length - 1]}
               stackHeight={pile.length}
-              onDrop={executeMoveCardToCenter}
+              onDrop={(item) => executeMoveCardToCenter(item, index)}
               left={getBoardPilePosition(board, index)[0]}
               top={getBoardPilePosition(board, index)[1]}
               rotate={board.pileLocs[index][2] * 360}

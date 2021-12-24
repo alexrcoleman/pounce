@@ -65,20 +65,22 @@ function solitaireToSolitaire(
   dest.push(...movingStack);
 }
 
-function getCentralPileForCard(
+function canPlayOnCenterPile(pile: CardState[], card: CardState) {
+  const top = pile[pile.length - 1];
+  return (
+    (top != null && top.suit === card.suit && top.value === card.value - 1) ||
+    (top == null && card.value === 1)
+  );
+}
+
+function getCentralPileForCardIndex(
   boardState: BoardState,
   card: CardState | undefined
 ) {
   if (card == null) {
-    return null;
+    return -1;
   }
-  return boardState.piles.find((pile) => {
-    const top = pile[pile.length - 1];
-    return (
-      (top != null && top.suit === card.suit && top.value === card.value - 1) ||
-      (top == null && card.value === 1)
-    );
-  });
+  return boardState.piles.findIndex((pile) => canPlayOnCenterPile(pile, card));
 }
 
 function canMoveToSolitairePile(
@@ -106,7 +108,8 @@ function cardToCenter(
   source:
     | { type: "pounce" }
     | { type: "solitaire"; index: number }
-    | { type: "deck" }
+    | { type: "deck" },
+  dest: number
 ) {
   const player = boardState.players[playerIndex];
   const sourceStack =
@@ -119,7 +122,10 @@ function cardToCenter(
   if (topCard == null) {
     throw new Error("No card to play from that pile");
   }
-  const pile = getCentralPileForCard(boardState, topCard);
+  const pile = boardState.piles[dest];
+  if (!pile || !canPlayOnCenterPile(pile, topCard)) {
+    throw new Error("Cannot play given card on pile");
+  }
   if (!pile) {
     throw new Error("No pile to play on");
   }
@@ -141,6 +147,8 @@ export type Move =
         | { type: "pounce" }
         | { type: "deck" }
         | { type: "solitaire"; index: number };
+      dest: number;
+      position?: [number, number];
     }
   | { type: "cycle" };
 
@@ -153,8 +161,16 @@ function getBasicAIMove(boardState: BoardState, playerIndex: number): Move {
 
   const player = boardState.players[playerIndex];
   // Play pounce card
-  if (getCentralPileForCard(boardState, peek(player.pounceDeck)) != null) {
-    return { type: "c2c", source: { type: "pounce" } };
+  const pounceToCenterIndex = getCentralPileForCardIndex(
+    boardState,
+    peek(player.pounceDeck)
+  );
+  if (pounceToCenterIndex >= 0) {
+    return {
+      type: "c2c",
+      source: { type: "pounce" },
+      dest: pounceToCenterIndex,
+    };
   }
 
   // Move pounce to solitaire
@@ -166,19 +182,27 @@ function getBasicAIMove(boardState: BoardState, playerIndex: number): Move {
   }
 
   // Play solitaire card
-  const playableSolitaire = player.stacks.findIndex(
-    (stack) => getCentralPileForCard(boardState, peek(stack)) != null
-  );
-  if (playableSolitaire >= 0) {
+  const playableSolitaire = player.stacks
+    .map((stack, index) => ({
+      source: index,
+      dest: getCentralPileForCardIndex(boardState, peek(stack)),
+    }))
+    .find((item) => item.dest >= 0);
+  if (playableSolitaire != null) {
     return {
       type: "c2c",
-      source: { type: "solitaire", index: playableSolitaire },
+      source: { type: "solitaire", index: playableSolitaire.source },
+      dest: playableSolitaire.dest,
     };
   }
 
   // Play deck card
-  if (getCentralPileForCard(boardState, peek(player.flippedDeck)) != null) {
-    return { type: "c2c", source: { type: "deck" } };
+  const deckCenterIndex = getCentralPileForCardIndex(
+    boardState,
+    peek(player.flippedDeck)
+  );
+  if (deckCenterIndex >= 0) {
+    return { type: "c2c", source: { type: "deck" }, dest: deckCenterIndex };
   }
 
   // Merge whole solitaire piles
@@ -264,7 +288,13 @@ export function executeMove(
     }
     const player = board.players[playerIndex];
     if (move.type === "c2c") {
-      cardToCenter(board, playerIndex, move.source);
+      cardToCenter(board, playerIndex, move.source, move.dest);
+      const pile = board.piles[move.dest];
+      // May set the position of the pile
+      if (pile.length === 1 && move.position) {
+        board.pileLocs[move.dest][0] = move.position[0];
+        board.pileLocs[move.dest][1] = move.position[1];
+      }
     } else if (move.type === "cycle") {
       cycleDeck(board, playerIndex);
     } else if (move.type === "c2s") {
