@@ -1,6 +1,7 @@
 import { CardDnDItem } from "./CardDnDItem";
 import { CardState } from "../shared/GameUtils";
 import { useDrop } from "react-dnd";
+import { useRef } from "react";
 
 type Props = {
   card: CardState | null;
@@ -9,6 +10,7 @@ type Props = {
   left: number;
   top: number;
   rotate: number;
+  onUpdateDragTarget: (card: CardState) => void;
 };
 
 const buffer = 15;
@@ -20,7 +22,9 @@ export default function FieldStackDragTarget({
   left,
   top,
   rotate,
+  onUpdateDragTarget,
 }: Props) {
+  const lastUpdateRef = useRef(0);
   const [{ isOver, canDrop }, drop] = useDrop(
     () => ({
       accept: "card",
@@ -33,10 +37,16 @@ export default function FieldStackDragTarget({
         card != null &&
         item.card.value === card.value + 1 &&
         item.card.suit === card.suit,
+      hover: (item, monitor) => {
+        if (Date.now() >= lastUpdateRef.current + 1000) {
+          lastUpdateRef.current = Date.now();
+          card && onUpdateDragTarget(card);
+        }
+      },
     }),
     [onDrop, card]
   );
-  if (!canDrop) {
+  if (stackHeight === 0) {
     return null;
   }
   return (

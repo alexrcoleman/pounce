@@ -9,6 +9,7 @@ type Props = {
   left: number;
   top: number;
   rotate: number;
+  onUpdateDragTarget: (card: CardState) => void;
 };
 
 const buffer = 4;
@@ -20,6 +21,7 @@ export default function StackDragTarget({
   stackHeight,
   left,
   top,
+  onUpdateDragTarget,
   rotate,
 }: Props) {
   const [{ isOver, canDrop, isDragging }, drop] = useDrop(
@@ -35,6 +37,7 @@ export default function StackDragTarget({
         card == null ||
         (item.card.value === card.value - 1 &&
           black.includes(item.card.suit) !== black.includes(card.suit)),
+      hover: () => card && onUpdateDragTarget(card),
     }),
     [onDrop]
   );

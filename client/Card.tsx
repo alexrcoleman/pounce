@@ -23,6 +23,7 @@ type Props = {
    */
   rotation?: number;
   onClick?: () => void;
+  onHover?: (card: CardState) => void;
   onDrag?: (dest: CardState) => void;
   source: SourceType;
   scaleDown: boolean;
@@ -65,6 +66,7 @@ const CardContentMemo = React.memo(function CardContent({
   faceUp,
   card,
   onClick,
+  onHover,
   source,
   color,
   rotation = 0,
@@ -78,13 +80,26 @@ const CardContentMemo = React.memo(function CardContent({
   const offset = useRef(Math.random() * 2 - 1);
   const rotationOffset = useRef(Math.random() * 2 - 1);
   const canDrag = source.type !== "other";
+  const item = useMemo(() => ({ source, card }), [source, card]);
   const [{ isDragging }, drag] = useDrag(
     () => ({
       type: "card",
-      item: { source, card },
+      item,
       collect: (monitor) => ({
         isDragging: !!monitor.isDragging(),
       }),
+      isDragging: (monitor) => {
+        if (monitor.getItem() == item) {
+          return true;
+        }
+        const dragItem = monitor.getItem();
+        return (
+          dragItem.source.type === "solitaire" &&
+          item.source.type === "solitaire" &&
+          dragItem.source.pileIndex === item.source.pileIndex &&
+          dragItem.source.slotIndex < item.source.slotIndex
+        );
+      },
       canDrag: () => canDrag,
       // options: { dropEffect: "move" },
     }),
@@ -128,6 +143,7 @@ const CardContentMemo = React.memo(function CardContent({
           opacity: isDragging ? 0.4 : 1,
         } as any
       }
+      onMouseOver={() => onHover && onHover(card)}
       title={`${zIndex + 1} card(s)`}
       onClick={onClick}
       ref={drag}

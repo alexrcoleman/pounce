@@ -1,7 +1,7 @@
+import { BoardState, CardState } from "../shared/GameUtils";
 import { Socket, io } from "socket.io-client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { BoardState } from "../shared/GameUtils";
 import { Move } from "../shared/PlayerUtils";
 
 export default function useGameSocket(
@@ -14,6 +14,7 @@ export default function useGameSocket(
   const [latency, setLatency] = useState(0);
   const [lastTime, setLastTime] = useState(0);
   const [socketId, setSocketId] = useState("");
+  const [hands, setHands] = useState<{ location: CardState | null }[]>([]);
   useEffect(() => {
     fetch("/api/socketio").finally(() => {
       const socket = (socketRef.current = io());
@@ -29,6 +30,9 @@ export default function useGameSocket(
 
       socket.on("alert", (message) => {
         alert(message);
+      });
+      socket.on("update_hands", ({ hands }) => {
+        setHands(hands);
       });
       socket.on("update", (data) => {
         setBoard(data.board);
@@ -76,6 +80,12 @@ export default function useGameSocket(
   const onRotate = useCallback(() => {
     socketRef.current?.emit("rotate_decks");
   }, [socketRef]);
+  const sendHand = useCallback(
+    (card: CardState) => {
+      socketRef.current?.emit("update_hand", { location: card });
+    },
+    [socketRef]
+  );
   return {
     onRemoveAI,
     onAddAI,
@@ -83,8 +93,10 @@ export default function useGameSocket(
     onRestart,
     executeMove,
     onRotate,
+    onUpdateHand: sendHand,
     socketId,
     isConnected,
     board,
+    hands,
   };
 }

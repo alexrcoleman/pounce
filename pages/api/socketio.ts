@@ -1,4 +1,5 @@
 import {
+  CardState,
   addPlayer,
   removePlayer,
   resetBoard,
@@ -16,7 +17,10 @@ export const config = {
   },
 };
 
-const socketData: Record<string, { name?: string; currentRoom?: string }> = {};
+const socketData: Record<
+  string,
+  { name?: string; currentRoom?: string; handLocation?: CardState | null }
+> = {};
 
 export default function (req: any, res: any) {
   if (!res.socket.server.io) {
@@ -28,6 +32,15 @@ export default function (req: any, res: any) {
         board: getRoom(roomId).board,
         time: Date.now(),
       });
+    const broadcastHands = (roomId: string) => {
+      const room = getRoom(roomId);
+      const hands = room.board.players.map((p, index) => {
+        return { location: socketData[p.socketId ?? ""]?.handLocation ?? null };
+      });
+      io.to(roomId).emit("update_hands", {
+        hands,
+      });
+    };
     io.of("/").adapter.on("create-room", (id) => {
       if (id.startsWith("pounce:")) {
         console.log("Set up new board for room: " + id);
@@ -162,6 +175,13 @@ export default function (req: any, res: any) {
       });
       socket.on("disconnect", () => {
         delete socketData[socket.id];
+      });
+      socket.on("update_hand", ({ location }) => {
+        if (user.currentRoom == null) {
+          return;
+        }
+        socketData[socket.id].handLocation = location;
+        broadcastHands(user.currentRoom);
       });
     });
 

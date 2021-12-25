@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import Card from "./Card";
 import { CardDnDItem } from "./CardDnDItem";
+import CursorHand from "./CursorHand";
 import { DndProvider } from "react-dnd";
 import FieldDragTarget from "./FieldDragTarget";
 import FieldStackDragTarget from "./FieldStackDragTarget";
@@ -22,11 +23,15 @@ type Props = {
   playerIndex: number;
   startGame: () => void;
   isHost: boolean;
+  hands: { location: CardState | null }[];
+  onUpdateHand: (card: CardState) => void;
 };
 export default function Board({
   board,
   isHost,
   executeMove,
+  onUpdateHand,
+  hands,
   startGame,
   playerIndex: activePlayerIndex,
 }: Props): JSX.Element {
@@ -51,22 +56,29 @@ export default function Board({
     },
     [executeMove]
   );
+  let cardLocs: Record<string, [number, number]> = {};
   const cards = board.piles
     .flatMap((pile, pileIndex) =>
-      pile.map((card, index) => (
-        <Card
-          scaleDown={false}
-          card={card}
-          faceUp={index < 12}
-          positionX={getBoardPilePosition(board, pileIndex)[0]}
-          positionY={getBoardPilePosition(board, pileIndex)[1] + index * 0.2}
-          key={getCardKey(card)}
-          zIndex={index}
-          boardState={board}
-          rotation={board.pileLocs[pileIndex][2]}
-          source={{ type: "other" }}
-        />
-      ))
+      pile.map((card, index) => {
+        const pile = getBoardPilePosition(board, pileIndex);
+        const loc: [number, number] = [pile[0], pile[1] + index * 0.2];
+        cardLocs[getCardKey(card)] = loc;
+        return (
+          <Card
+            scaleDown={false}
+            card={card}
+            faceUp={index < 12}
+            positionX={loc[0]}
+            positionY={loc[1]}
+            key={getCardKey(card)}
+            zIndex={index}
+            boardState={board}
+            rotation={board.pileLocs[pileIndex][2]}
+            source={{ type: "other" }}
+            onHover={onUpdateHand}
+          />
+        );
+      })
     )
     .concat(
       board.players.flatMap((player, playerIndex) => {
@@ -76,85 +88,122 @@ export default function Board({
           playerIndex
         );
         return [
-          player.deck.map((card, index) => (
-            <Card
-              scaleDown={player.index !== activePlayerIndex}
-              card={card}
-              faceUp={false}
-              positionX={px + 5.5 * 60}
-              positionY={py + 70 + index * 0.2}
-              key={getCardKey(card)}
-              zIndex={index}
-              boardState={board}
-              onClick={
-                playerIndex === activePlayerIndex ? cycleDeck : undefined
-              }
-              source={{ type: "other" }}
-            />
-          )),
-          player.flippedDeck.map((card, index) => (
-            <Card
-              scaleDown={player.index !== activePlayerIndex}
-              card={card}
-              faceUp={true}
-              positionX={px + 4.5 * 60}
-              positionY={py + 70 + index * 0.1}
-              key={getCardKey(card)}
-              zIndex={index}
-              boardState={board}
-              source={
-                playerIndex === activePlayerIndex &&
-                index === player.flippedDeck.length - 1
-                  ? { type: "flippedDeck" }
-                  : { type: "other" }
-              }
-              onClick={
-                playerIndex === activePlayerIndex && player.deck.length === 0
-                  ? cycleDeck
-                  : undefined
-              }
-            />
-          )),
-          player.pounceDeck.map((card, index) => (
-            <Card
-              scaleDown={player.index !== activePlayerIndex}
-              card={card}
-              faceUp={index === player.pounceDeck.length - 1}
-              positionX={px - 60}
-              positionY={py + 100 + index * 0.1}
-              key={getCardKey(card)}
-              zIndex={index}
-              boardState={board}
-              source={
-                playerIndex === activePlayerIndex &&
-                index === player.pounceDeck.length - 1
-                  ? { type: "pounce" }
-                  : { type: "other" }
-              }
-            />
-          )),
-          player.stacks.flatMap((stack, stackIndex) =>
-            stack.map((card, index) => (
+          player.deck.map((card, index) => {
+            const loc: [number, number] = [
+              px + 5.5 * 60,
+              py + 70 + index * 0.2,
+            ];
+            cardLocs[getCardKey(card)] = loc;
+            return (
+              <Card
+                scaleDown={player.index !== activePlayerIndex}
+                card={card}
+                faceUp={false}
+                positionX={loc[0]}
+                positionY={loc[1]}
+                key={getCardKey(card)}
+                zIndex={index}
+                boardState={board}
+                onClick={
+                  playerIndex === activePlayerIndex ? cycleDeck : undefined
+                }
+                source={{ type: "other" }}
+                onHover={
+                  playerIndex === activePlayerIndex ? onUpdateHand : undefined
+                }
+              />
+            );
+          }),
+          player.flippedDeck.map((card, index) => {
+            const loc: [number, number] = [
+              px + 4.5 * 60,
+              py + 70 + index * 0.1,
+            ];
+            cardLocs[getCardKey(card)] = loc;
+            return (
               <Card
                 scaleDown={player.index !== activePlayerIndex}
                 card={card}
                 faceUp={true}
-                positionX={px + stackIndex * 60}
-                positionY={py + 50 + index * 15}
+                positionX={loc[0]}
+                positionY={loc[1]}
                 key={getCardKey(card)}
                 zIndex={index}
                 boardState={board}
                 source={
-                  playerIndex === activePlayerIndex
-                    ? {
-                        type: "solitaire",
-                        pileIndex: stackIndex,
-                        slotIndex: index,
-                      }
+                  playerIndex === activePlayerIndex &&
+                  index === player.flippedDeck.length - 1
+                    ? { type: "flippedDeck" }
                     : { type: "other" }
                 }
+                onClick={
+                  playerIndex === activePlayerIndex && player.deck.length === 0
+                    ? cycleDeck
+                    : undefined
+                }
+                onHover={
+                  playerIndex === activePlayerIndex ? onUpdateHand : undefined
+                }
               />
-            ))
+            );
+          }),
+          player.pounceDeck.map((card, index) => {
+            const loc: [number, number] = [px - 60, py + 100 + index * 0.1];
+            cardLocs[getCardKey(card)] = loc;
+            return (
+              <Card
+                scaleDown={player.index !== activePlayerIndex}
+                card={card}
+                faceUp={index === player.pounceDeck.length - 1}
+                positionX={loc[0]}
+                positionY={loc[1]}
+                key={getCardKey(card)}
+                zIndex={index}
+                boardState={board}
+                source={
+                  playerIndex === activePlayerIndex &&
+                  index === player.pounceDeck.length - 1
+                    ? { type: "pounce" }
+                    : { type: "other" }
+                }
+                onHover={
+                  playerIndex === activePlayerIndex ? onUpdateHand : undefined
+                }
+              />
+            );
+          }),
+          player.stacks.flatMap((stack, stackIndex) =>
+            stack.map((card, index) => {
+              const loc: [number, number] = [
+                px + stackIndex * 60,
+                py + 50 + index * 15,
+              ];
+              cardLocs[getCardKey(card)] = loc;
+              return (
+                <Card
+                  scaleDown={player.index !== activePlayerIndex}
+                  card={card}
+                  faceUp={true}
+                  positionX={loc[0]}
+                  positionY={loc[1]}
+                  key={getCardKey(card)}
+                  zIndex={index}
+                  boardState={board}
+                  source={
+                    playerIndex === activePlayerIndex
+                      ? {
+                          type: "solitaire",
+                          pileIndex: stackIndex,
+                          slotIndex: index,
+                        }
+                      : { type: "other" }
+                  }
+                  onHover={
+                    playerIndex === activePlayerIndex ? onUpdateHand : undefined
+                  }
+                />
+              );
+            })
           ),
         ].flat();
       })
@@ -165,6 +214,9 @@ export default function Board({
   useEffect(() => {
     setUseTouch(isTouchDevice());
   }, []);
+
+  // TODO: Make this tracked separately
+  const onUpdateDragHover = onUpdateHand;
   return (
     <DndProvider backend={useTouch ? TouchBackend : HTML5Backend}>
       <div className={styles.root}>
@@ -183,6 +235,7 @@ export default function Board({
               );
               return (
                 <StackDragTarget
+                  onUpdateDragTarget={onUpdateDragHover}
                   key={index}
                   left={px + index * 60}
                   top={py + 50}
@@ -224,6 +277,7 @@ export default function Board({
               key={index}
               card={pile[pile.length - 1]}
               stackHeight={pile.length}
+              onUpdateDragTarget={onUpdateDragHover}
               onDrop={(item) => executeMoveCardToCenter(item, index)}
               left={getBoardPilePosition(board, index)[0]}
               top={getBoardPilePosition(board, index)[1]}
@@ -240,6 +294,20 @@ export default function Board({
               }
             />
           ))}
+          {hands.map((hand, index) => {
+            if (!hand.location || index === activePlayerIndex) {
+              return null;
+            }
+            const cardLoc = cardLocs[getCardKey(hand.location)];
+            return (
+              <CursorHand
+                x={cardLoc[0] + 15}
+                y={cardLoc[1]}
+                color={board.players[index].color}
+                key={index}
+              />
+            );
+          })}
           <VictoryOverlay board={board} startGame={startGame} isHost={isHost} />
         </div>
       </div>

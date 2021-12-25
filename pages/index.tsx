@@ -18,11 +18,13 @@ const Home: NextPage = () => {
     executeMove,
     onStart,
     onRestart,
+    onUpdateHand,
     onAddAI,
     onRemoveAI,
     isConnected,
     board,
     socketId,
+    hands,
     onRotate,
   } = useGameSocket(roomId, name);
 
@@ -69,7 +71,9 @@ const Home: NextPage = () => {
       />
       <div className={styles.boardWrapper}>
         <Board
+          hands={hands}
           board={board}
+          onUpdateHand={onUpdateHand}
           executeMove={executeMove}
           startGame={onStart}
           isHost={hostIndex === playerIndex}
