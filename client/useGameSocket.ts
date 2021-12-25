@@ -2,7 +2,7 @@ import { BoardState, CardState } from "../shared/GameUtils";
 import { Socket, io } from "socket.io-client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { Move } from "../shared/PlayerUtils";
+import type { Move } from "../shared/MoveHandler";
 
 export default function useGameSocket(
   roomId: string | null,

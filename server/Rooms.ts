@@ -6,7 +6,8 @@ import {
 } from "../shared/GameUtils";
 
 import { Server } from "socket.io";
-import { handleAIMove } from "../shared/PlayerUtils";
+import { executeMove } from "../shared/MoveHandler";
+import { getBasicAIMove } from "../shared/ComputerV1";
 
 const rooms: Record<
   string,
@@ -36,7 +37,8 @@ export function createRoom(io: Server, roomId: string) {
             if (aiCooldowns[index] > Date.now() || player.socketId != null) {
               return false;
             }
-            handleAIMove(board, index);
+            const move = getBasicAIMove(board, index);
+            executeMove(board, index, move);
             aiCooldowns[index] =
               Date.now() + (Math.random() * 2000 + 5000) / room.aiSpeed;
             return true;

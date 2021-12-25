@@ -9,7 +9,7 @@ import {
 import { createRoom, deleteRoom, getRoom } from "../../server/Rooms";
 
 import { Server } from "socket.io";
-import { executeMove } from "../../shared/PlayerUtils";
+import { executeMove } from "../../shared/MoveHandler";
 
 export const config = {
   api: {

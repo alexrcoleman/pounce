@@ -8,7 +8,7 @@ import { DndProvider } from "react-dnd";
 import FieldDragTarget from "./FieldDragTarget";
 import FieldStackDragTarget from "./FieldStackDragTarget";
 import { HTML5Backend } from "react-dnd-html5-backend";
-import { Move } from "../shared/PlayerUtils";
+import type { Move } from "../shared/MoveHandler";
 import Player from "./Player";
 import ScoresTable from "./ScoresTable";
 import StackDragTarget from "./StackDragTarget";
@@ -37,6 +37,9 @@ export default function Board({
 }: Props): JSX.Element {
   const cycleDeck = useCallback(() => {
     executeMove({ type: "cycle" });
+  }, [executeMove]);
+  const flipDeck = useCallback(() => {
+    executeMove({ type: "flip_deck" });
   }, [executeMove]);
   const executeMoveCardToCenter = useCallback(
     (item: CardDnDItem, targetPile: number, position?: [number, number]) => {
@@ -137,9 +140,7 @@ export default function Board({
                     : { type: "other" }
                 }
                 onClick={
-                  playerIndex === activePlayerIndex && player.deck.length === 0
-                    ? cycleDeck
-                    : undefined
+                  playerIndex === activePlayerIndex ? flipDeck : undefined
                 }
                 onHover={
                   playerIndex === activePlayerIndex ? onUpdateHand : undefined

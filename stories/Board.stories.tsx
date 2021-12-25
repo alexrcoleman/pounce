@@ -5,7 +5,7 @@ import React, { useCallback, useMemo, useState } from "react";
 
 import Board from "../client/Board";
 import { createBoard } from "../shared/GameUtils";
-import { executeMove } from "../shared/PlayerUtils";
+import { executeMove } from "../shared/MoveHandler";
 
 export default {
   title: "Pounce/Board",
