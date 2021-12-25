@@ -11,11 +11,13 @@ type Props = {
   roomId?: string | null;
   isHost: boolean;
   onRotate: () => void;
+  setUseAnimations: (use: boolean) => void;
 };
 
 export default function Header({
   isStarted,
   onAddAI,
+  setUseAnimations,
   onRemoveAI,
   onRestart,
   onStart,
@@ -30,28 +32,48 @@ export default function Header({
       <div
         className={joinClasses(styles.root, isExpanded && styles.enabledRoot)}
       >
-        <button disabled={isStarted} onClick={onAddAI}>
-          Add AI
-        </button>
-        <button disabled={isStarted} onClick={onRemoveAI}>
-          Remove AI
-        </button>
-        |
-        <button disabled={isStarted || !isHost} onClick={onStart}>
-          Start
-        </button>
-        <button disabled={!isHost} onClick={onRestart}>
-          Restart
-        </button>
-        <button disabled={!isStarted || !isHost} onClick={onRotate}>
-          Rotate decks
-        </button>
+        {isHost && (
+          <>
+            <button disabled={isStarted} onClick={onAddAI}>
+              Add AI
+            </button>
+            <button disabled={isStarted} onClick={onRemoveAI}>
+              Remove AI
+            </button>
+          </>
+        )}
+        {isHost && (
+          <>
+            |
+            <button disabled={isStarted} onClick={onStart}>
+              Start
+            </button>
+            <button onClick={onRestart}>Restart</button>
+            <button disabled={!isStarted} onClick={onRotate}>
+              Rotate decks
+            </button>
+          </>
+        )}
         {roomId && (
           <>
             | Room:<b>{roomId}</b>
             <button onClick={onLeaveRoom}>Leave Room</button>
           </>
         )}
+        |
+        <input
+          type="checkbox"
+          id="animations"
+          defaultChecked={true}
+          onChange={(e) => setUseAnimations(e.target.checked)}
+        />
+        <label htmlFor="animations" style={{ marginLeft: -8 }}>
+          Animations
+        </label>
+        <div className={styles.slider}>
+          Scale
+          <input type="range" />
+        </div>
       </div>
       <button
         className={styles.floatingButton}

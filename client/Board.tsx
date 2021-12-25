@@ -1,5 +1,5 @@
 import type { BoardState, CardState } from "../shared/GameUtils";
-import { RefObject, useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import Card from "./Card";
 import { CardDnDItem } from "./CardDnDItem";
@@ -10,9 +10,9 @@ import { HTML5Backend } from "react-dnd-html5-backend";
 import { Move } from "../shared/PlayerUtils";
 import Player from "./Player";
 import ScoresTable from "./ScoresTable";
-import { Socket } from "socket.io-client";
 import StackDragTarget from "./StackDragTarget";
 import { TouchBackend } from "react-dnd-touch-backend";
+import VictoryOverlay from "./VictoryOverlay";
 import isTouchDevice from "./isTouchDevice";
 import styles from "./Board.module.css";
 
@@ -20,10 +20,14 @@ type Props = {
   board: BoardState;
   executeMove: (move: Move) => void;
   playerIndex: number;
+  startGame: () => void;
+  isHost: boolean;
 };
 export default function Board({
   board,
+  isHost,
   executeMove,
+  startGame,
   playerIndex: activePlayerIndex,
 }: Props): JSX.Element {
   const cycleDeck = useCallback(() => {
@@ -236,33 +240,7 @@ export default function Board({
               }
             />
           ))}
-          {board.pouncer != null && (
-            <div
-              style={{
-                zIndex: 1000000,
-                backgroundColor: "rgba(0,0,0,.5)",
-                width: "100%",
-                height: "100%",
-                position: "absolute",
-              }}
-            >
-              <div
-                style={{
-                  zIndex: 1000000,
-                  position: "absolute",
-                  left: "50%",
-                  top: "50%",
-                  transform: "translate(-50%, -50%)",
-                  borderRadius: 4,
-                  padding: 20,
-                  backgroundColor: "white",
-                  border: "2px solid #ddd",
-                }}
-              >
-                Pounce by {board.players[board.pouncer].name}
-              </div>
-            </div>
-          )}
+          <VictoryOverlay board={board} startGame={startGame} isHost={isHost} />
         </div>
       </div>
     </DndProvider>

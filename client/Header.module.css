@@ -1,6 +1,6 @@
 .root {
   z-index: 100000;
-  top: 0;
+  position: absolute;
   left: 0;
   display: flex;
   align-items: center;
@@ -30,4 +30,11 @@
   text-align: center;
   border: none;
   border-radius: 0 0 4px 4px;
+  min-width: 70px;
+}
+.slider {
+  font-size: 12px;
+  display: flex;
+  align-items: center;
+  flex-direction: column;
 }

@@ -6,12 +6,14 @@ import Head from "next/head";
 import Header from "../client/Header";
 import JoinForm from "../client/JoinForm";
 import type { NextPage } from "next";
+import joinClasses from "../client/joinClasses";
 import styles from "../styles/Home.module.css";
 import useGameSocket from "../client/useGameSocket";
 
 const Home: NextPage = () => {
   const [roomId, setRoomId] = useState<null | string>(null);
   const [name, setName] = useState<null | string>(null);
+  const [animations, setAnimations] = useState(true);
   const {
     executeMove,
     onStart,
@@ -44,12 +46,18 @@ const Home: NextPage = () => {
   const playerIndex = board.players.findIndex((p) => p.socketId === socketId);
   const hostIndex = board.players.findIndex((p) => p.socketId != null);
   return (
-    <div className={styles.container}>
+    <div
+      className={joinClasses(
+        styles.container,
+        !animations && styles.hideAnimations
+      )}
+    >
       <Head>
         <title>Pounce | {roomId}</title>
       </Head>
       <Header
         onAddAI={onAddAI}
+        setUseAnimations={setAnimations}
         isStarted={board.isActive}
         onRemoveAI={onRemoveAI}
         onRestart={onRestart}
@@ -63,6 +71,8 @@ const Home: NextPage = () => {
         <Board
           board={board}
           executeMove={executeMove}
+          startGame={onStart}
+          isHost={hostIndex === playerIndex}
           playerIndex={playerIndex}
         />
       </div>

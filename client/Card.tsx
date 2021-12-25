@@ -103,7 +103,7 @@ const CardContentMemo = React.memo(function CardContent({
     setIsAnimating(true);
     const t = setTimeout(() => {
       setIsAnimating(false);
-    }, 1000);
+    }, 1000 + zIndex);
     return () => clearTimeout(t);
   }, [positionX, positionY, zIndex]);
   return (
@@ -237,7 +237,7 @@ const CardFace = React.memo(function CardFace({
       )}
       <div
         style={{
-          fontSize: 8,
+          fontSize: 10,
           position: "absolute",
           left: padding,
           top: padding,
@@ -249,7 +249,7 @@ const CardFace = React.memo(function CardFace({
       </div>
       <div
         style={{
-          fontSize: 8,
+          fontSize: 10,
           position: "absolute",
           right: padding,
           bottom: padding,

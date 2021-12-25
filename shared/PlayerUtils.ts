@@ -153,11 +153,9 @@ export type Move =
   | { type: "cycle" };
 
 function getBasicAIMove(boardState: BoardState, playerIndex: number): Move {
-  // TODO: Make this return an action instead of doing it
-
   // Settings:
-  const solitaireFromDeck = playerIndex === 1 || playerIndex === 2;
-  const solitaireFromDeckOnlyIfHelp = playerIndex === 2;
+  const solitaireFromDeck = true;
+  const solitaireFromDeckOnlyIfHelp = true;
 
   const player = boardState.players[playerIndex];
   // Play pounce card
