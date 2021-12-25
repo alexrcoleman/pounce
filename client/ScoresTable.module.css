@@ -1,0 +1,17 @@
+.table {
+  background-color: rgba(255, 255, 255, 0.2);
+  padding: 8px;
+  border-collapse: collapse;
+  border: 1px;
+  width: 275px;
+  max-width: 275px;
+}
+
+.table td,
+.table th {
+  border: 1px solid black;
+  padding: 5px;
+  /* text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap; */
+}

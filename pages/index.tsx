@@ -2,19 +2,16 @@ import io, { Socket } from "socket.io-client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import Board from "../client/Board";
-import type { BoardState } from "../shared/GameUtils";
+import Head from "next/head";
 import Header from "../client/Header";
 import JoinForm from "../client/JoinForm";
-import { Move } from "../shared/PlayerUtils";
 import type { NextPage } from "next";
 import styles from "../styles/Home.module.css";
 import useGameSocket from "../client/useGameSocket";
-import { useRouter } from "next/router";
 
 const Home: NextPage = () => {
-  const router = useRouter();
-  const roomId = router.query.room as string;
-  const name = router.query.name as string;
+  const [roomId, setRoomId] = useState<null | string>(null);
+  const [name, setName] = useState<null | string>(null);
   const {
     executeMove,
     onStart,
@@ -23,15 +20,18 @@ const Home: NextPage = () => {
     onRemoveAI,
     isConnected,
     board,
-    playerIndex,
+    socketId,
+    onRotate,
   } = useGameSocket(roomId, name);
 
   if (!roomId || !name) {
     return (
       <JoinForm
-        onSubmit={(room, name) =>
-          router.push({ pathname: "/", query: { room, name } })
-        }
+        placeholderName={name ?? ""}
+        onSubmit={(room, name) => {
+          setRoomId(room);
+          setName(name);
+        }}
       />
     );
   }
@@ -41,14 +41,23 @@ const Home: NextPage = () => {
   if (board == null) {
     return <div>Loading...</div>;
   }
+  const playerIndex = board.players.findIndex((p) => p.socketId === socketId);
+  const hostIndex = board.players.findIndex((p) => p.socketId != null);
   return (
     <div className={styles.container}>
+      <Head>
+        <title>Pounce | {roomId}</title>
+      </Head>
       <Header
         onAddAI={onAddAI}
         isStarted={board.isActive}
         onRemoveAI={onRemoveAI}
         onRestart={onRestart}
+        onLeaveRoom={() => setRoomId(null)}
         onStart={onStart}
+        roomId={roomId}
+        isHost={hostIndex === playerIndex}
+        onRotate={onRotate}
       />
       <div className={styles.boardWrapper}>
         <Board

@@ -43,18 +43,21 @@ export default function StackDragTarget({
   }
   return (
     <div
-      style={{
-        height: 77 + (stackHeight - 1) * 10 + 2 * buffer,
-        width: 55 + 2 * buffer,
-        zIndex: 1000000,
-        backgroundColor: isOver && canDrop ? "rgba(255,255,0,.5)" : "",
-        outline: canDrop ? "1px solid yellow" : "",
-        borderRadius: 4,
-        position: "absolute",
-        transform: `translate(${left - buffer}px, ${
-          top - buffer
-        }px) rotate(${rotate}deg)`,
-      }}
+      style={
+        {
+          height: 77 + Math.max(stackHeight - 1, 0) * 15 + 2 * buffer,
+          width: 55 + 2 * buffer,
+          zIndex: 1000000,
+          backgroundColor: isOver && canDrop ? "rgba(255,255,0,.5)" : "",
+          outline: canDrop ? "1px solid yellow" : "",
+          borderRadius: 4,
+          position: "absolute",
+          "--s": 1.1,
+          transform: `translate(${left - buffer}px, ${
+            top - buffer
+          }px) rotate(${rotate}deg) scale(var(--s), var(--s))`,
+        } as any
+      }
       ref={drop}
     />
   );

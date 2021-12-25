@@ -1,4 +1,7 @@
 .root {
+  z-index: 100000;
+  top: 0;
+  left: 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -6,4 +9,25 @@
   height: 40px;
   background-color: rgb(220, 220, 220);
   padding: 8px;
+  opacity: 0;
+  transition: opacity 1s, margin 1s;
+  margin-top: -40px;
+}
+.enabledRoot {
+  position: initial;
+  opacity: 1;
+  margin-top: 0;
+}
+.floatingButton {
+  font-size: 15px;
+  position: absolute;
+  top: 0;
+  right: 10px;
+  padding: 8px;
+  z-index: 10000000;
+  cursor: pointer;
+  background-color: rgb(220, 220, 220);
+  text-align: center;
+  border: none;
+  border-radius: 0 0 4px 4px;
 }

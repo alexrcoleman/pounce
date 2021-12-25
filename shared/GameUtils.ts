@@ -1,6 +1,6 @@
 import shuffle from "./shuffle";
 
-const colors = ["#E63B33", "#B5E649", "#B227E6", "#4EB8E6", "#E6983E"];
+const colors = ["red", "blue", "green", "orange", "yellow", "pink"];
 const SUITS = ["hearts", "spades", "diamonds", "clubs"] as const;
 const VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] as const;
 export type Suits = typeof SUITS[number];
@@ -21,6 +21,7 @@ export type PlayerState = {
   flippedDeck: CardState[];
   totalPoints: number;
   currentPoints: number;
+  scores: (number | null)[];
 };
 export type BoardState = {
   pouncer?: number;
@@ -71,19 +72,21 @@ function generateLocations(
 function createPlayer(
   socketId: string | null,
   index: number,
-  name: string
+  name: string,
+  color: string
 ): PlayerState {
   return {
     index,
     name,
     socketId: socketId,
-    color: colors[index % colors.length],
+    color,
     stacks: [[], [], [], []],
     pounceDeck: [],
     deck: createShuffledDeck(index),
     flippedDeck: [],
     totalPoints: 0,
     currentPoints: 0,
+    scores: [],
   };
 }
 
@@ -99,7 +102,7 @@ function randomName() {
 export function createBoard(playerCount: number): BoardState {
   const players = Array(playerCount)
     .fill(0)
-    .map((_, index) => createPlayer(null, index, randomName()));
+    .map((_, index) => createPlayer(null, index, randomName(), colors[index]));
   const boardState = {
     isActive: false,
     players,
@@ -121,9 +124,18 @@ export function addPlayer(
     console.warn("Game is active, cannot add player");
     return -1;
   }
+  const roundCount = board.players[0]?.scores?.length ?? 0;
+  const usedColors = board.players.map((p) => p.color);
+  const available = colors.filter((c) => !usedColors.includes(c));
   board.players.push(
-    createPlayer(socketId, board.players.length, name ?? randomName())
+    createPlayer(
+      socketId,
+      board.players.length,
+      name ?? randomName(),
+      available[0]
+    )
   );
+  board.players[board.players.length - 1].scores = Array(roundCount).fill(null);
   board.piles.push([], [], [], []);
   board.pileLocs = generateLocations(board.players.length * 4);
   return board.players.length - 1;
@@ -163,17 +175,39 @@ function dealHands(board: BoardState) {
 
 export function resetBoard(boardState: BoardState) {
   boardState.pouncer = undefined;
-  boardState.isActive = false;
   boardState.players.forEach((player, index) => {
     player.deck = createShuffledDeck(index);
     player.flippedDeck = [];
     player.pounceDeck = [];
+    if (boardState.isActive) {
+      player.totalPoints += player.currentPoints;
+      player.scores.push(player.currentPoints);
+      player.currentPoints = 0;
+    }
     player.stacks = [[], [], [], []];
-    player.totalPoints += player.currentPoints;
-    player.currentPoints = 0;
   });
+  boardState.isActive = false;
   boardState.piles = Array(boardState.players.length * 4)
     .fill(0)
     .map(() => []);
   boardState.pileLocs = generateLocations(boardState.players.length * 4);
+}
+
+export function rotateDecks(board: BoardState) {
+  board.players.forEach((player) => {
+    player.deck.push(...player.flippedDeck.reverse());
+    player.flippedDeck = [];
+    player.deck.unshift(player.deck.pop() as CardState);
+  });
+}
+
+export function scoreBoard(board: BoardState) {
+  const pouncer = board.players.findIndex((p) => p.pounceDeck.length === 0);
+  board.isActive = false;
+  board.pouncer = pouncer;
+  board.players.forEach((player) => {
+    player.totalPoints += player.currentPoints;
+    player.scores.push(player.currentPoints);
+    player.currentPoints = 0;
+  });
 }

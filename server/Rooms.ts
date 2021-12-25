@@ -1,25 +1,33 @@
-import { BoardState, createBoard, isGameOver } from "../shared/GameUtils";
+import {
+  BoardState,
+  createBoard,
+  isGameOver,
+  scoreBoard,
+} from "../shared/GameUtils";
 
 import { Server } from "socket.io";
 import { handleAIMove } from "../shared/PlayerUtils";
 
 const rooms: Record<
   string,
-  { board: BoardState; interval: NodeJS.Timer; aiSpeed: number }
+  {
+    board: BoardState;
+    interval: NodeJS.Timer;
+    aiSpeed: number;
+    aiCooldowns: number[];
+  }
 > = {};
 
 export function createRoom(io: Server, roomId: string) {
   const board = createBoard(0);
-  let aiCooldowns = board.players.map(() => 0);
   const interval = setInterval(() => {
     const room = rooms[roomId];
+    const aiCooldowns = room.aiCooldowns;
     let hasUpdate = false;
     if (!board.isActive) {
       //no-op
     } else if (isGameOver(board)) {
-      const pouncer = board.players.findIndex((p) => p.pounceDeck.length === 0);
-      board.isActive = false;
-      board.pouncer = pouncer;
+      scoreBoard(board);
       hasUpdate = true;
     } else {
       hasUpdate =
@@ -39,7 +47,7 @@ export function createRoom(io: Server, roomId: string) {
       io.to(roomId).emit("update", { board, time: Date.now() });
     }
   }, 100);
-  rooms[roomId] = { board, interval, aiSpeed: 3 };
+  rooms[roomId] = { board, interval, aiSpeed: 3, aiCooldowns: [] };
   io.to(roomId).emit("update", {
     board,
     time: Date.now(),

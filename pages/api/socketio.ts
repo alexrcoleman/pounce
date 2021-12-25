@@ -2,6 +2,7 @@ import {
   addPlayer,
   removePlayer,
   resetBoard,
+  rotateDecks,
   startGame,
 } from "../../shared/GameUtils";
 import { createRoom, deleteRoom, getRoom } from "../../server/Rooms";
@@ -15,10 +16,7 @@ export const config = {
   },
 };
 
-const socketData: Record<
-  string,
-  { name?: string; currentRoom?: string; currentPlayerId?: number }
-> = {};
+const socketData: Record<string, { name?: string; currentRoom?: string }> = {};
 
 export default function (req: any, res: any) {
   if (!res.socket.server.io) {
@@ -64,6 +62,15 @@ export default function (req: any, res: any) {
       socketData[socket.id] = {};
       const user = socketData[socket.id];
       socket.on("join_room", async (args) => {
+        console.log("join_room " + socket.id, args);
+        if (args.roomId == null) {
+          if (user.currentRoom != null) {
+            console.log("Removing " + socket.id + " from " + user.currentRoom);
+            await socket.leave(user.currentRoom);
+          }
+          user.currentRoom = undefined;
+          return;
+        }
         user.name = String(args.name);
         const roomId = "pounce:" + args.roomId;
         if (getRoom(roomId)?.board?.isActive) {
@@ -74,26 +81,28 @@ export default function (req: any, res: any) {
           return;
         }
         if (user.currentRoom != null) {
-          socket.leave(user.currentRoom);
+          await socket.leave(user.currentRoom);
         }
         user.currentRoom = roomId;
         await socket.join(roomId);
-        user.currentPlayerId = getRoom(
-          user.currentRoom
-        ).board.players.findIndex((p) => p.socketId === socket.id);
-        socket.emit("assign", user.currentPlayerId);
       });
       socket.on("move", (args) => {
-        if (user.currentPlayerId == null || user.currentRoom == null) {
+        if (user.currentRoom == null) {
+          return;
+        }
+        const pid = getRoom(user.currentRoom).board.players.findIndex(
+          (p) => p.socketId === socket.id
+        );
+        if (pid < 0) {
           return;
         }
         const room = getRoom(user.currentRoom);
         const board = room.board;
-        executeMove(board, user.currentPlayerId, args);
+        executeMove(board, pid, args);
         broadcastUpdate(user.currentRoom);
       });
       socket.on("add_ai", () => {
-        if (user.currentPlayerId == null || user.currentRoom == null) {
+        if (user.currentRoom == null) {
           return;
         }
 
@@ -102,7 +111,7 @@ export default function (req: any, res: any) {
         broadcastUpdate(user.currentRoom);
       });
       socket.on("remove_ai", () => {
-        if (user.currentPlayerId == null || user.currentRoom == null) {
+        if (user.currentRoom == null) {
           return;
         }
 
@@ -114,16 +123,26 @@ export default function (req: any, res: any) {
         }
       });
       socket.on("start_game", () => {
-        if (user.currentPlayerId == null || user.currentRoom == null) {
+        if (user.currentRoom == null) {
           return;
         }
 
         const room = getRoom(user.currentRoom);
         startGame(room.board);
+        room.aiCooldowns = room.board.players.map(() => Date.now() + 1000);
+        broadcastUpdate(user.currentRoom);
+      });
+      socket.on("rotate_decks", () => {
+        if (user.currentRoom == null) {
+          return;
+        }
+
+        const room = getRoom(user.currentRoom);
+        rotateDecks(room.board);
         broadcastUpdate(user.currentRoom);
       });
       socket.on("restart_game", () => {
-        if (user.currentPlayerId == null || user.currentRoom == null) {
+        if (user.currentRoom == null) {
           return;
         }
 
@@ -132,7 +151,7 @@ export default function (req: any, res: any) {
         broadcastUpdate(user.currentRoom);
       });
       socket.on("set_ai_speed", (args) => {
-        if (user.currentPlayerId == null || user.currentRoom == null) {
+        if (user.currentRoom == null) {
           return;
         }
         const speed = Math.max(

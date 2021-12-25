@@ -9,6 +9,7 @@ import FieldStackDragTarget from "./FieldStackDragTarget";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import { Move } from "../shared/PlayerUtils";
 import Player from "./Player";
+import ScoresTable from "./ScoresTable";
 import { Socket } from "socket.io-client";
 import StackDragTarget from "./StackDragTarget";
 import { TouchBackend } from "react-dnd-touch-backend";
@@ -50,6 +51,7 @@ export default function Board({
     .flatMap((pile, pileIndex) =>
       pile.map((card, index) => (
         <Card
+          scaleDown={false}
           card={card}
           faceUp={index < 12}
           positionX={getBoardPilePosition(board, pileIndex)[0]}
@@ -64,14 +66,19 @@ export default function Board({
     )
     .concat(
       board.players.flatMap((player, playerIndex) => {
-        const [px, py] = getPlayerPosition(playerIndex);
+        const [px, py] = getPlayerPosition(
+          activePlayerIndex,
+          board.players.length,
+          playerIndex
+        );
         return [
           player.deck.map((card, index) => (
             <Card
+              scaleDown={player.index !== activePlayerIndex}
               card={card}
               faceUp={false}
-              positionX={px + 6 * 60}
-              positionY={py + 50 + index * 0.2}
+              positionX={px + 5.5 * 60}
+              positionY={py + 70 + index * 0.2}
               key={getCardKey(card)}
               zIndex={index}
               boardState={board}
@@ -83,10 +90,11 @@ export default function Board({
           )),
           player.flippedDeck.map((card, index) => (
             <Card
+              scaleDown={player.index !== activePlayerIndex}
               card={card}
               faceUp={true}
-              positionX={px + 5 * 60}
-              positionY={py + 50 + index * 0.1}
+              positionX={px + 4.5 * 60}
+              positionY={py + 70 + index * 0.1}
               key={getCardKey(card)}
               zIndex={index}
               boardState={board}
@@ -105,6 +113,7 @@ export default function Board({
           )),
           player.pounceDeck.map((card, index) => (
             <Card
+              scaleDown={player.index !== activePlayerIndex}
               card={card}
               faceUp={index === player.pounceDeck.length - 1}
               positionX={px - 60}
@@ -123,10 +132,11 @@ export default function Board({
           player.stacks.flatMap((stack, stackIndex) =>
             stack.map((card, index) => (
               <Card
+                scaleDown={player.index !== activePlayerIndex}
                 card={card}
                 faceUp={true}
                 positionX={px + stackIndex * 60}
-                positionY={py + 50 + index * 10}
+                positionY={py + 50 + index * 15}
                 key={getCardKey(card)}
                 zIndex={index}
                 boardState={board}
@@ -156,10 +166,17 @@ export default function Board({
       <div className={styles.root}>
         <div className={styles.rootInside}>
           <div className={styles.pileSection} />
+          <div className={styles.scores}>
+            <ScoresTable board={board} />
+          </div>
           {cards.sort((a, b) => ((a.key ?? "") < (b.key ?? "") ? -1 : 1))}
           {activePlayerIndex != -1 &&
             board.players[activePlayerIndex].stacks.map((stack, index) => {
-              const [px, py] = getPlayerPosition(activePlayerIndex);
+              const [px, py] = getPlayerPosition(
+                activePlayerIndex,
+                board.players.length,
+                activePlayerIndex
+              );
               return (
                 <StackDragTarget
                   key={index}
@@ -191,7 +208,7 @@ export default function Board({
                 />
               );
             })}
-          <div style={{ position: "absolute", left: 600, top: 50 }}>
+          <div style={{ position: "absolute", left: 550, top: 50 }}>
             <FieldDragTarget
               onDrop={(item, position) =>
                 executeMoveCardToCenter(item, firstOpenStack, position)
@@ -210,7 +227,14 @@ export default function Board({
             />
           ))}
           {board.players.map((p, i) => (
-            <Player player={p} index={i} key={i} />
+            <Player
+              player={p}
+              index={i}
+              key={i}
+              top={
+                getPlayerPosition(activePlayerIndex, board.players.length, i)[1]
+              }
+            />
           ))}
           {board.pouncer != null && (
             <div
@@ -247,13 +271,23 @@ export default function Board({
 
 function getBoardPilePosition(board: BoardState, index: number) {
   return [
-    600 + board.pileLocs[index][0] * 500,
+    550 + board.pileLocs[index][0] * 500,
     50 + board.pileLocs[index][1] * 500,
   ];
 }
 
-function getPlayerPosition(index: number) {
-  return [80, 175 * index];
+function getPlayerPosition(
+  activeIndex: number,
+  playerCount: number,
+  index: number
+) {
+  if (index == activeIndex) {
+    return [80, 0];
+  }
+  return [
+    80,
+    180 + 165 * (((index - activeIndex + playerCount) % playerCount) - 1),
+  ];
 }
 
 function getCardKey(card: CardState) {

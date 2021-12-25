@@ -13,22 +13,20 @@ export default function useGameSocket(
   const socketRef = useRef<Socket | null>(null);
   const [latency, setLatency] = useState(0);
   const [lastTime, setLastTime] = useState(0);
-  const [playerIndex, setPlayerIndex] = useState(-1);
+  const [socketId, setSocketId] = useState("");
   useEffect(() => {
-    if (!roomId || !name) {
-      return;
-    }
     fetch("/api/socketio").finally(() => {
       const socket = (socketRef.current = io());
       (global as any).socketio = socket;
       socket.on("connect", () => {
+        setSocketId(socket.id);
         setConnected(true);
-        socket.emit("join_room", { roomId, name });
+        if (roomId && name) {
+          socket.emit("join_room", { roomId, name });
+          return;
+        }
       });
 
-      socket.on("assign", (id) => {
-        setPlayerIndex(id);
-      });
       socket.on("alert", (message) => {
         alert(message);
       });
@@ -49,7 +47,14 @@ export default function useGameSocket(
         socketRef.current.close();
       }
     };
-  }, [roomId, name]);
+  }, []);
+  useEffect(() => {
+    const socket = socketRef.current;
+    if (socket) {
+      socket.emit("join_room", { roomId, name });
+      return;
+    }
+  }, [roomId]);
   const executeMove = useCallback(
     (move: Move) => {
       socketRef.current?.emit("move", move);
@@ -68,13 +73,17 @@ export default function useGameSocket(
   const onRestart = useCallback(() => {
     socketRef.current?.emit("restart_game");
   }, [socketRef]);
+  const onRotate = useCallback(() => {
+    socketRef.current?.emit("rotate_decks");
+  }, [socketRef]);
   return {
     onRemoveAI,
     onAddAI,
     onStart,
     onRestart,
     executeMove,
-    playerIndex,
+    onRotate,
+    socketId,
     isConnected,
     board,
   };

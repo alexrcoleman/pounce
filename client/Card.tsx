@@ -25,6 +25,7 @@ type Props = {
   onClick?: () => void;
   onDrag?: (dest: CardState) => void;
   source: SourceType;
+  scaleDown: boolean;
 };
 
 /**
@@ -67,6 +68,7 @@ const CardContentMemo = React.memo(function CardContent({
   source,
   color,
   rotation = 0,
+  scaleDown,
 }: Omit<Props, "boardState"> & {
   color: string;
 }) {
@@ -122,6 +124,7 @@ const CardContentMemo = React.memo(function CardContent({
             "deg",
           "--x": positionX + offset.current * 2 + "px",
           "--y": positionY + "px",
+          "--s": scaleDown ? ".9" : "1.1",
           opacity: isDragging ? 0.4 : 1,
         } as any
       }
@@ -171,7 +174,18 @@ const CardFace = React.memo(function CardFace({
   return (
     <div className={styles.front}>
       {["J", "Q", "K"].includes(valueText) ? (
-        <b>{valueText}</b>
+        <div
+          className={styles.frontGrid}
+          style={{ gridTemplateRows: "33% 33% 33%" }}
+        >
+          <span style={{ gridRow: 1, gridColumn: 1 }}>{icon}</span>
+          <b
+            style={{ gridRow: 2, gridColumn: 2, fontSize: 25, marginLeft: -6 }}
+          >
+            {valueText === "Q" ? "♕" : valueText === "K" ? "♔" : valueText}
+          </b>
+          <span style={{ gridRow: 3, gridColumn: 3 }}>{icon}</span>
+        </div>
       ) : value === 1 ? (
         <span style={{ fontSize: 30 }}>{icon}</span>
       ) : (

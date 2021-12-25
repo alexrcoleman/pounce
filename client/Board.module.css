@@ -12,10 +12,16 @@
 
 .pileSection {
   position: absolute;
-  left: 600px;
+  left: 550px;
   top: 50px;
   height: calc(500px + 77px);
   border-radius: 5px;
   width: calc(500px + 77px);
-  border: 1px solid rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+.scores {
+  position: absolute;
+  left: 1150px;
+  top: 50px;
 }
