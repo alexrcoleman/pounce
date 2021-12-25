@@ -53,6 +53,7 @@ export const Draggable: ComponentStory<typeof Card> = (args) => {
           boardState={board}
         />
         <FieldStackDragTarget
+          onUpdateDragTarget={() => console.log("Update drop")}
           card={{ suit: "hearts", value: 2, player: 0 }}
           stackHeight={1}
           onDrop={() => console.log("Drop")}
@@ -61,6 +62,7 @@ export const Draggable: ComponentStory<typeof Card> = (args) => {
           rotate={0}
         />
         <StackDragTarget
+          onUpdateDragTarget={() => console.log("Update drop")}
           card={{ suit: "clubs", value: 4, player: 0 }}
           stackHeight={1}
           onDrop={() => console.log("Drop")}
