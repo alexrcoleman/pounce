@@ -51,6 +51,7 @@ export default function useGameSocket(
         socketRef.current.close();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
     const socket = socketRef.current;
@@ -58,7 +59,7 @@ export default function useGameSocket(
       socket.emit("join_room", { roomId, name });
       return;
     }
-  }, [roomId]);
+  }, [roomId, name]);
   const executeMove = useCallback(
     (move: Move) => {
       socketRef.current?.emit("move", move);
