@@ -299,6 +299,9 @@ export default function Board({
               return null;
             }
             const cardLoc = cardLocs[getCardKey(hand.location)];
+            if (!cardLoc) {
+              return null;
+            }
             return (
               <CursorHand
                 x={cardLoc[0] + 15}

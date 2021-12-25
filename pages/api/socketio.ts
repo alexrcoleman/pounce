@@ -54,6 +54,7 @@ export default function (req: any, res: any) {
         const index = board.players.findIndex((p) => p.socketId === userId);
         removePlayer(board, index);
         broadcastUpdate(id);
+        broadcastHands(id);
       }
     });
     io.of("/").adapter.on("join-room", (id, userId) => {
@@ -63,6 +64,7 @@ export default function (req: any, res: any) {
         );
         addPlayer(getRoom(id).board, userId, socketData[userId].name);
         broadcastUpdate(id);
+        broadcastHands(id);
       }
     });
     io.of("/").adapter.on("delete-room", (id) => {
@@ -162,6 +164,7 @@ export default function (req: any, res: any) {
         const room = getRoom(user.currentRoom);
         resetBoard(room.board);
         broadcastUpdate(user.currentRoom);
+        broadcastHands(user.currentRoom);
       });
       socket.on("set_ai_speed", (args) => {
         if (user.currentRoom == null) {
