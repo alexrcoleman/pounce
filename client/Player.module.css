@@ -1,7 +1,7 @@
 .card {
   position: absolute;
   z-index: 10000;
-  border-width: 2px;
+  border-width: 1px;
   padding: 5px;
   font-size: 12px;
   background-color: white;
@@ -10,7 +10,19 @@
   border-style: solid;
   opacity: 0.5;
   transition: opacity 0.25s linear;
+  display: flex;
+  align-items: center;
 }
 .card:hover {
   opacity: 1;
+}
+.connection {
+  border-radius: 50%;
+  width: 10px;
+  height: 10px;
+  margin-right: 5px;
+  background-color: rgb(38, 156, 38);
+}
+.disconnected {
+  background-color: rgb(177, 41, 41);
 }

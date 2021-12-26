@@ -51,10 +51,11 @@ export default function (req: any, res: any) {
       if (id.startsWith("pounce:")) {
         console.log(userId + " left " + id);
         const board = getRoom(id).board;
-        const index = board.players.findIndex((p) => p.socketId === userId);
-        removePlayer(board, index);
-        broadcastUpdate(id);
-        broadcastHands(id);
+        const player = board.players.find((p) => p.socketId === userId);
+        if (player) {
+          player.disconnected = true;
+          broadcastUpdate(id);
+        }
       }
     });
     io.of("/").adapter.on("join-room", (id, userId) => {
@@ -62,7 +63,14 @@ export default function (req: any, res: any) {
         console.log(
           userId + " entered " + id + " name=" + socketData[userId].name
         );
-        addPlayer(getRoom(id).board, userId, socketData[userId].name);
+        const room = getRoom(id);
+        const player = room.board.players.find((p) => p.socketId === userId);
+        if (!player) {
+          addPlayer(room.board, userId, socketData[userId].name);
+        } else {
+          player.disconnected = false;
+          player.name = socketData[userId].name ?? player.name;
+        }
         broadcastUpdate(id);
         broadcastHands(id);
       }
@@ -141,10 +149,16 @@ export default function (req: any, res: any) {
         if (user.currentRoom == null) {
           return;
         }
-
         const room = getRoom(user.currentRoom);
-        startGame(room.board);
+        // Remove any disconnected players
+        removePlayer(
+          room.board,
+          ...room.board.players
+            .filter((p) => p.disconnected)
+            .map((p) => p.index)
+        );
         room.aiCooldowns = room.board.players.map(() => Date.now() + 1000);
+        startGame(room.board);
         broadcastUpdate(user.currentRoom);
       });
       socket.on("rotate_decks", () => {

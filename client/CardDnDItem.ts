@@ -4,9 +4,14 @@ export type SourceType =
   | { type: "pounce" }
   | { type: "solitaire"; pileIndex: number; slotIndex: number }
   | { type: "flippedDeck" }
-  | { type: "other" };
+  | { type: "other" }
+  | { type: "field_stack"; index: number };
 
 export type CardDnDItem = {
   source: SourceType;
   card: CardState;
+};
+
+export type FieldStackDnDItem = {
+  index: number;
 };

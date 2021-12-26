@@ -79,30 +79,49 @@ const CardContentMemo = React.memo(function CardContent({
   const [isAnimating, setIsAnimating] = useState(false);
   const offset = useRef(Math.random() * 2 - 1);
   const rotationOffset = useRef(Math.random() * 2 - 1);
-  const canDrag = source.type !== "other";
-  const item = useMemo(() => ({ source, card }), [source, card]);
-  const [{ isDragging }, drag] = useDrag(
-    () => ({
-      type: "card",
-      item,
-      collect: (monitor) => ({
-        isDragging: !!monitor.isDragging(),
-      }),
-      isDragging: (monitor) => {
-        if (monitor.getItem() == item) {
-          return true;
-        }
-        const dragItem = monitor.getItem();
-        return (
-          dragItem.source.type === "solitaire" &&
-          item.source.type === "solitaire" &&
-          dragItem.source.pileIndex === item.source.pileIndex &&
-          dragItem.source.slotIndex < item.source.slotIndex
-        );
-      },
-      canDrag: () => canDrag,
-      // options: { dropEffect: "move" },
-    }),
+  const item = useMemo(
+    () =>
+      source.type === "field_stack"
+        ? { index: source.index }
+        : { source, card },
+    [source, card]
+  );
+  const [{ isDragging, canDrag }, drag] = useDrag(
+    () =>
+      source.type === "field_stack"
+        ? {
+            type: "field_stack",
+            item,
+            collect: (monitor) => ({
+              isDragging: !!monitor.isDragging(),
+              canDrag: monitor.canDrag(),
+            }),
+          }
+        : {
+            type: "card",
+            item,
+            collect: (monitor) => ({
+              isDragging: !!monitor.isDragging(),
+              canDrag: monitor.canDrag(),
+            }),
+            isDragging: (monitor) => {
+              if (monitor.getItem() == item) {
+                return true;
+              }
+              const dragItem = monitor.getItem();
+              if (dragItem.source == null || item.source == null) {
+                return false;
+              }
+              return (
+                dragItem.source.type === "solitaire" &&
+                item.source.type === "solitaire" &&
+                dragItem.source.pileIndex === item.source.pileIndex &&
+                dragItem.source.slotIndex < item.source.slotIndex
+              );
+            },
+            canDrag: () => source.type !== "other",
+            // options: { dropEffect: "move" },
+          },
     [source, card, positionX, positionY]
   );
 

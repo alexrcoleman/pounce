@@ -19,7 +19,8 @@ export type Move =
       position?: [number, number];
     }
   | { type: "cycle" }
-  | { type: "flip_deck" };
+  | { type: "flip_deck" }
+  | { type: "move_field_stack"; index: number; position: [number, number] };
 
 export function executeMove(
   board: BoardState,
@@ -53,6 +54,9 @@ export function executeMove(
       );
     } else if (move.type === "flip_deck") {
       //todo
+    } else if (move.type === "move_field_stack") {
+      board.pileLocs[move.index][0] = move.position[0];
+      board.pileLocs[move.index][1] = move.position[1];
     } else {
       const _unused: never = move;
     }

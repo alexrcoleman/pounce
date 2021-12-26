@@ -59,6 +59,19 @@ export default function Board({
     },
     [executeMove]
   );
+  const playerPositions = board.players.map((_, index) =>
+    index == activePlayerIndex
+      ? [80, 0]
+      : [
+          80,
+          180 +
+            165 *
+              (((index - activePlayerIndex + board.players.length) %
+                board.players.length) -
+                1),
+        ]
+  );
+
   let cardLocs: Record<string, [number, number]> = {};
   const cards = board.piles
     .flatMap((pile, pileIndex) =>
@@ -77,7 +90,7 @@ export default function Board({
             zIndex={index}
             boardState={board}
             rotation={board.pileLocs[pileIndex][2]}
-            source={{ type: "other" }}
+            source={{ type: "field_stack", index: pileIndex }}
             onHover={onUpdateHand}
           />
         );
@@ -85,11 +98,7 @@ export default function Board({
     )
     .concat(
       board.players.flatMap((player, playerIndex) => {
-        const [px, py] = getPlayerPosition(
-          activePlayerIndex,
-          board.players.length,
-          playerIndex
-        );
+        const [px, py] = playerPositions[playerIndex];
         return [
           player.deck.map((card, index) => {
             const loc: [number, number] = [
@@ -229,11 +238,7 @@ export default function Board({
           {cards.sort((a, b) => ((a.key ?? "") < (b.key ?? "") ? -1 : 1))}
           {activePlayerIndex != -1 &&
             board.players[activePlayerIndex].stacks.map((stack, index) => {
-              const [px, py] = getPlayerPosition(
-                activePlayerIndex,
-                board.players.length,
-                activePlayerIndex
-              );
+              const [px, py] = playerPositions[activePlayerIndex];
               return (
                 <StackDragTarget
                   onUpdateDragTarget={onUpdateDragHover}
@@ -271,6 +276,13 @@ export default function Board({
               onDrop={(item, position) =>
                 executeMoveCardToCenter(item, firstOpenStack, position)
               }
+              onMoveFieldStack={(item, position) =>
+                executeMove({
+                  type: "move_field_stack",
+                  index: item.index,
+                  position,
+                })
+              }
             />
           </div>
           {board.piles.map((pile, index) => (
@@ -286,14 +298,7 @@ export default function Board({
             />
           ))}
           {board.players.map((p, i) => (
-            <Player
-              player={p}
-              index={i}
-              key={i}
-              top={
-                getPlayerPosition(activePlayerIndex, board.players.length, i)[1]
-              }
-            />
+            <Player player={p} index={i} key={i} top={playerPositions[i][1]} />
           ))}
           {hands.map((hand, index) => {
             if (!hand.location || index === activePlayerIndex) {
@@ -312,6 +317,27 @@ export default function Board({
               />
             );
           })}
+          {board.players.map(
+            (player, index) =>
+              player.pounceDeck.length > 0 && (
+                <div
+                  key={index}
+                  style={{
+                    zIndex: 10000,
+                    color: "white",
+                    fontSize: "12px",
+                    width: 55,
+                    textAlign: "center",
+                    position: "absolute",
+                    transform: `translate(${
+                      playerPositions[index][0] - 60
+                    }px, ${playerPositions[index][1] + 80}px)`,
+                  }}
+                >
+                  {player.pounceDeck.length}
+                </div>
+              )
+          )}
           <VictoryOverlay board={board} startGame={startGame} isHost={isHost} />
         </div>
       </div>
@@ -323,20 +349,6 @@ function getBoardPilePosition(board: BoardState, index: number) {
   return [
     550 + board.pileLocs[index][0] * 500,
     50 + board.pileLocs[index][1] * 500,
-  ];
-}
-
-function getPlayerPosition(
-  activeIndex: number,
-  playerCount: number,
-  index: number
-) {
-  if (index == activeIndex) {
-    return [80, 0];
-  }
-  return [
-    80,
-    180 + 165 * (((index - activeIndex + playerCount) % playerCount) - 1),
   ];
 }
 

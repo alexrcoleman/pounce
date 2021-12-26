@@ -11,6 +11,7 @@ export type CardState = {
   player: number;
 };
 export type PlayerState = {
+  disconnected?: boolean;
   socketId: string | null;
   name: string;
   index: number;
@@ -140,8 +141,9 @@ export function addPlayer(
   board.pileLocs = generateLocations(board.players.length * 4);
   return board.players.length - 1;
 }
-export function removePlayer(board: BoardState, index: number) {
-  board.players.splice(index, 1);
+export function removePlayer(board: BoardState, ...indices: number[]) {
+  const sorted = indices.slice().sort().reverse();
+  sorted.forEach((i) => board.players.splice(i, 1));
   for (let i = 0; i < 4; i++) {
     board.pileLocs.pop();
     board.piles.pop();

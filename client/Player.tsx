@@ -1,4 +1,5 @@
 import { PlayerState } from "../shared/GameUtils";
+import joinClasses from "./joinClasses";
 import styles from "./Player.module.css";
 
 type Props = {
@@ -8,6 +9,7 @@ type Props = {
 };
 
 export default function Player({ top, player, index }: Props) {
+  console.log(player);
   return (
     <div
       className={styles.card}
@@ -16,7 +18,15 @@ export default function Player({ top, player, index }: Props) {
         top: top + 15,
       }}
     >
-      {player.name}: {player.currentPoints} ({player.totalPoints} total)
+      <div
+        className={joinClasses(
+          styles.connection,
+          player.disconnected && styles.disconnected
+        )}
+      />
+      <span>
+        {player.name}: {player.currentPoints} ({player.totalPoints} total)
+      </span>
     </div>
   );
 }
