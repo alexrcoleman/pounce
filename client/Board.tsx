@@ -103,33 +103,33 @@ export default function Board({
     .concat(
       board.players.flatMap((player, playerIndex) => {
         const [px, py] = playerPositions[playerIndex];
+        const isActivePlayer = playerIndex === activePlayerIndex;
         return [
           player.deck.map((card, index) => {
             const loc: [number, number] = [
               px + 5.5 * 60,
               py + 70 + index * 0.2,
             ];
-            cardLocs[getCardKey(card)] = loc;
+            const cardKey = getCardKey(card);
+            cardLocs[cardKey] = loc;
             return (
               <Card
-                scaleDown={playerIndex !== activePlayerIndex}
+                scaleDown={!isActivePlayer}
                 card={card}
                 faceUp={false}
                 positionX={loc[0]}
                 positionY={loc[1]}
-                key={getCardKey(card)}
+                key={cardKey}
                 zIndex={index}
                 boardState={board}
                 onClick={
-                  playerIndex === activePlayerIndex &&
-                  index === player.deck.length - 1
+                  isActivePlayer && index === player.deck.length - 1
                     ? cycleDeck
                     : undefined
                 }
                 source={{ type: "other" }}
                 onHover={
-                  playerIndex === activePlayerIndex &&
-                  index === player.deck.length - 1
+                  isActivePlayer && index === player.deck.length - 1
                     ? onUpdateHand
                     : undefined
                 }
@@ -137,89 +137,76 @@ export default function Board({
             );
           }),
           player.flippedDeck.map((card, index) => {
+            const cardKey = getCardKey(card);
             const loc: [number, number] = [
               px + 4.5 * 60,
               py + 70 + index * 0.1,
             ];
-            cardLocs[getCardKey(card)] = loc;
+            cardLocs[cardKey] = loc;
+            const isTopCard = index === player.flippedDeck.length - 1;
             return (
               <Card
-                scaleDown={playerIndex !== activePlayerIndex}
+                scaleDown={!isActivePlayer}
                 card={card}
                 faceUp={true}
                 positionX={loc[0]}
                 positionY={loc[1]}
-                key={getCardKey(card)}
+                key={cardKey}
                 zIndex={index}
                 boardState={board}
                 source={
-                  playerIndex === activePlayerIndex &&
-                  index === player.flippedDeck.length - 1
+                  isActivePlayer && isTopCard
                     ? { type: "flippedDeck" }
                     : { type: "other" }
                 }
-                onClick={
-                  playerIndex === activePlayerIndex &&
-                  index === player.flippedDeck.length - 1
-                    ? flipDeck
-                    : undefined
-                }
-                onHover={
-                  playerIndex === activePlayerIndex &&
-                  index === player.flippedDeck.length - 1
-                    ? onUpdateHand
-                    : undefined
-                }
+                onClick={isActivePlayer && isTopCard ? flipDeck : undefined}
+                onHover={isActivePlayer && isTopCard ? onUpdateHand : undefined}
               />
             );
           }),
           player.pounceDeck.map((card, index) => {
             const loc: [number, number] = [px - 60, py + 100 + index * 0.1];
             cardLocs[getCardKey(card)] = loc;
+            const isTopCard = index === player.pounceDeck.length - 1;
             return (
               <Card
-                scaleDown={playerIndex !== activePlayerIndex}
+                scaleDown={!isActivePlayer}
                 card={card}
-                faceUp={index === player.pounceDeck.length - 1}
+                faceUp={isTopCard}
                 positionX={loc[0]}
                 positionY={loc[1]}
                 key={getCardKey(card)}
                 zIndex={index}
                 boardState={board}
                 source={
-                  playerIndex === activePlayerIndex &&
-                  index === player.pounceDeck.length - 1
+                  isActivePlayer && isTopCard
                     ? { type: "pounce" }
                     : { type: "other" }
                 }
-                onHover={
-                  playerIndex === activePlayerIndex &&
-                  index === player.pounceDeck.length - 1
-                    ? onUpdateHand
-                    : undefined
-                }
+                onHover={isActivePlayer && isTopCard ? onUpdateHand : undefined}
               />
             );
           }),
           player.stacks.flatMap((stack, stackIndex) =>
             stack.map((card, index) => {
+              const cardKey = getCardKey(card);
               const loc: [number, number] = [
                 px + stackIndex * 60,
                 py + 50 + index * 15,
               ];
-              cardLocs[getCardKey(card)] = loc;
+              cardLocs[cardKey] = loc;
               return (
                 <Card
-                  scaleDown={playerIndex !== activePlayerIndex}
+                  scaleDown={!isActivePlayer}
                   card={card}
                   faceUp={true}
                   positionX={loc[0]}
                   positionY={loc[1]}
-                  key={getCardKey(card)}
+                  key={cardKey}
                   zIndex={index}
                   boardState={board}
                   source={
-                    playerIndex === activePlayerIndex
+                    isActivePlayer
                       ? {
                           type: "solitaire",
                           pileIndex: stackIndex,
@@ -227,9 +214,7 @@ export default function Board({
                         }
                       : { type: "other" }
                   }
-                  onHover={
-                    playerIndex === activePlayerIndex ? onUpdateHand : undefined
-                  }
+                  onHover={isActivePlayer ? onUpdateHand : undefined}
                 />
               );
             })

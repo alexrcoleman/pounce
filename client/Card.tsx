@@ -1,6 +1,7 @@
 import type { BoardState, CardState, Suits, Values } from "../shared/GameUtils";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import CardFace from "./CardFace";
 import React from "react";
 import { SourceType } from "./CardDnDItem";
 import joinClasses from "./joinClasses";
@@ -68,7 +69,6 @@ const CardContentMemo = React.memo(function CardContent({
   color: string;
 }) {
   const { suit, value } = card;
-  const suitColor = suit === "clubs" || suit === "spades" ? "black" : "red";
   const [isAnimating, setIsAnimating] = useState(false);
   const offset = useRef(Math.random() * 2 - 1);
   const rotationOffset = useRef(Math.random() * 2 - 1);
@@ -144,18 +144,21 @@ const CardContentMemo = React.memo(function CardContent({
     }, 1000 + zIndex);
     return () => clearTimeout(t);
   }, [positionX, positionY, zIndex]);
+
   return (
     <div
       className={joinClasses(
         styles.root,
         onClick != null && styles.clickable,
-        canDrag && styles.draggable
+        canDrag && styles.draggable,
+        suit === "clubs" || suit === "spades"
+          ? styles.blackCard
+          : styles.redCard
       )}
       style={
         {
           pointerEvents: isDraggingOther ? "none" : "",
           zIndex: zIndex + (isAnimating ? 1000 : 0),
-          color: suitColor,
           "--c": color,
           "--r":
             rotation * 360 +
@@ -172,167 +175,17 @@ const CardContentMemo = React.memo(function CardContent({
       onClick={onClick}
       ref={drag}
     >
-      <div
-        className={styles.body}
-        style={{
-          transform: faceUp ? "rotateY(180deg)" : "",
-        }}
-      >
+      <div className={joinClasses(styles.body, faceUp && styles.bodyFaceUp)}>
         <div
           className={styles.back}
           style={{
             backgroundColor: color,
           }}
-        ></div>
-        <CardFace suit={suit} value={value} />
+        />
+        <div className={styles.front}>
+          <CardFace suit={suit} value={value} />
+        </div>
       </div>
     </div>
   );
 });
-
-const CardFace = React.memo(function CardFace({
-  value,
-  suit,
-}: {
-  value: number;
-  suit: string;
-}) {
-  const padding = 2;
-  const valueText =
-    value === 1
-      ? "A"
-      : value === 11
-      ? "J"
-      : value === 12
-      ? "Q"
-      : value === 13
-      ? "K"
-      : String(value);
-  const icon = getIcon(suit);
-  const gridRowCount = 25;
-  return (
-    <div className={styles.front}>
-      {["J", "Q", "K"].includes(valueText) ? (
-        <div
-          className={styles.frontGrid}
-          style={{
-            gridTemplateRows: `repeat(${gridRowCount}, minmax(0, 1fr))`,
-          }}
-        >
-          <span style={{ gridRow: 1, gridColumn: 1 }}>{icon}</span>
-          <b
-            style={{
-              gridRow: (gridRowCount - 1) / 2,
-              gridColumn: 2,
-              fontSize: 25,
-              marginLeft: -6,
-            }}
-          >
-            {valueText === "Q" ? "♕" : valueText === "K" ? "♔" : valueText}
-          </b>
-          <span style={{ gridRow: gridRowCount, gridColumn: 3 }}>{icon}</span>
-        </div>
-      ) : value === 1 ? (
-        <span style={{ fontSize: 30 }}>{icon}</span>
-      ) : (
-        <div
-          className={styles.frontGrid}
-          style={{
-            gridTemplateRows: `repeat(${gridRowCount}, minmax(0, 1fr))`,
-          }}
-        >
-          {cardPatterns[value].map((count, colIndex) =>
-            Array(count)
-              .fill(0)
-              .map((_, index) => {
-                const max = Math.max(
-                  cardPatterns[value][0],
-                  cardPatterns[value][1]
-                );
-                let row = ((gridRowCount - 1) / (max - 1)) * index;
-                if (colIndex === 1) {
-                  if (cardPatterns[value][0] != 0) {
-                    row +=
-                      (gridRowCount - 1) / (cardPatterns[value][0] - 1) / 2;
-                  }
-
-                  if (
-                    (value === 10 && index === 1) ||
-                    (value === 9 && index === 0)
-                  ) {
-                    row += (gridRowCount - 1) / (cardPatterns[value][0] - 1);
-                  }
-                }
-                return (
-                  <div
-                    key={index}
-                    style={{
-                      gridColumn: colIndex + 1,
-                      gridRow: row + 1,
-                      marginLeft: colIndex === 1 ? -6 : undefined,
-                      transform:
-                        row > gridRowCount / 2 + 1 ? "scale(1, -1)" : "",
-                    }}
-                  >
-                    {icon}
-                  </div>
-                );
-              })
-          )}
-        </div>
-      )}
-      <div
-        style={{
-          fontSize: 10,
-          position: "absolute",
-          left: padding,
-          top: padding,
-        }}
-      >
-        <div style={{ marginBottom: -2 }}>{valueText}</div>
-        {icon}
-      </div>
-      <div
-        style={{
-          fontSize: 10,
-          position: "absolute",
-          right: padding,
-          bottom: padding,
-          transform: "rotate(180deg)",
-        }}
-      >
-        <div style={{ marginBottom: -2 }}>{valueText}</div>
-        {icon}
-      </div>
-    </div>
-  );
-});
-
-function getIcon(type: string): string {
-  if (type === "clubs") {
-    return "♣";
-  } else if (type === "diamonds") {
-    return "♦";
-  } else if (type === "hearts") {
-    return "♥";
-  } else {
-    return "♠";
-  }
-}
-
-const cardPatterns = [
-  [],
-  [0, 1, 0],
-  [0, 2, 0],
-  [0, 3, 0],
-  [2, 0, 2],
-  [2, 1, 2],
-  [3, 0, 3],
-  [3, 1, 3],
-  [3, 2, 3],
-  [4, 1, 4],
-  [4, 2, 4],
-  [],
-  [],
-  [],
-];
