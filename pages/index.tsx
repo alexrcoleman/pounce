@@ -44,7 +44,7 @@ const Home: NextPage = () => {
     return <div>Connecting...</div>;
   }
   if (board == null) {
-    return <div>Loading...</div>;
+    return <div>Waiting for game data...</div>;
   }
   const playerIndex = board.players.findIndex((p) => p.socketId === socketId);
   const hostIndex = board.players.findIndex(

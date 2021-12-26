@@ -79,7 +79,7 @@ export default function Header({
           <input
             type="range"
             value={scale}
-            min=".75"
+            min="1"
             max="2"
             step=".025"
             onChange={(e) => setScale(e.target.valueAsNumber)}
