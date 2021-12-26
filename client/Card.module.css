@@ -60,7 +60,7 @@
   display: grid;
   font-size: 14px;
   height: 100%;
-  padding: 6px 0px;
+  padding: 10px 0px;
   align-items: center;
   justify-content: center;
   grid-template-columns: 15px 2px 16px;

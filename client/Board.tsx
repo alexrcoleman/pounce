@@ -64,7 +64,7 @@ export default function Board({
       ? [80, 0]
       : [
           80,
-          180 +
+          185 +
             165 *
               (((index - activePlayerIndex + board.players.length) %
                 board.players.length) -
@@ -76,8 +76,8 @@ export default function Board({
   const cards = board.piles
     .flatMap((pile, pileIndex) =>
       pile.map((card, index) => {
-        const pile = getBoardPilePosition(board, pileIndex);
-        const loc: [number, number] = [pile[0], pile[1] + index * 0.2];
+        const pilePos = getBoardPilePosition(board, pileIndex);
+        const loc: [number, number] = [pilePos[0], pilePos[1] + index * 0.2];
         cardLocs[getCardKey(card)] = loc;
         return (
           <Card
