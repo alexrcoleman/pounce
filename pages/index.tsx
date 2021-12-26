@@ -47,7 +47,9 @@ const Home: NextPage = () => {
     return <div>Loading...</div>;
   }
   const playerIndex = board.players.findIndex((p) => p.socketId === socketId);
-  const hostIndex = board.players.findIndex((p) => p.socketId != null);
+  const hostIndex = board.players.findIndex(
+    (p) => !p.disconnected && p.socketId != null
+  );
   return (
     <div
       className={joinClasses(

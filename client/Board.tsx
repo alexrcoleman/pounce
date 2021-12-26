@@ -108,7 +108,7 @@ export default function Board({
             cardLocs[getCardKey(card)] = loc;
             return (
               <Card
-                scaleDown={player.index !== activePlayerIndex}
+                scaleDown={playerIndex !== activePlayerIndex}
                 card={card}
                 faceUp={false}
                 positionX={loc[0]}
@@ -134,7 +134,7 @@ export default function Board({
             cardLocs[getCardKey(card)] = loc;
             return (
               <Card
-                scaleDown={player.index !== activePlayerIndex}
+                scaleDown={playerIndex !== activePlayerIndex}
                 card={card}
                 faceUp={true}
                 positionX={loc[0]}
@@ -162,7 +162,7 @@ export default function Board({
             cardLocs[getCardKey(card)] = loc;
             return (
               <Card
-                scaleDown={player.index !== activePlayerIndex}
+                scaleDown={playerIndex !== activePlayerIndex}
                 card={card}
                 faceUp={index === player.pounceDeck.length - 1}
                 positionX={loc[0]}
@@ -191,7 +191,7 @@ export default function Board({
               cardLocs[getCardKey(card)] = loc;
               return (
                 <Card
-                  scaleDown={player.index !== activePlayerIndex}
+                  scaleDown={playerIndex !== activePlayerIndex}
                   card={card}
                   faceUp={true}
                   positionX={loc[0]}
@@ -235,7 +235,20 @@ export default function Board({
           <div className={styles.scores}>
             <ScoresTable board={board} />
           </div>
-          {cards.sort((a, b) => ((a.key ?? "") < (b.key ?? "") ? -1 : 1))}
+          <div style={{ position: "absolute", left: 550, top: 50 }}>
+            <FieldDragTarget
+              onDrop={(item, position) =>
+                executeMoveCardToCenter(item, firstOpenStack, position)
+              }
+              onMoveFieldStack={(item, position) =>
+                executeMove({
+                  type: "move_field_stack",
+                  index: item.index,
+                  position,
+                })
+              }
+            />
+          </div>
           {activePlayerIndex != -1 &&
             board.players[activePlayerIndex].stacks.map((stack, index) => {
               const [px, py] = playerPositions[activePlayerIndex];
@@ -271,20 +284,6 @@ export default function Board({
                 />
               );
             })}
-          <div style={{ position: "absolute", left: 550, top: 50 }}>
-            <FieldDragTarget
-              onDrop={(item, position) =>
-                executeMoveCardToCenter(item, firstOpenStack, position)
-              }
-              onMoveFieldStack={(item, position) =>
-                executeMove({
-                  type: "move_field_stack",
-                  index: item.index,
-                  position,
-                })
-              }
-            />
-          </div>
           {board.piles.map((pile, index) => (
             <FieldStackDragTarget
               key={index}
@@ -297,6 +296,7 @@ export default function Board({
               rotate={board.pileLocs[index][2] * 360}
             />
           ))}
+          {cards.sort((a, b) => ((a.key ?? "") < (b.key ?? "") ? -1 : 1))}
           {board.players.map((p, i) => (
             <Player player={p} index={i} key={i} top={playerPositions[i][1]} />
           ))}

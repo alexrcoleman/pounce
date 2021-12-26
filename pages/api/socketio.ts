@@ -60,17 +60,25 @@ export default function (req: any, res: any) {
     });
     io.of("/").adapter.on("join-room", (id, userId) => {
       if (id.startsWith("pounce:")) {
-        console.log(
-          userId + " entered " + id + " name=" + socketData[userId].name
-        );
+        const user = socketData[userId];
+        user.currentRoom = id;
         const room = getRoom(id);
         const player = room.board.players.find((p) => p.socketId === userId);
         if (!player) {
           addPlayer(room.board, userId, socketData[userId].name);
+          if (room.board.isActive) {
+            io.to(userId).emit(
+              "alert",
+              "Room currently has in progress game, you will join once the game is over"
+            );
+          }
         } else {
           player.disconnected = false;
           player.name = socketData[userId].name ?? player.name;
         }
+        console.log(
+          userId + " entered " + id + " name=" + socketData[userId].name
+        );
         broadcastUpdate(id);
         broadcastHands(id);
       }
@@ -96,17 +104,9 @@ export default function (req: any, res: any) {
         }
         user.name = String(args.name);
         const roomId = "pounce:" + args.roomId;
-        if (getRoom(roomId)?.board?.isActive) {
-          socket.emit(
-            "alert",
-            "Room currently has in progress game, join once the game is over"
-          );
-          return;
-        }
         if (user.currentRoom != null) {
           await socket.leave(user.currentRoom);
         }
-        user.currentRoom = roomId;
         await socket.join(roomId);
       });
       socket.on("move", (args) => {
@@ -154,10 +154,11 @@ export default function (req: any, res: any) {
         removePlayer(
           room.board,
           ...room.board.players
-            .filter((p) => p.disconnected)
-            .map((p) => p.index)
+            .map((p, i) => ({ p, i }))
+            .filter((pair) => pair.p.disconnected)
+            .map((pair) => pair.i)
         );
-        room.aiCooldowns = room.board.players.map(() => Date.now() + 1000);
+        room.aiCooldowns = room.board.players.map(() => Date.now() + 2000);
         startGame(room.board);
         broadcastUpdate(user.currentRoom);
       });

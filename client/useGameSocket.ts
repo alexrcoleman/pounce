@@ -56,6 +56,7 @@ export default function useGameSocket(
   useEffect(() => {
     const socket = socketRef.current;
     if (socket) {
+      setBoard(null);
       socket.emit("join_room", { roomId, name });
       return;
     }

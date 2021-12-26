@@ -10,7 +10,7 @@ export default function CursorHand({ x, y, color }: Props) {
         position: "absolute",
         transform: `translate(${x}px, ${y}px) rotate(-120deg)`,
         color: color,
-        transition: ".25s transform linear",
+        transition: ".5s transform linear",
         zIndex: 100000,
         width: 20,
         height: 20,

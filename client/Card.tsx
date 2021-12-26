@@ -86,7 +86,7 @@ const CardContentMemo = React.memo(function CardContent({
         : { source, card },
     [source, card]
   );
-  const [{ isDragging, canDrag }, drag] = useDrag(
+  const [{ isDragging, isDraggingOther, canDrag }, drag] = useDrag(
     () =>
       source.type === "field_stack"
         ? {
@@ -95,7 +95,16 @@ const CardContentMemo = React.memo(function CardContent({
             collect: (monitor) => ({
               isDragging: !!monitor.isDragging(),
               canDrag: monitor.canDrag(),
+              isDraggingOther:
+                monitor.getItem() != null && monitor.getItem() !== item,
             }),
+            isDragging: (monitor) => {
+              const dragItem = monitor.getItem();
+              if (dragItem == item) {
+                return true;
+              }
+              return dragItem.index === item.index;
+            },
           }
         : {
             type: "card",
@@ -103,6 +112,8 @@ const CardContentMemo = React.memo(function CardContent({
             collect: (monitor) => ({
               isDragging: !!monitor.isDragging(),
               canDrag: monitor.canDrag(),
+              isDraggingOther:
+                monitor.getItem() != null && monitor.getItem() !== item,
             }),
             isDragging: (monitor) => {
               if (monitor.getItem() == item) {
@@ -149,6 +160,7 @@ const CardContentMemo = React.memo(function CardContent({
       )}
       style={
         {
+          pointerEvents: isDraggingOther ? "none" : "",
           zIndex: zIndex + (isAnimating ? 1000 : 0),
           color: suitColor,
           "--c": color,

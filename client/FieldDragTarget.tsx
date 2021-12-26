@@ -47,7 +47,6 @@ export default function FieldDragTarget({ onDrop, onMoveFieldStack }: Props) {
       style={{
         height: 577,
         width: 577,
-        zIndex: 100000,
         backgroundColor: isOver && canDrop ? "rgba(255,255,0,.5)" : "",
         outline: canDrop ? "1px solid yellow" : "",
         borderRadius: 4,

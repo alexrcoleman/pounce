@@ -25,19 +25,20 @@ export default function FieldStackDragTarget({
   onUpdateDragTarget,
 }: Props) {
   const lastUpdateRef = useRef(0);
-  const [{ isOver, canDrop }, drop] = useDrop(
+  const [{ isOver, canDrop, isDragging }, drop] = useDrop(
     () => ({
       accept: "card",
       drop: (item: CardDnDItem) => onDrop(item),
       collect: (monitor) => ({
         isOver: !!monitor.isOver(),
         canDrop: !!monitor.canDrop(),
+        isDragging: monitor.getItemType() === "card",
       }),
       canDrop: (item) =>
         card != null &&
         item.card.value === card.value + 1 &&
         item.card.suit === card.suit,
-      hover: (item, monitor) => {
+      hover: () => {
         if (Date.now() >= lastUpdateRef.current + 1000) {
           lastUpdateRef.current = Date.now();
           card && onUpdateDragTarget(card);
@@ -46,7 +47,7 @@ export default function FieldStackDragTarget({
     }),
     [onDrop, card]
   );
-  if (stackHeight === 0) {
+  if (stackHeight === 0 || !isDragging) {
     return null;
   }
   return (
@@ -54,7 +55,6 @@ export default function FieldStackDragTarget({
       style={{
         height: 77 + stackHeight * 0.2 + 2 * buffer,
         width: 55 + 2 * buffer,
-        zIndex: 1000000,
         backgroundColor: isOver && canDrop ? "rgba(255,255,0,.5)" : "",
         outline: canDrop ? "1px solid yellow" : "",
         borderRadius: 4,

@@ -11,10 +11,10 @@ export type CardState = {
   player: number;
 };
 export type PlayerState = {
+  isSpectating?: boolean;
   disconnected?: boolean;
   socketId: string | null;
   name: string;
-  index: number;
   color: string;
   stacks: [CardState[], CardState[], CardState[], CardState[]];
   pounceDeck: CardState[];
@@ -77,7 +77,6 @@ function createPlayer(
   color: string
 ): PlayerState {
   return {
-    index,
     name,
     socketId: socketId,
     color,
@@ -121,24 +120,24 @@ export function addPlayer(
   socketId: string | null,
   name?: string
 ) {
-  if (board.isActive) {
-    console.warn("Game is active, cannot add player");
-    return -1;
-  }
   const roundCount = board.players[0]?.scores?.length ?? 0;
   const usedColors = board.players.map((p) => p.color);
   const available = colors.filter((c) => !usedColors.includes(c));
-  board.players.push(
-    createPlayer(
-      socketId,
-      board.players.length,
-      name ?? randomName(),
-      available[0]
-    )
+  const player = createPlayer(
+    socketId,
+    board.players.length,
+    name ?? randomName(),
+    available[0]
   );
-  board.players[board.players.length - 1].scores = Array(roundCount).fill(null);
-  board.piles.push([], [], [], []);
-  board.pileLocs = generateLocations(board.players.length * 4);
+  player.scores = Array(roundCount).fill(null);
+  board.players.push(player);
+
+  if (board.isActive) {
+    player.isSpectating = true;
+  } else {
+    board.piles.push([], [], [], []);
+    board.pileLocs = generateLocations(board.players.length * 4);
+  }
   return board.players.length - 1;
 }
 export function removePlayer(board: BoardState, ...indices: number[]) {
@@ -153,7 +152,10 @@ export function removePlayer(board: BoardState, ...indices: number[]) {
 }
 
 export function isGameOver(board: BoardState) {
-  return board.players.find((p) => p.pounceDeck.length === 0) != null;
+  return (
+    board.players.find((p) => !p.isSpectating && p.pounceDeck.length === 0) !=
+    null
+  );
 }
 
 export function startGame(board: BoardState) {
@@ -187,6 +189,7 @@ export function resetBoard(boardState: BoardState) {
       player.currentPoints = 0;
     }
     player.stacks = [[], [], [], []];
+    player.isSpectating = false;
   });
   boardState.isActive = false;
   boardState.piles = Array(boardState.players.length * 4)
@@ -204,12 +207,18 @@ export function rotateDecks(board: BoardState) {
 }
 
 export function scoreBoard(board: BoardState) {
-  const pouncer = board.players.findIndex((p) => p.pounceDeck.length === 0);
+  const pouncer = board.players.findIndex(
+    (p) => !p.isSpectating && p.pounceDeck.length === 0
+  );
   board.isActive = false;
   board.pouncer = pouncer;
   board.players.forEach((player) => {
-    player.totalPoints += player.currentPoints;
-    player.scores.push(player.currentPoints);
+    if (!player.isSpectating) {
+      player.totalPoints += player.currentPoints;
+      player.scores.push(player.currentPoints);
+    } else {
+      player.scores.push(null);
+    }
     player.currentPoints = 0;
   });
 }

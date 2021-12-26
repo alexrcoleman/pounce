@@ -32,6 +32,9 @@ export function executeMove(
       throw new Error("Game is over");
     }
     const player = board.players[playerIndex];
+    if (player.isSpectating) {
+      throw new Error("Spectating player cannot move");
+    }
     if (move.type === "c2c") {
       cardToCenter(board, playerIndex, move.source, move.dest);
       const pile = board.piles[move.dest];

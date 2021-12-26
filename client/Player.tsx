@@ -9,22 +9,33 @@ type Props = {
 };
 
 export default function Player({ top, player, index }: Props) {
-  console.log(player);
   return (
     <div
       className={styles.card}
       style={{
         borderColor: player.color,
         top: top + 15,
+        zIndex: 20000,
       }}
     >
       <div
         className={joinClasses(
           styles.connection,
-          player.disconnected && styles.disconnected
+          player.disconnected
+            ? styles.disconnected
+            : player.isSpectating && styles.spectating
         )}
+        title={
+          player.disconnected
+            ? "Disconnected"
+            : player.isSpectating
+            ? "Spectating"
+            : undefined
+        }
       />
-      <span>{player.name}</span>
+      <span>
+        {player.name} (Current: {player.currentPoints})
+      </span>
     </div>
   );
 }
