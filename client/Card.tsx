@@ -171,6 +171,7 @@ const CardContentMemo = React.memo(function CardContent({
         } as any
       }
       onMouseOver={() => onHover && onHover(card)}
+      onTouchStart={() => onHover && onHover(card)}
       title={`${zIndex + 1} card(s)`}
       onClick={onClick}
       ref={drag}
