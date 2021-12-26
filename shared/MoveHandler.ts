@@ -53,7 +53,14 @@ export function executeMove(
         move.count
       );
     } else if (move.type === "flip_deck") {
-      //todo
+      const player = board.players[playerIndex];
+      if (player.deck.length === 0) {
+        player.deck = player.flippedDeck.reverse();
+        player.flippedDeck = [];
+      } else {
+        player.flippedDeck.push(...player.deck.reverse());
+        player.deck = [];
+      }
     } else if (move.type === "move_field_stack") {
       board.pileLocs[move.index][0] = move.position[0];
       board.pileLocs[move.index][1] = move.position[1];
