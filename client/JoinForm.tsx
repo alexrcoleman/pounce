@@ -17,6 +17,10 @@ export default function JoinForm({ placeholderName, onSubmit }: Props) {
           onSubmit(roomRef.current, nameRef.current);
         }}
       >
+        <div className={styles.header}>
+          <img src="/favicon.svg" width="30px" />
+          Pounce Online
+        </div>
         <div>
           <label>
             Room
