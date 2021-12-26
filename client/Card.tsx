@@ -150,10 +150,7 @@ const CardContentMemo = React.memo(function CardContent({
       className={joinClasses(
         styles.root,
         onClick != null && styles.clickable,
-        canDrag && styles.draggable,
-        suit === "clubs" || suit === "spades"
-          ? styles.blackCard
-          : styles.redCard
+        canDrag && styles.draggable
       )}
       style={
         {

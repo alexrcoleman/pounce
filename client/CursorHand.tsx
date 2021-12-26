@@ -1,28 +1,27 @@
+import CardFace from "./CardFace";
+import { CardState } from "../shared/GameUtils";
+import styles from "./CursorHand.module.css";
 type Props = {
   x: number;
   y: number;
   color: string;
+  card: CardState | null;
 };
-export default function CursorHand({ x, y, color }: Props) {
+export default function CursorHand({ x, y, color, card }: Props) {
   return (
     <div
+      className={styles.root}
       style={{
-        position: "absolute",
-        transform: `translate(${x}px, ${y}px) rotate(-120deg)`,
+        transform: `translate(${x}px, ${y}px)`,
         color: color,
-        transition: ".5s transform linear",
-        zIndex: 100000,
-        width: 20,
-        height: 20,
-        pointerEvents: "none",
-        fontSize: "20px",
-        borderRadius: "50px",
-        WebkitTextStrokeColor: "#111111BB",
-        WebkitTextStrokeWidth: "1px",
-        textAlign: "center",
       }}
     >
-      ➤
+      <div className={styles.cursor}>➤</div>
+      {card && (
+        <div className={styles.card}>
+          <CardFace value={card.value} suit={card.suit} />
+        </div>
+      )}
     </div>
   );
 }

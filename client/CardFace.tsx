@@ -1,4 +1,5 @@
 import React from "react";
+import joinClasses from "./joinClasses";
 import styles from "./CardFace.module.css";
 
 const CardFace = React.memo(function CardFace({
@@ -22,7 +23,14 @@ const CardFace = React.memo(function CardFace({
   const icon = getIcon(suit);
   const gridRowCount = 25;
   return (
-    <>
+    <div
+      className={joinClasses(
+        styles.root,
+        suit === "clubs" || suit === "spades"
+          ? styles.blackCard
+          : styles.redCard
+      )}
+    >
       {["J", "Q", "K"].includes(valueText) ? (
         <div
           className={styles.frontGrid}
@@ -115,7 +123,7 @@ const CardFace = React.memo(function CardFace({
         <div style={{ marginBottom: -2 }}>{valueText}</div>
         {icon}
       </div>
-    </>
+    </div>
   );
 });
 export default CardFace;

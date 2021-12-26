@@ -5,6 +5,7 @@ import Card from "./Card";
 import { CardDnDItem } from "./CardDnDItem";
 import CursorHand from "./CursorHand";
 import { DndProvider } from "react-dnd";
+import DragReporter from "./DragReporter";
 import FieldDragTarget from "./FieldDragTarget";
 import FieldStackDragTarget from "./FieldStackDragTarget";
 import { HTML5Backend } from "react-dnd-html5-backend";
@@ -23,13 +24,15 @@ type Props = {
   playerIndex: number;
   startGame: () => void;
   isHost: boolean;
-  hands: { location: CardState | null }[];
+  hands: { location: CardState | null; item: CardState | null }[];
   onUpdateHand: (card: CardState) => void;
+  onUpdateGrabbedItem: (card: CardState | null) => void;
 };
 export default function Board({
   board,
   isHost,
   executeMove,
+  onUpdateGrabbedItem,
   onUpdateHand,
   hands,
   startGame,
@@ -233,6 +236,7 @@ export default function Board({
   const onUpdateDragHover = onUpdateHand;
   return (
     <DndProvider backend={useTouch ? TouchBackend : HTML5Backend}>
+      <DragReporter onUpdateGrabbedItem={onUpdateGrabbedItem} />
       <div className={styles.root}>
         <div className={styles.rootInside}>
           <div className={styles.pileSection} />
@@ -314,6 +318,7 @@ export default function Board({
             }
             return (
               <CursorHand
+                card={hand.item}
                 x={cardLoc[0] + 15}
                 y={cardLoc[1]}
                 color={board.players[index].color}

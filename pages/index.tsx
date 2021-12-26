@@ -27,6 +27,7 @@ const Home: NextPage = () => {
     socketId,
     hands,
     onRotate,
+    onUpdateGrabbedItem,
   } = useGameSocket(roomId, name);
 
   if (!roomId || !name) {
@@ -79,6 +80,7 @@ const Home: NextPage = () => {
           hands={hands}
           board={board}
           onUpdateHand={onUpdateHand}
+          onUpdateGrabbedItem={onUpdateGrabbedItem}
           executeMove={executeMove}
           startGame={onStart}
           isHost={hostIndex === playerIndex}

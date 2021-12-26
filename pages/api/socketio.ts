@@ -24,7 +24,12 @@ export const config = {
 
 const socketData: Record<
   string,
-  { name?: string; currentRoom?: string; handLocation?: CardState | null }
+  {
+    name?: string;
+    currentRoom?: string;
+    handLocation?: CardState | null;
+    handItem?: CardState | null;
+  }
 > = {};
 
 export default function (req: any, res: any) {
@@ -35,7 +40,11 @@ export default function (req: any, res: any) {
     const broadcastHands = (roomId: string) => {
       const room = getRoom(roomId);
       const hands = room.board.players.map((p, index) => {
-        return { location: socketData[p.socketId ?? ""]?.handLocation ?? null };
+        const user = socketData[p.socketId ?? ""];
+        return {
+          location: user?.handLocation ?? null,
+          item: user?.handItem ?? null,
+        };
       });
       io.to(roomId).emit("update_hands", {
         hands,
@@ -189,11 +198,16 @@ export default function (req: any, res: any) {
       socket.on("disconnect", () => {
         delete socketData[socket.id];
       });
-      socket.on("update_hand", ({ location }) => {
+      socket.on("update_hand", ({ item, location }) => {
         if (user.currentRoom == null) {
           return;
         }
-        socketData[socket.id].handLocation = location;
+        if (location !== undefined) {
+          socketData[socket.id].handLocation = location;
+        }
+        if (item !== undefined) {
+          socketData[socket.id].handItem = item;
+        }
         broadcastHands(user.currentRoom);
       });
     });

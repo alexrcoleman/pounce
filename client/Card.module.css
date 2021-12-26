@@ -13,12 +13,6 @@
     scale(var(--s), var(--s));
   outline: 2px solid #ffe63f00;
 }
-.blackCard {
-  color: black;
-}
-.redCard {
-  color: red;
-}
 .clickable {
   cursor: pointer;
 }
@@ -48,10 +42,6 @@
   height: 100%;
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background-color: white;
 }
 .front {
   transform: rotateY(-180deg);

@@ -14,7 +14,9 @@ export default function useGameSocket(
   const [latency, setLatency] = useState(0);
   const [lastTime, setLastTime] = useState(0);
   const [socketId, setSocketId] = useState("");
-  const [hands, setHands] = useState<{ location: CardState | null }[]>([]);
+  const [hands, setHands] = useState<
+    { location: CardState | null; item: CardState | null }[]
+  >([]);
   useEffect(() => {
     fetch("/api/socketio").finally(() => {
       const socket = (socketRef.current = io());
@@ -84,7 +86,13 @@ export default function useGameSocket(
   }, [socketRef]);
   const sendHand = useCallback(
     (card: CardState) => {
-      socketRef.current?.emit("update_hand", { location: card });
+      socketRef.current?.emit("update_hand", { location: card ?? null });
+    },
+    [socketRef]
+  );
+  const onUpdateGrabbedItem = useCallback(
+    (card: CardState | null) => {
+      socketRef.current?.emit("update_hand", { item: card ?? null });
     },
     [socketRef]
   );
@@ -96,6 +104,7 @@ export default function useGameSocket(
     executeMove,
     onRotate,
     onUpdateHand: sendHand,
+    onUpdateGrabbedItem,
     socketId,
     isConnected,
     board,
