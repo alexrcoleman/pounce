@@ -41,14 +41,7 @@ export default function Card({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const cardMemo = useMemo(() => card, [card.player, card.suit, card.value]);
 
-  const sourcePileIndex = source.type === "solitaire" ? source.pileIndex : null;
-  const sourceSlotIndex = source.type === "solitaire" ? source.slotIndex : null;
-
-  const sourceMemo = useMemo(
-    () => source,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [source.type, sourcePileIndex, sourceSlotIndex]
-  );
+  const sourceMemo = useMemo(() => source, [JSON.stringify(source)]);
   return (
     <CardContentMemo
       color={boardState.players[card.player].color}

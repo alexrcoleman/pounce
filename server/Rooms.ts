@@ -12,10 +12,15 @@ import { getBasicAIMove } from "../shared/ComputerV1";
 const rooms: Record<
   string,
   {
+    io: Server;
     board: BoardState;
     interval: NodeJS.Timer;
     aiSpeed: number;
     aiCooldowns: number[];
+    /**
+     * What the AI currently sees the board as (to give reaction delay)
+     */
+    aiBoard: BoardState;
   }
 > = {};
 
@@ -37,7 +42,7 @@ export function createRoom(io: Server, roomId: string) {
             if (aiCooldowns[index] > Date.now() || player.socketId != null) {
               return false;
             }
-            const move = getBasicAIMove(board, index);
+            const move = getBasicAIMove(room.aiBoard, index);
             executeMove(board, index, move);
             aiCooldowns[index] =
               Date.now() + (Math.random() * 2000 + 5000) / room.aiSpeed;
@@ -46,14 +51,29 @@ export function createRoom(io: Server, roomId: string) {
           .find(Boolean) != null;
     }
     if (hasUpdate) {
-      io.to(roomId).emit("update", { board, time: Date.now() });
+      broadcastUpdate(roomId);
     }
   }, 100);
-  rooms[roomId] = { board, interval, aiSpeed: 3, aiCooldowns: [] };
-  io.to(roomId).emit("update", {
+  rooms[roomId] = {
+    io,
     board,
+    interval,
+    aiSpeed: 3,
+    aiCooldowns: [],
+    aiBoard: JSON.parse(JSON.stringify(board)),
+  };
+  broadcastUpdate(roomId);
+}
+
+export function broadcastUpdate(roomId: string) {
+  const room = rooms[roomId];
+  room.io.to(roomId).emit("update", {
+    board: room.board,
     time: Date.now(),
   });
+  setTimeout(() => {
+    room.aiBoard = JSON.parse(JSON.stringify(room.board));
+  }, 600);
 }
 
 export function getRoom(roomId: string) {

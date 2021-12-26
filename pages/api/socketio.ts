@@ -6,7 +6,12 @@ import {
   rotateDecks,
   startGame,
 } from "../../shared/GameUtils";
-import { createRoom, deleteRoom, getRoom } from "../../server/Rooms";
+import {
+  broadcastUpdate,
+  createRoom,
+  deleteRoom,
+  getRoom,
+} from "../../server/Rooms";
 
 import { Server } from "socket.io";
 import { executeMove } from "../../shared/MoveHandler";
@@ -27,11 +32,6 @@ export default function (req: any, res: any) {
     console.log("*First use, starting socket.io");
 
     const io = new Server(res.socket.server);
-    const broadcastUpdate = (roomId: string) =>
-      io.to(roomId).emit("update", {
-        board: getRoom(roomId).board,
-        time: Date.now(),
-      });
     const broadcastHands = (roomId: string) => {
       const room = getRoom(roomId);
       const hands = room.board.players.map((p, index) => {
@@ -66,12 +66,6 @@ export default function (req: any, res: any) {
         const player = room.board.players.find((p) => p.socketId === userId);
         if (!player) {
           addPlayer(room.board, userId, socketData[userId].name);
-          if (room.board.isActive) {
-            io.to(userId).emit(
-              "alert",
-              "Room currently has in progress game, you will join once the game is over"
-            );
-          }
         } else {
           player.disconnected = false;
           player.name = socketData[userId].name ?? player.name;
@@ -159,6 +153,7 @@ export default function (req: any, res: any) {
             .map((pair) => pair.i)
         );
         room.aiCooldowns = room.board.players.map(() => Date.now() + 2000);
+        room.aiBoard = JSON.parse(JSON.stringify(room.board)); // todo: refactor
         startGame(room.board);
         broadcastUpdate(user.currentRoom);
       });

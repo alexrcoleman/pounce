@@ -15,3 +15,6 @@
   overflow: hidden;
   white-space: nowrap; */
 }
+.table tr td:nth-child(n + 2) {
+  text-align: end;
+}
