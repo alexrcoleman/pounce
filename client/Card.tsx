@@ -105,6 +105,7 @@ const CardContentMemo = React.memo(function CardContent({
               }
               return dragItem.index === item.index;
             },
+            canDrag: () => source.type === "field_stack" && source.isTopCard,
           }
         : {
             type: "card",

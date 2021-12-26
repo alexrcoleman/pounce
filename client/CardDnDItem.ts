@@ -5,7 +5,7 @@ export type SourceType =
   | { type: "solitaire"; pileIndex: number; slotIndex: number }
   | { type: "flippedDeck" }
   | { type: "other" }
-  | { type: "field_stack"; index: number };
+  | { type: "field_stack"; index: number; isTopCard: boolean };
 
 export type CardDnDItem = {
   source: SourceType;

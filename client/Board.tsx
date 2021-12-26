@@ -90,7 +90,11 @@ export default function Board({
             zIndex={index}
             boardState={board}
             rotation={board.pileLocs[pileIndex][2]}
-            source={{ type: "field_stack", index: pileIndex }}
+            source={{
+              type: "field_stack",
+              index: pileIndex,
+              isTopCard: index === pile.length - 1,
+            }}
             onHover={onUpdateHand}
           />
         );
@@ -117,11 +121,17 @@ export default function Board({
                 zIndex={index}
                 boardState={board}
                 onClick={
-                  playerIndex === activePlayerIndex ? cycleDeck : undefined
+                  playerIndex === activePlayerIndex &&
+                  index === player.deck.length - 1
+                    ? cycleDeck
+                    : undefined
                 }
                 source={{ type: "other" }}
                 onHover={
-                  playerIndex === activePlayerIndex ? onUpdateHand : undefined
+                  playerIndex === activePlayerIndex &&
+                  index === player.deck.length - 1
+                    ? onUpdateHand
+                    : undefined
                 }
               />
             );
@@ -149,10 +159,16 @@ export default function Board({
                     : { type: "other" }
                 }
                 onClick={
-                  playerIndex === activePlayerIndex ? flipDeck : undefined
+                  playerIndex === activePlayerIndex &&
+                  index === player.flippedDeck.length - 1
+                    ? flipDeck
+                    : undefined
                 }
                 onHover={
-                  playerIndex === activePlayerIndex ? onUpdateHand : undefined
+                  playerIndex === activePlayerIndex &&
+                  index === player.flippedDeck.length - 1
+                    ? onUpdateHand
+                    : undefined
                 }
               />
             );
@@ -177,7 +193,10 @@ export default function Board({
                     : { type: "other" }
                 }
                 onHover={
-                  playerIndex === activePlayerIndex ? onUpdateHand : undefined
+                  playerIndex === activePlayerIndex &&
+                  index === player.pounceDeck.length - 1
+                    ? onUpdateHand
+                    : undefined
                 }
               />
             );
