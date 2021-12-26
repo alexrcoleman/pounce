@@ -12,6 +12,8 @@ type Props = {
   isHost: boolean;
   onRotate: () => void;
   setUseAnimations: (use: boolean) => void;
+  scale: number;
+  setScale: (scale: number) => void;
 };
 
 export default function Header({
@@ -25,6 +27,8 @@ export default function Header({
   onRotate,
   isHost,
   roomId,
+  scale,
+  setScale,
 }: Props) {
   const [isExpanded, setExpanded] = useState(true);
   return (
@@ -72,7 +76,11 @@ export default function Header({
         </label>
         <div className={styles.slider}>
           Scale
-          <input type="range" />
+          <input
+            type="range"
+            value={scale}
+            onChange={(e) => setScale(e.target.valueAsNumber)}
+          />
         </div>
       </div>
       <button

@@ -24,9 +24,7 @@ export default function Player({ top, player, index }: Props) {
           player.disconnected && styles.disconnected
         )}
       />
-      <span>
-        {player.name}: {player.currentPoints} ({player.totalPoints} total)
-      </span>
+      <span>{player.name}</span>
     </div>
   );
 }

@@ -14,6 +14,7 @@ const Home: NextPage = () => {
   const [roomId, setRoomId] = useState<null | string>(null);
   const [name, setName] = useState<null | string>(null);
   const [animations, setAnimations] = useState(true);
+  const [scale, setScale] = useState(1);
   const {
     executeMove,
     onStart,
@@ -68,8 +69,10 @@ const Home: NextPage = () => {
         roomId={roomId}
         isHost={hostIndex === playerIndex}
         onRotate={onRotate}
+        scale={scale}
+        setScale={setScale}
       />
-      <div className={styles.boardWrapper}>
+      <div className={styles.boardWrapper} style={{ "--scale": scale } as any}>
         <Board
           hands={hands}
           board={board}
