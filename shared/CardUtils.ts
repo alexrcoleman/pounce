@@ -6,6 +6,15 @@ export function peek(cards: CardState[]): CardState | undefined {
   return cards[cards.length - 1] ?? undefined;
 }
 
+export function cardEquals(
+  a: CardState | null | undefined,
+  b: CardState | null | undefined
+) {
+  return (
+    a?.player === b?.player && a?.suit === b?.suit && a?.value === b?.value
+  );
+}
+
 export function canMoveToSolitairePile(
   card: CardState | undefined,
   solitairePile: CardState[]

@@ -91,8 +91,8 @@ function createPlayer(
 }
 
 function randomName() {
-  const adjs = ["Happy", "Funny", "Rude", "Speedy"];
-  const nouns = ["Ninja", "Pouncer", "Player", "Tomato", "Banana"];
+  const adjs = ["Happy", "Funny", "Rude", "Speedy", "Slow", "Magic", "Good"];
+  const nouns = ["Ninja", "Pouncer", "Player", "Tomato", "Banana", "Doggy"];
   return (
     adjs[Math.floor(Math.random() * adjs.length)] +
     " " +

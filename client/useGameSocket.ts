@@ -35,6 +35,7 @@ export default function useGameSocket(
       });
       socket.on("update_hands", ({ hands }) => {
         setHands(hands);
+        console.log("GOt", hands);
       });
       socket.on("update", (data) => {
         setBoard(data.board);
@@ -96,6 +97,9 @@ export default function useGameSocket(
     },
     [socketRef]
   );
+  const setAILevel = useCallback((level: number) => {
+    socketRef.current?.emit("set_ai_level", { speed: level });
+  }, []);
   return {
     onRemoveAI,
     onAddAI,
@@ -107,6 +111,7 @@ export default function useGameSocket(
     onUpdateGrabbedItem,
     socketId,
     isConnected,
+    setAILevel,
     board,
     hands,
   };

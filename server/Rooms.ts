@@ -1,5 +1,6 @@
 import {
   BoardState,
+  CardState,
   createBoard,
   isGameOver,
   scoreBoard,
@@ -17,6 +18,10 @@ const rooms: Record<
     interval: NodeJS.Timer;
     aiSpeed: number;
     aiCooldowns: number[];
+    hands: {
+      location?: CardState | null;
+      item?: CardState | null;
+    }[]; // todo: put this in the board?
     /**
      * What the AI currently sees the board as (to give reaction delay)
      */
@@ -29,29 +34,47 @@ export function createRoom(io: Server, roomId: string) {
   const interval = setInterval(() => {
     const room = rooms[roomId];
     const aiCooldowns = room.aiCooldowns;
-    let hasUpdate = false;
+    let hasUpdate = false,
+      hasHandUpdate = false;
     if (!board.isActive) {
       //no-op
     } else if (isGameOver(board)) {
       scoreBoard(board);
       hasUpdate = true;
     } else {
-      hasUpdate =
-        board.players
-          .map((player, index) => {
-            if (aiCooldowns[index] > Date.now() || player.socketId != null) {
-              return false;
-            }
-            const move = getBasicAIMove(room.aiBoard, index);
-            executeMove(board, index, move);
-            aiCooldowns[index] =
-              Date.now() + (Math.random() * 2000 + 5000) / room.aiSpeed;
-            return true;
-          })
-          .find(Boolean) != null;
+      board.players.map((player, index) => {
+        if (aiCooldowns[index] > Date.now() || player.socketId != null) {
+          return false;
+        }
+        hasUpdate = true;
+        room.hands[index] = room.hands[index] ?? {};
+        const move = getBasicAIMove(room.aiBoard, index);
+        const moveResult = executeMove(board, index, move, room.hands[index]);
+
+        let cooldownDist = {
+          mean: 2500 / room.aiSpeed,
+          deviation: 500 / room.aiSpeed,
+        };
+        if (moveResult?.cursorMove) {
+          room.hands[index].location = moveResult.cursorMove;
+          hasHandUpdate = true;
+          cooldownDist = {
+            mean: Math.min(500, 1500 / room.aiSpeed),
+            deviation: Math.min(100, 300 / room.aiSpeed),
+          };
+        }
+        // todo: normal distribution
+        const delay =
+          (Math.random() - 0.5) * 2 * cooldownDist.deviation +
+          cooldownDist.mean;
+        aiCooldowns[index] = Date.now() + delay;
+      });
     }
     if (hasUpdate) {
       broadcastUpdate(roomId);
+    }
+    if (hasHandUpdate) {
+      broadcastHands(roomId);
     }
   }, 100);
   rooms[roomId] = {
@@ -60,6 +83,7 @@ export function createRoom(io: Server, roomId: string) {
     interval,
     aiSpeed: 3,
     aiCooldowns: [],
+    hands: [],
     aiBoard: JSON.parse(JSON.stringify(board)),
   };
   broadcastUpdate(roomId);
@@ -71,9 +95,17 @@ export function broadcastUpdate(roomId: string) {
     board: room.board,
     time: Date.now(),
   });
+  const reactionDelay = 1800 / room.aiSpeed;
   setTimeout(() => {
     room.aiBoard = JSON.parse(JSON.stringify(room.board));
-  }, 600);
+  }, reactionDelay);
+}
+
+export function broadcastHands(roomId: string) {
+  const room = getRoom(roomId);
+  room.io.to(roomId).emit("update_hands", {
+    hands: room.board.players.map((_, index) => room.hands[index] ?? {}),
+  });
 }
 
 export function getRoom(roomId: string) {

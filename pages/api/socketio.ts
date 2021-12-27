@@ -7,6 +7,7 @@ import {
   startGame,
 } from "../../shared/GameUtils";
 import {
+  broadcastHands,
   broadcastUpdate,
   createRoom,
   deleteRoom,
@@ -27,8 +28,6 @@ const socketData: Record<
   {
     name?: string;
     currentRoom?: string;
-    handLocation?: CardState | null;
-    handItem?: CardState | null;
   }
 > = {};
 
@@ -37,19 +36,6 @@ export default function (req: any, res: any) {
     console.log("*First use, starting socket.io");
 
     const io = new Server(res.socket.server);
-    const broadcastHands = (roomId: string) => {
-      const room = getRoom(roomId);
-      const hands = room.board.players.map((p, index) => {
-        const user = socketData[p.socketId ?? ""];
-        return {
-          location: user?.handLocation ?? null,
-          item: user?.handItem ?? null,
-        };
-      });
-      io.to(roomId).emit("update_hands", {
-        hands,
-      });
-    };
     io.of("/").adapter.on("create-room", (id) => {
       if (id.startsWith("pounce:")) {
         console.log("Set up new board for room: " + id);
@@ -185,13 +171,13 @@ export default function (req: any, res: any) {
         broadcastUpdate(user.currentRoom);
         broadcastHands(user.currentRoom);
       });
-      socket.on("set_ai_speed", (args) => {
+      socket.on("set_ai_level", (args) => {
         if (user.currentRoom == null) {
           return;
         }
         const speed = Math.max(
-          3,
-          Math.min(8, typeof args.speed === "number" ? args.speed : 3)
+          1,
+          Math.min(9, typeof args.speed === "number" ? args.speed : 3)
         );
         getRoom(user.currentRoom).aiSpeed = speed;
       });
@@ -202,11 +188,17 @@ export default function (req: any, res: any) {
         if (user.currentRoom == null) {
           return;
         }
+        const room = getRoom(user.currentRoom);
+        const player = room.board.players.findIndex(
+          (p) => p.socketId === socket.id
+        );
+        const hands = room.hands;
+        hands[player] = hands[player] ?? {};
         if (location !== undefined) {
-          socketData[socket.id].handLocation = location;
+          hands[player].location = location;
         }
         if (item !== undefined) {
-          socketData[socket.id].handItem = item;
+          hands[player].item = item;
         }
         broadcastHands(user.currentRoom);
       });

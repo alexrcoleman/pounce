@@ -14,6 +14,7 @@ type Props = {
   setUseAnimations: (use: boolean) => void;
   scale: number;
   setScale: (scale: number) => void;
+  setAILevel: (level: number) => void;
 };
 
 export default function Header({
@@ -29,6 +30,7 @@ export default function Header({
   roomId,
   scale,
   setScale,
+  setAILevel,
 }: Props) {
   const [isExpanded, setExpanded] = useState(true);
   return (
@@ -44,6 +46,17 @@ export default function Header({
             <button disabled={isStarted} onClick={onRemoveAI}>
               Remove AI
             </button>
+            <div className={styles.slider}>
+              AI Level
+              <input
+                type="range"
+                defaultValue={3}
+                min={1}
+                max={9}
+                step={1}
+                onChange={(e) => setAILevel(e.target.valueAsNumber)}
+              />
+            </div>
           </>
         )}
         {isHost && (
@@ -75,7 +88,7 @@ export default function Header({
           Animations
         </label>
         <div className={styles.slider}>
-          Scale
+          Zoom
           <input
             type="range"
             value={scale}

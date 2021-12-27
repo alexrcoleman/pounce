@@ -1,5 +1,10 @@
 import { BoardState, CardState, isGameOver } from "./GameUtils";
-import { canMoveToSolitairePile, canPlayOnCenterPile, peek } from "./CardUtils";
+import {
+  canMoveToSolitairePile,
+  canPlayOnCenterPile,
+  cardEquals,
+  peek,
+} from "./CardUtils";
 
 export type Move =
   | {
@@ -21,12 +26,14 @@ export type Move =
   | { type: "cycle" }
   | { type: "flip_deck" }
   | { type: "move_field_stack"; index: number; position: [number, number] };
-
+type MoveResult = { cursorMove?: CardState };
+type AICursorData = { location?: CardState | null | undefined } | undefined;
 export function executeMove(
   board: BoardState,
   playerIndex: number,
-  move: Move
-) {
+  move: Move,
+  aiCursor?: AICursorData
+): MoveResult | null {
   try {
     if (isGameOver(board)) {
       throw new Error("Game is over");
@@ -35,8 +42,16 @@ export function executeMove(
     if (player.isSpectating) {
       throw new Error("Spectating player cannot move");
     }
+    let moveResult: MoveResult;
+    let playedCard: CardState | undefined;
     if (move.type === "c2c") {
-      cardToCenter(board, playerIndex, move.source, move.dest);
+      moveResult = cardToCenter(
+        board,
+        playerIndex,
+        move.source,
+        move.dest,
+        aiCursor
+      );
       const pile = board.piles[move.dest];
       // May set the position of the pile
       if (pile.length === 1 && move.position) {
@@ -44,16 +59,23 @@ export function executeMove(
         board.pileLocs[move.dest][1] = move.position[1];
       }
     } else if (move.type === "cycle") {
-      cycleDeck(board, playerIndex);
+      moveResult = cycleDeck(board, playerIndex, aiCursor);
     } else if (move.type === "c2s") {
-      cardToSolitaire(board, playerIndex, move.source, move.dest);
-    } else if (move.type === "s2s") {
-      solitaireToSolitaire(
+      moveResult = cardToSolitaire(
         board,
         playerIndex,
         move.source,
         move.dest,
-        move.count
+        aiCursor
+      );
+    } else if (move.type === "s2s") {
+      moveResult = solitaireToSolitaire(
+        board,
+        playerIndex,
+        move.source,
+        move.dest,
+        move.count,
+        aiCursor
       );
     } else if (move.type === "flip_deck") {
       const player = board.players[playerIndex];
@@ -64,11 +86,14 @@ export function executeMove(
         player.flippedDeck.push(...player.deck.reverse());
         player.deck = [];
       }
+      moveResult = {};
     } else if (move.type === "move_field_stack") {
       board.pileLocs[move.index][0] = move.position[0];
       board.pileLocs[move.index][1] = move.position[1];
+      moveResult = {};
     } else {
       const _unused: never = move;
+      throw new Error("Invalid move type");
     }
 
     player.currentPoints =
@@ -77,8 +102,10 @@ export function executeMove(
       player.deck.length * -1 +
       player.flippedDeck.length * -1 +
       player.stacks.reduce((s, x) => s + x.length, 0) * -1;
+    return moveResult;
   } catch (e) {
     console.error("Player " + playerIndex + " attempted an illegal move", e);
+    return null;
   }
 }
 
@@ -89,8 +116,9 @@ function cardToCenter(
     | { type: "pounce" }
     | { type: "solitaire"; index: number }
     | { type: "deck" },
-  dest: number
-) {
+  dest: number,
+  aiCursor: AICursorData
+): MoveResult {
   const player = boardState.players[playerIndex];
   const sourceStack =
     source.type === "pounce"
@@ -102,6 +130,9 @@ function cardToCenter(
   if (topCard == null) {
     throw new Error("No card to play from that pile");
   }
+  if (aiCursor && !cardEquals(aiCursor.location, topCard)) {
+    return { cursorMove: topCard };
+  }
   const pile = boardState.piles[dest];
   if (!pile || !canPlayOnCenterPile(pile, topCard)) {
     throw new Error("Cannot play given card on pile");
@@ -112,14 +143,16 @@ function cardToCenter(
 
   sourceStack.pop();
   pile.push(topCard);
+  return {};
 }
 
 function cardToSolitaire(
   boardState: BoardState,
   playerIndex: number,
   source: "pounce" | "deck",
-  solitairePile: number
-) {
+  solitairePile: number,
+  aiCursor: AICursorData
+): MoveResult {
   const player = boardState.players[playerIndex];
   const sourceStack =
     source === "pounce" ? player.pounceDeck : player.flippedDeck;
@@ -128,11 +161,15 @@ function cardToSolitaire(
   if (topCard == null) {
     throw new Error("No card to play from that pile");
   }
+  if (aiCursor && !cardEquals(aiCursor.location, topCard)) {
+    return { cursorMove: topCard };
+  }
   if (!canMoveToSolitairePile(topCard, destStack)) {
     throw new Error("Tried to move stack to stack of invalid value/color");
   }
   sourceStack.pop();
   destStack.push(topCard);
+  return {};
 }
 
 function solitaireToSolitaire(
@@ -140,8 +177,9 @@ function solitaireToSolitaire(
   playerIndex: number,
   fromPile: number,
   toPile: number,
-  count: number
-) {
+  count: number,
+  aiCursor: AICursorData
+): MoveResult {
   const player = boardState.players[playerIndex];
   const source = player.stacks[fromPile];
   const dest = player.stacks[toPile];
@@ -150,6 +188,10 @@ function solitaireToSolitaire(
   if (topCard == null) {
     throw new Error("Tried to move too many cards from solitaire stack");
   }
+
+  if (aiCursor && !cardEquals(aiCursor.location, topCard)) {
+    return { cursorMove: topCard };
+  }
   if (!canMoveToSolitairePile(topCard, dest)) {
     throw new Error(
       "Tried to move solitaire stack to stack of invalid value/color"
@@ -157,19 +199,30 @@ function solitaireToSolitaire(
   }
   const movingStack = source.splice(source.length - count, count);
   dest.push(...movingStack);
+  return {};
 }
 
-function cycleDeck(boardState: BoardState, playerIndex: number) {
+function cycleDeck(
+  boardState: BoardState,
+  playerIndex: number,
+  aiCursor: AICursorData
+): MoveResult {
   const player = boardState.players[playerIndex];
   if (player.deck.length === 0) {
+    if (aiCursor && !cardEquals(aiCursor.location, peek(player.flippedDeck))) {
+      return { cursorMove: peek(player.flippedDeck) };
+    }
     player.deck = player.flippedDeck.reverse();
     player.flippedDeck = [];
   } else {
-    const triple = [
-      player.deck.pop(),
-      player.deck.pop(),
-      player.deck.pop(),
-    ].filter(Boolean) as CardState[];
+    const triple = player.deck.slice(-3).reverse();
+    if (aiCursor && !cardEquals(aiCursor.location, peek(triple))) {
+      return { cursorMove: peek(triple) };
+    }
+    player.deck.pop();
+    player.deck.pop();
+    player.deck.pop();
     player.flippedDeck.push(...triple);
   }
+  return {};
 }

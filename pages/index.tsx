@@ -28,6 +28,7 @@ const Home: NextPage = () => {
     hands,
     onRotate,
     onUpdateGrabbedItem,
+    setAILevel,
   } = useGameSocket(roomId, name);
 
   if (!roomId || !name) {
@@ -72,6 +73,7 @@ const Home: NextPage = () => {
         roomId={roomId}
         isHost={hostIndex === playerIndex}
         onRotate={onRotate}
+        setAILevel={setAILevel}
         scale={scale}
         setScale={setScale}
       />
