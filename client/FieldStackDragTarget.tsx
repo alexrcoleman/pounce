@@ -13,7 +13,7 @@ type Props = {
   onUpdateDragTarget: (card: CardState) => void;
 };
 
-const buffer = 15;
+const buffer = 30;
 
 export default function FieldStackDragTarget({
   card,

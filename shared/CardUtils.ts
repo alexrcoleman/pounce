@@ -42,11 +42,12 @@ export function canPlayOnCenterPile(pile: CardState[], card: CardState) {
   );
 }
 
-export function couldMatch(a: CardState, b: CardState) {
+export function couldMatch(a: CardState, b: CardState): boolean {
   return (
-    a.value % 2 ^
-    b.value % 2 ^
-    (a.suit === "spades" || a.suit === "clubs" ? 1 : 0) ^
-    (b.suit === "spades" || b.suit === "clubs" ? 1 : 0)
+    (a.value % 2 ^
+      b.value % 2 ^
+      (a.suit === "spades" || a.suit === "clubs" ? 1 : 0) ^
+      (b.suit === "spades" || b.suit === "clubs" ? 1 : 0)) ===
+    0
   );
 }

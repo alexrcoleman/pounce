@@ -33,7 +33,7 @@ type Props = {
 /**
  * Renders a playing card at a given position.
  */
-export default function Card({
+export default React.memo(function Card({
   boardState,
   card,
   source,
@@ -51,7 +51,7 @@ export default function Card({
       {...otherProps}
     />
   );
-}
+});
 
 const CardContentMemo = React.memo(function CardContent({
   positionX,

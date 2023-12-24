@@ -32,7 +32,8 @@ export default function Header({
   setScale,
   setAILevel,
 }: Props) {
-  const [isExpanded, setExpanded] = useState(true);
+  // TODO: Move this to a dialog probably
+  const [isExpanded, setExpanded] = useState(isHost);
   return (
     <>
       <div
@@ -52,10 +53,11 @@ export default function Header({
                 type="range"
                 defaultValue={3}
                 min={1}
-                max={9}
+                max={10}
                 step={1}
                 onChange={(e) => setAILevel(e.target.valueAsNumber)}
               />
+              <button onClick={() => setAILevel(1000)}>Simulation Mode</button>
             </div>
           </>
         )}
@@ -92,7 +94,7 @@ export default function Header({
           <input
             type="range"
             value={scale}
-            min="1"
+            min="0.5"
             max="2"
             step=".025"
             onChange={(e) => setScale(e.target.valueAsNumber)}

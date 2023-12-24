@@ -5,8 +5,15 @@ type Props = {
   onSubmit: (room: string, name: string) => void;
 };
 
+function randomCode() {
+  let code = "";
+  for (let i = 0; i < 5; i++) {
+    code += String.fromCharCode(65 + Math.floor(Math.random() * 26));
+  }
+  return code;
+}
 export default function JoinForm({ placeholderName, onSubmit }: Props) {
-  const roomRef = useRef("");
+  const roomRef = useRef(randomCode());
   const nameRef = useRef(placeholderName);
   return (
     <div className={styles.root}>
@@ -23,11 +30,15 @@ export default function JoinForm({ placeholderName, onSubmit }: Props) {
         </div>
         <div>
           <label>
-            Room
+            Room Code
             <br />
             <input
               name="room"
-              onChange={(e) => (roomRef.current = e.target.value)}
+              onChange={(e) => {
+                roomRef.current = e.target.value = e.target.value.toUpperCase();
+              }}
+              defaultValue={roomRef.current}
+              autoFocus
               autoComplete="off"
             />
           </label>

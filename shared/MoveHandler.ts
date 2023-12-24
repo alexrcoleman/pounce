@@ -3,6 +3,7 @@ import {
   canMoveToSolitairePile,
   canPlayOnCenterPile,
   cardEquals,
+  couldMatch,
   peek,
 } from "./CardUtils";
 
@@ -26,8 +27,10 @@ export type Move =
   | { type: "cycle" }
   | { type: "flip_deck" }
   | { type: "move_field_stack"; index: number; position: [number, number] };
-type MoveResult = { cursorMove?: CardState };
-type AICursorData = { location?: CardState | null | undefined } | undefined;
+type MoveResult = { cursorMove?: CardState; cursorMoveItem?: CardState };
+type AICursorData =
+  | { location?: CardState | null | undefined; item?: CardState | null }
+  | undefined;
 export function executeMove(
   board: BoardState,
   playerIndex: number,
@@ -102,9 +105,18 @@ export function executeMove(
       player.deck.length * -1 +
       player.flippedDeck.length * -1 +
       player.stacks.reduce((s, x) => s + x.length, 0) * -1;
+    if (
+      move.type !== "cycle" &&
+      move.type !== "move_field_stack" &&
+      move.type !== "flip_deck"
+    ) {
+      // Progress is made on the board
+      board.ticksSinceMove = 0;
+    }
+    board.ticksSinceMove += 1 / board.players.length;
     return moveResult;
   } catch (e) {
-    console.error("Player " + playerIndex + " attempted an illegal move", e);
+    // console.error("Player " + playerIndex + " attempted an illegal move", e);
     return null;
   }
 }
@@ -130,10 +142,18 @@ function cardToCenter(
   if (topCard == null) {
     throw new Error("No card to play from that pile");
   }
-  if (aiCursor && !cardEquals(aiCursor.location, topCard)) {
-    return { cursorMove: topCard };
-  }
   const pile = boardState.piles[dest];
+  if (aiCursor && !cardEquals(aiCursor.item, topCard)) {
+    if (cardEquals(aiCursor.location, topCard)) {
+      // Already on the right card, now drag it
+      const pileCard = peek(pile);
+      if (pileCard) {
+        return { cursorMove: pileCard, cursorMoveItem: topCard };
+      }
+    } else {
+      return { cursorMove: topCard };
+    }
+  }
   if (!pile || !canPlayOnCenterPile(pile, topCard)) {
     throw new Error("Cannot play given card on pile");
   }
@@ -164,7 +184,19 @@ function cardToSolitaire(
   if (aiCursor && !cardEquals(aiCursor.location, topCard)) {
     return { cursorMove: topCard };
   }
-  if (!canMoveToSolitairePile(topCard, destStack)) {
+  if (
+    destStack.length >= 1 &&
+    topCard.value === destStack[0].value + 1 &&
+    couldMatch(topCard, destStack[0])
+  ) {
+    // Trying to tuck a card under the solitaire stack, ensure they have a free slot
+    if (!player.stacks.some((s) => s.length === 0)) {
+      throw new Error("No free solitaire slots");
+    }
+    sourceStack.pop();
+    destStack.unshift(topCard);
+    return {};
+  } else if (!canMoveToSolitairePile(topCard, destStack)) {
     throw new Error("Tried to move stack to stack of invalid value/color");
   }
   sourceStack.pop();

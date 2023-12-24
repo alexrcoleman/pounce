@@ -147,9 +147,11 @@ export default function (req: any, res: any) {
             .filter((pair) => pair.p.disconnected)
             .map((pair) => pair.i)
         );
-        room.aiCooldowns = room.board.players.map(() => Date.now() + 2000);
+        room.aiCooldowns = room.board.players.map(
+          () => Date.now() + 2000 + Math.random()
+        );
         room.aiBoard = JSON.parse(JSON.stringify(room.board)); // todo: refactor
-        startGame(room.board);
+        startGame(room);
         broadcastUpdate(user.currentRoom);
       });
       socket.on("rotate_decks", () => {
@@ -175,11 +177,26 @@ export default function (req: any, res: any) {
         if (user.currentRoom == null) {
           return;
         }
-        const speed = Math.max(
-          1,
-          Math.min(9, typeof args.speed === "number" ? args.speed : 3)
-        );
-        getRoom(user.currentRoom).aiSpeed = speed;
+        const isSimulationMode = args.speed === 1000;
+        const room = getRoom(user.currentRoom);
+        if (isSimulationMode) {
+          room.autoStart = true;
+          room.timescale = 100;
+          room.board.players.forEach((p) => {
+            if (p.socketId != null) {
+              // Mark any humans as spectating
+              p.isSpectating = true;
+            }
+          });
+        } else {
+          room.timescale = 1;
+          room.autoStart = false;
+          const speed = Math.max(
+            1,
+            Math.min(500, typeof args.speed === "number" ? args.speed : 3)
+          );
+          room.aiSpeed = speed;
+        }
       });
       socket.on("disconnect", () => {
         delete socketData[socket.id];
