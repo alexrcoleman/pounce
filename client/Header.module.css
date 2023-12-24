@@ -2,21 +2,22 @@
   z-index: 100000;
   position: absolute;
   left: 0;
+  top: 0;
   display: flex;
   align-items: center;
   gap: 10px;
   width: 100%;
-  height: 40px;
+  height: 60px;
   background-color: rgb(220, 220, 220);
   padding: 8px;
   opacity: 0;
-  transition: opacity 1s, margin 1s;
-  margin-top: -40px;
+  transition: opacity 0.25s, margin 0.25s;
+  visibility: hidden;
 }
 .enabledRoot {
-  position: initial;
   opacity: 1;
   margin-top: 0;
+  visibility: visible;
 }
 .floatingButton {
   font-size: 15px;
@@ -31,6 +32,8 @@
   border: none;
   border-radius: 0 0 4px 4px;
   min-width: 70px;
+  border: 1px solid rgba(0, 0, 0, 0.25);
+  border-top: none;
 }
 .slider {
   font-size: 12px;

@@ -25,6 +25,11 @@
 
 .scores {
   position: absolute;
-  left: 1150px;
-  top: 50px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 100000;
+  background-color: rgba(255, 255, 255, 0.9);
+  padding: 20px;
+  border-radius: 5px;
 }

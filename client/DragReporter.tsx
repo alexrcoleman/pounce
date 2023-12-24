@@ -13,7 +13,6 @@ export default function DragReporter({ onUpdateGrabbedItem }: Props) {
   useEffect(() => {
     const monitor = manager.getMonitor();
     const unsub = monitor.subscribeToStateChange(() => {
-      console.log(monitor.getItem());
       const item = monitor.getItem();
       if (item == null) {
         onUpdateGrabbedItem(null);

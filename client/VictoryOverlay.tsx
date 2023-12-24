@@ -31,7 +31,7 @@ export default function VictoryOverlay({ board, startGame, isHost }: Props) {
           border: "2px solid #ddd",
         }}
       >
-        <div style={{ marginBottom: 20 }}>
+        <div style={{ marginBottom: 20, fontSize: "25px" }}>
           <i>Pounce!</i> by <b>{board.players[board.pouncer].name}</b>
         </div>
         <ScoresTable board={board} />

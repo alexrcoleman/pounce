@@ -1,5 +1,5 @@
 import type { BoardState, CardState } from "../shared/GameUtils";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import Card from "./Card";
 import { CardDnDItem } from "./CardDnDItem";
@@ -93,11 +93,11 @@ export default function Board({
             zIndex={index}
             boardState={board}
             rotation={board.pileLocs[pileIndex][2]}
-            source={{
+            source={stableObject({
               type: "field_stack",
               index: pileIndex,
               isTopCard: index === pile.length - 1,
-            }}
+            })}
             onHover={onUpdateHand}
           />
         );
@@ -130,7 +130,7 @@ export default function Board({
                     ? cycleDeck
                     : undefined
                 }
-                source={{ type: "other" }}
+                source={stableObject({ type: "other" })}
                 onHover={
                   isActivePlayer && index === player.deck.length - 1
                     ? onUpdateHand
@@ -159,8 +159,8 @@ export default function Board({
                 boardState={board}
                 source={
                   isActivePlayer && isTopCard
-                    ? { type: "flippedDeck" }
-                    : { type: "other" }
+                    ? stableObject({ type: "flippedDeck" })
+                    : stableObject({ type: "other" })
                 }
                 onClick={isActivePlayer && isTopCard ? flipDeck : undefined}
                 onHover={isActivePlayer && isTopCard ? onUpdateHand : undefined}
@@ -183,8 +183,8 @@ export default function Board({
                 boardState={board}
                 source={
                   isActivePlayer && isTopCard
-                    ? { type: "pounce" }
-                    : { type: "other" }
+                    ? stableObject({ type: "pounce" })
+                    : stableObject({ type: "other" })
                 }
                 onHover={isActivePlayer && isTopCard ? onUpdateHand : undefined}
               />
@@ -210,12 +210,12 @@ export default function Board({
                   boardState={board}
                   source={
                     isActivePlayer
-                      ? {
+                      ? stableObject({
                           type: "solitaire",
                           pileIndex: stackIndex,
                           slotIndex: index,
-                        }
-                      : { type: "other" }
+                        })
+                      : stableObject({ type: "other" })
                   }
                   onHover={isActivePlayer ? onUpdateHand : undefined}
                 />
@@ -234,29 +234,68 @@ export default function Board({
 
   // TODO: Make this tracked separately
   const onUpdateDragHover = onUpdateHand;
+
+  // Sort by key to keep them stable
+  cards.sort((a, b) => ((a.key ?? "") < (b.key ?? "") ? -1 : 1));
+
+  const [grabbedItem, setGrabbedItem] = useState<CardState | null>(null);
+  const boardPiles = useMemo(() => {
+    const indexedPiles = board.piles.map(
+      (pile, index) => [pile, index] as const
+    );
+    // If a pile can be played on, sort it to the front
+    if (grabbedItem) {
+      const playablePiles = indexedPiles.filter(([pile]) => {
+        const topCard = pile[pile.length - 1];
+        if (
+          topCard &&
+          topCard.suit === grabbedItem.suit &&
+          topCard.value === grabbedItem.value - 1
+        ) {
+          return true;
+        }
+        return false;
+      });
+
+      if (playablePiles.length >= 1) {
+        const otherPiles = indexedPiles.filter(
+          (pile) => !playablePiles.includes(pile)
+        );
+        return otherPiles.concat(playablePiles); //.concat(otherPiles);
+      }
+    }
+    return indexedPiles;
+  }, [board.piles, grabbedItem]);
+  const isDraggingAce = grabbedItem?.value === 1;
+  const fieldDragTarget = (
+    <div style={{ position: "absolute", left: 550, top: 50 }}>
+      <FieldDragTarget
+        onDrop={(item, position) =>
+          executeMoveCardToCenter(item, firstOpenStack, position)
+        }
+        onMoveFieldStack={(item, position) =>
+          executeMove({
+            type: "move_field_stack",
+            index: item.index,
+            position,
+          })
+        }
+      />
+    </div>
+  );
   return (
     <DndProvider backend={useTouch ? TouchBackend : HTML5Backend}>
-      <DragReporter onUpdateGrabbedItem={onUpdateGrabbedItem} />
+      <DragReporter
+        onUpdateGrabbedItem={(item) => {
+          onUpdateGrabbedItem(item);
+          setGrabbedItem(item);
+        }}
+      />
       <div className={styles.root}>
         <div className={styles.rootInside}>
           <div className={styles.pileSection} />
-          <div className={styles.scores}>
-            <ScoresTable board={board} />
-          </div>
-          <div style={{ position: "absolute", left: 550, top: 50 }}>
-            <FieldDragTarget
-              onDrop={(item, position) =>
-                executeMoveCardToCenter(item, firstOpenStack, position)
-              }
-              onMoveFieldStack={(item, position) =>
-                executeMove({
-                  type: "move_field_stack",
-                  index: item.index,
-                  position,
-                })
-              }
-            />
-          </div>
+          <ScoresTableTabOverlay board={board} />
+          {!isDraggingAce && fieldDragTarget}
           {activePlayerIndex != -1 &&
             board.players[activePlayerIndex].stacks.map((stack, index) => {
               const [px, py] = playerPositions[activePlayerIndex];
@@ -292,7 +331,7 @@ export default function Board({
                 />
               );
             })}
-          {board.piles.map((pile, index) => (
+          {boardPiles.map(([pile, index]) => (
             <FieldStackDragTarget
               key={index}
               card={pile[pile.length - 1]}
@@ -304,7 +343,8 @@ export default function Board({
               rotate={board.pileLocs[index][2] * 360}
             />
           ))}
-          {cards.sort((a, b) => ((a.key ?? "") < (b.key ?? "") ? -1 : 1))}
+          {isDraggingAce && fieldDragTarget}
+          {cards}
           {board.players.map((p, i) => (
             <Player player={p} index={i} key={i} top={playerPositions[i][1]} />
           ))}
@@ -352,6 +392,46 @@ export default function Board({
       </div>
     </DndProvider>
   );
+}
+
+function ScoresTableTabOverlay({ board }: { board: BoardState }) {
+  const [showScores, setShowScores] = useState(false);
+  useEffect(() => {
+    const keydown = (e: KeyboardEvent) => {
+      if (e.key === "Tab") {
+        setShowScores(true);
+        e.preventDefault();
+      }
+    };
+    const keyup = (e: KeyboardEvent) => {
+      if (e.key === "Tab") {
+        setShowScores(false);
+      }
+    };
+    window.addEventListener("keydown", keydown);
+    window.addEventListener("keyup", keyup);
+    return () => {
+      window.removeEventListener("keydown", keydown);
+      window.removeEventListener("keyup", keyup);
+    };
+  }, []);
+  if (!showScores) {
+    return null;
+  }
+  return (
+    <div className={styles.scores}>
+      <ScoresTable board={board} />
+    </div>
+  );
+}
+
+const memo: Record<string, unknown> = {};
+function stableObject<T>(obj: T): T {
+  const key = JSON.stringify(obj);
+  if (!memo[key]) {
+    memo[key] = obj;
+  }
+  return memo[key] as T;
 }
 
 function getBoardPilePosition(board: BoardState, index: number) {

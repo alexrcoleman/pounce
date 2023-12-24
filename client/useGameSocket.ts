@@ -35,7 +35,6 @@ export default function useGameSocket(
       });
       socket.on("update_hands", ({ hands }) => {
         setHands(hands);
-        console.log("GOt", hands);
       });
       socket.on("update", (data) => {
         setBoard(data.board);

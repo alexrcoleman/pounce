@@ -3,8 +3,8 @@ import shuffle from "./shuffle";
 const colors = ["red", "blue", "green", "orange", "yellow", "pink"];
 const SUITS = ["hearts", "spades", "diamonds", "clubs"] as const;
 const VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] as const;
-export type Suits = typeof SUITS[number];
-export type Values = typeof VALUES[number];
+export type Suits = (typeof SUITS)[number];
+export type Values = (typeof VALUES)[number];
 export type CardState = {
   suit: Suits;
   value: Values;
@@ -30,6 +30,7 @@ export type BoardState = {
   players: PlayerState[];
   piles: CardState[][];
   pileLocs: [number, number, number][];
+  ticksSinceMove: number;
 };
 
 function createUnshuffledDeck(player: number): CardState[] {
@@ -63,7 +64,6 @@ function generateLocations(
         ) != null;
     } while (isInvalid && ++failCount < 20);
     if (isInvalid) {
-      console.warn("Failed to generate locations, restarting...");
       return generateLocations(count, threshold - 0.05);
     }
     locs.push([x, y, Math.random()]);
@@ -91,7 +91,7 @@ function createPlayer(
 }
 
 function randomName() {
-  const adjs = ["Happy", "Funny", "Rude", "Speedy", "Slow", "Magic", "Good"];
+  const adjs = ["Happy", "Rude", "Speedy", "Slow", "Magic", "Good"];
   const nouns = ["Ninja", "Pouncer", "Player", "Tomato", "Banana", "Doggy"];
   return (
     adjs[Math.floor(Math.random() * adjs.length)] +
@@ -110,6 +110,7 @@ export function createBoard(playerCount: number): BoardState {
       .fill(0)
       .map(() => []),
     pileLocs: generateLocations(playerCount * 4),
+    ticksSinceMove: 0,
   };
   resetBoard(boardState);
   return boardState;
@@ -158,8 +159,35 @@ export function isGameOver(board: BoardState) {
   );
 }
 
-export function startGame(board: BoardState) {
-  resetBoard(board);
+function updateQueuedHands(
+  board: BoardState,
+  queuedHands: CardState[][][],
+  queuedHand: CardState[][] | undefined
+) {
+  if (queuedHands.length === 0 && queuedHand == null) {
+    // Queue up all combinations of this hand for fairness
+    console.log("Queueing up hands for next game");
+    const players = board.players;
+    for (let o = 1; o < players.length; o++) {
+      queuedHands.push(
+        players.map((_, i) =>
+          players[(i + o) % players.length].deck.map((c) => ({ ...c }))
+        )
+      );
+    }
+  }
+}
+export function startGame(room: {
+  board: BoardState;
+  queuedHands: CardState[][][];
+}) {
+  const { board, queuedHands } = room;
+  const queuedHand = queuedHands.splice(0, 1);
+  if (queuedHand.length > 0) {
+    console.log("Playing queued hand");
+  }
+  resetBoard(board, queuedHand[0]);
+  updateQueuedHands(board, queuedHands, queuedHand[0]);
   dealHands(board);
   board.players.forEach((p) => (p.currentPoints = -26));
   board.isActive = true;
@@ -167,6 +195,9 @@ export function startGame(board: BoardState) {
 
 function dealHands(board: BoardState) {
   board.players.forEach((player, index) => {
+    if (player.isSpectating) {
+      return;
+    }
     for (let i = 0; i < 4; i++) {
       for (let j = 0; j < 3; j++) {
         player.pounceDeck.push(player.deck.pop() as CardState);
@@ -177,10 +208,13 @@ function dealHands(board: BoardState) {
   });
 }
 
-export function resetBoard(boardState: BoardState) {
+export function resetBoard(boardState: BoardState, decks?: CardState[][]) {
+  boardState.ticksSinceMove = 0;
   boardState.pouncer = undefined;
   boardState.players.forEach((player, index) => {
-    player.deck = createShuffledDeck(index);
+    player.deck =
+      decks?.[index]?.map((c) => ({ ...c, player: index })) ??
+      createShuffledDeck(index);
     player.flippedDeck = [];
     player.pounceDeck = [];
     if (boardState.isActive) {
@@ -189,7 +223,7 @@ export function resetBoard(boardState: BoardState) {
       player.currentPoints = 0;
     }
     player.stacks = [[], [], [], []];
-    player.isSpectating = false;
+    // player.isSpectating = false; @nocommit
   });
   boardState.isActive = false;
   boardState.piles = Array(boardState.players.length * 4)
@@ -199,6 +233,7 @@ export function resetBoard(boardState: BoardState) {
 }
 
 export function rotateDecks(board: BoardState) {
+  board.ticksSinceMove = 0;
   board.players.forEach((player) => {
     player.deck.push(...player.flippedDeck.reverse());
     player.flippedDeck = [];
