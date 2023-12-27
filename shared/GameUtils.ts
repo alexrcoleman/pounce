@@ -1,3 +1,5 @@
+import { RoomState } from "../server/Rooms";
+import { getDistance } from "./MoveHandler";
 import shuffle from "./shuffle";
 
 const colors = ["red", "blue", "green", "orange", "yellow", "pink"];
@@ -5,6 +7,12 @@ const SUITS = ["hearts", "spades", "diamonds", "clubs"] as const;
 const VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] as const;
 export type Suits = (typeof SUITS)[number];
 export type Values = (typeof VALUES)[number];
+
+export type CursorState = {
+  location?: CardState | null;
+  item?: CardState | null;
+};
+
 export type CardState = {
   suit: Suits;
   value: Values;
@@ -56,12 +64,9 @@ function generateLocations(
     do {
       x = Math.random();
       y = Math.random();
-      isInvalid =
-        locs.find(
-          (loc) =>
-            Math.sqrt(Math.pow(loc[0] - x, 2) + Math.pow(loc[1] - y, 2)) <
-            minDistance * 2
-        ) != null;
+      isInvalid = locs.some(
+        (loc) => getDistance([loc[0], loc[1]], [x, y]) < minDistance * 2
+      );
     } while (isInvalid && ++failCount < 20);
     if (isInvalid) {
       return generateLocations(count, threshold - 0.05);
@@ -70,6 +75,58 @@ function generateLocations(
   }
   return locs;
 }
+
+export function fixBoardPiles(
+  board: BoardState,
+  index: number,
+  threshold = 0.7
+): void {
+  const count = board.pileLocs.length;
+  const minDistance = Math.sqrt(threshold / count / Math.PI);
+  const corruptLoc = [
+    board.pileLocs[index][0],
+    board.pileLocs[index][1],
+  ] as const;
+  const pileLocs = board.pileLocs;
+  // Find indices overlapping with corruptLoc and empty piles
+  const badIndices = pileLocs
+    .map((loc, index) =>
+      getDistance([loc[0], loc[1]], corruptLoc) < minDistance &&
+      board.piles[index].length === 0
+        ? index
+        : -1
+    )
+    .filter((index) => index !== -1);
+
+  if (badIndices.length === 0) {
+    return;
+  }
+  console.log("Detected invisible card collision, fixing piles");
+
+  const lockedInLocs = pileLocs
+    .filter((_, index) => !badIndices.includes(index))
+    .map((loc) => [loc[0], loc[1]] as const);
+
+  while (badIndices.length > 0) {
+    const badIndex = badIndices.pop() as number;
+    let x: number, y: number;
+    let isInvalid = true;
+    let failCount = 0;
+    do {
+      x = Math.random();
+      y = Math.random();
+      isInvalid = lockedInLocs.some(
+        (loc) => getDistance([loc[0], loc[1]], [x, y]) < minDistance * 2
+      );
+    } while (isInvalid && ++failCount < 20);
+    if (isInvalid) {
+      return fixBoardPiles(board, index, threshold - 0.05);
+    }
+    board.pileLocs[badIndex] = [x, y, Math.random()];
+    lockedInLocs.push([x, y]);
+  }
+}
+
 function createPlayer(
   socketId: string | null,
   index: number,
@@ -177,10 +234,7 @@ function updateQueuedHands(
     }
   }
 }
-export function startGame(room: {
-  board: BoardState;
-  queuedHands: CardState[][][];
-}) {
+export function startGame(room: RoomState) {
   const { board, queuedHands } = room;
   const queuedHand = queuedHands.splice(0, 1);
   if (queuedHand.length > 0) {
@@ -191,6 +245,7 @@ export function startGame(room: {
   dealHands(board);
   board.players.forEach((p) => (p.currentPoints = -26));
   board.isActive = true;
+  room.hands = [];
 }
 
 function dealHands(board: BoardState) {

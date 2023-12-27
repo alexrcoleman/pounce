@@ -47,16 +47,16 @@ export default function FieldStackDragTarget({
     }),
     [onDrop, card]
   );
-  if (stackHeight === 0 || !isDragging) {
-    return null;
-  }
+  // if (stackHeight === 0 || !isDragging) {
+  //   return null;
+  // }
   return (
     <div
       style={{
         height: 77 + stackHeight * 0.2 + 2 * buffer,
         width: 55 + 2 * buffer,
         backgroundColor: isOver && canDrop ? "rgba(255,255,0,.5)" : "",
-        outline: canDrop ? "1px solid yellow" : "",
+        outline: canDrop || stackHeight === 0 ? "1px solid yellow" : "",
         borderRadius: 4,
         position: "absolute",
         transform: `translate(${left - buffer}px, ${

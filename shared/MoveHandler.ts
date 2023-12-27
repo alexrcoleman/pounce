@@ -1,4 +1,11 @@
-import { BoardState, CardState, isGameOver } from "./GameUtils";
+import {
+  BoardState,
+  CardState,
+  CursorState,
+  PlayerState,
+  fixBoardPiles,
+  isGameOver,
+} from "./GameUtils";
 import {
   canMoveToSolitairePile,
   canPlayOnCenterPile,
@@ -27,10 +34,42 @@ export type Move =
   | { type: "cycle" }
   | { type: "flip_deck" }
   | { type: "move_field_stack"; index: number; position: [number, number] };
-type MoveResult = { cursorMove?: CardState; cursorMoveItem?: CardState };
-type AICursorData =
-  | { location?: CardState | null | undefined; item?: CardState | null }
-  | undefined;
+type MoveResult = {
+  cursorMove?: CardState;
+  cursorMoveItem?: CardState;
+  clearCursor?: boolean;
+};
+type AICursorData = CursorState | undefined;
+
+function getSourceCard(
+  boardState: BoardState,
+  player: PlayerState,
+  move: Move
+): CardState | null | undefined {
+  // Technically not true, but for the sake of the AI it is
+  if (
+    move.type === "cycle" ||
+    move.type === "flip_deck" ||
+    move.type === "move_field_stack"
+  ) {
+    return null;
+  }
+  // Same
+  if (move.type === "s2s") {
+    return null;
+  }
+  if (move.type === "c2s") {
+    return move.source === "pounce"
+      ? peek(player.pounceDeck)
+      : peek(player.flippedDeck);
+  }
+
+  return move.source.type === "pounce"
+    ? peek(player.pounceDeck)
+    : move.source.type === "deck"
+    ? peek(player.flippedDeck)
+    : peek(player.stacks[move.source.index]);
+}
 export function executeMove(
   board: BoardState,
   playerIndex: number,
@@ -46,7 +85,17 @@ export function executeMove(
       throw new Error("Spectating player cannot move");
     }
     let moveResult: MoveResult;
-    let playedCard: CardState | undefined;
+    const card = getSourceCard(board, player, move);
+
+    if (aiCursor?.item != null && !cardEquals(card, aiCursor.item)) {
+      // Technically human players can release anywhere to reset the card back
+      // But this helps represent the "mental" reset of missing a drop, and makes
+      // the move failure more visible
+      if (cardEquals(aiCursor.location, aiCursor.item)) {
+        return { clearCursor: true };
+      }
+      return { cursorMove: aiCursor.item };
+    }
     if (move.type === "c2c") {
       moveResult = cardToCenter(
         board,
@@ -60,6 +109,7 @@ export function executeMove(
       if (pile.length === 1 && move.position) {
         board.pileLocs[move.dest][0] = move.position[0];
         board.pileLocs[move.dest][1] = move.position[1];
+        fixBoardPiles(board, move.dest);
       }
     } else if (move.type === "cycle") {
       moveResult = cycleDeck(board, playerIndex, aiCursor);
@@ -93,6 +143,7 @@ export function executeMove(
     } else if (move.type === "move_field_stack") {
       board.pileLocs[move.index][0] = move.position[0];
       board.pileLocs[move.index][1] = move.position[1];
+      fixBoardPiles(board, move.index);
       moveResult = {};
     } else {
       const _unused: never = move;
@@ -142,7 +193,12 @@ function cardToCenter(
   if (topCard == null) {
     throw new Error("No card to play from that pile");
   }
-  const pile = boardState.piles[dest];
+  let pile = boardState.piles[dest];
+  if (topCard.value === 1 && pile.length > 0) {
+    // Just auto-adjust to another pile; this is a common mistake from delayed reactions by AI, and not realistic
+    dest = boardState.piles.findIndex((p) => p.length === 0);
+    pile = boardState.piles[dest];
+  }
   if (aiCursor && !cardEquals(aiCursor.item, topCard)) {
     if (cardEquals(aiCursor.location, topCard)) {
       // Already on the right card, now drag it
@@ -163,7 +219,7 @@ function cardToCenter(
 
   sourceStack.pop();
   pile.push(topCard);
-  return {};
+  return { clearCursor: true };
 }
 
 function cardToSolitaire(
@@ -201,7 +257,7 @@ function cardToSolitaire(
   }
   sourceStack.pop();
   destStack.push(topCard);
-  return {};
+  return { clearCursor: true };
 }
 
 function solitaireToSolitaire(
@@ -257,4 +313,61 @@ function cycleDeck(
     player.flippedDeck.push(...triple);
   }
   return {};
+}
+
+export function getDistance(
+  p1: readonly [number, number],
+  p2: readonly [number, number]
+): number {
+  const d1 = p1[0] - p2[0];
+  const d2 = p1[1] - p2[1];
+  return Math.sqrt(d1 * d1 + d2 * d2);
+}
+
+export function getApproximateCardLocation(
+  board: BoardState,
+  card: CardState
+): [number, number] {
+  const CARD_WIDTH = 70;
+  const pile = board.piles.findIndex((p) => p.some((c) => cardEquals(c, card)));
+  if (pile >= 0) {
+    return getApproximatePileLocation(board, pile);
+  }
+  const playerIdx = card.player;
+  const player = board.players[playerIdx];
+  const [px, py] = getApproximatePlayerLocation(board, playerIdx);
+  const stackIdx = player.stacks.findIndex((s) =>
+    s.some((c) => cardEquals(c, card))
+  );
+  if (stackIdx >= 0) {
+    return [
+      px + (stackIdx + 1) * CARD_WIDTH,
+      py + 10 * (player.stacks[stackIdx].length - 1),
+    ];
+  }
+  if (player.pounceDeck.some((c) => cardEquals(c, card))) {
+    return [px, py + 50];
+  }
+  if (player.deck.some((c) => cardEquals(c, card))) {
+    return [px + CARD_WIDTH * 6, py + 50];
+  }
+  // must be in flipped deck
+  return [px + CARD_WIDTH * 5, py + 50];
+}
+export function getApproximatePlayerLocation(
+  board: BoardState,
+  playerIndex: number
+): [number, number] {
+  // const player = board.players[playerIdx];
+  // const px = 10;
+  // const py = 50 + playerIdx * PLAYER_HEIGHT;
+  // for fairness, put all players in the same row
+  return [10, 50];
+}
+export function getApproximatePileLocation(
+  board: BoardState,
+  pileIndex: number
+): [number, number] {
+  const [x, y] = board.pileLocs[pileIndex];
+  return [x * 500 + 550, y * 500 + 50];
 }

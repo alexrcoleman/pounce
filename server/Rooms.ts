@@ -1,6 +1,7 @@
 import {
   BoardState,
   CardState,
+  CursorState,
   createBoard,
   isGameOver,
   rotateDecks,
@@ -9,22 +10,23 @@ import {
 } from "../shared/GameUtils";
 
 import { Server } from "socket.io";
-import { executeMove } from "../shared/MoveHandler";
+import {
+  executeMove,
+  getApproximateCardLocation,
+  getDistance,
+} from "../shared/MoveHandler";
 import { getBasicAIMove } from "../shared/ComputerV1";
-import shuffle from "../shared/shuffle";
-import { cardEquals } from "../shared/CardUtils";
+import deepClone from "../shared/deepClone";
+import { peek } from "../shared/CardUtils";
 
-type RoomState = {
+export type RoomState = {
   io: Server;
   board: BoardState;
   interval: NodeJS.Timer;
   aiSpeed: number;
   timescale: number;
   aiCooldowns: number[];
-  hands: {
-    location?: CardState | null;
-    item?: CardState | null;
-  }[]; // todo: put this in the board?
+  hands: CursorState[]; // todo: put this in the board?
   /**
    * What the AI currently sees the board as (to give reaction delay)
    */
@@ -64,47 +66,41 @@ export function createRoom(io: Server, roomId: string) {
           return false;
         }
         hasUpdate = true;
-        room.hands[index] = room.hands[index] ?? {};
-        const move = getBasicAIMove(room.aiBoard, index);
+        const hand = (room.hands[index] = room.hands[index] ?? {});
+        const visibleBoard = getVisibleBoard(room, index);
+        const move = getBasicAIMove(visibleBoard, index, hand);
 
-        const moveResult = move
-          ? executeMove(board, index, move, room.hands[index])
-          : null;
+        const moveResult = move ? executeMove(board, index, move, hand) : null;
 
         let cooldownDist = {
-          mean: 2500 / room.aiSpeed,
-          deviation: 500 / room.aiSpeed,
+          mean: 3500 / room.aiSpeed,
+          deviation: 750 / room.aiSpeed,
         };
         if (moveResult?.cursorMove) {
           const hand = room.hands[index];
-          // TODO: Set the cooldown based on how far the move is
           const currentPos = hand.location
-            ? getApproximateCardLocation(room, hand.location)
+            ? getApproximateCardLocation(board, hand.location)
             : null;
           hand.location = moveResult.cursorMove;
-          hand.item = moveResult.cursorMoveItem;
+          hand.item = moveResult.cursorMoveItem ?? hand.item;
           hasHandUpdate = true;
 
           let cost = 1500;
           if (currentPos) {
             const targetPos = getApproximateCardLocation(
-              room,
+              board,
               moveResult.cursorMove
             );
-            const dx = targetPos[0] - currentPos[0];
-            const dy = targetPos[1] - currentPos[1];
-            const distance = Math.sqrt(dx * dx + dy * dy);
+            const distance = getDistance(targetPos, currentPos);
             cost = 750 + distance * 3;
           }
           cooldownDist = {
             mean: cost / room.aiSpeed,
             deviation: cost / 5 / room.aiSpeed,
           };
-        } else {
-          if (room.hands[index].item != null) {
-            hasHandUpdate = true;
-            room.hands[index].item = undefined;
-          }
+        } else if (moveResult?.clearCursor) {
+          hasHandUpdate = true;
+          room.hands[index].item = undefined;
         }
         // todo: normal distribution
         const delay = move
@@ -136,40 +132,23 @@ export function createRoom(io: Server, roomId: string) {
   broadcastUpdate(roomId);
 }
 
-function getApproximateCardLocation(
-  room: RoomState,
-  card: CardState
-): [number, number] {
-  const CARD_WIDTH = 70;
-  const pile = room.board.piles.findIndex((p) =>
-    p.some((c) => cardEquals(c, card))
-  );
-  if (pile >= 0) {
-    const [x, y] = room.board.pileLocs[pile];
-    return [x + 550, y + 50];
-  }
-  const playerIdx = card.player;
-  const player = room.board.players[playerIdx];
-  const px = 10;
-  // const py = 50 + playerIdx * PLAYER_HEIGHT;
-  const py = 50; // for fairness, put all players in the same row
-  const stackIdx = player.stacks.findIndex((s) =>
-    s.some((c) => cardEquals(c, card))
-  );
-  if (stackIdx >= 0) {
-    return [
-      px + (stackIdx + 1) * CARD_WIDTH,
-      py + 10 * (player.stacks[stackIdx].length - 1),
-    ];
-  }
-  if (player.pounceDeck.some((c) => cardEquals(c, card))) {
-    return [px, py + 50];
-  }
-  if (player.deck.some((c) => cardEquals(c, card))) {
-    return [px + CARD_WIDTH * 6, py + 50];
-  }
-  // must be in flipped deck
-  return [px + CARD_WIDTH * 5, py + 50];
+function getVisibleBoard(room: RoomState, playerIndex: number) {
+  const visibleBoard = deepClone(room.aiBoard);
+  const realBoard = room.board;
+  // Allow seeing their own hand instantly
+  visibleBoard.players[playerIndex] = realBoard.players[playerIndex];
+
+  // Allow seeing any piles they played on instantly
+  realBoard.piles.forEach((p, i) => {
+    if (peek(p)?.player === playerIndex || p.length === 1) {
+      visibleBoard.piles[i] = p;
+    }
+  });
+
+  // TODO: Pick a few piles they might be interested in to show immediately (TBD how to decide this, perhaps
+  // just their pounce pile and any Aces)
+
+  return visibleBoard;
 }
 
 export function broadcastUpdate(roomId: string) {
@@ -178,7 +157,7 @@ export function broadcastUpdate(roomId: string) {
     board: room.board,
     time: Date.now(),
   });
-  const reactionDelay = 1800 / room.aiSpeed / room.timescale;
+  const reactionDelay = 10000 / room.aiSpeed / room.timescale;
   const visibleBoard = JSON.parse(JSON.stringify(room.board));
   setTimeout(() => {
     room.aiBoard = visibleBoard;

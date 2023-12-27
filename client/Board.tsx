@@ -1,4 +1,4 @@
-import type { BoardState, CardState } from "../shared/GameUtils";
+import type { BoardState, CardState, CursorState } from "../shared/GameUtils";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import Card from "./Card";
@@ -24,7 +24,7 @@ type Props = {
   playerIndex: number;
   startGame: () => void;
   isHost: boolean;
-  hands: { location: CardState | null; item: CardState | null }[];
+  hands: CursorState[];
   onUpdateHand: (card: CardState) => void;
   onUpdateGrabbedItem: (card: CardState | null) => void;
 };
@@ -293,7 +293,9 @@ export default function Board({
       />
       <div className={styles.root}>
         <div className={styles.rootInside}>
-          <div className={styles.pileSection} />
+          <div className={styles.pileSection}>
+            <div className={styles.pileSectionPattern} />
+          </div>
           <ScoresTableTabOverlay board={board} />
           {!isDraggingAce && fieldDragTarget}
           {activePlayerIndex != -1 &&

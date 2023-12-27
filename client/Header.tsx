@@ -64,7 +64,13 @@ export default function Header({
         {isHost && (
           <>
             |
-            <button disabled={isStarted} onClick={onStart}>
+            <button
+              disabled={isStarted}
+              onClick={() => {
+                onStart();
+                setExpanded(false);
+              }}
+            >
               Start
             </button>
             <button onClick={onRestart}>Restart</button>

@@ -5,7 +5,7 @@ type Props = {
   x: number;
   y: number;
   color: string;
-  card: CardState | null;
+  card: CardState | null | undefined;
 };
 export default function CursorHand({ x, y, color, card }: Props) {
   return (

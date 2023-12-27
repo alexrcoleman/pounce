@@ -1,4 +1,9 @@
-import type { BoardState, CardState, PlayerState } from "./GameUtils";
+import type {
+  BoardState,
+  CardState,
+  CursorState,
+  PlayerState,
+} from "./GameUtils";
 import {
   canMoveToSolitairePile,
   canPlayOnCenterPile,
@@ -6,7 +11,13 @@ import {
   peek,
 } from "./CardUtils";
 
-import type { Move } from "./MoveHandler";
+import {
+  getApproximateCardLocation,
+  getApproximatePileLocation,
+  getApproximatePlayerLocation,
+  getDistance,
+  type Move,
+} from "./MoveHandler";
 
 type StrategySettings = {
   solitaireFromDeck?: boolean;
@@ -20,18 +31,34 @@ type StrategySettings = {
 };
 
 class AIStrategy {
+  private sortedPiles: (readonly [CardState[], number])[] = [];
   constructor(
     private settings: StrategySettings,
     private boardState: BoardState,
-    private player: PlayerState
-  ) {}
+    private player: PlayerState,
+    private cursor: CursorState
+  ) {
+    this.sortedPiles = boardState.piles
+      .map((pile, index) => [pile, index] as const)
+      .sort((a, b) => {
+        // Get a rough idea of the closest target before we grab something, but update once we have grabbed something
+        const c = cursor.location
+          ? getApproximateCardLocation(boardState, cursor.location)
+          : getApproximatePlayerLocation(
+              boardState,
+              boardState.players.indexOf(player)
+            );
+        const p1 = getApproximatePileLocation(boardState, a[1]);
+        const p2 = getApproximatePileLocation(boardState, b[1]);
+        return getDistance(p1, c) - getDistance(p2, c);
+      });
+  }
 
   private getPounceToCenterMove(
     boardState: BoardState,
     player: PlayerState
   ): Move | undefined {
-    const pounceToCenterIndex = getCentralPileForCardIndex(
-      boardState,
+    const pounceToCenterIndex = this.getCentralPileForCardIndex(
       peek(player.pounceDeck)
     );
     if (pounceToCenterIndex >= 0) {
@@ -135,7 +162,7 @@ class AIStrategy {
             );
             if (
               toIndex >= 0 &&
-              getCentralPileForCardIndex(boardState, stack[i - 1]) != -1
+              this.getCentralPileForCardIndex(stack[i - 1]) != -1
             ) {
               return {
                 type: "s2s",
@@ -272,7 +299,7 @@ class AIStrategy {
     const playableSolitaire = player.stacks
       .map((stack, index) => ({
         source: index,
-        dest: getCentralPileForCardIndex(boardState, peek(stack)),
+        dest: this.getCentralPileForCardIndex(peek(stack)),
       }))
       .find((item) => item.dest >= 0);
     if (playableSolitaire != null) {
@@ -289,7 +316,7 @@ class AIStrategy {
     player: PlayerState
   ): Move | undefined {
     const card = peek(player.flippedDeck);
-    const deckCenterIndex = getCentralPileForCardIndex(boardState, card);
+    const deckCenterIndex = this.getCentralPileForCardIndex(card);
 
     if (deckCenterIndex < 0) {
       return;
@@ -327,6 +354,16 @@ class AIStrategy {
 
     return moves.filter(Boolean)[0];
   }
+
+  private getCentralPileForCardIndex(card: CardState | undefined) {
+    if (card == null) {
+      return -1;
+    }
+    return (
+      this.sortedPiles.find(([pile]) => canPlayOnCenterPile(pile, card))?.[1] ??
+      -1
+    );
+  }
 }
 
 function canPlayOnSoon(
@@ -339,16 +376,6 @@ function canPlayOnSoon(
     source.value >= target.value &&
     source.value - threshold <= target.value
   );
-}
-
-function getCentralPileForCardIndex(
-  boardState: BoardState,
-  card: CardState | undefined
-) {
-  if (card == null) {
-    return -1;
-  }
-  return boardState.piles.findIndex((pile) => canPlayOnCenterPile(pile, card));
 }
 
 // Round 8 Totals: X, 19,118,88
@@ -402,13 +429,14 @@ const playerStyles: { name: string; strategy: StrategySettings }[] = [
 ];
 export function getBasicAIMove(
   boardState: BoardState,
-  playerIndex: number
+  playerIndex: number,
+  cursor: CursorState
 ): Move | undefined {
   const player = boardState.players[playerIndex];
   const botIndex = boardState.players
     .filter((p) => p.socketId == null)
     .indexOf(player);
   const playerStyle = playerStyles[botIndex % playerStyles.length];
-  const ai = new AIStrategy(playerStyle.strategy, boardState, player);
+  const ai = new AIStrategy(playerStyle.strategy, boardState, player, cursor);
   return ai.getMove();
 }

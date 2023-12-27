@@ -108,6 +108,7 @@ const CardContentMemo = React.memo(function CardContent({
               canDrag: monitor.canDrag(),
               isDraggingOther:
                 monitor.getItem() != null && monitor.getItem() !== item,
+              // TODO: Find a way to make this work, maybe a child component which
             }),
             isDragging: (monitor) => {
               if (monitor.getItem() == item) {

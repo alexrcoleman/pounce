@@ -30,6 +30,19 @@ export default function JoinForm({ placeholderName, onSubmit }: Props) {
         </div>
         <div>
           <label>
+            Name
+            <br />
+            <input
+              name="name"
+              onChange={(e) => (nameRef.current = e.target.value)}
+              defaultValue={placeholderName}
+              autoComplete="off"
+              autoFocus
+            />
+          </label>
+        </div>
+        <div>
+          <label>
             Room Code
             <br />
             <input
@@ -38,19 +51,6 @@ export default function JoinForm({ placeholderName, onSubmit }: Props) {
                 roomRef.current = e.target.value = e.target.value.toUpperCase();
               }}
               defaultValue={roomRef.current}
-              autoFocus
-              autoComplete="off"
-            />
-          </label>
-        </div>
-        <div>
-          <label>
-            Name
-            <br />
-            <input
-              name="name"
-              onChange={(e) => (nameRef.current = e.target.value)}
-              defaultValue={placeholderName}
               autoComplete="off"
             />
           </label>

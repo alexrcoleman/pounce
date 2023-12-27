@@ -1,5 +1,4 @@
-import io, { Socket } from "socket.io-client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useState } from "react";
 
 import Board from "../client/Board";
 import Head from "next/head";
@@ -30,6 +29,7 @@ const Home: NextPage = () => {
     onUpdateGrabbedItem,
     setAILevel,
   } = useGameSocket(roomId, name);
+  const onLeaveRoom = useCallback(() => setRoomId(null), []);
 
   if (!roomId || !name) {
     return (
@@ -43,15 +43,25 @@ const Home: NextPage = () => {
     );
   }
   if (!isConnected) {
-    return <div>Connecting...</div>;
+    return <div className={styles.loadingStateText}>Connecting...</div>;
   }
   if (board == null) {
-    return <div>Waiting for game data...</div>;
+    return (
+      <div className={styles.loadingStateText}>Waiting for game data...</div>
+    );
   }
   const playerIndex = board.players.findIndex((p) => p.socketId === socketId);
   const hostIndex = board.players.findIndex(
     (p) => !p.disconnected && p.socketId != null
   );
+  const isHost = hostIndex === playerIndex;
+  console.log({
+    players: board.players.map((p) => p.socketId),
+    socketId,
+    playerIndex,
+    hostIndex,
+    isHost,
+  });
   return (
     <div
       className={joinClasses(
@@ -68,10 +78,10 @@ const Home: NextPage = () => {
         isStarted={board.isActive}
         onRemoveAI={onRemoveAI}
         onRestart={onRestart}
-        onLeaveRoom={() => setRoomId(null)}
+        onLeaveRoom={onLeaveRoom}
         onStart={onStart}
         roomId={roomId}
-        isHost={hostIndex === playerIndex}
+        isHost={isHost}
         onRotate={onRotate}
         setAILevel={setAILevel}
         scale={scale}
@@ -85,7 +95,7 @@ const Home: NextPage = () => {
           onUpdateGrabbedItem={onUpdateGrabbedItem}
           executeMove={executeMove}
           startGame={onStart}
-          isHost={hostIndex === playerIndex}
+          isHost={isHost}
           playerIndex={playerIndex}
         />
       </div>

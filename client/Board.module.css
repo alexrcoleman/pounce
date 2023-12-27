@@ -1,6 +1,7 @@
 .root {
-  background-image: url("https://i.stack.imgur.com/KcaHc.png");
+  background-image: url("https://unblast.com/wp-content/uploads/2020/04/Seamless-Wood-Texture-2.jpg");
   background-repeat: repeat;
+  background-size: 50% 50%;
   width: 100%;
   height: 100%;
   position: relative;
@@ -8,19 +9,31 @@
   transform: scale(var(--scale), var(--scale));
 }
 .rootInside {
-  background-color: rgba(0, 255, 0, 0.3);
   width: 100%;
   height: 100%;
+  background-color: rgb(201, 185, 164, 0.8);
 }
 
-.pileSection {
+.pileSectionPattern {
   position: absolute;
+  left: 0px;
+  top: 0px;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 255, 0, 0.3);
+}
+.pileSection {
+  background-image: url("https://i.stack.imgur.com/KcaHc.png");
+  background-repeat: repeat;
+  position: absolute;
+  background-size: 200% 200%;
   left: 550px;
   top: 50px;
   height: calc(500px + 77px);
-  border-radius: 5px;
+  border-radius: 10px;
   width: calc(500px + 77px);
-  border: 1px solid rgba(0, 0, 0, 0.2);
+  border: 1px solid rgba(0, 255, 0, 0.3);
+  overflow: hidden;
 }
 
 .scores {

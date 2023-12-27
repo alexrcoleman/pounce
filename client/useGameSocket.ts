@@ -1,103 +1,114 @@
-import { BoardState, CardState } from "../shared/GameUtils";
+import { BoardState, CardState, CursorState } from "../shared/GameUtils";
 import { Socket, io } from "socket.io-client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { Move } from "../shared/MoveHandler";
+import {
+  ServerToClientEvents,
+  ClientToServerEvents,
+} from "../shared/SocketTypes";
 
+type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 export default function useGameSocket(
   roomId: string | null,
   name: string | null
 ) {
   const [board, setBoard] = useState<BoardState | null>(null);
-  const [isConnected, setConnected] = useState(false);
-  const socketRef = useRef<Socket | null>(null);
   const [latency, setLatency] = useState(0);
   const [lastTime, setLastTime] = useState(0);
   const [socketId, setSocketId] = useState("");
-  const [hands, setHands] = useState<
-    { location: CardState | null; item: CardState | null }[]
-  >([]);
+  const [socket, setSocket] = useState<ClientSocket | null>(null);
+  const [hands, setHands] = useState<CursorState[]>([]);
   useEffect(() => {
-    fetch("/api/socketio").finally(() => {
-      const socket = (socketRef.current = io());
-      (global as any).socketio = socket;
+    const controller = new AbortController();
+    console.log("Building socket...");
+    let socket: ClientSocket;
+    fetch("/api/socketio", { signal: controller.signal }).finally(() => {
+      if (controller.signal.aborted) {
+        return;
+      }
+      console.log("Fetch complete, connecting socket...");
+      socket = io();
+      setSocket(socket);
       socket.on("connect", () => {
+        console.log("Connected", socket.id);
         setSocketId(socket.id);
-        setConnected(true);
-        if (roomId && name) {
-          socket.emit("join_room", { roomId, name });
-          return;
-        }
       });
 
       socket.on("alert", (message) => {
         alert(message);
       });
       socket.on("update_hands", ({ hands }) => {
+        console.log("Receieved hand");
         setHands(hands);
       });
       socket.on("update", (data) => {
+        console.log("Recieved update");
         setBoard(data.board);
         setLatency(Date.now() - data.time);
         setLastTime(data.time);
       });
 
       socket.on("disconnect", () => {
-        setConnected(false);
+        console.log("Disconnected from server");
+        setSocketId("");
         setBoard(null);
         // Try to reconnect maybe
       });
     });
     return () => {
-      if (socketRef.current) {
-        socketRef.current.close();
+      controller.abort();
+      console.log("Tearing down socket " + (socket != null));
+      if (socket) {
+        socket.close();
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  const isConnected = socketId !== "";
   useEffect(() => {
-    const socket = socketRef.current;
-    if (socket) {
+    if (socket && isConnected && roomId && name) {
+      console.log("Joining room via effect, roomId/name changed");
       setBoard(null);
       socket.emit("join_room", { roomId, name });
       return;
     }
-  }, [roomId, name]);
+  }, [socket, roomId, name, isConnected]);
   const executeMove = useCallback(
     (move: Move) => {
-      socketRef.current?.emit("move", move);
+      socket?.emit("move", move);
     },
-    [socketRef]
+    [socket]
   );
   const onAddAI = useCallback(() => {
-    socketRef.current?.emit("add_ai");
-  }, [socketRef]);
+    socket?.emit("add_ai");
+  }, [socket]);
   const onRemoveAI = useCallback(() => {
-    socketRef.current?.emit("remove_ai");
-  }, [socketRef]);
+    socket?.emit("remove_ai");
+  }, [socket]);
   const onStart = useCallback(() => {
-    socketRef.current?.emit("start_game");
-  }, [socketRef]);
+    socket?.emit("start_game");
+  }, [socket]);
   const onRestart = useCallback(() => {
-    socketRef.current?.emit("restart_game");
-  }, [socketRef]);
+    socket?.emit("restart_game");
+  }, [socket]);
   const onRotate = useCallback(() => {
-    socketRef.current?.emit("rotate_decks");
-  }, [socketRef]);
+    socket?.emit("rotate_decks");
+  }, [socket]);
   const sendHand = useCallback(
     (card: CardState) => {
-      socketRef.current?.emit("update_hand", { location: card ?? null });
+      socket?.emit("update_hand", { location: card ?? null });
     },
-    [socketRef]
+    [socket]
   );
   const onUpdateGrabbedItem = useCallback(
     (card: CardState | null) => {
-      socketRef.current?.emit("update_hand", { item: card ?? null });
+      socket?.emit("update_hand", { item: card ?? null });
     },
-    [socketRef]
+    [socket]
   );
   const setAILevel = useCallback((level: number) => {
-    socketRef.current?.emit("set_ai_level", { speed: level });
+    socket?.emit("set_ai_level", { speed: level });
   }, []);
   return {
     onRemoveAI,
