@@ -4,23 +4,17 @@ import SocketState from "./SocketState";
 import { useCallback } from "react";
 import { Move } from "../shared/MoveHandler";
 import { CardState } from "../shared/GameUtils";
+import { useClientContext } from "./ClientContext";
 
-export default observer(function CardsLayer({
-  state,
-  executeMove,
-  onUpdateHand,
-}: {
-  state: SocketState;
-  executeMove: (move: Move) => void;
-  onUpdateHand: (card: CardState) => void;
-}) {
+export default observer(function CardsLayer() {
+  const { socket, state } = useClientContext();
   const board = state.board!;
   const cycleDeck = useCallback(() => {
-    executeMove({ type: "cycle" });
-  }, [executeMove]);
+    socket?.emit("move", { type: "cycle" });
+  }, [socket]);
   const flipDeck = useCallback(() => {
-    executeMove({ type: "flip_deck" });
-  }, [executeMove]);
+    socket?.emit("move", { type: "flip_deck" });
+  }, [socket]);
   const cards = board.piles
     .flatMap((pile, pileIndex) =>
       pile.map((card, index) => {
@@ -28,14 +22,13 @@ export default observer(function CardsLayer({
           <Card
             card={card}
             key={getCardKey(card)}
-            state={state}
             location={stableObject({
               type: "field_stack",
               stackIndex: pileIndex,
               isTopCard: index === pile.length - 1,
               cardIndex: index,
             })}
-            onHover={onUpdateHand}
+            isHandTarget={true}
           />
         );
       })
@@ -43,21 +36,16 @@ export default observer(function CardsLayer({
     .concat(
       board.players.flatMap((player, playerIndex) => {
         const isActivePlayer = playerIndex === state.getActivePlayerIndex();
-        const onHover = isActivePlayer ? onUpdateHand : undefined;
         return [
           player.deck.map((card, index) => {
+            const isTopCard = index === player.deck.length - 1;
             return (
               <Card
                 card={card}
                 key={getCardKey(card)}
-                state={state}
-                onClick={
-                  isActivePlayer && index === player.deck.length - 1
-                    ? cycleDeck
-                    : undefined
-                }
+                onClick={isActivePlayer && isTopCard ? cycleDeck : undefined}
                 location={stableObject({ type: "deck", cardIndex: index })}
-                onHover={index === player.deck.length - 1 ? onHover : undefined}
+                isHandTarget={isTopCard && isActivePlayer}
               />
             );
           }),
@@ -67,13 +55,12 @@ export default observer(function CardsLayer({
               <Card
                 card={card}
                 key={getCardKey(card)}
-                state={state}
                 location={stableObject({
                   type: "flippedDeck",
                   cardIndex: index,
                 })}
                 onClick={isActivePlayer && isTopCard ? flipDeck : undefined}
-                onHover={isTopCard ? onHover : undefined}
+                isHandTarget={isTopCard && isActivePlayer}
               />
             );
           }),
@@ -83,13 +70,12 @@ export default observer(function CardsLayer({
               <Card
                 card={card}
                 key={getCardKey(card)}
-                state={state}
                 location={stableObject({
                   type: "pounce",
                   playerIndex,
                   cardIndex: index,
                 })}
-                onHover={isTopCard ? onHover : undefined}
+                isHandTarget={isTopCard && isActivePlayer}
               />
             );
           }),
@@ -99,13 +85,12 @@ export default observer(function CardsLayer({
                 <Card
                   card={card}
                   key={getCardKey(card)}
-                  state={state}
                   location={stableObject({
                     type: "solitaire",
                     pileIndex: stackIndex,
                     cardIndex: index,
                   })}
-                  onHover={onHover}
+                  isHandTarget={isActivePlayer}
                 />
               );
             })

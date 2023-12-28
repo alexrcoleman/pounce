@@ -9,12 +9,13 @@ import joinClasses from "../client/joinClasses";
 import styles from "../styles/Home.module.css";
 import useGameSocket from "../client/useGameSocket";
 import { observer } from "mobx-react-lite";
+import { ClientContext } from "../client/ClientContext";
 const Home: NextPage = observer(() => {
   const [roomId, setRoomId] = useState<null | string>(null);
   const [name, setName] = useState<null | string>(null);
   const [animations, setAnimations] = useState(true);
   const [scale, setScale] = useState(1);
-  const { actions, isConnected, state } = useGameSocket(roomId, name);
+  const { actions, isConnected, state, socket } = useGameSocket(roomId, name);
   const onLeaveRoom = useCallback(() => setRoomId(null), []);
 
   if (!roomId || !name) {
@@ -37,9 +38,6 @@ const Home: NextPage = observer(() => {
       <div className={styles.loadingStateText}>Waiting for game data...</div>
     );
   }
-  const playerIndex = state.getActivePlayerIndex();
-  const hostIndex = state.getHostPlayerIndex();
-  const isHost = hostIndex === playerIndex;
 
   return (
     <div
@@ -51,31 +49,24 @@ const Home: NextPage = observer(() => {
       <Head>
         <title>Pounce | {roomId}</title>
       </Head>
-      <Header
-        onAddAI={actions.onAddAI}
-        setUseAnimations={setAnimations}
-        isStarted={board.isActive}
-        onRemoveAI={actions.onRemoveAI}
-        onRestart={actions.onRestart}
-        onLeaveRoom={onLeaveRoom}
-        onStart={actions.onStart}
-        roomId={roomId}
-        isHost={isHost}
-        onRotate={actions.onRotate}
-        setAILevel={actions.setAILevel}
-        scale={scale}
-        setScale={setScale}
-      />
-      <div className={styles.boardWrapper} style={{ "--scale": scale } as any}>
-        <Board
-          state={state}
-          onUpdateHand={actions.onUpdateHand}
-          onUpdateGrabbedItem={actions.onUpdateGrabbedItem}
-          executeMove={actions.executeMove}
-          startGame={actions.onStart}
-          isHost={isHost}
+      <ClientContext.Provider value={{ state, socket: socket }}>
+        <Header
+          setUseAnimations={setAnimations}
+          onLeaveRoom={onLeaveRoom}
+          roomId={roomId}
+          scale={scale}
+          setScale={setScale}
         />
-      </div>
+        <div
+          className={styles.boardWrapper}
+          style={{ "--scale": scale } as any}
+        >
+          <Board
+            onUpdateHand={actions.onUpdateHand}
+            executeMove={actions.executeMove}
+          />
+        </div>
+      </ClientContext.Provider>
     </div>
   );
 });

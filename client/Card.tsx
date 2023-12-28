@@ -1,5 +1,5 @@
 import type { BoardState, CardState, Suits, Values } from "../shared/GameUtils";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import CardFace from "./CardFace";
 import React from "react";
@@ -18,13 +18,13 @@ import {
   getPlayerStackLocation,
 } from "../shared/CardLocations";
 import { computed, toJS } from "mobx";
+import { useClientContext } from "./ClientContext";
 
 type Props = {
-  state: SocketState;
   card: CardState;
   onClick?: () => void;
-  onHover?: (card: CardState) => void;
   location: CardLocation;
+  isHandTarget?: boolean;
 };
 
 /**
@@ -33,10 +33,17 @@ type Props = {
 const CardContentMemo = observer(function CardContent({
   card,
   location,
-  state,
-  onHover,
+  isHandTarget,
   onClick,
 }: Props) {
+  const { state, socket } = useClientContext();
+  const onUpdateHand = useCallback(
+    (card: CardState) => {
+      socket?.emit("update_hand", { item: card });
+    },
+    [socket]
+  );
+  const onHover = isHandTarget ? onUpdateHand : undefined;
   const board = state.board!;
   const player = board.players[card.player];
 

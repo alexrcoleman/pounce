@@ -5,16 +5,16 @@ import { Move } from "../shared/MoveHandler";
 import { CardDnDItem } from "./CardDnDItem";
 import SocketState from "./SocketState";
 import StackDragTarget from "./StackDragTarget";
+import { useClientContext } from "./ClientContext";
 
 export default observer(function ActivePlayerStackTargets({
-  state,
   onUpdateDragHover,
   executeMove,
 }: {
-  state: SocketState;
   onUpdateDragHover: (item: CardState) => void;
   executeMove: (move: Move) => void;
 }) {
+  const { state } = useClientContext();
   const activePlayerIndex = state.getActivePlayerIndex();
   if (activePlayerIndex === -1) {
     return null;
@@ -33,9 +33,7 @@ export default observer(function ActivePlayerStackTargets({
             key={index}
             left={px + index * 60}
             top={py + 50}
-            rotate={0}
-            card={stack[stack.length - 1]}
-            stackHeight={stack.length}
+            stack={stack}
             onDrop={(item: CardDnDItem) => {
               if (item.source.type === "solitaire") {
                 executeMove({

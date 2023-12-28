@@ -3,6 +3,9 @@ import { CardDnDItem, FieldStackDnDItem } from "./CardDnDItem";
 import { MutableRefObject, useRef } from "react";
 
 import { useDrop } from "react-dnd";
+import SocketState from "./SocketState";
+import { Button } from "antd";
+import { useClientContext } from "./ClientContext";
 
 type Props = {
   onDrop: (item: CardDnDItem, position: [number, number]) => void;
@@ -43,10 +46,10 @@ export default observer(function FieldDragTarget({
     }),
     [onDrop]
   );
+  const { socket, state } = useClientContext();
   if (!canDrop) {
     return null;
   }
-  console.log({ isOver, canDrop });
   return (
     <div
       style={{

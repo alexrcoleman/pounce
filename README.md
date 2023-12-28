@@ -4,13 +4,23 @@ This is a project to simulate the game Nertz / Pounce. It includes some online m
 
 ## Planned todos:
 
+### Infra
+
+- Find a way to deploy nextjs+socketio (github pages?)
+- Consider how to make serverless work (assuming one pod for now still, maybe spins down if no sockets)
+- Separate homepage from `rooms/<roomcode>` page
+
 ### User Play / Interface
 
 - Allow two-clicks to drag (nice for long-distance moves where dragging trackpad that far gets cumbersome)
 - Move settings behind a dialog instead of header bar
 - Move Deal Hands / Start to the "field"
-- Deal hands before starting to allow prep
+- Deal hands before starting to allow prep (maybe fixed 5 seconds from deal to start, removed in automation mode)
 - Draw area around each players section maybe (shaded gray box? ensure player1 lies over player2)
+- Maybe flip all the cards over and simulate tallying them up (fly them all into a pile, count up to their score?)
+- Add sound effects for card movements (volume cycles < solitaire < field)
+- Improve HandsLayer performance? Maybe not super important
+- Perhaps rework code system to be more secure (lobbylist + passwords?)
 
 ### Bots/Simulation
 
@@ -23,6 +33,8 @@ This is a project to simulate the game Nertz / Pounce. It includes some online m
 - Add strategy to pre-emptively "play" a card that doesnt play (ex. after 4H gets played in the center, pre-play 6H; maybe only if you see 5H in someones hand, or saw the 4H coming in someones hand too )
 
 - Add competition-priority boost (note: requires reworking moves from a fixed ordering to weighted ordering). If someone else has a card you want to play to the center, prioritize playing that over other moves (ex. P=5H Solitaire=7C 8H \_ KH; we could move the pounce card out, or play a solitaire move to merge 7C into 8H, but we really should just play KH on the board if it can play since the other moves arent "competitive" )
+
+- Fix reactions not updating when failing a play (Should learn about that pile ideally). May need to track board per AI
 
 ### Random
 

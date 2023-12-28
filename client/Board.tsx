@@ -1,45 +1,33 @@
-import type { BoardState, CardState, CursorState } from "../shared/GameUtils";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import type { BoardState, CardState } from "../shared/GameUtils";
+import { useEffect, useState } from "react";
 
-import Card from "./Card";
-import { CardDnDItem } from "./CardDnDItem";
-import CursorHand from "./CursorHand";
 import { DndProvider } from "react-dnd";
 import DragReporter from "./DragReporter";
-import FieldDragTarget from "./FieldDragTarget";
-import FieldStackDragTarget from "./FieldStackDragTarget";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import type { Move } from "../shared/MoveHandler";
 import Player from "./Player";
 import ScoresTable from "./ScoresTable";
-import StackDragTarget from "./StackDragTarget";
 import { TouchBackend } from "react-dnd-touch-backend";
 import VictoryOverlay from "./VictoryOverlay";
 import isTouchDevice from "./isTouchDevice";
 import styles from "./Board.module.css";
 
 import { observer } from "mobx-react-lite";
-import SocketState from "./SocketState";
 import CardsLayer from "./CardsLayer";
 import HandsLayer from "./HandsLayer";
 import FieldStackDragTargets from "./FieldStackDragTargets";
 import ActivePlayerStackTargets from "./ActivePlayerStackTargets";
+import { useClientContext } from "./ClientContext";
+import { Button } from "antd";
 type Props = {
-  state: SocketState;
   executeMove: (move: Move) => void;
-  startGame: () => void;
-  isHost: boolean;
   onUpdateHand: (card: CardState) => void;
-  onUpdateGrabbedItem: (card: CardState | null) => void;
 };
 export default observer(function Board({
-  isHost,
   executeMove,
-  onUpdateGrabbedItem,
   onUpdateHand,
-  startGame,
-  state,
 }: Props): JSX.Element {
+  const { state, socket } = useClientContext();
   const board = state.board!;
 
   const [useTouch, setUseTouch] = useState(false);
@@ -55,18 +43,15 @@ export default observer(function Board({
     <DndProvider backend={useTouch ? TouchBackend : HTML5Backend}>
       <DragReporter
         onUpdateGrabbedItem={(item) => {
-          onUpdateGrabbedItem(item);
+          socket?.emit("update_hand", { item });
           setGrabbedItem(item);
         }}
       />
       <div className={styles.root}>
         <div className={styles.rootInside}>
-          <div className={styles.pileSection}>
-            <div className={styles.pileSectionPattern} />
-          </div>
+          <PileSection />
           <ScoresTableTabOverlay board={board} />
           <ActivePlayerStackTargets
-            state={state}
             executeMove={executeMove}
             onUpdateDragHover={onUpdateDragHover}
           />
@@ -76,24 +61,30 @@ export default observer(function Board({
             onUpdateDragHover={onUpdateDragHover}
             executeMove={executeMove}
           />
-          <CardsLayer
-            state={state}
-            executeMove={executeMove}
-            onUpdateHand={onUpdateHand}
-          />
+          <CardsLayer />
           {board.players.map((p, i) => (
-            <Player
-              state={state}
-              player={p}
-              playerIndex={i}
-              key={p.socketId ?? i}
-            />
+            <Player player={p} playerIndex={i} key={p.socketId ?? i} />
           ))}
-          <HandsLayer state={state} />
-          <VictoryOverlay board={board} startGame={startGame} isHost={isHost} />
+          <HandsLayer />
+          <VictoryOverlay />
         </div>
       </div>
     </DndProvider>
+  );
+});
+
+const PileSection = observer(function PileSection() {
+  const { state, socket } = useClientContext();
+
+  return (
+    <div className={styles.pileSection}>
+      <div className={styles.pileSectionPattern} />
+      {!state.board!.isActive && state.getIsHost() && (
+        <Button type="primary" onClick={() => socket?.emit("start_game")}>
+          Start Game
+        </Button>
+      )}
+    </div>
   );
 });
 

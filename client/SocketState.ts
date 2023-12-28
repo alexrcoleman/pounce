@@ -1,3 +1,4 @@
+import React from "react";
 import { BoardState, CursorState } from "../shared/GameUtils";
 import { makeAutoObservable } from "mobx";
 
@@ -15,6 +16,10 @@ export default class SocketState {
     this.board = applyDeepUpdate(this.board, data.board);
     this.latency = Date.now() - data.time;
     this.lastTime = data.time;
+  }
+  onConnect(socketId: string) {
+    this.socketId = socketId;
+    this.board = null;
   }
   updateHands(hands: CursorState[]) {
     this.hands = applyDeepUpdate(this.hands, hands);
@@ -36,6 +41,14 @@ export default class SocketState {
     return this.board.players.findIndex(
       (p) => !p.disconnected && p.socketId != null
     );
+  }
+  getIsHost() {
+    const playerIndex = this.getActivePlayerIndex();
+    const hostIndex = this.getHostPlayerIndex();
+    return hostIndex === playerIndex;
+  }
+  clearBoard() {
+    this.board = null;
   }
 }
 

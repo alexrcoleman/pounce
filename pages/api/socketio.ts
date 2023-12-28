@@ -170,6 +170,9 @@ export default function (req: any, res: any) {
 
         const room = getRoom(user.currentRoom);
         resetBoard(room.board);
+        room.board.players.forEach((p) => {
+          p.scores = [];
+        });
         broadcastUpdate(user.currentRoom);
         broadcastHands(user.currentRoom);
       });

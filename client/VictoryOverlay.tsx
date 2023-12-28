@@ -2,17 +2,13 @@ import { BoardState } from "../shared/GameUtils";
 import Confetti from "react-confetti";
 import ScoresTable from "./ScoresTable";
 import { observer } from "mobx-react-lite";
+import SocketState from "./SocketState";
+import { useClientContext } from "./ClientContext";
 
-type Props = {
-  board: BoardState;
-  startGame: () => void;
-  isHost: boolean;
-};
-export default observer(function VictoryOverlay({
-  board,
-  startGame,
-  isHost,
-}: Props) {
+export default observer(function VictoryOverlay() {
+  const { state, socket } = useClientContext();
+  const board = state.board!;
+  const isHost = state.getIsHost();
   const pouncer = board.pouncer != null ? board.players[board.pouncer] : null;
   return pouncer != null ? (
     <div
@@ -43,7 +39,9 @@ export default observer(function VictoryOverlay({
         <ScoresTable board={board} />
         <div style={{ marginTop: 20 }}>
           {isHost ? (
-            <button onClick={startGame}>Start Next Round</button>
+            <button onClick={() => socket?.emit("start_game")}>
+              Start Next Round
+            </button>
           ) : (
             "Waiting for host to start next round..."
           )}

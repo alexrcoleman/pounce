@@ -4,14 +4,15 @@ import joinClasses from "./joinClasses";
 import styles from "./Player.module.css";
 import SocketState from "./SocketState";
 import { getPlayerLocation } from "../shared/CardLocations";
+import { useClientContext } from "./ClientContext";
 
 type Props = {
-  state: SocketState;
   player: PlayerState;
   playerIndex: number;
 };
 
-export default observer(function Player({ state, player, playerIndex }: Props) {
+export default observer(function Player({ player, playerIndex }: Props) {
+  const { state } = useClientContext();
   const [px, py] = getPlayerLocation(playerIndex, state.getActivePlayerIndex());
   return (
     <>

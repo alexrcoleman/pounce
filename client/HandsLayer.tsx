@@ -4,9 +4,11 @@ import CursorHand from "./CursorHand";
 import { getCardKey, stableObject } from "./CardsLayer";
 import { CardState } from "../shared/GameUtils";
 import { CardLocation, getPosition } from "./Card";
+import { useClientContext } from "./ClientContext";
 
 type CardWithLocation = { card: CardState; location: CardLocation };
-export default observer(function HandsLayer({ state }: { state: SocketState }) {
+export default observer(function HandsLayer() {
+  const { state } = useClientContext();
   const hands = state.hands;
   const activePlayerIndex = state.getActivePlayerIndex();
   const board = state.board!;

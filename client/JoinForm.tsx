@@ -1,3 +1,4 @@
+import { Button, Form, Input } from "antd";
 import styles from "./JoinForm.module.css";
 import { useRef } from "react";
 type Props = {
@@ -17,10 +18,9 @@ export default function JoinForm({ placeholderName, onSubmit }: Props) {
   const nameRef = useRef(placeholderName);
   return (
     <div className={styles.root}>
-      <form
+      <Form
         className={styles.form}
-        onSubmit={(e) => {
-          e.preventDefault();
+        onFinish={() => {
           onSubmit(roomRef.current, nameRef.current);
         }}
       >
@@ -32,7 +32,7 @@ export default function JoinForm({ placeholderName, onSubmit }: Props) {
           <label>
             Name
             <br />
-            <input
+            <Input
               name="name"
               onChange={(e) => (nameRef.current = e.target.value)}
               defaultValue={placeholderName}
@@ -45,7 +45,7 @@ export default function JoinForm({ placeholderName, onSubmit }: Props) {
           <label>
             Room Code
             <br />
-            <input
+            <Input
               name="room"
               onChange={(e) => {
                 roomRef.current = e.target.value = e.target.value.toUpperCase();
@@ -55,8 +55,8 @@ export default function JoinForm({ placeholderName, onSubmit }: Props) {
             />
           </label>
         </div>
-        <button type="submit">Join</button>
-      </form>
+        <Button htmlType="submit">Join</Button>
+      </Form>
     </div>
   );
 }

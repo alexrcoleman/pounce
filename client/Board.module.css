@@ -23,6 +23,9 @@
   background-color: rgba(0, 255, 0, 0.3);
 }
 .pileSection {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background-image: url("https://i.stack.imgur.com/KcaHc.png");
   background-repeat: repeat;
   position: absolute;
@@ -34,6 +37,7 @@
   width: calc(500px + 77px);
   border: 1px solid rgba(0, 255, 0, 0.3);
   overflow: hidden;
+  box-shadow: 0px 0px 8px rgba(0, 0, 0, 0.6);
 }
 
 .scores {
