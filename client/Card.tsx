@@ -186,9 +186,11 @@ const CardContentMemo = observer(function CardContent({
       <div className={joinClasses(styles.body, faceUp && styles.bodyFaceUp)}>
         <div
           className={styles.back}
-          style={{
-            backgroundColor: color,
-          }}
+          style={
+            {
+              "--hr": colors[color] ?? "0deg",
+            } as any
+          }
         />
         <div className={styles.front}>
           <CardFace suit={suit} value={value} />
@@ -198,6 +200,15 @@ const CardContentMemo = observer(function CardContent({
   );
 });
 
+const colors: Record<string, string | undefined> = {
+  red: "200deg",
+  blue: "80deg",
+  green: "320deg",
+  orange: "245deg",
+  yellow: "280deg",
+  pink: "151deg",
+};
+// ["red", "blue", "green", "orange", "yellow", "pink"];
 export default CardContentMemo;
 
 export type CardLocation =

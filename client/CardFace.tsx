@@ -43,8 +43,9 @@ const CardFace = React.memo(function CardFace({
             style={{
               gridRow: (gridRowCount - 1) / 2,
               gridColumn: 2,
-              fontSize: 25,
-              marginLeft: -6,
+              fontSize: valueText === "J" ? 25 : 55,
+              marginLeft: valueText === "J" ? -6 : -15,
+              marginTop: valueText === "J" ? 0 : -5,
             }}
           >
             {valueText === "Q" ? "♕" : valueText === "K" ? "♔" : valueText}
