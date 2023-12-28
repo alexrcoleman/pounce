@@ -1,9 +1,10 @@
+import { observer } from "mobx-react-lite";
 import { BoardState } from "../shared/GameUtils";
 import styles from "./ScoresTable.module.css";
 type Props = {
   board: BoardState;
 };
-export default function ScoresTable({ board }: Props) {
+export default observer(function ScoresTable({ board }: Props) {
   const maxScore = Math.max(...board.players.map((p) => p.totalPoints));
   return (
     <>
@@ -51,4 +52,4 @@ export default function ScoresTable({ board }: Props) {
       </table>
     </>
   );
-}
+});

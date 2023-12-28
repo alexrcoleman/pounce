@@ -1,6 +1,7 @@
 import { CardDnDItem } from "./CardDnDItem";
 import { CardState } from "../shared/GameUtils";
 import { useDrop } from "react-dnd";
+import { toJS } from "mobx";
 
 type Props = {
   card: CardState | null;
@@ -24,26 +25,26 @@ export default function StackDragTarget({
   onUpdateDragTarget,
   rotate,
 }: Props) {
-  const [{ isOver, canDrop, isDragging }, drop] = useDrop(
+  const cardObject = toJS(card);
+  const [{ isOver, canDrop }, drop] = useDrop(
     () => ({
       accept: "card",
       drop: (item: CardDnDItem) => onDrop(item),
       collect: (monitor) => ({
         isOver: !!monitor.isOver(),
         canDrop: !!monitor.canDrop(),
-        isDragging: monitor.getItem() != null,
       }),
       canDrop: (item) =>
-        card == null ||
-        (item.card.value === card.value - 1 &&
-          black.includes(item.card.suit) !== black.includes(card.suit)),
-      hover: () => card && onUpdateDragTarget(card),
+        cardObject == null ||
+        (item.card.value === cardObject.value - 1 &&
+          black.includes(item.card.suit) !== black.includes(cardObject.suit)),
+      hover: () => cardObject && onUpdateDragTarget(cardObject),
     }),
     [onDrop]
   );
-  if (!canDrop) {
-    return null;
-  }
+  // if (!canDrop) {
+  //   return null;
+  // }
   return (
     <div
       style={
@@ -58,6 +59,7 @@ export default function StackDragTarget({
           transform: `translate(${left - buffer}px, ${
             top - buffer
           }px) rotate(${rotate}deg) scale(var(--s), var(--s))`,
+          zIndex: canDrop ? 100 : undefined,
         } as any
       }
       ref={drop}

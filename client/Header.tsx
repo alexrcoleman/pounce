@@ -1,6 +1,7 @@
 import joinClasses from "./joinClasses";
 import styles from "./Header.module.css";
 import { useState } from "react";
+import { observer } from "mobx-react-lite";
 type Props = {
   isStarted: boolean;
   onAddAI: () => void;
@@ -17,7 +18,7 @@ type Props = {
   setAILevel: (level: number) => void;
 };
 
-export default function Header({
+export default observer(function Header({
   isStarted,
   onAddAI,
   setUseAnimations,
@@ -115,4 +116,4 @@ export default function Header({
       </button>
     </>
   );
-}
+});

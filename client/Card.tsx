@@ -8,66 +8,75 @@ import joinClasses from "./joinClasses";
 import styles from "./Card.module.css";
 import { useDrag } from "react-dnd";
 import usePrevious from "./usePrevious";
+import { observer } from "mobx-react-lite";
+import SocketState from "./SocketState";
+import {
+  getBoardPileCardLocation,
+  getPlayerDeckLocation,
+  getPlayerFlippedDeckLocation,
+  getPlayerPounceCardLocation,
+  getPlayerStackLocation,
+} from "../shared/CardLocations";
+import { computed, toJS } from "mobx";
 
 type Props = {
-  boardState: BoardState;
+  state: SocketState;
   card: CardState;
-  positionX: number;
-  positionY: number;
-  zIndex: number;
-  /**
-   * Whether the face of the card is up
-   */
-  faceUp: boolean;
-  /**
-   * Rotation to apply to the card, 0 being normal, .5 being upside down
-   */
-  rotation?: number;
   onClick?: () => void;
   onHover?: (card: CardState) => void;
-  onDrag?: (dest: CardState) => void;
-  source: SourceType;
-  scaleDown: boolean;
+  location: CardLocation;
 };
 
 /**
  * Renders a playing card at a given position.
  */
-export default React.memo(function Card({
-  boardState,
+const CardContentMemo = observer(function CardContent({
   card,
-  source,
-  ...otherProps
-}: Props): JSX.Element {
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const cardMemo = useMemo(() => card, [card.player, card.suit, card.value]);
-
-  const sourceMemo = useMemo(() => source, [JSON.stringify(source)]);
-  return (
-    <CardContentMemo
-      color={boardState.players[card.player].color}
-      source={sourceMemo}
-      card={cardMemo}
-      {...otherProps}
-    />
-  );
-});
-
-const CardContentMemo = React.memo(function CardContent({
-  positionX,
-  positionY,
-  zIndex,
-  faceUp,
-  card,
-  onClick,
+  location,
+  state,
   onHover,
-  source,
-  color,
-  rotation = 0,
-  scaleDown,
-}: Omit<Props, "boardState"> & {
-  color: string;
-}) {
+  onClick,
+}: Props) {
+  const board = state.board!;
+  const player = board.players[card.player];
+
+  const pile =
+    location.type === "field_stack"
+      ? board.piles[location.stackIndex]
+      : location.type === "pounce"
+      ? player.pounceDeck
+      : location.type === "flippedDeck"
+      ? player.flippedDeck
+      : location.type === "solitaire"
+      ? player.stacks[location.pileIndex]
+      : player.deck;
+  const zIndex = location.cardIndex;
+
+  const faceUp = computed(() => {
+    return (
+      location.type === "flippedDeck" ||
+      (location.type === "pounce" && zIndex === pile.length - 1) ||
+      (location.type === "field_stack" && zIndex < 12) ||
+      location.type === "solitaire"
+    );
+  }).get();
+
+  const scaleDown =
+    location.type !== "field_stack" &&
+    card.player !== state.getActivePlayerIndex();
+
+  const rotation =
+    location.type === "field_stack"
+      ? board.pileLocs[location.stackIndex][2]
+      : 0;
+
+  const source = useMemo(
+    () => computed(() => getSource(card, state, location)),
+    [card, state, location]
+  ).get();
+
+  const [positionX, positionY] = getPosition(card, state, location);
+  const color = board.players[card.player].color;
   const { suit, value } = card;
   const [isAnimating, setIsAnimating] = useState(false);
   const offset = useRef(Math.random() * 2 - 1);
@@ -76,8 +85,8 @@ const CardContentMemo = React.memo(function CardContent({
     () =>
       source.type === "field_stack"
         ? { index: source.index }
-        : { source, card },
-    [source, card]
+        : { source, card: toJS(card) },
+    [source, JSON.stringify(toJS(card))]
   );
   const [{ isDragging, isDraggingOther, canDrag }, drag] = useDrag(
     () =>
@@ -168,7 +177,7 @@ const CardContentMemo = React.memo(function CardContent({
           opacity: isDragging ? 0.4 : 1,
         } as any
       }
-      onMouseOver={() => onHover && onHover(card)}
+      onMouseEnter={() => onHover && onHover(card)}
       onTouchStart={() => onHover && onHover(card)}
       title={`${zIndex + 1} card(s)`}
       onClick={onClick}
@@ -188,3 +197,96 @@ const CardContentMemo = React.memo(function CardContent({
     </div>
   );
 });
+
+export default CardContentMemo;
+
+export type CardLocation =
+  | { type: "pounce"; cardIndex: number }
+  | {
+      type: "solitaire";
+      pileIndex: number;
+      cardIndex: number;
+    }
+  | { type: "flippedDeck"; cardIndex: number }
+  | { type: "field_stack"; stackIndex: number; cardIndex: number }
+  | { type: "deck"; cardIndex: number };
+
+function getSource(
+  card: CardState,
+  state: SocketState,
+  location: CardLocation
+): SourceType {
+  if (location.type === "field_stack") {
+    const stackHeight = state.board!.piles[location.stackIndex].length;
+    return {
+      type: "field_stack",
+      index: location.stackIndex,
+      isTopCard: location.cardIndex === stackHeight - 1,
+    };
+  }
+  if (
+    location.type === "deck" ||
+    card.player !== state.getActivePlayerIndex()
+  ) {
+    return { type: "other" };
+  }
+  const player = state.board!.players[card.player];
+  switch (location.type) {
+    case "flippedDeck":
+      if (location.cardIndex !== player.flippedDeck.length - 1) {
+        return { type: "other" };
+      }
+      return { type: "flippedDeck" };
+    case "pounce":
+      if (location.cardIndex !== player.pounceDeck.length - 1) {
+        return { type: "other" };
+      }
+      return { type: "pounce" };
+    case "solitaire":
+      return {
+        type: "solitaire",
+        pileIndex: location.pileIndex,
+        slotIndex: location.cardIndex,
+      };
+  }
+}
+export function getPosition(
+  card: CardState,
+  state: SocketState,
+  location: CardLocation
+): [number, number] {
+  const playerIndex = card.player;
+  switch (location.type) {
+    case "field_stack":
+      return getBoardPileCardLocation(
+        state.board!,
+        location.stackIndex,
+        location.cardIndex
+      );
+    case "flippedDeck":
+      return getPlayerFlippedDeckLocation(
+        playerIndex,
+        location.cardIndex,
+        state.getActivePlayerIndex()
+      );
+    case "deck":
+      return getPlayerDeckLocation(
+        playerIndex,
+        location.cardIndex,
+        state.getActivePlayerIndex()
+      );
+    case "pounce":
+      return getPlayerPounceCardLocation(
+        playerIndex,
+        location.cardIndex,
+        state.getActivePlayerIndex()
+      );
+    case "solitaire":
+      return getPlayerStackLocation(
+        playerIndex,
+        location.pileIndex,
+        location.cardIndex,
+        state.getActivePlayerIndex()
+      );
+  }
+}

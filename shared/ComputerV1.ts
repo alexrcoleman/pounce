@@ -11,13 +11,12 @@ import {
   peek,
 } from "./CardUtils";
 
+import { getDistance, type Move } from "./MoveHandler";
 import {
   getApproximateCardLocation,
-  getApproximatePileLocation,
-  getApproximatePlayerLocation,
-  getDistance,
-  type Move,
-} from "./MoveHandler";
+  getBoardPileLocation,
+  getPlayerLocation,
+} from "./CardLocations";
 
 type StrategySettings = {
   solitaireFromDeck?: boolean;
@@ -44,12 +43,9 @@ class AIStrategy {
         // Get a rough idea of the closest target before we grab something, but update once we have grabbed something
         const c = cursor.location
           ? getApproximateCardLocation(boardState, cursor.location)
-          : getApproximatePlayerLocation(
-              boardState,
-              boardState.players.indexOf(player)
-            );
-        const p1 = getApproximatePileLocation(boardState, a[1]);
-        const p2 = getApproximatePileLocation(boardState, b[1]);
+          : getPlayerLocation(boardState.players.indexOf(player));
+        const p1 = getBoardPileLocation(boardState, a[1]);
+        const p2 = getBoardPileLocation(boardState, b[1]);
         return getDistance(p1, c) - getDistance(p2, c);
       });
   }

@@ -2,6 +2,7 @@ import { CardDnDItem } from "./CardDnDItem";
 import { CardState } from "../shared/GameUtils";
 import { useDrop } from "react-dnd";
 import { useRef } from "react";
+import { observer } from "mobx-react-lite";
 
 type Props = {
   card: CardState | null;
@@ -15,7 +16,7 @@ type Props = {
 
 const buffer = 30;
 
-export default function FieldStackDragTarget({
+export default observer(function FieldStackDragTarget({
   card,
   onDrop,
   stackHeight,
@@ -47,9 +48,9 @@ export default function FieldStackDragTarget({
     }),
     [onDrop, card]
   );
-  // if (stackHeight === 0 || !isDragging) {
-  //   return null;
-  // }
+  if (stackHeight === 0 || !isDragging) {
+    return null;
+  }
   return (
     <div
       style={{
@@ -66,4 +67,4 @@ export default function FieldStackDragTarget({
       ref={drop}
     />
   );
-}
+});

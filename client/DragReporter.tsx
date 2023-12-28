@@ -12,8 +12,13 @@ export default function DragReporter({ onUpdateGrabbedItem }: Props) {
   const manager = useDragDropManager();
   useEffect(() => {
     const monitor = manager.getMonitor();
+    let lastItem: unknown = null;
     const unsub = monitor.subscribeToStateChange(() => {
       const item = monitor.getItem();
+      if (lastItem == item) {
+        return;
+      }
+      lastItem = item;
       if (item == null) {
         onUpdateGrabbedItem(null);
       } else if ("card" in item) {

@@ -1,14 +1,20 @@
 import { BoardState } from "../shared/GameUtils";
 import Confetti from "react-confetti";
 import ScoresTable from "./ScoresTable";
+import { observer } from "mobx-react-lite";
 
 type Props = {
   board: BoardState;
   startGame: () => void;
   isHost: boolean;
 };
-export default function VictoryOverlay({ board, startGame, isHost }: Props) {
-  return board.pouncer != null ? (
+export default observer(function VictoryOverlay({
+  board,
+  startGame,
+  isHost,
+}: Props) {
+  const pouncer = board.pouncer != null ? board.players[board.pouncer] : null;
+  return pouncer != null ? (
     <div
       style={{
         zIndex: 1000000,
@@ -32,7 +38,7 @@ export default function VictoryOverlay({ board, startGame, isHost }: Props) {
         }}
       >
         <div style={{ marginBottom: 20, fontSize: "25px" }}>
-          <i>Pounce!</i> by <b>{board.players[board.pouncer].name}</b>
+          <i>Pounce!</i> by <b>{pouncer.name}</b>
         </div>
         <ScoresTable board={board} />
         <div style={{ marginTop: 20 }}>
@@ -46,4 +52,4 @@ export default function VictoryOverlay({ board, startGame, isHost }: Props) {
       <Confetti />
     </div>
   ) : null;
-}
+});

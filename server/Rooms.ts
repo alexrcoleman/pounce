@@ -10,14 +10,11 @@ import {
 } from "../shared/GameUtils";
 
 import { Server } from "socket.io";
-import {
-  executeMove,
-  getApproximateCardLocation,
-  getDistance,
-} from "../shared/MoveHandler";
+import { executeMove, getDistance } from "../shared/MoveHandler";
 import { getBasicAIMove } from "../shared/ComputerV1";
 import deepClone from "../shared/deepClone";
 import { peek } from "../shared/CardUtils";
+import { getApproximateCardLocation } from "../shared/CardLocations";
 
 export type RoomState = {
   io: Server;
@@ -136,17 +133,34 @@ function getVisibleBoard(room: RoomState, playerIndex: number) {
   const visibleBoard = deepClone(room.aiBoard);
   const realBoard = room.board;
   // Allow seeing their own hand instantly
-  visibleBoard.players[playerIndex] = realBoard.players[playerIndex];
+  const player = realBoard.players[playerIndex];
+  visibleBoard.players[playerIndex] = player;
 
+  const pounceCard = peek(player.pounceDeck);
   // Allow seeing any piles they played on instantly
+  const nonEmptyPileCount = realBoard.piles.filter((p) => p.length > 1).length;
   realBoard.piles.forEach((p, i) => {
-    if (peek(p)?.player === playerIndex || p.length === 1) {
+    const topCard = peek(p);
+    const canPounceCardPlay =
+      pounceCard &&
+      topCard &&
+      pounceCard.suit === topCard.suit &&
+      topCard.value < pounceCard.value &&
+      topCard.value >= pounceCard.value - 3;
+    if (
+      peek(p)?.player === playerIndex ||
+      p.length <= 1 ||
+      nonEmptyPileCount < 4 ||
+      canPounceCardPlay
+    ) {
       visibleBoard.piles[i] = p;
     }
   });
 
   // TODO: Pick a few piles they might be interested in to show immediately (TBD how to decide this, perhaps
   // just their pounce pile and any Aces)
+
+  // Additionally (perhaps related to the above), show any piles they attempted to play on recently
 
   return visibleBoard;
 }
@@ -157,7 +171,7 @@ export function broadcastUpdate(roomId: string) {
     board: room.board,
     time: Date.now(),
   });
-  const reactionDelay = 10000 / room.aiSpeed / room.timescale;
+  const reactionDelay = (2500 / room.aiSpeed + 100) / room.timescale;
   const visibleBoard = JSON.parse(JSON.stringify(room.board));
   setTimeout(() => {
     room.aiBoard = visibleBoard;

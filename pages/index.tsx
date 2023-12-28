@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import Board from "../client/Board";
 import Head from "next/head";
@@ -8,27 +8,13 @@ import type { NextPage } from "next";
 import joinClasses from "../client/joinClasses";
 import styles from "../styles/Home.module.css";
 import useGameSocket from "../client/useGameSocket";
-
-const Home: NextPage = () => {
+import { observer } from "mobx-react-lite";
+const Home: NextPage = observer(() => {
   const [roomId, setRoomId] = useState<null | string>(null);
   const [name, setName] = useState<null | string>(null);
   const [animations, setAnimations] = useState(true);
   const [scale, setScale] = useState(1);
-  const {
-    executeMove,
-    onStart,
-    onRestart,
-    onUpdateHand,
-    onAddAI,
-    onRemoveAI,
-    isConnected,
-    board,
-    socketId,
-    hands,
-    onRotate,
-    onUpdateGrabbedItem,
-    setAILevel,
-  } = useGameSocket(roomId, name);
+  const { actions, isConnected, state } = useGameSocket(roomId, name);
   const onLeaveRoom = useCallback(() => setRoomId(null), []);
 
   if (!roomId || !name) {
@@ -45,23 +31,16 @@ const Home: NextPage = () => {
   if (!isConnected) {
     return <div className={styles.loadingStateText}>Connecting...</div>;
   }
+  const board = state.board;
   if (board == null) {
     return (
       <div className={styles.loadingStateText}>Waiting for game data...</div>
     );
   }
-  const playerIndex = board.players.findIndex((p) => p.socketId === socketId);
-  const hostIndex = board.players.findIndex(
-    (p) => !p.disconnected && p.socketId != null
-  );
+  const playerIndex = state.getActivePlayerIndex();
+  const hostIndex = state.getHostPlayerIndex();
   const isHost = hostIndex === playerIndex;
-  console.log({
-    players: board.players.map((p) => p.socketId),
-    socketId,
-    playerIndex,
-    hostIndex,
-    isHost,
-  });
+
   return (
     <div
       className={joinClasses(
@@ -73,34 +52,32 @@ const Home: NextPage = () => {
         <title>Pounce | {roomId}</title>
       </Head>
       <Header
-        onAddAI={onAddAI}
+        onAddAI={actions.onAddAI}
         setUseAnimations={setAnimations}
         isStarted={board.isActive}
-        onRemoveAI={onRemoveAI}
-        onRestart={onRestart}
+        onRemoveAI={actions.onRemoveAI}
+        onRestart={actions.onRestart}
         onLeaveRoom={onLeaveRoom}
-        onStart={onStart}
+        onStart={actions.onStart}
         roomId={roomId}
         isHost={isHost}
-        onRotate={onRotate}
-        setAILevel={setAILevel}
+        onRotate={actions.onRotate}
+        setAILevel={actions.setAILevel}
         scale={scale}
         setScale={setScale}
       />
       <div className={styles.boardWrapper} style={{ "--scale": scale } as any}>
         <Board
-          hands={hands}
-          board={board}
-          onUpdateHand={onUpdateHand}
-          onUpdateGrabbedItem={onUpdateGrabbedItem}
-          executeMove={executeMove}
-          startGame={onStart}
+          state={state}
+          onUpdateHand={actions.onUpdateHand}
+          onUpdateGrabbedItem={actions.onUpdateGrabbedItem}
+          executeMove={actions.executeMove}
+          startGame={actions.onStart}
           isHost={isHost}
-          playerIndex={playerIndex}
         />
       </div>
     </div>
   );
-};
+});
 
 export default Home;

@@ -1,3 +1,4 @@
+import { observer } from "mobx-react-lite";
 import { CardDnDItem, FieldStackDnDItem } from "./CardDnDItem";
 import { MutableRefObject, useRef } from "react";
 
@@ -10,7 +11,10 @@ type Props = {
     position: [number, number]
   ) => void;
 };
-export default function FieldDragTarget({ onDrop, onMoveFieldStack }: Props) {
+export default observer(function FieldDragTarget({
+  onDrop,
+  onMoveFieldStack,
+}: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [{ isOver, canDrop }, drop] = useDrop(
     () => ({
@@ -42,6 +46,7 @@ export default function FieldDragTarget({ onDrop, onMoveFieldStack }: Props) {
   if (!canDrop) {
     return null;
   }
+  console.log({ isOver, canDrop });
   return (
     <div
       style={{
@@ -57,4 +62,4 @@ export default function FieldDragTarget({ onDrop, onMoveFieldStack }: Props) {
       }}
     />
   );
-}
+});
