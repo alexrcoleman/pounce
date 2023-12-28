@@ -5,7 +5,7 @@ import { DndProvider } from "react-dnd";
 import DragReporter from "./DragReporter";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import type { Move } from "../shared/MoveHandler";
-import Player from "./Player";
+import PlayerArea from "./PlayerArea";
 import ScoresTable from "./ScoresTable";
 import { TouchBackend } from "react-dnd-touch-backend";
 import VictoryOverlay from "./VictoryOverlay";
@@ -63,7 +63,7 @@ export default observer(function Board({
           />
           <CardsLayer />
           {board.players.map((p, i) => (
-            <Player player={p} playerIndex={i} key={p.socketId ?? i} />
+            <PlayerArea player={p} playerIndex={i} key={p.socketId ?? i} />
           ))}
           <HandsLayer />
           <VictoryOverlay />
@@ -114,7 +114,7 @@ function ScoresTableTabOverlay({ board }: { board: BoardState }) {
   }
   return (
     <div className={styles.scores}>
-      <ScoresTable board={board} />
+      <ScoresTable board={board} bufferRows={10} />
     </div>
   );
 }

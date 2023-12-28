@@ -8,7 +8,6 @@ function MyApp({ Component, pageProps }: AppProps) {
     <>
       <Head>
         <title>Pounce</title>
-        <link rel="icon" href="favicon.svg" />
       </Head>
       <Component {...pageProps} />
     </>

@@ -1,20 +1,43 @@
+.root {
+  background-color: rgba(255, 255, 255, 0.9);
+  background-image: url("/notebook.png");
+  background-size: 150%;
+  width: 600px;
+  height: 600px;
+  background-position: -50px -20px;
+  padding-top: 10px;
+  font-family: "Single Day", cursive;
+  position: relative;
+  color: #333;
+  /* background-origin: -800px 0px; */
+}
 .table {
-  background-color: rgba(255, 255, 255, 0.2);
+  position: absolute;
+  left: 60px;
+  top: 58px;
   padding: 8px;
   border-collapse: collapse;
-  border: 1px;
-  width: 275px;
-  max-width: 275px;
+  /* border: 1px; */
+  font-size: 20px;
+  width: 520px;
+  /* disable text wrap */
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  table-layout: fixed;
+}
+
+.table tr td:not(:last-child) {
+  border-right: 1px solid black;
+}
+.table tr th:not(:last-child) {
+  border-right: 1px solid black;
 }
 
 .table td,
 .table th {
-  border: 1px solid black;
-  padding: 5px;
-  /* text-overflow: ellipsis;
   overflow: hidden;
-  white-space: nowrap; */
-}
-.table tr td:nth-child(n + 2) {
-  text-align: end;
+  text-overflow: ellipsis;
+  padding: 3.5px;
+  line-height: 17.7px;
+  text-align: center;
 }

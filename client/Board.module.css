@@ -32,9 +32,9 @@
   background-size: 200% 200%;
   left: 550px;
   top: 50px;
-  height: calc(500px + 77px);
+  height: calc(577px);
   border-radius: 10px;
-  width: calc(500px + 77px);
+  width: calc(577px);
   border: 1px solid rgba(0, 255, 0, 0.3);
   overflow: hidden;
   box-shadow: 0px 0px 8px rgba(0, 0, 0, 0.6);
@@ -47,6 +47,6 @@
   transform: translate(-50%, -50%);
   z-index: 100000;
   background-color: rgba(255, 255, 255, 0.9);
-  padding: 20px;
-  border-radius: 5px;
+  border-radius: 2px;
+  overflow: hidden;
 }

@@ -11,8 +11,12 @@ type Props = {
   playerIndex: number;
 };
 
-export default observer(function Player({ player, playerIndex }: Props) {
+/**
+ * Currently just shows the player's name and score on a badge, as well as pounce card count.
+ */
+export default observer(function PlayerArea({ player, playerIndex }: Props) {
   const { state } = useClientContext();
+  const isStarted = state.board?.isActive ?? false;
   const [px, py] = getPlayerLocation(playerIndex, state.getActivePlayerIndex());
   return (
     <>
@@ -40,7 +44,8 @@ export default observer(function Player({ player, playerIndex }: Props) {
           }
         />
         <span>
-          {player.name} (Current: {player.currentPoints})
+          {player.name}
+          {isStarted && ` (Current: ${player.currentPoints})`}
         </span>
       </div>
 

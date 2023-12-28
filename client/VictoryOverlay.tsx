@@ -4,6 +4,7 @@ import ScoresTable from "./ScoresTable";
 import { observer } from "mobx-react-lite";
 import SocketState from "./SocketState";
 import { useClientContext } from "./ClientContext";
+import { Button, Flex } from "antd";
 
 export default observer(function VictoryOverlay() {
   const { state, socket } = useClientContext();
@@ -33,19 +34,28 @@ export default observer(function VictoryOverlay() {
           border: "2px solid #ddd",
         }}
       >
-        <div style={{ marginBottom: 20, fontSize: "25px" }}>
-          <i>Pounce!</i> by <b>{pouncer.name}</b>
+        <div
+          style={{
+            marginBottom: 20,
+            fontSize: "25px",
+            display: "flex",
+            justifyContent: "center",
+          }}
+        >
+          <span>
+            <i>Pounce!</i> by <b>{pouncer.name}</b>
+          </span>
         </div>
         <ScoresTable board={board} />
-        <div style={{ marginTop: 20 }}>
+        <Flex justify="end" style={{ marginTop: 20 }}>
           {isHost ? (
-            <button onClick={() => socket?.emit("start_game")}>
+            <Button type="primary" onClick={() => socket?.emit("start_game")}>
               Start Next Round
-            </button>
+            </Button>
           ) : (
             "Waiting for host to start next round..."
           )}
-        </div>
+        </Flex>
       </div>
       <Confetti />
     </div>
