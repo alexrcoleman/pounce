@@ -1,10 +1,9 @@
-import { BoardState } from "../shared/GameUtils";
 import Confetti from "react-confetti";
 import ScoresTable from "./ScoresTable";
 import { observer } from "mobx-react-lite";
-import SocketState from "./SocketState";
 import { useClientContext } from "./ClientContext";
 import { Button, Flex } from "antd";
+import Link from "next/link";
 
 export default observer(function VictoryOverlay() {
   const { state, socket } = useClientContext();
@@ -47,13 +46,16 @@ export default observer(function VictoryOverlay() {
           </span>
         </div>
         <ScoresTable board={board} />
-        <Flex justify="end" style={{ marginTop: 20 }}>
+        <Flex justify="end" align="center" style={{ marginTop: 20, gap: 10 }}>
+          <Link href="/" passHref>
+            <Button>Leave Room</Button>
+          </Link>
           {isHost ? (
             <Button type="primary" onClick={() => socket?.emit("start_game")}>
               Start Next Round
             </Button>
           ) : (
-            "Waiting for host to start next round..."
+            "Waiting for host to start..."
           )}
         </Flex>
       </div>

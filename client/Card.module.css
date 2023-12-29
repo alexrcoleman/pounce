@@ -51,5 +51,5 @@
   background-size: 95% 95%;
   background-position: 50% 50%;
   background-repeat: no-repeat;
-  filter: saturate(350%) hue-rotate(var(--hr));
+  filter: saturate(350%) brightness(115%) contrast(130%) hue-rotate(var(--hr));
 }

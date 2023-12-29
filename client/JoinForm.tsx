@@ -3,6 +3,7 @@ import styles from "./JoinForm.module.css";
 import { useRef } from "react";
 type Props = {
   placeholderName: string;
+  placeholderRoomId?: string;
   onSubmit: (room: string, name: string) => void;
 };
 
@@ -13,8 +14,12 @@ function randomCode() {
   }
   return code;
 }
-export default function JoinForm({ placeholderName, onSubmit }: Props) {
-  const roomRef = useRef(randomCode());
+export default function JoinForm({
+  placeholderName,
+  placeholderRoomId,
+  onSubmit,
+}: Props) {
+  const roomRef = useRef(placeholderRoomId ?? randomCode());
   const nameRef = useRef(placeholderName);
   return (
     <div className={styles.root}>

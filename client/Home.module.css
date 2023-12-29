@@ -1,6 +1,5 @@
 .container {
   width: 100vw;
-  min-width: 1440px;
   overflow: auto;
   height: 100vh;
 }

@@ -14,6 +14,7 @@ import {
   getBoardPileCardLocation,
   getPlayerDeckLocation,
   getPlayerFlippedDeckLocation,
+  getPlayerLocation,
   getPlayerPounceCardLocation,
   getPlayerStackLocation,
 } from "../shared/CardLocations";
@@ -25,6 +26,7 @@ type Props = {
   onClick?: () => void;
   location: CardLocation;
   isHandTarget?: boolean;
+  postGameStage?: number;
 };
 
 /**
@@ -35,6 +37,7 @@ const CardContentMemo = observer(function CardContent({
   location,
   isHandTarget,
   onClick,
+  postGameStage,
 }: Props) {
   const { state, socket } = useClientContext();
   const onUpdateHand = useCallback(
@@ -59,7 +62,7 @@ const CardContentMemo = observer(function CardContent({
       : player.deck;
   const zIndex = location.cardIndex;
 
-  const faceUp = computed(() => {
+  let faceUp = computed(() => {
     return (
       location.type === "flippedDeck" ||
       (location.type === "pounce" && zIndex === pile.length - 1) ||
@@ -68,11 +71,11 @@ const CardContentMemo = observer(function CardContent({
     );
   }).get();
 
-  const scaleDown =
+  let scaleDown =
     location.type !== "field_stack" &&
     card.player !== state.getActivePlayerIndex();
 
-  const rotation =
+  let rotation =
     location.type === "field_stack"
       ? board.pileLocs[location.stackIndex][2]
       : 0;
@@ -82,7 +85,30 @@ const CardContentMemo = observer(function CardContent({
     [card, state, location]
   ).get();
 
-  const [positionX, positionY] = getPosition(card, state, location);
+  let [positionX, positionY] = getPosition(card, state, location);
+
+  // Post-game animation:
+  if (postGameStage) {
+    const [px, py] = getPlayerLocation(
+      card.player,
+      state.getActivePlayerIndex()
+    );
+    if (
+      (postGameStage === 1 || postGameStage === 2) &&
+      location.type === "field_stack"
+    ) {
+      faceUp = false;
+      if (postGameStage === 2) {
+        [positionX, positionY] = [px + 400, py + 100];
+      }
+    }
+    if (postGameStage === 3) {
+      faceUp = false;
+      [positionX, positionY] = [px + 400, py + 100];
+      rotation = 0;
+      scaleDown = false;
+    }
+  }
   const color = board.players[card.player].color;
   const { suit, value } = card;
   const [isAnimating, setIsAnimating] = useState(false);

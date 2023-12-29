@@ -27,7 +27,7 @@ export default observer(function ScoresTable({ board, bufferRows = 2 }: Props) {
       className={styles.root}
       style={{
         height:
-          48 +
+          58 +
           8 +
           24.7 *
             (Math.min(MAX_SCORES_ROW, scoreIndices.length + bufferRows) + 1),

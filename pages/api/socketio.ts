@@ -172,6 +172,7 @@ export default function (req: any, res: any) {
         resetBoard(room.board);
         room.board.players.forEach((p) => {
           p.scores = [];
+          p.totalPoints = 0;
         });
         broadcastUpdate(user.currentRoom);
         broadcastHands(user.currentRoom);

@@ -13,8 +13,6 @@ This is a project to simulate the game Nertz / Pounce. It includes some online m
 ### User Play / Interface
 
 - Allow two-clicks to drag (nice for long-distance moves where dragging trackpad that far gets cumbersome)
-- Move settings behind a dialog instead of header bar
-- Move Deal Hands / Start to the "field"
 - Deal hands before starting to allow prep (maybe fixed 5 seconds from deal to start, removed in automation mode)
 - Draw area around each players section maybe (shaded gray box? ensure player1 lies over player2)
 - Maybe flip all the cards over and simulate tallying them up (fly them all into a pile, count up to their score?)

@@ -1,7 +1,7 @@
 import { observer } from "mobx-react-lite";
 import Card from "./Card";
 import SocketState from "./SocketState";
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Move } from "../shared/MoveHandler";
 import { CardState } from "../shared/GameUtils";
 import { useClientContext } from "./ClientContext";
@@ -15,6 +15,26 @@ export default observer(function CardsLayer() {
   const flipDeck = useCallback(() => {
     socket?.emit("move", { type: "flip_deck" });
   }, [socket]);
+
+  const [postGameStage, setPostGameStage] = useState(0);
+  const isActive = board.isActive;
+  useEffect(() => {
+    let timeouts: NodeJS.Timeout[] = [];
+    if (!isActive) {
+      for (let i = 1; i <= 3; i++) {
+        timeouts.push(
+          setTimeout(() => {
+            setPostGameStage(i);
+          }, i * 2000)
+        );
+      }
+    } else {
+      setPostGameStage(0);
+    }
+    return () => {
+      timeouts.forEach(clearTimeout);
+    };
+  }, [isActive]);
   const cards = board.piles
     .flatMap((pile, pileIndex) =>
       pile.map((card, index) => {
@@ -28,6 +48,7 @@ export default observer(function CardsLayer() {
               isTopCard: index === pile.length - 1,
               cardIndex: index,
             })}
+            postGameStage={postGameStage}
             isHandTarget={true}
           />
         );
@@ -46,6 +67,7 @@ export default observer(function CardsLayer() {
                 onClick={isActivePlayer && isTopCard ? cycleDeck : undefined}
                 location={stableObject({ type: "deck", cardIndex: index })}
                 isHandTarget={isTopCard && isActivePlayer}
+                postGameStage={postGameStage}
               />
             );
           }),
@@ -61,6 +83,7 @@ export default observer(function CardsLayer() {
                 })}
                 onClick={isActivePlayer && isTopCard ? flipDeck : undefined}
                 isHandTarget={isTopCard && isActivePlayer}
+                postGameStage={postGameStage}
               />
             );
           }),
@@ -76,6 +99,7 @@ export default observer(function CardsLayer() {
                   cardIndex: index,
                 })}
                 isHandTarget={isTopCard && isActivePlayer}
+                postGameStage={postGameStage}
               />
             );
           }),
@@ -91,6 +115,7 @@ export default observer(function CardsLayer() {
                     cardIndex: index,
                   })}
                   isHandTarget={isActivePlayer}
+                  postGameStage={postGameStage}
                 />
               );
             })
