@@ -50,6 +50,13 @@ const SettingsDialog = observer(function SettingsDialog({
       onCancel={props.onClose}
       okText="Done"
       cancelButtonProps={{ style: { display: "none" } }}
+      styles={{
+        body: {
+          overflowY: "auto",
+          maxHeight: "calc(100vh - 300px)",
+          paddingRight: "30px",
+        },
+      }}
     >
       <Flex vertical gap={10}>
         <Card title="Room">

@@ -47,7 +47,7 @@ export default observer(function VictoryOverlay() {
         </div>
         <ScoresTable board={board} />
         <Flex justify="end" align="center" style={{ marginTop: 20, gap: 10 }}>
-          <Link href="/" passHref>
+          <Link legacyBehavior href="/" passHref>
             <Button>Leave Room</Button>
           </Link>
           {isHost ? (

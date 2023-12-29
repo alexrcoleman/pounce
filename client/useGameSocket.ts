@@ -20,36 +20,33 @@ export default function useGameSocket(
 ) {
   const state = useLocalObservable(() => new SocketState());
   const [socket, setSocket] = useState<ClientSocket | null>(null);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
-    const controller = new AbortController();
     let socket: ClientSocket;
-    fetch("/api/socketio", { signal: controller.signal }).finally(() => {
-      if (controller.signal.aborted) {
-        return;
-      }
-      socket = io();
-      setSocket(socket);
-      socket.on("connect", () => {
-        console.log("Connected", socket.id);
-        runInAction(() => state.onConnect(socket.id));
-      });
+    socket = window.location.host === "localhost:3000" ? io(":3001") : io();
+    socket.on("connect_error", () => {
+      setError("No connection to socket server");
+    });
+    setSocket(socket);
+    socket.on("connect", () => {
+      console.log("Connected", socket.id);
+      runInAction(() => state.onConnect(socket.id));
+    });
 
-      socket.on("alert", (message) => {
-        alert(message);
-      });
-      socket.on("update_hands", ({ hands }) => {
-        runInAction(() => state.updateHands(hands));
-      });
-      socket.on("update", (data) => {
-        runInAction(() => state.onUpdate(data));
-      });
+    socket.on("alert", (message) => {
+      alert(message);
+    });
+    socket.on("update_hands", ({ hands }) => {
+      runInAction(() => state.updateHands(hands));
+    });
+    socket.on("update", (data) => {
+      runInAction(() => state.onUpdate(data));
+    });
 
-      socket.on("disconnect", () => {
-        runInAction(() => state.onDisconnect());
-      });
+    socket.on("disconnect", () => {
+      runInAction(() => state.onDisconnect());
     });
     return () => {
-      controller.abort();
       if (socket) {
         socket.close();
       }
@@ -85,6 +82,7 @@ export default function useGameSocket(
     [socket]
   );
   return {
+    error,
     isConnected,
     actions,
     state,

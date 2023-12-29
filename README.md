@@ -12,6 +12,8 @@ This is a project to simulate the game Nertz / Pounce. It includes some online m
 
 ### User Play / Interface
 
+- Fix touch dragging on mobile (iphone)
+- Add compact mobile version
 - Allow two-clicks to drag (nice for long-distance moves where dragging trackpad that far gets cumbersome)
 - Deal hands before starting to allow prep (maybe fixed 5 seconds from deal to start, removed in automation mode)
 - Draw area around each players section maybe (shaded gray box? ensure player1 lies over player2)
@@ -19,6 +21,10 @@ This is a project to simulate the game Nertz / Pounce. It includes some online m
 - Add sound effects for card movements (volume cycles < solitaire < field)
 - Improve HandsLayer performance? Maybe not super important
 - Perhaps rework code system to be more secure (lobbylist + passwords?)
+- Add toggle for "fair decks" mode (i.e. queueing up repeat decks)
+- Add "copy join link" to Room section
+
+- Consider moving from sockets to p2p (https://socket.io/blog/socket-io-p2p/), removing the need for socket server (only static content basically). Could consider changing billing mode in this case. This would also allow offline play potentially with app support.
 
 ### Bots/Simulation
 
@@ -37,3 +43,4 @@ This is a project to simulate the game Nertz / Pounce. It includes some online m
 ### Random
 
 - Fix spectating mode (have "opted-in" spectate mode, which doesnt automatically disable when a new round starts, but can be manually left. This would also be used for Simulation Mode)
+- Fix bug with closing page not disconnecting (Doesnt happen locally, but in prod, may need to fix logging and debug)

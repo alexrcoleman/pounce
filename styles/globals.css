@@ -7,11 +7,6 @@ body {
   background-color: rgb(201, 185, 164, 1);
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
 * {
   box-sizing: border-box;
 }

@@ -26,11 +26,11 @@ type Props = {
 export default observer(function Board({
   executeMove,
   onUpdateHand,
-}: Props): JSX.Element {
+}: Props): JSX.Element | null {
   const { state, socket } = useClientContext();
   const board = state.board!;
 
-  const [useTouch, setUseTouch] = useState(false);
+  const [useTouch, setUseTouch] = useState<boolean | null>(null);
   useEffect(() => {
     setUseTouch(isTouchDevice());
   }, []);
@@ -39,8 +39,16 @@ export default observer(function Board({
   const onUpdateDragHover = onUpdateHand;
 
   const [grabbedItem, setGrabbedItem] = useState<CardState | null>(null);
+  if (useTouch == null) {
+    // Loading touch type still. Ideally we'd render still here, but
+    // DnDProvider seems to struggle with backend changing
+    return null;
+  }
   return (
-    <DndProvider backend={useTouch ? TouchBackend : HTML5Backend}>
+    <DndProvider
+      backend={useTouch ? TouchBackend : HTML5Backend}
+      key={String(useTouch)}
+    >
       <DragReporter
         onUpdateGrabbedItem={(item) => {
           socket?.emit("update_hand", { item });

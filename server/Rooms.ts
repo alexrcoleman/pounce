@@ -189,7 +189,10 @@ export function getRoom(roomId: string) {
   return rooms[roomId];
 }
 export function deleteRoom(roomId: string) {
+  console.log("RoomS: ", Object.keys(rooms), " deleting " + roomId);
   const room = getRoom(roomId);
-  clearInterval(room.interval);
-  delete rooms[roomId];
+  if (room) {
+    clearInterval(room.interval);
+    delete rooms[roomId];
+  }
 }

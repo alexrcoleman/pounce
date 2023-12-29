@@ -12,13 +12,11 @@ type AppProps = {
 };
 
 const Home: NextPage<PageProps> = observer(
-  ({ name, setName, roomId, ...props }: PageProps & AppProps) => {
-    console.log(props);
+  ({ name, setName }: PageProps & AppProps) => {
     const router = useRouter();
     return (
       <JoinForm
         placeholderName={name ?? ""}
-        placeholderRoomId={roomId}
         onSubmit={(room, name) => {
           setName!(name);
           router.push(`/r/${room}`);
@@ -27,11 +25,5 @@ const Home: NextPage<PageProps> = observer(
     );
   }
 );
-
-Home.getInitialProps = (ctx: NextPageContext) => {
-  return {
-    roomId: ctx.query.roomid?.toString(),
-  };
-};
 
 export default Home;
