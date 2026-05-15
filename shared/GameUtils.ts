@@ -1,4 +1,3 @@
-import { RoomState } from "../server/Rooms";
 import { getDistance } from "./MoveHandler";
 import shuffle from "./shuffle";
 
@@ -39,6 +38,11 @@ export type BoardState = {
   piles: CardState[][];
   pileLocs: [number, number, number][];
   ticksSinceMove: number;
+};
+type StartGameRoomState = {
+  board: BoardState;
+  hands: CursorState[];
+  queuedHands: CardState[][][];
 };
 
 function createUnshuffledDeck(player: number): CardState[] {
@@ -234,7 +238,7 @@ function updateQueuedHands(
     }
   }
 }
-export function startGame(room: RoomState) {
+export function startGame(room: StartGameRoomState) {
   const { board, queuedHands } = room;
   const queuedHand = queuedHands.splice(0, 1);
   if (queuedHand.length > 0) {

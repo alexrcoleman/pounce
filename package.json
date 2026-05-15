@@ -2,7 +2,7 @@
   "name": "pounce",
   "private": true,
   "scripts": {
-    "dev": "concurrently -k 'next dev' 'ts-node-dev server/socketioMain.ts'",
+    "dev": "concurrently -k \"next dev\" \"ts-node-dev server/socketioMain.ts\"",
     "build": "next build",
     "start": "PORT=3000 next start -p 3000",
     "build-socketio": "echo 'no build needed for socketio server'",

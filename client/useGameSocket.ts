@@ -3,6 +3,7 @@ import { Socket, io } from "socket.io-client";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Move } from "../shared/MoveHandler";
+import { GameSocket } from "./GameConnection";
 import {
   ServerToClientEvents,
   ClientToServerEvents,
@@ -19,7 +20,7 @@ export default function useGameSocket(
   name: string | null
 ) {
   const state = useLocalObservable(() => new SocketState());
-  const [socket, setSocket] = useState<ClientSocket | null>(null);
+  const [socket, setSocket] = useState<GameSocket | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let socket: ClientSocket;

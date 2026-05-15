@@ -1,0 +1,25 @@
+{
+  "name": "Pounce Online",
+  "short_name": "Pounce",
+  "description": "Play Pounce online with friends or offline against AI.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#c9b9a4",
+  "theme_color": "#1677ff",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Play offline",
+      "short_name": "Offline",
+      "url": "/offline"
+    }
+  ]
+}

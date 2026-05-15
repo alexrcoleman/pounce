@@ -1,10 +1,12 @@
 import { Button, Form, Input } from "antd";
 import styles from "./JoinForm.module.css";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
+import usePwaInstall from "./usePwaInstall";
 type Props = {
   placeholderName: string;
   onSubmit: (room: string, name: string) => void;
+  onPlayOffline?: (name: string) => void;
 };
 
 function randomCode() {
@@ -14,9 +16,18 @@ function randomCode() {
   }
   return code;
 }
-export default function JoinForm({ placeholderName, onSubmit }: Props) {
+export default function JoinForm({
+  placeholderName,
+  onSubmit,
+  onPlayOffline,
+}: Props) {
   const [currentRoom, setCurrentRoom] = useState("");
   const [currentName, setCurrentName] = useState(placeholderName);
+  const {
+    downloadForOffline,
+    isOfflineReady,
+    isPreparing,
+  } = usePwaInstall();
   const router = useRouter();
   useEffect(() => {
     if (router.isReady) {
@@ -80,6 +91,27 @@ export default function JoinForm({ placeholderName, onSubmit }: Props) {
             disabled={!currentName || !currentRoom}
           >
             Play
+          </Button>
+          <Button
+            htmlType="button"
+            size="large"
+            onClick={() => {
+              const name =
+                currentName.trim() ||
+                localStorage.getItem("pounce::name") ||
+                "Player";
+              localStorage.setItem("pounce::name", name);
+              onPlayOffline?.(name);
+            }}
+          >
+            Play offline
+          </Button>
+          <Button
+            htmlType="button"
+            loading={isPreparing}
+            onClick={downloadForOffline}
+          >
+            {isOfflineReady ? "Offline ready" : "Download for offline"}
           </Button>
         </div>
       </Form>

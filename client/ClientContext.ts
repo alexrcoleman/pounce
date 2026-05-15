@@ -1,10 +1,10 @@
 import React from "react";
 import SocketState from "./SocketState";
-import { ClientSocket } from "./useGameSocket";
+import { GameSocket } from "./GameConnection";
 
 export const ClientContext = React.createContext<
   | {
-      socket: ClientSocket | null;
+      socket: GameSocket | null;
       state: SocketState;
     }
   | undefined

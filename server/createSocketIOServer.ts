@@ -1,10 +1,7 @@
 import {
-  CardState,
   addPlayer,
   removePlayer,
-  resetBoard,
   rotateDecks,
-  startGame,
 } from "../shared/GameUtils";
 import {
   broadcastHands,
@@ -13,6 +10,12 @@ import {
   deleteRoom,
   getRoom,
 } from "../server/Rooms";
+import {
+  resetRoom,
+  setRoomAILevel,
+  startRoomGame,
+  updateRoomHand,
+} from "../shared/RoomLogic";
 
 import { Server } from "socket.io";
 import { executeMove } from "../shared/MoveHandler";
@@ -140,19 +143,7 @@ export default function createSocketIOServer() {
         return;
       }
       const room = getRoom(user.currentRoom);
-      // Remove any disconnected players
-      removePlayer(
-        room.board,
-        ...room.board.players
-          .map((p, i) => ({ p, i }))
-          .filter((pair) => pair.p.disconnected)
-          .map((pair) => pair.i)
-      );
-      room.aiCooldowns = room.board.players.map(
-        () => Date.now() + 2000 + Math.random()
-      );
-      room.aiBoard = JSON.parse(JSON.stringify(room.board)); // todo: refactor
-      startGame(room);
+      startRoomGame(room);
       broadcastUpdate(user.currentRoom);
     });
     socket.on("rotate_decks", () => {
@@ -170,11 +161,7 @@ export default function createSocketIOServer() {
       }
 
       const room = getRoom(user.currentRoom);
-      resetBoard(room.board);
-      room.board.players.forEach((p) => {
-        p.scores = [];
-        p.totalPoints = 0;
-      });
+      resetRoom(room);
       broadcastUpdate(user.currentRoom);
       broadcastHands(user.currentRoom);
     });
@@ -182,26 +169,8 @@ export default function createSocketIOServer() {
       if (user.currentRoom == null) {
         return;
       }
-      const isSimulationMode = args.speed === 1000;
       const room = getRoom(user.currentRoom);
-      if (isSimulationMode) {
-        room.autoStart = true;
-        room.timescale = 100;
-        room.board.players.forEach((p) => {
-          if (p.socketId != null) {
-            // Mark any humans as spectating
-            p.isSpectating = true;
-          }
-        });
-      } else {
-        room.timescale = 1;
-        room.autoStart = false;
-        const speed = Math.max(
-          1,
-          Math.min(500, typeof args.speed === "number" ? args.speed : 3)
-        );
-        room.aiSpeed = speed;
-      }
+      setRoomAILevel(room, typeof args.speed === "number" ? args.speed : 3);
     });
     socket.on("disconnect", () => {
       delete socketData[socket.id];
@@ -214,14 +183,7 @@ export default function createSocketIOServer() {
       const player = room.board.players.findIndex(
         (p) => p.socketId === socket.id
       );
-      const hands = room.hands;
-      hands[player] = hands[player] ?? {};
-      if (location !== undefined) {
-        hands[player].location = location;
-      }
-      if (item !== undefined) {
-        hands[player].item = item;
-      }
+      updateRoomHand(room, player, { item, location });
       broadcastHands(user.currentRoom);
     });
   });
