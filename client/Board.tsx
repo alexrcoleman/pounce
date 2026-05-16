@@ -15,6 +15,7 @@ import styles from "./Board.module.css";
 import { observer } from "mobx-react-lite";
 import CardsLayer from "./CardsLayer";
 import HandsLayer from "./HandsLayer";
+import HandPlatesLayer from "./HandPlatesLayer";
 import FieldStackDragTargets from "./FieldStackDragTargets";
 import ActivePlayerStackTargets from "./ActivePlayerStackTargets";
 import { useClientContext } from "./ClientContext";
@@ -75,6 +76,7 @@ export default observer(function Board({
           <div className={styles.rootInside}>
             <PileSection />
             <ScoresTableTabOverlay board={board} />
+            <HandPlatesLayer />
             <ActivePlayerStackTargets
               executeMove={executeMove}
               onUpdateDragHover={onUpdateDragHover}
