@@ -65,7 +65,6 @@ export default observer(function FieldStackDragTarget({
         transform: `translate(${left - buffer}px, ${
           top - buffer
         }px) rotate(${rotate}deg) scale(${scale}, ${scale})`,
-        transformOrigin: "0% 0%",
       }}
       ref={drop}
     />

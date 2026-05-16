@@ -80,7 +80,6 @@ export default observer(function StackDragTarget({
           transform: `translate(${left - buffer}px, ${
             top - buffer
           }px) rotate(${0}deg) scale(${targetScale}, ${targetScale})`,
-          transformOrigin: "0% 0%",
           zIndex: canDrop ? 100 : undefined,
         } as any
       }
