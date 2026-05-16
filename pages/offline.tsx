@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { Button } from "antd";
 import Board from "../client/Board";
 import { ClientContext } from "../client/ClientContext";
 import Head from "next/head";
@@ -35,11 +36,21 @@ const OfflinePage: NextPage<{
   }, [router]);
 
   if (!isConnected) {
-    return <div className={styles.loadingStateText}>Starting...</div>;
+    return (
+      <OfflineLoadingState
+        message="Starting offline game"
+        onLeaveRoom={onLeaveRoom}
+      />
+    );
   }
   const board = state.board;
   if (board == null) {
-    return <div className={styles.loadingStateText}>Preparing game...</div>;
+    return (
+      <OfflineLoadingState
+        message="Preparing your table"
+        onLeaveRoom={onLeaveRoom}
+      />
+    );
   }
 
   return (
@@ -73,5 +84,27 @@ const OfflinePage: NextPage<{
     </>
   );
 });
+
+function OfflineLoadingState({
+  message,
+  onLeaveRoom,
+}: {
+  message: string;
+  onLeaveRoom: () => void;
+}) {
+  return (
+    <>
+      <Head>
+        <title>Pounce | Offline</title>
+      </Head>
+      <div className={styles.loadingState}>
+        <div className={styles.loadingStateText}>{message}</div>
+        <Button size="large" onClick={onLeaveRoom}>
+          Back home
+        </Button>
+      </div>
+    </>
+  );
+}
 
 export default OfflinePage;

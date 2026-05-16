@@ -24,9 +24,12 @@ export default function JoinForm({
   const [currentRoom, setCurrentRoom] = useState("");
   const [currentName, setCurrentName] = useState(placeholderName);
   const {
+    canInstall,
     downloadForOffline,
     isOfflineReady,
     isPreparing,
+    isSupported,
+    message,
   } = usePwaInstall();
   const router = useRouter();
   useEffect(() => {
@@ -109,10 +112,20 @@ export default function JoinForm({
           <Button
             htmlType="button"
             loading={isPreparing}
+            disabled={!isSupported}
             onClick={downloadForOffline}
           >
-            {isOfflineReady ? "Offline ready" : "Download for offline"}
+            {isOfflineReady
+              ? "Offline ready"
+              : canInstall
+              ? "Install app"
+              : "Download for offline"}
           </Button>
+          {message ? (
+            <div className={styles.offlineStatus} role="status">
+              {message}
+            </div>
+          ) : null}
         </div>
       </Form>
     </div>

@@ -1,8 +1,10 @@
-const OFFLINE_CACHE_NAME = "pounce-offline-v1";
+const OFFLINE_CACHE_NAME = "pounce-offline-v2";
 const OFFLINE_PAGES = ["/", "/offline"];
 const STATIC_ASSETS = [
   "/manifest.webmanifest",
   "/favicon.svg",
+  "/pwa-icon-192.png",
+  "/pwa-icon-512.png",
   "/card-back.png",
   "/notebook.png",
 ];
@@ -16,12 +18,16 @@ export async function cacheOfflineAssets() {
 
   await Promise.all(
     OFFLINE_PAGES.map(async (page) => {
-      const response = await fetch(page, { cache: "reload" });
-      if (response.ok) {
-        cache.put(page, response.clone());
-        collectSameOriginAssets(await response.text()).forEach((url) =>
-          urls.add(url)
-        );
+      try {
+        const response = await fetch(page, { cache: "reload" });
+        if (response.ok) {
+          cache.put(page, response.clone());
+          collectSameOriginAssets(await response.text()).forEach((url) =>
+            urls.add(url)
+          );
+        }
+      } catch (error) {
+        console.warn("Unable to cache offline page", page, error);
       }
     })
   );

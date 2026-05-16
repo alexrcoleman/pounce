@@ -1,9 +1,11 @@
-const CACHE_NAME = "pounce-offline-v1";
+const CACHE_NAME = "pounce-offline-v2";
 const APP_SHELL = [
   "/",
   "/offline",
   "/manifest.webmanifest",
   "/favicon.svg",
+  "/pwa-icon-192.png",
+  "/pwa-icon-512.png",
   "/card-back.png",
   "/notebook.png",
 ];
