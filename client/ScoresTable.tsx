@@ -33,9 +33,7 @@ export default observer(function ScoresTable({ board, bufferRows = 2 }: Props) {
             (Math.min(MAX_SCORES_ROW, scoreIndices.length + bufferRows) + 1),
       }}
     >
-      <div style={{ textAlign: "center", marginBottom: 4, fontSize: "30px" }}>
-        {title}
-      </div>
+      <div className={styles.title}>{title}</div>
       <table className={styles.table}>
         <thead>
           <tr>
@@ -65,15 +63,12 @@ export default observer(function ScoresTable({ board, bufferRows = 2 }: Props) {
               ))}
             </tr>
           ))}
-          <tr>
+          <tr className={styles.totalRow}>
             {/* <td>Total</td> */}
             {players.map((p, i) => (
               <td
                 key={i}
                 style={{
-                  color: "#111",
-                  fontSize: "25px",
-                  borderTop: "1px solid #AAA",
                   fontWeight: p.totalPoints === maxScore ? "bold" : "normal",
                   textDecoration: p.totalPoints === maxScore ? "underline" : "",
                 }}
