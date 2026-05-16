@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import Board from "../../client/Board";
 import Head from "next/head";
@@ -87,13 +87,11 @@ const RoomPage = observer(
               scale={scale}
               setScale={setScale}
             />
-            <div
-              className={styles.boardWrapper}
-              style={{ "--scale": scale } as any}
-            >
+            <div className={styles.boardWrapper}>
               <Board
                 onUpdateHand={actions.onUpdateHand}
                 executeMove={actions.executeMove}
+                zoom={scale}
               />
             </div>
           </ClientContext.Provider>

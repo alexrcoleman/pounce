@@ -12,6 +12,7 @@
   transition: opacity 0.25s linear;
   display: flex;
   align-items: center;
+  transform-origin: 0% 0%;
 }
 .card:hover {
   opacity: 1;

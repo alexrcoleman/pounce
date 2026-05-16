@@ -7,6 +7,7 @@ import { Move } from "../shared/MoveHandler";
 import { CardDnDItem } from "./CardDnDItem";
 import { getBoardPileLocation } from "../shared/CardLocations";
 import FieldDragTarget from "./FieldDragTarget";
+import { FIELD_LEFT, FIELD_TOP, useBoardLayout } from "./BoardLayout";
 
 export default observer(function FieldStackDragTargets({
   state,
@@ -38,6 +39,9 @@ export default observer(function FieldStackDragTargets({
     [executeMove]
   );
   const board = state.board!;
+  const layout = useBoardLayout();
+  const fieldArea = { type: "field" } as const;
+  const fieldScale = layout.getScale(fieldArea);
   const boardPiles = useMemo(() => {
     const indexedPiles = board.piles.map(
       (pile, index) => [pile, index] as const
@@ -67,8 +71,20 @@ export default observer(function FieldStackDragTargets({
   }, [board.piles.length, grabbedItem]);
 
   const firstOpenStack = board.piles.findIndex((pile) => pile.length === 0);
+  const [fieldLeft, fieldTop] = layout.mapPoint(
+    [FIELD_LEFT, FIELD_TOP],
+    fieldArea
+  );
   const fieldDragTarget = (
-    <div style={{ position: "absolute", left: 550, top: 50 }}>
+    <div
+      style={{
+        position: "absolute",
+        left: 0,
+        top: 0,
+        transform: `translate(${fieldLeft}px, ${fieldTop}px) scale(${fieldScale})`,
+        transformOrigin: "0% 0%",
+      }}
+    >
       <FieldDragTarget
         onDrop={(item, position) =>
           executeMoveCardToCenter(item, firstOpenStack, position)
@@ -88,18 +104,25 @@ export default observer(function FieldStackDragTargets({
   return (
     <>
       {!isDraggingAce && fieldDragTarget}
-      {boardPiles.map(([pile, index]) => (
-        <FieldStackDragTarget
-          key={index}
-          card={pile[pile.length - 1]}
-          stackHeight={pile.length}
-          onUpdateDragTarget={onUpdateDragHover}
-          onDrop={(item) => executeMoveCardToCenter(item, index)}
-          left={getBoardPileLocation(board, index)[0]}
-          top={getBoardPileLocation(board, index)[1]}
-          rotate={board.pileLocs[index][2] * 360}
-        />
-      ))}
+      {boardPiles.map(([pile, index]) => {
+        const [left, top] = layout.mapPoint(
+          getBoardPileLocation(board, index),
+          fieldArea
+        );
+        return (
+          <FieldStackDragTarget
+            key={index}
+            card={pile[pile.length - 1]}
+            stackHeight={pile.length}
+            onUpdateDragTarget={onUpdateDragHover}
+            onDrop={(item) => executeMoveCardToCenter(item, index)}
+            left={left}
+            top={top}
+            scale={fieldScale}
+            rotate={board.pileLocs[index][2] * 360}
+          />
+        );
+      })}
       {isDraggingAce && fieldDragTarget}
     </>
   );

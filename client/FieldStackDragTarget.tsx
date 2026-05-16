@@ -10,6 +10,7 @@ type Props = {
   onDrop: (source: CardDnDItem) => void;
   left: number;
   top: number;
+  scale?: number;
   rotate: number;
   onUpdateDragTarget: (card: CardState) => void;
 };
@@ -22,6 +23,7 @@ export default observer(function FieldStackDragTarget({
   stackHeight,
   left,
   top,
+  scale = 1,
   rotate,
   onUpdateDragTarget,
 }: Props) {
@@ -62,7 +64,8 @@ export default observer(function FieldStackDragTarget({
         position: "absolute",
         transform: `translate(${left - buffer}px, ${
           top - buffer
-        }px) rotate(${rotate}deg)`,
+        }px) rotate(${rotate}deg) scale(${scale}, ${scale})`,
+        transformOrigin: "0% 0%",
       }}
       ref={drop}
     />

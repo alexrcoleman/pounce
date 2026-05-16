@@ -20,6 +20,7 @@ import {
 } from "../shared/CardLocations";
 import { computed, toJS } from "mobx";
 import { useClientContext } from "./ClientContext";
+import { type BoardLayoutArea, useBoardLayout } from "./BoardLayout";
 
 type Props = {
   card: CardState;
@@ -40,6 +41,7 @@ const CardContentMemo = observer(function CardContent({
   postGameStage,
 }: Props) {
   const { state, socket } = useClientContext();
+  const layout = useBoardLayout();
   const onUpdateHand = useCallback(
     (card: CardState) => {
       socket?.emit("update_hand", { item: card });
@@ -86,6 +88,10 @@ const CardContentMemo = observer(function CardContent({
   ).get();
 
   let [positionX, positionY] = getPosition(card, state, location);
+  let layoutArea: BoardLayoutArea =
+    location.type === "field_stack"
+      ? { type: "field" }
+      : { type: "player", playerIndex: card.player };
 
   // Post-game animation:
   if (postGameStage) {
@@ -100,11 +106,13 @@ const CardContentMemo = observer(function CardContent({
       faceUp = false;
       if (postGameStage === 2) {
         [positionX, positionY] = [px + 400, py + 100];
+        layoutArea = { type: "player", playerIndex: card.player };
       }
     }
     if (postGameStage === 3) {
       faceUp = false;
       [positionX, positionY] = [px + 400, py + 100];
+      layoutArea = { type: "player", playerIndex: card.player };
       rotation = 0;
       scaleDown = false;
     }
@@ -188,6 +196,12 @@ const CardContentMemo = observer(function CardContent({
     return () => clearTimeout(t);
   }, [positionX, positionY, zIndex]);
 
+  const [mappedX, mappedY] = layout.mapPoint(
+    [positionX + offset.current * 2, positionY],
+    layoutArea
+  );
+  const layoutScale = layout.getScale(layoutArea);
+
   return (
     <div
       className={joinClasses(
@@ -204,9 +218,9 @@ const CardContentMemo = observer(function CardContent({
             rotation * 360 +
             rotationOffset.current * (rotation != 0 ? 10 : 2) +
             "deg",
-          "--x": positionX + offset.current * 2 + "px",
-          "--y": positionY + "px",
-          "--s": scaleDown ? ".9" : "1.1",
+          "--x": mappedX + "px",
+          "--y": mappedY + "px",
+          "--s": (scaleDown ? 0.9 : 1.1) * layoutScale,
           opacity: isDragging ? 0.4 : 1,
         } as any
       }

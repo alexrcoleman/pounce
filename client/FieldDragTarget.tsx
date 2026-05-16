@@ -3,9 +3,7 @@ import { CardDnDItem, FieldStackDnDItem } from "./CardDnDItem";
 import { MutableRefObject, useRef } from "react";
 
 import { useDrop } from "react-dnd";
-import SocketState from "./SocketState";
-import { Button } from "antd";
-import { useClientContext } from "./ClientContext";
+import { FIELD_SIZE } from "./BoardLayout";
 
 type Props = {
   onDrop: (item: CardDnDItem, position: [number, number]) => void;
@@ -44,17 +42,16 @@ export default observer(function FieldDragTarget({
       }),
       canDrop: (item) => !("card" in item) || item.card.value === 1,
     }),
-    [onDrop]
+    [onDrop, onMoveFieldStack]
   );
-  const { socket, state } = useClientContext();
   if (!canDrop) {
     return null;
   }
   return (
     <div
       style={{
-        height: 577,
-        width: 577,
+        height: FIELD_SIZE,
+        width: FIELD_SIZE,
         backgroundColor: isOver && canDrop ? "rgba(255,255,0,.5)" : "",
         outline: canDrop ? "1px solid yellow" : "",
         borderRadius: 4,

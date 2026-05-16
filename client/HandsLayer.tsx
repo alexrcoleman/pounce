@@ -1,14 +1,15 @@
 import { observer } from "mobx-react-lite";
-import SocketState from "./SocketState";
 import CursorHand from "./CursorHand";
 import { getCardKey, stableObject } from "./CardsLayer";
 import { CardState } from "../shared/GameUtils";
 import { CardLocation, getPosition } from "./Card";
 import { useClientContext } from "./ClientContext";
+import { type BoardLayoutArea, useBoardLayout } from "./BoardLayout";
 
 type CardWithLocation = { card: CardState; location: CardLocation };
 export default observer(function HandsLayer() {
   const { state } = useClientContext();
+  const layout = useBoardLayout();
   const hands = state.hands;
   const activePlayerIndex = state.getActivePlayerIndex();
   const board = state.board!;
@@ -69,12 +70,21 @@ export default observer(function HandsLayer() {
     }),
   ];
 
-  const cardLocs = new Map<string, [number, number]>();
+  const cardLocs = new Map<string, [number, number, number]>();
   cardsWithLocation.forEach((cardWithLoc) => {
     const card = cardWithLoc.card;
     const location = cardWithLoc.location;
     const [x, y] = getPosition(card, state, location);
-    cardLocs.set(getCardKey(card), [x, y]);
+    const layoutArea: BoardLayoutArea =
+      location.type === "field_stack"
+        ? { type: "field" }
+        : { type: "player", playerIndex: card.player };
+    const [mappedX, mappedY] = layout.mapPoint([x, y], layoutArea);
+    cardLocs.set(getCardKey(card), [
+      mappedX,
+      mappedY,
+      layout.getScale(layoutArea),
+    ]);
   });
   return (
     <>
@@ -89,8 +99,9 @@ export default observer(function HandsLayer() {
         return (
           <CursorHand
             card={hand.item}
-            x={cardLoc[0] + 15}
+            x={cardLoc[0] + 15 * cardLoc[2]}
             y={cardLoc[1]}
+            scale={cardLoc[2]}
             color={state.board!.players[index].color}
             key={index}
           />

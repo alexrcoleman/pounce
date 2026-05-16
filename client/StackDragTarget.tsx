@@ -11,17 +11,18 @@ type Props = {
   onDrop: (source: CardDnDItem) => void;
   left: number;
   top: number;
+  scale?: number;
   onUpdateDragTarget: (card: CardState) => void;
 };
 
 const buffer = 4;
-const black = ["clubs", "spades"];
 
 export default observer(function StackDragTarget({
   onDrop,
   stack,
   left,
   top,
+  scale = 1,
   onUpdateDragTarget,
 }: Props) {
   const card = toJS(peek(stack));
@@ -65,6 +66,7 @@ export default observer(function StackDragTarget({
   // if (!canDrop) {
   //   return null;
   // }
+  const targetScale = 1.1 * scale;
   return (
     <div
       style={
@@ -75,10 +77,10 @@ export default observer(function StackDragTarget({
           outline: canDrop ? "1px solid yellow" : "",
           borderRadius: 4,
           position: "absolute",
-          "--s": 1.1,
           transform: `translate(${left - buffer}px, ${
             top - buffer
-          }px) rotate(${0}deg) scale(var(--s), var(--s))`,
+          }px) rotate(${0}deg) scale(${targetScale}, ${targetScale})`,
+          transformOrigin: "0% 0%",
           zIndex: canDrop ? 100 : undefined,
         } as any
       }

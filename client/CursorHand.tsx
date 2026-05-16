@@ -8,14 +8,21 @@ type Props = {
   y: number;
   color: string;
   card: CardState | null | undefined;
+  scale?: number;
 };
 
-export default observer(function CursorHand({ x, y, color, card }: Props) {
+export default observer(function CursorHand({
+  x,
+  y,
+  color,
+  card,
+  scale = 1,
+}: Props) {
   return (
     <div
       className={styles.root}
       style={{
-        transform: `translate(${x}px, ${y}px)`,
+        transform: `translate(${x}px, ${y}px) scale(${scale})`,
         color: color,
       }}
     >

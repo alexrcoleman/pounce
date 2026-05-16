@@ -19,16 +19,31 @@ import FieldStackDragTargets from "./FieldStackDragTargets";
 import ActivePlayerStackTargets from "./ActivePlayerStackTargets";
 import { useClientContext } from "./ClientContext";
 import { Button } from "antd";
+import {
+  BoardLayoutProvider,
+  FIELD_LEFT,
+  FIELD_SIZE,
+  FIELD_TOP,
+  useBoardLayout,
+  useResponsiveBoardLayout,
+} from "./BoardLayout";
 type Props = {
   executeMove: (move: Move) => void;
   onUpdateHand: (card: CardState) => void;
+  zoom: number;
 };
 export default observer(function Board({
   executeMove,
   onUpdateHand,
+  zoom,
 }: Props): JSX.Element | null {
   const { state, socket } = useClientContext();
   const board = state.board!;
+  const { layout, ref } = useResponsiveBoardLayout({
+    activePlayerIndex: state.getActivePlayerIndex(),
+    board,
+    zoom,
+  });
 
   const [useTouch, setUseTouch] = useState<boolean | null>(null);
   useEffect(() => {
@@ -55,27 +70,29 @@ export default observer(function Board({
           setGrabbedItem(item);
         }}
       />
-      <div className={styles.root}>
-        <div className={styles.rootInside}>
-          <PileSection />
-          <ScoresTableTabOverlay board={board} />
-          <ActivePlayerStackTargets
-            executeMove={executeMove}
-            onUpdateDragHover={onUpdateDragHover}
-          />
-          <FieldStackDragTargets
-            state={state}
-            grabbedItem={grabbedItem}
-            onUpdateDragHover={onUpdateDragHover}
-            executeMove={executeMove}
-          />
-          <CardsLayer />
-          {board.players.map((p, i) => (
-            <PlayerArea player={p} playerIndex={i} key={p.socketId ?? i} />
-          ))}
-          <HandsLayer />
-          <VictoryOverlay />
-        </div>
+      <div className={styles.root} data-layout-mode={layout.mode} ref={ref}>
+        <BoardLayoutProvider value={layout}>
+          <div className={styles.rootInside}>
+            <PileSection />
+            <ScoresTableTabOverlay board={board} />
+            <ActivePlayerStackTargets
+              executeMove={executeMove}
+              onUpdateDragHover={onUpdateDragHover}
+            />
+            <FieldStackDragTargets
+              state={state}
+              grabbedItem={grabbedItem}
+              onUpdateDragHover={onUpdateDragHover}
+              executeMove={executeMove}
+            />
+            <CardsLayer />
+            {board.players.map((p, i) => (
+              <PlayerArea player={p} playerIndex={i} key={p.socketId ?? i} />
+            ))}
+            <HandsLayer />
+            <VictoryOverlay />
+          </div>
+        </BoardLayoutProvider>
       </div>
     </DndProvider>
   );
@@ -83,9 +100,20 @@ export default observer(function Board({
 
 const PileSection = observer(function PileSection() {
   const { state, socket } = useClientContext();
+  const layout = useBoardLayout();
+  const fieldArea = { type: "field" } as const;
+  const [left, top] = layout.mapPoint([FIELD_LEFT, FIELD_TOP], fieldArea);
+  const scale = layout.getScale(fieldArea);
 
   return (
-    <div className={styles.pileSection}>
+    <div
+      className={styles.pileSection}
+      style={{
+        width: FIELD_SIZE,
+        height: FIELD_SIZE,
+        transform: `translate(${left}px, ${top}px) scale(${scale})`,
+      }}
+    >
       <div className={styles.pileSectionPattern} />
       {!state.board!.isActive && state.getIsHost() && (
         <Button type="primary" onClick={() => socket?.emit("start_game")}>

@@ -3,9 +3,9 @@ import { getPlayerLocation } from "../shared/CardLocations";
 import { CardState } from "../shared/GameUtils";
 import { Move } from "../shared/MoveHandler";
 import { CardDnDItem } from "./CardDnDItem";
-import SocketState from "./SocketState";
 import StackDragTarget from "./StackDragTarget";
 import { useClientContext } from "./ClientContext";
+import { useBoardLayout } from "./BoardLayout";
 
 export default observer(function ActivePlayerStackTargets({
   onUpdateDragHover,
@@ -15,24 +15,29 @@ export default observer(function ActivePlayerStackTargets({
   executeMove: (move: Move) => void;
 }) {
   const { state } = useClientContext();
+  const layout = useBoardLayout();
   const activePlayerIndex = state.getActivePlayerIndex();
   if (activePlayerIndex === -1) {
     return null;
   }
   const stacks = state.board!.players[activePlayerIndex].stacks;
+  const playerArea = { type: "player", playerIndex: activePlayerIndex } as const;
+  const [px, py] = getPlayerLocation(activePlayerIndex, activePlayerIndex);
+  const scale = layout.getScale(playerArea);
   return (
     <>
       {stacks.map((stack, index) => {
-        const [px, py] = getPlayerLocation(
-          activePlayerIndex,
-          activePlayerIndex
+        const [left, top] = layout.mapPoint(
+          [px + index * 60, py + 50],
+          playerArea
         );
         return (
           <StackDragTarget
             onUpdateDragTarget={onUpdateDragHover}
             key={index}
-            left={px + index * 60}
-            top={py + 50}
+            left={left}
+            top={top}
+            scale={scale}
             stack={stack}
             onDrop={(item: CardDnDItem) => {
               if (item.source.type === "solitaire") {
