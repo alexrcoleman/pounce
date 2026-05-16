@@ -2,6 +2,25 @@
 
 This is a project to simulate the game Nertz / Pounce. It includes some online multiplayer logic to allow for competitive play with friends, as well as some Bots for local or online practice. There is also a "Simulation Mode" to rapidly simulate Bots playing against each other to analyze various strategies.
 
+## Deploying
+
+The production app runs on Google Cloud Run:
+
+- Project: `pounce-409615`
+- Service: `pounce`
+- Region: `us-east4`
+
+Deploy from the repo root with:
+
+```powershell
+gcloud run deploy pounce `
+  --source . `
+  --project pounce-409615 `
+  --region us-east4
+```
+
+Cloud Run builds the included `Dockerfile` from source and updates the existing service. The existing service settings should be preserved by default, including port `8080`, `maxScale=1`, memory, CPU, concurrency, timeout, startup probe, and public access. Run `git status --short` first because `--source .` uploads the current working tree, including uncommitted files that are not ignored.
+
 ## Planned todos:
 
 ### Infra
