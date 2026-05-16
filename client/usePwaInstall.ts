@@ -14,9 +14,15 @@ export default function usePwaInstall() {
   const [isOfflineReady, setIsOfflineReady] = useState(false);
   const [isSupported, setIsSupported] = useState(false);
   const [message, setMessage] = useState("");
+  const [installContext, setInstallContext] = useState<InstallContext>({
+    isIOS: false,
+    isStandalone: false,
+    shouldUseSafari: false,
+  });
 
   useEffect(() => {
     setIsSupported("serviceWorker" in navigator && "caches" in window);
+    setInstallContext(getInstallContext());
     const onBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
       setInstallPrompt(event as BeforeInstallPromptEvent);
@@ -54,11 +60,21 @@ export default function usePwaInstall() {
       await waitForServiceWorkerReady();
       await cacheOfflineAssets();
       setIsOfflineReady(true);
-      setMessage(
-        installAccepted
-          ? "Pounce is installing and offline files are ready."
-          : "Offline files are ready."
-      );
+      if (installAccepted) {
+        setMessage("Pounce is installing and offline files are ready.");
+      } else if (installContext.isIOS && installContext.isStandalone) {
+        setMessage("Pounce is saved and ready for offline play.");
+      } else if (installContext.isIOS && installContext.shouldUseSafari) {
+        setMessage(
+          "Offline files are ready. Open this page in Safari, then tap Share and Add to Home Screen."
+        );
+      } else if (installContext.isIOS) {
+        setMessage(
+          "Offline files are ready. Tap Share, then Add to Home Screen."
+        );
+      } else {
+        setMessage("Offline files are ready.");
+      }
     } catch (error) {
       console.warn("Unable to prepare Pounce for offline use", error);
       setMessage("Offline setup did not finish. Try again while online.");
@@ -70,10 +86,38 @@ export default function usePwaInstall() {
   return {
     canInstall: installPrompt != null,
     downloadForOffline,
+    installContext,
     isOfflineReady,
     isPreparing,
     isSupported,
     message,
+  };
+}
+
+type InstallContext = {
+  isIOS: boolean;
+  isStandalone: boolean;
+  shouldUseSafari: boolean;
+};
+
+function getInstallContext(): InstallContext {
+  const navigatorWithStandalone = navigator as Navigator & {
+    standalone?: boolean;
+  };
+  const userAgent = navigator.userAgent;
+  const isTouchMac =
+    navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+  const isIOS = /iPad|iPhone|iPod/.test(userAgent) || isTouchMac;
+  const isStandalone =
+    window.matchMedia("(display-mode: standalone)").matches ||
+    navigatorWithStandalone.standalone === true;
+  const isSafari =
+    /Safari/.test(userAgent) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(userAgent);
+
+  return {
+    isIOS,
+    isStandalone,
+    shouldUseSafari: isIOS && !isSafari,
   };
 }
 

@@ -26,6 +26,7 @@ export default function JoinForm({
   const {
     canInstall,
     downloadForOffline,
+    installContext,
     isOfflineReady,
     isPreparing,
     isSupported,
@@ -117,6 +118,8 @@ export default function JoinForm({
           >
             {isOfflineReady
               ? "Offline ready"
+              : installContext.isIOS && !installContext.isStandalone
+              ? "Save to Home Screen"
               : canInstall
               ? "Install app"
               : "Download for offline"}

@@ -16,6 +16,7 @@ function MyApp({ Component, pageProps }: AppProps) {
         <meta name="application-name" content="Pounce" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-title" content="Pounce" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
         <meta name="theme-color" content="#1677ff" />
       </Head>
       <PwaRegistration />

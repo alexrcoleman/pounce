@@ -1,4 +1,4 @@
-const CACHE_NAME = "pounce-offline-v2";
+const CACHE_NAME = "pounce-offline-v3";
 const APP_SHELL = [
   "/",
   "/offline",
@@ -6,14 +6,13 @@ const APP_SHELL = [
   "/favicon.svg",
   "/pwa-icon-192.png",
   "/pwa-icon-512.png",
+  "/apple-touch-icon.png",
   "/card-back.png",
   "/notebook.png",
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
-  );
+  event.waitUntil(cacheAppShell());
   self.skipWaiting();
 });
 
@@ -72,6 +71,57 @@ async function cacheFirst(request) {
     cache.put(request, response.clone());
   }
   return response;
+}
+
+async function cacheAppShell() {
+  const cache = await caches.open(CACHE_NAME);
+  const urls = new Set(APP_SHELL);
+
+  await Promise.all(
+    ["/", "/offline"].map(async (page) => {
+      try {
+        const response = await fetch(page, { cache: "reload" });
+        if (response.ok) {
+          await cache.put(page, response.clone());
+          collectSameOriginAssets(await response.text()).forEach((url) =>
+            urls.add(url)
+          );
+        }
+      } catch (error) {
+        console.warn("Unable to cache app shell page", page, error);
+      }
+    })
+  );
+
+  await Promise.all(
+    Array.from(urls).map(async (url) => {
+      try {
+        const response = await fetch(url, { cache: "reload" });
+        if (response.ok) {
+          await cache.put(url, response);
+        }
+      } catch (error) {
+        console.warn("Unable to cache app shell asset", url, error);
+      }
+    })
+  );
+}
+
+function collectSameOriginAssets(html) {
+  const urls = [];
+  const assetPattern = /(?:href|src)="([^"]+)"/g;
+  let match;
+  while ((match = assetPattern.exec(html)) != null) {
+    try {
+      const url = new URL(match[1], self.location.origin);
+      if (url.origin === self.location.origin) {
+        urls.push(url.pathname + url.search);
+      }
+    } catch (error) {
+      // Ignore malformed URLs in generated markup.
+    }
+  }
+  return urls;
 }
 
 async function networkFirst(request, fallbackUrl) {
