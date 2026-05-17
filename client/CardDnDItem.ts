@@ -10,8 +10,11 @@ export type SourceType =
 export type CardDnDItem = {
   source: SourceType;
   card: CardState;
+  initialClientPosition: [number, number];
 };
 
 export type FieldStackDnDItem = {
   index: number;
+  initialPosition: [number, number];
+  initialClientPosition: [number, number];
 };

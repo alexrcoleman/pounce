@@ -7,8 +7,11 @@ export const CARD_HEIGHT = 77;
 export const FIELD_PILE_AREA_SIZE = 500;
 export const FIELD_STACK_CARD_GAP = 0.2;
 
-const PLAYER_HAND_OFFSET_X = -12;
-const PLAYER_CARD_SPACING = 66;
+const PLAYER_HAND_OFFSET_X = -8;
+const PLAYER_CARD_SPACING = 70;
+const PLAYER_POUNCE_COLUMN = -0.9;
+const PLAYER_FLIPPED_DECK_COLUMN = 4.35;
+const PLAYER_DECK_COLUMN = 5.45;
 const PLAYER_STACK_TOP = 42;
 const PLAYER_DECK_TOP = 62;
 const PLAYER_POUNCE_TOP = 92;
@@ -21,7 +24,7 @@ export function getPlayerDeckLocation(
 ): Location {
   const [px, py] = getPlayerLocation(playerIndex, activePlayerIndex);
   return [
-    px + PLAYER_HAND_OFFSET_X + 5.5 * PLAYER_CARD_SPACING,
+    px + PLAYER_HAND_OFFSET_X + PLAYER_DECK_COLUMN * PLAYER_CARD_SPACING,
     py + PLAYER_DECK_TOP + cardIndex * 0.2,
   ];
 }
@@ -32,7 +35,9 @@ export function getPlayerFlippedDeckLocation(
 ): Location {
   const [px, py] = getPlayerLocation(playerIndex, activePlayerIndex);
   return [
-    px + PLAYER_HAND_OFFSET_X + 4.5 * PLAYER_CARD_SPACING,
+    px +
+      PLAYER_HAND_OFFSET_X +
+      PLAYER_FLIPPED_DECK_COLUMN * PLAYER_CARD_SPACING,
     py + PLAYER_DECK_TOP + cardIndex * 0.1,
   ];
 }
@@ -119,7 +124,7 @@ export function getPlayerPounceCardLocation(
 ): Location {
   const [px, py] = getPlayerLocation(playerIndex, activePlayerIndex);
   return [
-    px + PLAYER_HAND_OFFSET_X - 1.1 * PLAYER_CARD_SPACING,
+    px + PLAYER_HAND_OFFSET_X + PLAYER_POUNCE_COLUMN * PLAYER_CARD_SPACING,
     py + PLAYER_POUNCE_TOP + cardIndex * 0.1,
   ];
 }

@@ -1,15 +1,11 @@
 import { observer } from "mobx-react-lite";
 import { CardDnDItem, FieldStackDnDItem } from "./CardDnDItem";
 import { MutableRefObject, useRef } from "react";
+import type { XYCoord } from "react-dnd";
 
 import { useDrop } from "react-dnd";
 import { FIELD_SIZE } from "./BoardLayout";
-import {
-  CARD_HEIGHT,
-  CARD_WIDTH,
-  FIELD_PILE_AREA_SIZE,
-} from "../shared/CardLocations";
-import { CARD_BASE_SCALE } from "./cardLayout";
+import { FIELD_PILE_AREA_SIZE } from "../shared/CardLocations";
 
 type Props = {
   onDrop: (item: CardDnDItem, position: [number, number]) => void;
@@ -32,10 +28,16 @@ export default observer(function FieldDragTarget({
         if (ref.current && loc) {
           position =
             "card" in item
-              ? getCardDropPosition(ref.current, loc)
+              ? getCardDropPosition(
+                  ref.current,
+                  item,
+                  monitor.getDifferenceFromInitialOffset(),
+                  monitor.getSourceClientOffset() ?? loc
+                )
               : getStackDropPosition(
                   ref.current,
-                  monitor.getSourceClientOffset() ?? loc
+                  item,
+                  monitor.getDifferenceFromInitialOffset()
                 );
         }
         if ("card" in item) {
@@ -74,40 +76,60 @@ export default observer(function FieldDragTarget({
 
 function getCardDropPosition(
   element: HTMLDivElement,
-  loc: { x: number; y: number }
+  item: CardDnDItem,
+  dragDelta: XYCoord | null,
+  fallbackLoc: XYCoord
 ): [number, number] {
-  return getFieldPilePosition(element, loc, [
-    (CARD_WIDTH * CARD_BASE_SCALE) / 2,
-    (CARD_HEIGHT * CARD_BASE_SCALE) / 2,
-  ]);
+  return getFieldPilePosition(
+    element,
+    getDraggedAnchorPosition(item.initialClientPosition, dragDelta, fallbackLoc)
+  );
 }
 
 function getStackDropPosition(
   element: HTMLDivElement,
-  loc: { x: number; y: number }
+  item: FieldStackDnDItem,
+  dragDelta: XYCoord | null
 ): [number, number] {
-  return getFieldPilePosition(element, loc, [0, 0]);
+  if (!dragDelta) {
+    return item.initialPosition;
+  }
+
+  const fieldScale = getFieldScale(element);
+  return [
+    item.initialPosition[0] +
+      dragDelta.x / fieldScale / FIELD_PILE_AREA_SIZE,
+    item.initialPosition[1] +
+      dragDelta.y / fieldScale / FIELD_PILE_AREA_SIZE,
+  ];
 }
 
 function getFieldPilePosition(
   element: HTMLDivElement,
-  loc: { x: number; y: number },
-  cardAnchorOffset: [number, number]
+  loc: XYCoord
 ): [number, number] {
   const rect = element.getBoundingClientRect();
-  const fieldScale = rect.width / FIELD_SIZE;
+  const fieldScale = getFieldScale(element);
   return [
-    clamp(
-      ((loc.x - rect.x) / fieldScale - cardAnchorOffset[0]) /
-        FIELD_PILE_AREA_SIZE
-    ),
-    clamp(
-      ((loc.y - rect.y) / fieldScale - cardAnchorOffset[1]) /
-        FIELD_PILE_AREA_SIZE
-    ),
+    ((loc.x - rect.x) / fieldScale) / FIELD_PILE_AREA_SIZE,
+    ((loc.y - rect.y) / fieldScale) / FIELD_PILE_AREA_SIZE,
   ];
 }
 
-function clamp(value: number) {
-  return Math.max(0, Math.min(1, value));
+function getDraggedAnchorPosition(
+  initialPosition: [number, number],
+  dragDelta: XYCoord | null,
+  fallbackLoc: XYCoord
+): XYCoord {
+  if (!dragDelta) {
+    return fallbackLoc;
+  }
+  return {
+    x: initialPosition[0] + dragDelta.x,
+    y: initialPosition[1] + dragDelta.y,
+  };
+}
+
+function getFieldScale(element: HTMLDivElement) {
+  return element.getBoundingClientRect().width / FIELD_SIZE;
 }

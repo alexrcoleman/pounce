@@ -74,7 +74,7 @@ export default observer(function FieldStackDragTarget({
         outline: canDrop || stackHeight === 0 ? "1px solid yellow" : "",
         borderRadius: 4,
         position: "absolute",
-        transformOrigin: "0% 0%",
+        transformOrigin: `${buffer}px ${buffer}px`,
         transform: `translate(${left - buffer}px, ${
           top - buffer
         }px) rotate(${rotate}deg)`,

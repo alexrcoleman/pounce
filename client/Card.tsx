@@ -7,7 +7,6 @@ import { SourceType } from "./CardDnDItem";
 import joinClasses from "./joinClasses";
 import styles from "./Card.module.css";
 import { useDrag } from "react-dnd";
-import usePrevious from "./usePrevious";
 import { observer } from "mobx-react-lite";
 import SocketState from "./SocketState";
 import {
@@ -121,14 +120,35 @@ const CardContentMemo = observer(function CardContent({
   const color = board.players[card.player].color;
   const { suit, value } = card;
   const [isAnimating, setIsAnimating] = useState(false);
-  const offset = useRef(Math.random() * 2 - 1);
   const rotationOffset = useRef(Math.random() * 2 - 1);
+
+  const [mappedX, mappedY] = layout.mapPoint([positionX, positionY], layoutArea);
+  const layoutScale = layout.getScale(layoutArea);
+  const cardScale = getCardScaleMultiplier({
+    area: layoutArea,
+    cardPlayer: card.player,
+    activePlayerIndex: state.getActivePlayerIndex(),
+    isScaleDown: scaleDown,
+    mode: layout.mode,
+  });
+
   const item = useMemo(
     () =>
       source.type === "field_stack"
-        ? { index: source.index }
-        : { source, card: toJS(card) },
-    [source, JSON.stringify(toJS(card))]
+        ? {
+            index: source.index,
+            initialPosition: [
+              board.pileLocs[source.index][0],
+              board.pileLocs[source.index][1],
+            ] as [number, number],
+            initialClientPosition: [mappedX, mappedY] as [number, number],
+          }
+        : {
+            source,
+            card: toJS(card),
+            initialClientPosition: [mappedX, mappedY] as [number, number],
+          },
+    [source, JSON.stringify(toJS(card)), board.pileLocs, mappedX, mappedY]
   );
   const [{ isDragging, isDraggingOther, canDrag }, drag] = useDrag(
     () =>
@@ -179,15 +199,8 @@ const CardContentMemo = observer(function CardContent({
             canDrag: () => source.type !== "other",
             // options: { dropEffect: "move" },
           },
-    [source, card, positionX, positionY]
+    [source, item]
   );
-  // For variance:
-  const lastPx = usePrevious(positionX);
-  if (positionX != lastPx) {
-    offset.current = Math.random() * 2 - 1;
-    // setRotation(Math.random() * 2 - 1);
-  }
-
   // So moving cards are "lifted" while moving
   useEffect(() => {
     setIsAnimating(true);
@@ -197,18 +210,9 @@ const CardContentMemo = observer(function CardContent({
     return () => clearTimeout(t);
   }, [positionX, positionY, zIndex]);
 
-  const [mappedX, mappedY] = layout.mapPoint(
-    [positionX + offset.current * 2, positionY],
-    layoutArea
-  );
-  const layoutScale = layout.getScale(layoutArea);
-  const cardScale = getCardScaleMultiplier({
-    area: layoutArea,
-    cardPlayer: card.player,
-    activePlayerIndex: state.getActivePlayerIndex(),
-    isScaleDown: scaleDown,
-    mode: layout.mode,
-  });
+  const cardRotation =
+    rotation * 360 +
+    (location.type === "field_stack" ? 0 : rotationOffset.current * 2);
 
   return (
     <div
@@ -222,10 +226,7 @@ const CardContentMemo = observer(function CardContent({
           pointerEvents: isDraggingOther ? "none" : "",
           zIndex: zIndex + (isAnimating ? 1000 : 0),
           "--c": color,
-          "--r":
-            rotation * 360 +
-            rotationOffset.current * (rotation != 0 ? 10 : 2) +
-            "deg",
+          "--r": cardRotation + "deg",
           "--x": mappedX + "px",
           "--y": mappedY + "px",
           "--s": cardScale * layoutScale,
