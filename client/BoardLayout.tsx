@@ -197,7 +197,10 @@ function createCompactLayout(
   const opponents = Array.from({ length: playerCount }, (_, index) => index)
     .filter((index) => index !== activePlayerIndex);
 
-  const opponentColumns = Math.min(3, Math.max(1, opponents.length));
+  const opponentColumns =
+    opponents.length >= 3
+      ? Math.min(3, Math.ceil(opponents.length / 2))
+      : Math.max(1, opponents.length);
   const opponentRows =
     opponents.length === 0 ? 0 : Math.ceil(opponents.length / opponentColumns);
   const opponentSlotWidth =
