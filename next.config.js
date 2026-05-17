@@ -12,4 +12,7 @@ module.exports = {
     "@ant-design",
     "@ant-design/icons-svg",
   ],
+  env: {
+    NEXT_PUBLIC_BUILD_DATE: new Date().toISOString(),
+  },
 };

@@ -154,6 +154,9 @@ const SettingsDialog = observer(function SettingsDialog({
             />
           </Flex>
         </Card>
+        <div className={styles.buildInfo}>
+          Build: {process.env.NEXT_PUBLIC_BUILD_DATE ?? "unknown"}
+        </div>
       </Flex>
     </Modal>
   );
