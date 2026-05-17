@@ -23,6 +23,7 @@ const COMPACT_PADDING = 12;
 const COMPACT_TOP_PADDING = 42;
 const COMPACT_GAP = 12;
 const COMPACT_SMALL_GAP = 8;
+const COMPACT_ACTIVE_LIFT = 24;
 
 type Point = [number, number];
 
@@ -220,7 +221,8 @@ function createCompactLayout(
   const activeScale = Math.min(maxActiveScale, maxActiveScale * zoom);
   const activeHeight = PLAYER_HEIGHT * activeScale;
   const activeWidth = PLAYER_WIDTH * activeScale;
-  const activeTop = viewport.height - COMPACT_PADDING - activeHeight;
+  const activeTop =
+    viewport.height - COMPACT_PADDING - COMPACT_ACTIVE_LIFT - activeHeight;
 
   const topGap = opponentRows > 0 ? COMPACT_GAP : 0;
   const middleTop = COMPACT_TOP_PADDING + opponentAreaHeight + topGap;
