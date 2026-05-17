@@ -196,11 +196,22 @@ const CardContentMemo = observer(function CardContent({
     return () => clearTimeout(t);
   }, [positionX, positionY, zIndex]);
 
+  const isCompactActivePlayerCard =
+    layout.mode === "compact" &&
+    layoutArea.type === "player" &&
+    card.player === state.getActivePlayerIndex();
   const [mappedX, mappedY] = layout.mapPoint(
-    [positionX + offset.current * 2, positionY],
+    [
+      positionX +
+        offset.current * 2 +
+        (isCompactActivePlayerCard ? COMPACT_ACTIVE_CARD_OFFSET_X : 0),
+      positionY +
+        (isCompactActivePlayerCard ? COMPACT_ACTIVE_CARD_OFFSET_Y : 0),
+    ],
     layoutArea
   );
   const layoutScale = layout.getScale(layoutArea);
+  const compactActiveCardScale = isCompactActivePlayerCard ? 1.2 : 1;
 
   return (
     <div
@@ -220,7 +231,7 @@ const CardContentMemo = observer(function CardContent({
             "deg",
           "--x": mappedX + "px",
           "--y": mappedY + "px",
-          "--s": (scaleDown ? 0.9 : 1.1) * layoutScale,
+          "--s": (scaleDown ? 0.9 : 1.1) * layoutScale * compactActiveCardScale,
           opacity: isDragging ? 0.4 : 1,
         } as any
       }
@@ -246,6 +257,9 @@ const CardContentMemo = observer(function CardContent({
     </div>
   );
 });
+
+const COMPACT_ACTIVE_CARD_OFFSET_X = -12;
+const COMPACT_ACTIVE_CARD_OFFSET_Y = -10;
 
 const colors: Record<string, string | undefined> = {
   red: "200deg",
