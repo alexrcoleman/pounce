@@ -2,7 +2,11 @@ import { observer } from "mobx-react-lite";
 import { PlayerState } from "../shared/GameUtils";
 import joinClasses from "./joinClasses";
 import styles from "./Player.module.css";
-import { getPlayerLocation } from "../shared/CardLocations";
+import {
+  CARD_WIDTH,
+  getPlayerLocation,
+  getPlayerPounceCardLocation,
+} from "../shared/CardLocations";
 import { useClientContext } from "./ClientContext";
 import { useBoardLayout } from "./BoardLayout";
 
@@ -22,7 +26,15 @@ export default observer(function PlayerArea({ player, playerIndex }: Props) {
   const playerArea = { type: "player", playerIndex } as const;
   const scale = layout.getScale(playerArea);
   const [badgeLeft, badgeTop] = layout.mapPoint([5, py + 15], playerArea);
-  const [countLeft, countTop] = layout.mapPoint([px - 60, py + 80], playerArea);
+  const [pounceLeft, pounceTop] = getPlayerPounceCardLocation(
+    playerIndex,
+    0,
+    state.getActivePlayerIndex()
+  );
+  const [countLeft, countTop] = layout.mapPoint(
+    [pounceLeft, pounceTop - 20],
+    playerArea
+  );
   return (
     <>
       <div
@@ -62,7 +74,7 @@ export default observer(function PlayerArea({ player, playerIndex }: Props) {
             zIndex: 10000,
             color: "white",
             fontSize: "12px",
-            width: 55,
+            width: CARD_WIDTH,
             textAlign: "center",
             position: "absolute",
             transform: `translate(${countLeft}px, ${countTop}px) scale(${scale})`,

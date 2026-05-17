@@ -5,6 +5,11 @@ import { computed, toJS } from "mobx";
 import { observer } from "mobx-react-lite";
 import { couldMatch, peek } from "../shared/CardUtils";
 import { useClientContext } from "./ClientContext";
+import {
+  CARD_HEIGHT,
+  CARD_WIDTH,
+  PLAYER_STACK_CARD_GAP,
+} from "../shared/CardLocations";
 
 type Props = {
   stack: CardState[];
@@ -12,6 +17,7 @@ type Props = {
   left: number;
   top: number;
   scale?: number;
+  cardScale?: number;
   onUpdateDragTarget: (card: CardState) => void;
 };
 
@@ -23,6 +29,7 @@ export default observer(function StackDragTarget({
   left,
   top,
   scale = 1,
+  cardScale = 1.1,
   onUpdateDragTarget,
 }: Props) {
   const card = toJS(peek(stack));
@@ -66,20 +73,23 @@ export default observer(function StackDragTarget({
   // if (!canDrop) {
   //   return null;
   // }
-  const targetScale = 1.1 * scale;
+  const targetWidth = CARD_WIDTH * cardScale * scale + 2 * buffer;
+  const targetHeight =
+    (CARD_HEIGHT * cardScale +
+      Math.max(stackHeight - 1, 0) * PLAYER_STACK_CARD_GAP) *
+      scale +
+    2 * buffer;
   return (
     <div
       style={
         {
-          height: 77 + Math.max(stackHeight - 1, 0) * 15 + 2 * buffer,
-          width: 55 + 2 * buffer,
+          height: targetHeight,
+          width: targetWidth,
           backgroundColor: isOver && canDrop ? "rgba(255,255,0,.5)" : "",
           outline: canDrop ? "1px solid yellow" : "",
           borderRadius: 4,
           position: "absolute",
-          transform: `translate(${left - buffer}px, ${
-            top - buffer
-          }px) rotate(${0}deg) scale(${targetScale}, ${targetScale})`,
+          transform: `translate(${left - buffer}px, ${top - buffer}px)`,
           zIndex: canDrop ? 100 : undefined,
         } as any
       }

@@ -3,6 +3,12 @@ import { CardState } from "../shared/GameUtils";
 import { useDrop } from "react-dnd";
 import { useRef } from "react";
 import { observer } from "mobx-react-lite";
+import {
+  CARD_HEIGHT,
+  CARD_WIDTH,
+  FIELD_STACK_CARD_GAP,
+} from "../shared/CardLocations";
+import { CARD_BASE_SCALE } from "./cardLayout";
 
 type Props = {
   card: CardState | null;
@@ -53,18 +59,25 @@ export default observer(function FieldStackDragTarget({
   if (stackHeight === 0 || !isDragging) {
     return null;
   }
+  const targetWidth = CARD_WIDTH * CARD_BASE_SCALE * scale + 2 * buffer;
+  const targetHeight =
+    (CARD_HEIGHT * CARD_BASE_SCALE +
+      Math.max(stackHeight - 1, 0) * FIELD_STACK_CARD_GAP) *
+      scale +
+    2 * buffer;
   return (
     <div
       style={{
-        height: 77 + stackHeight * 0.2 + 2 * buffer,
-        width: 55 + 2 * buffer,
+        height: targetHeight,
+        width: targetWidth,
         backgroundColor: isOver && canDrop ? "rgba(255,255,0,.5)" : "",
         outline: canDrop || stackHeight === 0 ? "1px solid yellow" : "",
         borderRadius: 4,
         position: "absolute",
+        transformOrigin: "0% 0%",
         transform: `translate(${left - buffer}px, ${
           top - buffer
-        }px) rotate(${rotate}deg) scale(${scale}, ${scale})`,
+        }px) rotate(${rotate}deg)`,
       }}
       ref={drop}
     />

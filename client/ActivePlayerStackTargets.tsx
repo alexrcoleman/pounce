@@ -1,11 +1,12 @@
 import { observer } from "mobx-react-lite";
-import { getPlayerLocation } from "../shared/CardLocations";
+import { getPlayerStackLocation } from "../shared/CardLocations";
 import { CardState } from "../shared/GameUtils";
 import { Move } from "../shared/MoveHandler";
 import { CardDnDItem } from "./CardDnDItem";
 import StackDragTarget from "./StackDragTarget";
 import { useClientContext } from "./ClientContext";
 import { useBoardLayout } from "./BoardLayout";
+import { getCardScaleMultiplier } from "./cardLayout";
 
 export default observer(function ActivePlayerStackTargets({
   onUpdateDragHover,
@@ -22,13 +23,19 @@ export default observer(function ActivePlayerStackTargets({
   }
   const stacks = state.board!.players[activePlayerIndex].stacks;
   const playerArea = { type: "player", playerIndex: activePlayerIndex } as const;
-  const [px, py] = getPlayerLocation(activePlayerIndex, activePlayerIndex);
   const scale = layout.getScale(playerArea);
+  const cardScale = getCardScaleMultiplier({
+    area: playerArea,
+    cardPlayer: activePlayerIndex,
+    activePlayerIndex,
+    isScaleDown: false,
+    mode: layout.mode,
+  });
   return (
     <>
       {stacks.map((stack, index) => {
         const [left, top] = layout.mapPoint(
-          [px + index * 60, py + 50],
+          getPlayerStackLocation(activePlayerIndex, index, 0, activePlayerIndex),
           playerArea
         );
         return (
@@ -38,6 +45,7 @@ export default observer(function ActivePlayerStackTargets({
             left={left}
             top={top}
             scale={scale}
+            cardScale={cardScale}
             stack={stack}
             onDrop={(item: CardDnDItem) => {
               if (item.source.type === "solitaire") {

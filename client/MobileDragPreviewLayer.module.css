@@ -7,8 +7,8 @@
 
 .card {
   position: absolute;
-  width: 55px;
-  height: 77px;
+  width: var(--card-width);
+  height: var(--card-height);
   border-radius: 3px;
   overflow: hidden;
   background-color: #eee;

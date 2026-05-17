@@ -1,8 +1,11 @@
 import { useDragLayer } from "react-dnd";
+import type { CSSProperties } from "react";
 
 import CardFace from "./CardFace";
+import { CARD_HEIGHT, CARD_WIDTH } from "../shared/CardLocations";
 import { CardState } from "../shared/GameUtils";
 import { useClientContext } from "./ClientContext";
+import { CARD_BASE_SCALE } from "./cardLayout";
 import styles from "./MobileDragPreviewLayer.module.css";
 
 type Props = {
@@ -34,10 +37,14 @@ export default function MobileDragPreviewLayer({ enabled }: Props) {
       <div
         className={styles.card}
         style={{
-          transform: `translate(${currentOffset.x - 28}px, ${
-            currentOffset.y - 42
-          }px) scale(1.1)`,
-        }}
+          "--card-width": `${CARD_WIDTH}px`,
+          "--card-height": `${CARD_HEIGHT}px`,
+          transform: `translate(${
+            currentOffset.x - (CARD_WIDTH * CARD_BASE_SCALE) / 2
+          }px, ${
+            currentOffset.y - (CARD_HEIGHT * CARD_BASE_SCALE) / 2
+          }px) scale(${CARD_BASE_SCALE})`,
+        } as CSSProperties}
       >
         <CardFace suit={card.suit} value={card.value} />
       </div>
