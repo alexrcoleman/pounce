@@ -118,7 +118,10 @@ const PileSection = observer(function PileSection() {
     >
       <div className={styles.pileSectionPattern} />
       {!state.board!.isActive && state.getIsHost() && (
-        <Button type="primary" onClick={() => socket?.emit("start_game")}>
+        <Button
+          className={styles.startButton}
+          onClick={() => socket?.emit("start_game")}
+        >
           Start Game
         </Button>
       )}

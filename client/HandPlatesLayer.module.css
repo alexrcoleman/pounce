@@ -9,27 +9,27 @@
   background:
     linear-gradient(
       135deg,
-      rgba(255, 255, 255, 0.22),
-      rgba(255, 255, 255, 0.08)
+      rgba(255, 247, 226, 0.68),
+      rgba(221, 176, 113, 0.52)
     ),
-    rgba(20, 12, 6, 0.16);
+    rgba(181, 126, 67, 0.58);
   box-shadow:
-    0 8px 18px rgba(0, 0, 0, 0.18),
-    inset 0 1px 0 rgba(255, 255, 255, 0.24),
-    inset 0 -10px 22px rgba(0, 0, 0, 0.12);
-  opacity: 0.82;
+    0 10px 20px rgba(0, 0, 0, 0.18),
+    inset 0 1px 0 rgba(255, 255, 255, 0.36),
+    inset 0 -10px 22px rgba(92, 53, 18, 0.14);
+  opacity: 0.94;
 }
 
 .activePlate {
   background:
     linear-gradient(
       135deg,
-      rgba(255, 255, 255, 0.28),
-      rgba(255, 255, 255, 0.1)
+      rgba(255, 249, 232, 0.76),
+      rgba(225, 180, 116, 0.58)
     ),
-    rgba(20, 12, 6, 0.18);
+    rgba(181, 126, 67, 0.66);
   box-shadow:
-    0 10px 22px rgba(0, 0, 0, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    inset 0 -12px 24px rgba(0, 0, 0, 0.14);
+    0 12px 24px rgba(0, 0, 0, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -12px 24px rgba(92, 53, 18, 0.16);
 }

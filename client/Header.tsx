@@ -53,7 +53,7 @@ const SettingsDialog = observer(function SettingsDialog({
       styles={{
         body: {
           overflowY: "auto",
-          maxHeight: "calc(100vh - 300px)",
+          maxHeight: "calc(100dvh - 300px)",
           paddingRight: "30px",
         },
       }}

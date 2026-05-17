@@ -1,12 +1,8 @@
-import rand from "rand-seed";
-const random = new rand("seed2");
-
 export default function shuffle<T>(array: T[]): T[] {
-  let currentIndex = array.length,
-    randomIndex;
+  let currentIndex = array.length;
 
   while (currentIndex != 0) {
-    randomIndex = Math.floor(random.next() * currentIndex);
+    const randomIndex = Math.floor(Math.random() * currentIndex);
     currentIndex--;
 
     [array[currentIndex], array[randomIndex]] = [

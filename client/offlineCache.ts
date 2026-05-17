@@ -1,4 +1,4 @@
-const OFFLINE_CACHE_NAME = "pounce-offline-v3";
+const OFFLINE_CACHE_NAME = "pounce-offline-v4";
 const OFFLINE_PAGES = ["/", "/offline"];
 const STATIC_ASSETS = [
   "/manifest.webmanifest",
