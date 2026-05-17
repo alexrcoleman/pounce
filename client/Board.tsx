@@ -18,6 +18,7 @@ import HandsLayer from "./HandsLayer";
 import HandPlatesLayer from "./HandPlatesLayer";
 import FieldStackDragTargets from "./FieldStackDragTargets";
 import ActivePlayerStackTargets from "./ActivePlayerStackTargets";
+import MobileDragPreviewLayer from "./MobileDragPreviewLayer";
 import { useClientContext } from "./ClientContext";
 import { Button } from "antd";
 import {
@@ -71,6 +72,7 @@ export default observer(function Board({
           setGrabbedItem(item);
         }}
       />
+      <MobileDragPreviewLayer enabled={useTouch} />
       <div className={styles.root} data-layout-mode={layout.mode} ref={ref}>
         <BoardLayoutProvider value={layout}>
           <div className={styles.rootInside}>
