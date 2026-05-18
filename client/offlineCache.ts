@@ -16,7 +16,7 @@ export async function cacheOfflineAssets() {
       try {
         const response = await fetch(page, { cache: "reload" });
         if (response.ok) {
-          cache.put(page, response.clone());
+          await cache.put(page, response.clone());
           collectSameOriginAssets(await response.text()).forEach((url) =>
             urls.add(url)
           );
@@ -39,6 +39,40 @@ export async function cacheOfflineAssets() {
       }
     })
   );
+}
+
+export async function isOfflineCacheReady() {
+  if (!("caches" in window)) {
+    return false;
+  }
+
+  try {
+    if (!(await caches.has(OFFLINE_CACHE_NAME))) {
+      return false;
+    }
+
+    const cache = await caches.open(OFFLINE_CACHE_NAME);
+    const urls = new Set<string>([...OFFLINE_PAGES, ...STATIC_ASSETS]);
+
+    for (const page of OFFLINE_PAGES) {
+      const response = await cache.match(page);
+      if (!response?.ok) {
+        return false;
+      }
+
+      collectSameOriginAssets(await response.clone().text()).forEach((url) =>
+        urls.add(url)
+      );
+    }
+
+    const cachedResponses = await Promise.all(
+      Array.from(urls).map((url) => cache.match(url))
+    );
+    return cachedResponses.every((response) => response != null);
+  } catch (error) {
+    console.warn("Unable to inspect offline cache", error);
+    return false;
+  }
 }
 
 function collectSameOriginAssets(html: string): string[] {

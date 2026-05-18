@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-import { cacheOfflineAssets } from "./offlineCache";
+import { cacheOfflineAssets, isOfflineCacheReady } from "./offlineCache";
 
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -11,6 +11,7 @@ export default function usePwaInstall() {
   const [installPrompt, setInstallPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
   const [isPreparing, setIsPreparing] = useState(false);
+  const [isCheckingOfflineReady, setIsCheckingOfflineReady] = useState(true);
   const [isOfflineReady, setIsOfflineReady] = useState(false);
   const [isSupported, setIsSupported] = useState(false);
   const [message, setMessage] = useState("");
@@ -21,8 +22,26 @@ export default function usePwaInstall() {
   });
 
   useEffect(() => {
-    setIsSupported("serviceWorker" in navigator && "caches" in window);
+    let isMounted = true;
+    const isPwaSupported = "serviceWorker" in navigator && "caches" in window;
+    setIsSupported(isPwaSupported);
     setInstallContext(getInstallContext());
+    if (isPwaSupported) {
+      isOfflineCacheReady()
+        .then((isReady) => {
+          if (isMounted) {
+            setIsOfflineReady(isReady);
+          }
+        })
+        .finally(() => {
+          if (isMounted) {
+            setIsCheckingOfflineReady(false);
+          }
+        });
+    } else {
+      setIsCheckingOfflineReady(false);
+    }
+
     const onBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
       setInstallPrompt(event as BeforeInstallPromptEvent);
@@ -36,6 +55,7 @@ export default function usePwaInstall() {
     window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
     window.addEventListener("appinstalled", onAppInstalled);
     return () => {
+      isMounted = false;
       window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
       window.removeEventListener("appinstalled", onAppInstalled);
     };
@@ -59,7 +79,13 @@ export default function usePwaInstall() {
 
       await waitForServiceWorkerReady();
       await cacheOfflineAssets();
-      setIsOfflineReady(true);
+      const isReady = await isOfflineCacheReady();
+      setIsOfflineReady(isReady);
+      if (!isReady) {
+        setMessage("Some offline files could not be saved. Try again online.");
+        return;
+      }
+
       if (installAccepted) {
         setMessage("Pounce is installing and offline files are ready.");
       } else if (installContext.isIOS && installContext.isStandalone) {
@@ -81,12 +107,13 @@ export default function usePwaInstall() {
     } finally {
       setIsPreparing(false);
     }
-  }, [installPrompt, isSupported]);
+  }, [installContext, installPrompt, isSupported]);
 
   return {
     canInstall: installPrompt != null,
     downloadForOffline,
     installContext,
+    isCheckingOfflineReady,
     isOfflineReady,
     isPreparing,
     isSupported,

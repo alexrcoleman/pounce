@@ -27,6 +27,7 @@ export default function JoinForm({
     canInstall,
     downloadForOffline,
     installContext,
+    isCheckingOfflineReady,
     isOfflineReady,
     isPreparing,
     isSupported,
@@ -112,11 +113,13 @@ export default function JoinForm({
           </Button>
           <Button
             htmlType="button"
-            loading={isPreparing}
-            disabled={!isSupported}
+            loading={isPreparing || isCheckingOfflineReady}
+            disabled={!isSupported || isCheckingOfflineReady}
             onClick={downloadForOffline}
           >
-            {isOfflineReady
+            {isCheckingOfflineReady
+              ? "Checking offline files"
+              : isOfflineReady
               ? "Offline ready"
               : installContext.isIOS && !installContext.isStandalone
               ? "Save to Home Screen"
