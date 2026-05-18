@@ -21,6 +21,7 @@ const CardFace = React.memo(function CardFace({
       ? "K"
       : String(value);
   const icon = getIcon(suit);
+  const faceCardArtSrc = getFaceCardArtSrc(value, suit);
   const gridRowCount = 25;
   return (
     <div
@@ -31,27 +32,16 @@ const CardFace = React.memo(function CardFace({
           : styles.redCard
       )}
     >
-      {["J", "Q", "K"].includes(valueText) ? (
-        <div
-          className={styles.frontGrid}
-          style={{
-            gridTemplateRows: `repeat(${gridRowCount}, minmax(0, 1fr))`,
-          }}
-        >
-          <span style={{ gridRow: 1, gridColumn: 1 }}>{icon}</span>
-          <b
-            style={{
-              gridRow: (gridRowCount - 1) / 2,
-              gridColumn: 2,
-              fontSize: valueText === "J" ? 25 : 55,
-              marginLeft: valueText === "J" ? -6 : -15,
-              marginTop: valueText === "J" ? 0 : -5,
-            }}
-          >
-            {valueText === "Q" ? "♕" : valueText === "K" ? "♔" : valueText}
-          </b>
-          <span style={{ gridRow: gridRowCount, gridColumn: 3 }}>{icon}</span>
-        </div>
+      {faceCardArtSrc ? (
+        <img
+          className={styles.faceCardArt}
+          src={faceCardArtSrc}
+          alt=""
+          aria-hidden="true"
+          decoding="async"
+          draggable={false}
+          loading="lazy"
+        />
       ) : value === 1 ? (
         <span style={{ fontSize: 30 }}>{icon}</span>
       ) : (
@@ -131,14 +121,31 @@ export default CardFace;
 
 function getIcon(type: string): string {
   if (type === "clubs") {
-    return "♣";
+    return "\u2663";
   } else if (type === "diamonds") {
-    return "♦";
+    return "\u2666";
   } else if (type === "hearts") {
-    return "♥";
+    return "\u2665";
   } else {
-    return "♠";
+    return "\u2660";
   }
+}
+
+function getFaceCardArtSrc(value: number, suit: string): string | null {
+  const rank =
+    value === 11
+      ? "jack"
+      : value === 12
+      ? "queen"
+      : value === 13
+      ? "king"
+      : null;
+  if (!rank) {
+    return null;
+  }
+
+  const color = suit === "clubs" || suit === "spades" ? "black" : "red";
+  return `/card-faces/${rank}-${color}.webp`;
 }
 
 const cardPatterns = [

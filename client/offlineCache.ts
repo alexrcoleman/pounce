@@ -1,4 +1,4 @@
-const OFFLINE_CACHE_NAME = "pounce-offline-v4";
+const OFFLINE_CACHE_NAME = "pounce-offline-v5";
 const OFFLINE_PAGES = ["/", "/offline"];
 const STATIC_ASSETS = [
   "/manifest.webmanifest",
@@ -7,6 +7,12 @@ const STATIC_ASSETS = [
   "/pwa-icon-512.png",
   "/apple-touch-icon.png",
   "/card-back.png",
+  "/card-faces/jack-red.webp",
+  "/card-faces/queen-red.webp",
+  "/card-faces/king-red.webp",
+  "/card-faces/jack-black.webp",
+  "/card-faces/queen-black.webp",
+  "/card-faces/king-black.webp",
   "/notebook.png",
 ];
 

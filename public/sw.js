@@ -1,4 +1,4 @@
-const CACHE_NAME = "pounce-offline-v4";
+const CACHE_NAME = "pounce-offline-v5";
 const APP_SHELL = [
   "/",
   "/offline",
@@ -8,6 +8,12 @@ const APP_SHELL = [
   "/pwa-icon-512.png",
   "/apple-touch-icon.png",
   "/card-back.png",
+  "/card-faces/jack-red.webp",
+  "/card-faces/queen-red.webp",
+  "/card-faces/king-red.webp",
+  "/card-faces/jack-black.webp",
+  "/card-faces/queen-black.webp",
+  "/card-faces/king-black.webp",
   "/notebook.png",
 ];
 
@@ -51,7 +57,8 @@ self.addEventListener("fetch", (event) => {
     url.pathname.startsWith("/_next/static/") ||
     url.pathname === "/manifest.webmanifest" ||
     url.pathname.endsWith(".svg") ||
-    url.pathname.endsWith(".png")
+    url.pathname.endsWith(".png") ||
+    url.pathname.endsWith(".webp")
   ) {
     event.respondWith(cacheFirst(request));
     return;
