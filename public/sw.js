@@ -1,4 +1,4 @@
-const CACHE_NAME = "pounce-offline-v5";
+const CACHE_NAME = "pounce-offline-v6";
 const APP_SHELL = [
   "/",
   "/offline",
