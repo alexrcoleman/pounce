@@ -11,7 +11,7 @@ export default function MyDocument() {
   return (
     <Html lang="en">
       <Head>
-        <link rel="icon" href="/favicon.svg" />
+        <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
         <link rel="manifest" href="/manifest.webmanifest" />
         <link
           rel="apple-touch-icon"

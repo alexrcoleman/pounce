@@ -1,9 +1,9 @@
-const CACHE_NAME = "pounce-offline-v6";
+const CACHE_NAME = "pounce-offline-v7";
 const APP_SHELL = [
   "/",
   "/offline",
   "/manifest.webmanifest",
-  "/favicon.svg",
+  "/favicon.png",
   "/pwa-icon-192.png",
   "/pwa-icon-512.png",
   "/apple-touch-icon.png",

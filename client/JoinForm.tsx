@@ -53,7 +53,7 @@ export default function JoinForm({
       >
         <div className={styles.form}>
           <div className={styles.header}>
-            <img src="/favicon.svg" width="30px" />
+            <img src="/favicon.png" width="30px" />
             Pounce Online
           </div>
           <div>
