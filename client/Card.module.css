@@ -1,17 +1,22 @@
 .root {
   position: absolute;
-  border-radius: 3px;
   height: 77px;
   width: 55px;
-  transition: transform 0.5s ease-in-out, opacity 0.25s ease-in-out,
-    outline 0.1s ease-in-out;
+  transition: transform 0.5s ease-in-out, opacity 0.25s ease-in-out;
+  user-select: none;
+  transform-origin: 0% 0%;
+  transform: translate(var(--x), var(--y)) scale(var(--s), var(--s));
+}
+.rotator {
+  width: 100%;
+  height: 100%;
+  border-radius: 3px;
   overflow: hidden;
   perspective: 1000px;
   box-shadow: 1px 1px 2px 0px rgba(0, 0, 0, 0.1);
-  user-select: none;
-  transform-origin: 0% 0%;
-  transform: translate(var(--x), var(--y)) rotate(var(--r))
-    scale(var(--s), var(--s));
+  transform-origin: 50% 50%;
+  transform: rotate(var(--r));
+  transition: transform 0.5s ease-in-out, outline 0.1s ease-in-out;
   outline: 2px solid #ffe63f00;
 }
 .clickable {
@@ -20,8 +25,8 @@
 .draggable {
   cursor: grab;
 }
-.clickable:hover,
-.draggable:hover {
+.clickable:hover .rotator,
+.draggable:hover .rotator {
   outline: 2px solid #ffe63f;
 }
 .body {

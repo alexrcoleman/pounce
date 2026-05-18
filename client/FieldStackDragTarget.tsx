@@ -21,7 +21,7 @@ type Props = {
   onUpdateDragTarget: (card: CardState) => void;
 };
 
-const buffer = 30;
+const buffer = 20;
 
 export default observer(function FieldStackDragTarget({
   card,
@@ -59,12 +59,11 @@ export default observer(function FieldStackDragTarget({
   if (stackHeight === 0 || !isDragging) {
     return null;
   }
-  const targetWidth = CARD_WIDTH * CARD_BASE_SCALE * scale + 2 * buffer;
-  const targetHeight =
-    (CARD_HEIGHT * CARD_BASE_SCALE +
-      Math.max(stackHeight - 1, 0) * FIELD_STACK_CARD_GAP) *
-      scale +
-    2 * buffer;
+  const cardWidth = CARD_WIDTH * CARD_BASE_SCALE * scale;
+  const cardHeight = CARD_HEIGHT * CARD_BASE_SCALE * scale;
+  const stackGap = Math.max(stackHeight - 1, 0) * FIELD_STACK_CARD_GAP * scale;
+  const targetWidth = cardWidth + 2 * buffer;
+  const targetHeight = cardHeight + stackGap + 2 * buffer;
   return (
     <div
       style={{
@@ -74,7 +73,9 @@ export default observer(function FieldStackDragTarget({
         outline: canDrop || stackHeight === 0 ? "1px solid yellow" : "",
         borderRadius: 4,
         position: "absolute",
-        transformOrigin: `${buffer}px ${buffer}px`,
+        transformOrigin: `${buffer + cardWidth / 2}px ${
+          buffer + stackGap + cardHeight / 2
+        }px`,
         transform: `translate(${left - buffer}px, ${
           top - buffer
         }px) rotate(${rotate}deg)`,

@@ -1,4 +1,4 @@
-import type { BoardState, CardState, Suits, Values } from "../shared/GameUtils";
+import type { CardState } from "../shared/GameUtils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import CardFace from "./CardFace";
@@ -9,18 +9,17 @@ import styles from "./Card.module.css";
 import { useDrag } from "react-dnd";
 import { observer } from "mobx-react-lite";
 import SocketState from "./SocketState";
-import {
-  getBoardPileCardLocation,
-  getPlayerDeckLocation,
-  getPlayerFlippedDeckLocation,
-  getPlayerLocation,
-  getPlayerPounceCardLocation,
-  getPlayerStackLocation,
-} from "../shared/CardLocations";
+import { getPlayerLocation } from "../shared/CardLocations";
 import { computed, toJS } from "mobx";
 import { useClientContext } from "./ClientContext";
 import { type BoardLayoutArea, useBoardLayout } from "./BoardLayout";
-import { getCardScaleMultiplier } from "./cardLayout";
+import {
+  type CardLocation,
+  getCardLayoutArea,
+  getCardRotationDegrees,
+  getCardScreenGeometry,
+  getPosition,
+} from "./cardGeometry";
 
 type Props = {
   card: CardState;
@@ -77,21 +76,13 @@ const CardContentMemo = observer(function CardContent({
     location.type !== "field_stack" &&
     card.player !== state.getActivePlayerIndex();
 
-  let rotation =
-    location.type === "field_stack"
-      ? board.pileLocs[location.stackIndex][2]
-      : 0;
-
   const source = useMemo(
     () => computed(() => getSource(card, state, location)),
     [card, state, location]
   ).get();
 
   let [positionX, positionY] = getPosition(card, state, location);
-  let layoutArea: BoardLayoutArea =
-    location.type === "field_stack"
-      ? { type: "field" }
-      : { type: "player", playerIndex: card.player };
+  let layoutArea: BoardLayoutArea = getCardLayoutArea(card, location);
 
   // Post-game animation:
   if (postGameStage) {
@@ -113,7 +104,6 @@ const CardContentMemo = observer(function CardContent({
       faceUp = false;
       [positionX, positionY] = [px + 400, py + 100];
       layoutArea = { type: "player", playerIndex: card.player };
-      rotation = 0;
       scaleDown = false;
     }
   }
@@ -121,15 +111,25 @@ const CardContentMemo = observer(function CardContent({
   const { suit, value } = card;
   const [isAnimating, setIsAnimating] = useState(false);
   const rotationOffset = useRef(Math.random() * 2 - 1);
+  let cardRotation = getCardRotationDegrees(
+    board,
+    card,
+    location,
+    rotationOffset.current * 2
+  );
+  if (postGameStage === 3) {
+    cardRotation = 0;
+  }
 
-  const [mappedX, mappedY] = layout.mapPoint([positionX, positionY], layoutArea);
-  const layoutScale = layout.getScale(layoutArea);
-  const cardScale = getCardScaleMultiplier({
-    area: layoutArea,
-    cardPlayer: card.player,
+  const geometry = getCardScreenGeometry({
     activePlayerIndex: state.getActivePlayerIndex(),
+    area: layoutArea,
+    card,
     isScaleDown: scaleDown,
-    mode: layout.mode,
+    layout,
+    location,
+    position: [positionX, positionY],
+    rotationDegrees: cardRotation,
   });
 
   const item = useMemo(
@@ -141,14 +141,20 @@ const CardContentMemo = observer(function CardContent({
               board.pileLocs[source.index][0],
               board.pileLocs[source.index][1],
             ] as [number, number],
-            initialClientPosition: [mappedX, mappedY] as [number, number],
+            initialClientPosition: [geometry.x, geometry.y] as [
+              number,
+              number
+            ],
           }
         : {
             source,
             card: toJS(card),
-            initialClientPosition: [mappedX, mappedY] as [number, number],
+            initialClientPosition: [geometry.x, geometry.y] as [
+              number,
+              number
+            ],
           },
-    [source, JSON.stringify(toJS(card)), board.pileLocs, mappedX, mappedY]
+    [source, JSON.stringify(toJS(card)), board.pileLocs, geometry.x, geometry.y]
   );
   const [{ isDragging, isDraggingOther, canDrag }, drag] = useDrag(
     () =>
@@ -210,10 +216,6 @@ const CardContentMemo = observer(function CardContent({
     return () => clearTimeout(t);
   }, [positionX, positionY, zIndex]);
 
-  const cardRotation =
-    rotation * 360 +
-    (location.type === "field_stack" ? 0 : rotationOffset.current * 2);
-
   return (
     <div
       className={joinClasses(
@@ -226,10 +228,10 @@ const CardContentMemo = observer(function CardContent({
           pointerEvents: isDraggingOther ? "none" : "",
           zIndex: zIndex + (isAnimating ? 1000 : 0),
           "--c": color,
-          "--r": cardRotation + "deg",
-          "--x": mappedX + "px",
-          "--y": mappedY + "px",
-          "--s": cardScale * layoutScale,
+          "--r": geometry.rotationDegrees + "deg",
+          "--x": geometry.x + "px",
+          "--y": geometry.y + "px",
+          "--s": geometry.screenScale,
           opacity: isDragging ? 0.4 : 1,
         } as any
       }
@@ -239,17 +241,19 @@ const CardContentMemo = observer(function CardContent({
       onClick={onClick}
       ref={drag}
     >
-      <div className={joinClasses(styles.body, faceUp && styles.bodyFaceUp)}>
-        <div
-          className={styles.back}
-          style={
-            {
-              "--hr": colors[color] ?? "0deg",
-            } as any
-          }
-        />
-        <div className={styles.front}>
-          <CardFace suit={suit} value={value} />
+      <div className={styles.rotator}>
+        <div className={joinClasses(styles.body, faceUp && styles.bodyFaceUp)}>
+          <div
+            className={styles.back}
+            style={
+              {
+                "--hr": colors[color] ?? "0deg",
+              } as any
+            }
+          />
+          <div className={styles.front}>
+            <CardFace suit={suit} value={value} />
+          </div>
         </div>
       </div>
     </div>
@@ -266,17 +270,6 @@ const colors: Record<string, string | undefined> = {
 };
 // ["red", "blue", "green", "orange", "yellow", "pink"];
 export default CardContentMemo;
-
-export type CardLocation =
-  | { type: "pounce"; cardIndex: number }
-  | {
-      type: "solitaire";
-      pileIndex: number;
-      cardIndex: number;
-    }
-  | { type: "flippedDeck"; cardIndex: number }
-  | { type: "field_stack"; stackIndex: number; cardIndex: number }
-  | { type: "deck"; cardIndex: number };
 
 function getSource(
   card: CardState,
@@ -315,45 +308,5 @@ function getSource(
         pileIndex: location.pileIndex,
         slotIndex: location.cardIndex,
       };
-  }
-}
-export function getPosition(
-  card: CardState,
-  state: SocketState,
-  location: CardLocation
-): [number, number] {
-  const playerIndex = card.player;
-  switch (location.type) {
-    case "field_stack":
-      return getBoardPileCardLocation(
-        state.board!,
-        location.stackIndex,
-        location.cardIndex
-      );
-    case "flippedDeck":
-      return getPlayerFlippedDeckLocation(
-        playerIndex,
-        location.cardIndex,
-        state.getActivePlayerIndex()
-      );
-    case "deck":
-      return getPlayerDeckLocation(
-        playerIndex,
-        location.cardIndex,
-        state.getActivePlayerIndex()
-      );
-    case "pounce":
-      return getPlayerPounceCardLocation(
-        playerIndex,
-        location.cardIndex,
-        state.getActivePlayerIndex()
-      );
-    case "solitaire":
-      return getPlayerStackLocation(
-        playerIndex,
-        location.pileIndex,
-        location.cardIndex,
-        state.getActivePlayerIndex()
-      );
   }
 }

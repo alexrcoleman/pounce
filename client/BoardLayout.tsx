@@ -32,7 +32,7 @@ export type BoardLayoutArea =
   | { type: "field" }
   | { type: "player"; playerIndex: number };
 
-type BoardLayout = {
+export type BoardLayout = {
   mode: BoardLayoutMode;
   mapPoint: (point: Point, area: BoardLayoutArea) => Point;
   getScale: (area: BoardLayoutArea) => number;

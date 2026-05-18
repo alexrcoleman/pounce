@@ -2,9 +2,15 @@ import { observer } from "mobx-react-lite";
 import CursorHand from "./CursorHand";
 import { getCardKey, stableObject } from "./CardsLayer";
 import { CardState } from "../shared/GameUtils";
-import { CardLocation, getPosition } from "./Card";
 import { useClientContext } from "./ClientContext";
-import { type BoardLayoutArea, useBoardLayout } from "./BoardLayout";
+import { useBoardLayout } from "./BoardLayout";
+import {
+  type CardLocation,
+  type CardScreenGeometry,
+  getCardRotationDegrees,
+  getCardScreenGeometry,
+  getPosition,
+} from "./cardGeometry";
 
 type CardWithLocation = { card: CardState; location: CardLocation };
 export default observer(function HandsLayer() {
@@ -70,21 +76,24 @@ export default observer(function HandsLayer() {
     }),
   ];
 
-  const cardLocs = new Map<string, [number, number, number]>();
+  const cardLocs = new Map<string, CardScreenGeometry>();
   cardsWithLocation.forEach((cardWithLoc) => {
     const card = cardWithLoc.card;
     const location = cardWithLoc.location;
-    const [x, y] = getPosition(card, state, location);
-    const layoutArea: BoardLayoutArea =
-      location.type === "field_stack"
-        ? { type: "field" }
-        : { type: "player", playerIndex: card.player };
-    const [mappedX, mappedY] = layout.mapPoint([x, y], layoutArea);
-    cardLocs.set(getCardKey(card), [
-      mappedX,
-      mappedY,
-      layout.getScale(layoutArea),
-    ]);
+    const isScaleDown =
+      location.type !== "field_stack" && card.player !== activePlayerIndex;
+    cardLocs.set(
+      getCardKey(card),
+      getCardScreenGeometry({
+        activePlayerIndex,
+        card,
+        isScaleDown,
+        layout,
+        location,
+        position: getPosition(card, state, location),
+        rotationDegrees: getCardRotationDegrees(board, card, location),
+      })
+    );
   });
   return (
     <>
@@ -99,9 +108,9 @@ export default observer(function HandsLayer() {
         return (
           <CursorHand
             card={hand.item}
-            x={cardLoc[0] + 15 * cardLoc[2]}
-            y={cardLoc[1]}
-            scale={cardLoc[2]}
+            x={cardLoc.centerX}
+            y={cardLoc.centerY}
+            scale={cardLoc.layoutScale}
             color={state.board!.players[index].color}
             key={index}
           />

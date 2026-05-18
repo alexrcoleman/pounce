@@ -8,6 +8,7 @@ import { CardDnDItem } from "./CardDnDItem";
 import { getBoardPileLocation } from "../shared/CardLocations";
 import FieldDragTarget from "./FieldDragTarget";
 import { FIELD_LEFT, FIELD_TOP, useBoardLayout } from "./BoardLayout";
+import { getFieldCardRotationDegrees } from "./cardGeometry";
 
 export default observer(function FieldStackDragTargets({
   state,
@@ -109,17 +110,22 @@ export default observer(function FieldStackDragTargets({
           getBoardPileLocation(board, index),
           fieldArea
         );
+        const topCard = pile[pile.length - 1];
         return (
           <FieldStackDragTarget
             key={index}
-            card={pile[pile.length - 1]}
+            card={topCard}
             stackHeight={pile.length}
             onUpdateDragTarget={onUpdateDragHover}
             onDrop={(item) => executeMoveCardToCenter(item, index)}
             left={left}
             top={top}
             scale={fieldScale}
-            rotate={board.pileLocs[index][2] * 360}
+            rotate={
+              topCard
+                ? getFieldCardRotationDegrees(board, topCard, index)
+                : board.pileLocs[index][2] * 360
+            }
           />
         );
       })}
