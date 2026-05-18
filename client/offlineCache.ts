@@ -1,20 +1,8 @@
-const OFFLINE_CACHE_NAME = "pounce-offline-v7";
+import { OFFLINE_STATIC_ASSETS } from "../shared/gameAssets";
+
+const OFFLINE_CACHE_NAME = "pounce-offline-v8";
 const OFFLINE_PAGES = ["/", "/offline"];
-const STATIC_ASSETS = [
-  "/manifest.webmanifest",
-  "/favicon.png",
-  "/pwa-icon-192.png",
-  "/pwa-icon-512.png",
-  "/apple-touch-icon.png",
-  "/card-back.png",
-  "/card-faces/jack-red.webp",
-  "/card-faces/queen-red.webp",
-  "/card-faces/king-red.webp",
-  "/card-faces/jack-black.webp",
-  "/card-faces/queen-black.webp",
-  "/card-faces/king-black.webp",
-  "/notebook.png",
-];
+const STATIC_ASSETS = OFFLINE_STATIC_ASSETS;
 
 export async function cacheOfflineAssets() {
   if (!("caches" in window)) {

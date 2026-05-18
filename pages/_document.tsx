@@ -6,6 +6,7 @@ import Document, {
   NextScript,
   DocumentContext,
 } from "next/document";
+import { HEAD_PRELOAD_ASSETS } from "../shared/gameAssets";
 
 export default function MyDocument() {
   return (
@@ -18,6 +19,15 @@ export default function MyDocument() {
           sizes="180x180"
           href="/apple-touch-icon.png"
         />
+        {HEAD_PRELOAD_ASSETS.map((asset) => (
+          <link
+            key={asset.href}
+            rel="preload"
+            href={asset.href}
+            as={asset.as}
+            type={asset.type}
+          />
+        ))}
 
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" />

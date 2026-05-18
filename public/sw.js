@@ -1,21 +1,7 @@
-const CACHE_NAME = "pounce-offline-v7";
-const APP_SHELL = [
-  "/",
-  "/offline",
-  "/manifest.webmanifest",
-  "/favicon.png",
-  "/pwa-icon-192.png",
-  "/pwa-icon-512.png",
-  "/apple-touch-icon.png",
-  "/card-back.png",
-  "/card-faces/jack-red.webp",
-  "/card-faces/queen-red.webp",
-  "/card-faces/king-red.webp",
-  "/card-faces/jack-black.webp",
-  "/card-faces/queen-black.webp",
-  "/card-faces/king-black.webp",
-  "/notebook.png",
-];
+const CACHE_NAME = "pounce-offline-v8";
+const GAME_ASSET_MANIFEST_URL = "/game-assets.json";
+const OFFLINE_PAGES = ["/", "/offline"];
+const APP_SHELL = [...OFFLINE_PAGES, GAME_ASSET_MANIFEST_URL];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(cacheAppShell());
@@ -55,6 +41,7 @@ self.addEventListener("fetch", (event) => {
 
   if (
     url.pathname.startsWith("/_next/static/") ||
+    url.pathname === GAME_ASSET_MANIFEST_URL ||
     url.pathname === "/manifest.webmanifest" ||
     url.pathname.endsWith(".svg") ||
     url.pathname.endsWith(".png") ||
@@ -83,9 +70,11 @@ async function cacheFirst(request) {
 async function cacheAppShell() {
   const cache = await caches.open(CACHE_NAME);
   const urls = new Set(APP_SHELL);
+  const gameAssetUrls = await fetchGameAssetUrls(cache);
+  gameAssetUrls.forEach((url) => urls.add(url));
 
   await Promise.all(
-    ["/", "/offline"].map(async (page) => {
+    OFFLINE_PAGES.map(async (page) => {
       try {
         const response = await fetch(page, { cache: "reload" });
         if (response.ok) {
@@ -112,6 +101,53 @@ async function cacheAppShell() {
       }
     })
   );
+}
+
+async function fetchGameAssetUrls(cache) {
+  try {
+    const response = await fetch(GAME_ASSET_MANIFEST_URL, { cache: "reload" });
+    if (!response.ok) {
+      return [];
+    }
+
+    await cache.put(GAME_ASSET_MANIFEST_URL, response.clone());
+    return getGameAssetUrls(await response.json());
+  } catch (error) {
+    console.warn("Unable to cache game asset manifest", error);
+    return [];
+  }
+}
+
+function getGameAssetUrls(manifest) {
+  manifest = manifest || {};
+  const urls = [];
+  if (Array.isArray(manifest.offline)) {
+    manifest.offline.forEach((url) => {
+      if (typeof url === "string") {
+        urls.push(url);
+      }
+    });
+  }
+
+  if (Array.isArray(manifest.preload)) {
+    manifest.preload.forEach((asset) => {
+      if (asset && typeof asset.href === "string") {
+        urls.push(asset.href);
+      }
+    });
+  }
+
+  const faceCards = manifest.faceCards || {};
+  ["red", "black"].forEach((color) => {
+    ["jack", "queen", "king"].forEach((rank) => {
+      const href = faceCards[color] && faceCards[color][rank];
+      if (typeof href === "string") {
+        urls.push(href);
+      }
+    });
+  });
+
+  return urls;
 }
 
 function collectSameOriginAssets(html) {

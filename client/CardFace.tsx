@@ -1,4 +1,9 @@
 import React from "react";
+import {
+  FACE_CARD_ART_SRC,
+  type FaceCardColor,
+  type FaceCardRank,
+} from "../shared/gameAssets";
 import joinClasses from "./joinClasses";
 import styles from "./CardFace.module.css";
 
@@ -40,7 +45,6 @@ const CardFace = React.memo(function CardFace({
           aria-hidden="true"
           decoding="async"
           draggable={false}
-          loading="lazy"
         />
       ) : value === 1 ? (
         <span style={{ fontSize: 30 }}>{icon}</span>
@@ -132,7 +136,7 @@ function getIcon(type: string): string {
 }
 
 function getFaceCardArtSrc(value: number, suit: string): string | null {
-  const rank =
+  const rank: FaceCardRank | null =
     value === 11
       ? "jack"
       : value === 12
@@ -144,8 +148,9 @@ function getFaceCardArtSrc(value: number, suit: string): string | null {
     return null;
   }
 
-  const color = suit === "clubs" || suit === "spades" ? "black" : "red";
-  return `/card-faces/${rank}-${color}.webp`;
+  const color: FaceCardColor =
+    suit === "clubs" || suit === "spades" ? "black" : "red";
+  return FACE_CARD_ART_SRC[color][rank];
 }
 
 const cardPatterns = [
