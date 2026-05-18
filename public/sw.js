@@ -1,26 +1,30 @@
-const CACHE_NAME = "pounce-offline-v9";
+const CACHE_NAME = "pounce-offline-v10";
 const GAME_ASSET_MANIFEST_URL = "/game-assets.json";
 const OFFLINE_PAGES = ["/", "/offline"];
 const APP_SHELL = [...OFFLINE_PAGES, GAME_ASSET_MANIFEST_URL];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(cacheAppShell());
-  self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
   event.waitUntil(
-    caches
-      .keys()
-      .then((keys) =>
-        Promise.all(
-          keys
-            .filter((key) => key !== CACHE_NAME)
-            .map((key) => caches.delete(key))
-        )
-      )
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(
+        keys
+          .filter((key) => key !== CACHE_NAME)
+          .map((key) => caches.delete(key))
+      );
+      await self.clients.claim();
+    })()
   );
-  self.clients.claim();
+});
+
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener("fetch", (event) => {
@@ -39,15 +43,19 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  if (url.pathname.startsWith("/_next/static/")) {
+    event.respondWith(cacheFirst(request));
+    return;
+  }
+
   if (
-    url.pathname.startsWith("/_next/static/") ||
     url.pathname === GAME_ASSET_MANIFEST_URL ||
     url.pathname === "/manifest.webmanifest" ||
     url.pathname.endsWith(".svg") ||
     url.pathname.endsWith(".png") ||
     url.pathname.endsWith(".webp")
   ) {
-    event.respondWith(cacheFirst(request));
+    event.respondWith(networkFirst(request, undefined, { cache: "reload" }));
     return;
   }
 
@@ -167,10 +175,10 @@ function collectSameOriginAssets(html) {
   return urls;
 }
 
-async function networkFirst(request, fallbackUrl) {
+async function networkFirst(request, fallbackUrl, fetchOptions) {
   const cache = await caches.open(CACHE_NAME);
   try {
-    const response = await fetch(request);
+    const response = await fetch(request, fetchOptions);
     if (response.ok) {
       cache.put(request, response.clone());
     }
