@@ -6,20 +6,20 @@ export const COMPACT_ACTIVE_CARD_SCALE = 1.2;
 export function getCardScaleMultiplier({
   area,
   cardPlayer,
-  activePlayerIndex,
+  fullSizePlayerIndices,
   isScaleDown,
   mode,
 }: {
   area: BoardLayoutArea;
   cardPlayer: number;
-  activePlayerIndex: number;
+  fullSizePlayerIndices: number[];
   isScaleDown: boolean;
   mode: BoardLayoutMode;
 }) {
   const compactActiveScale =
     mode === "compact" &&
     area.type === "player" &&
-    cardPlayer === activePlayerIndex
+    fullSizePlayerIndices.includes(cardPlayer)
       ? COMPACT_ACTIVE_CARD_SCALE
       : 1;
 

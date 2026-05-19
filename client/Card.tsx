@@ -72,9 +72,13 @@ const CardContentMemo = observer(function CardContent({
     );
   }).get();
 
+  const fullSizePlayerIndices =
+    layout.mode === "compact"
+      ? layout.fullSizePlayerIndices
+      : [state.getActivePlayerIndex()];
   let scaleDown =
     location.type !== "field_stack" &&
-    card.player !== state.getActivePlayerIndex();
+    !fullSizePlayerIndices.includes(card.player);
 
   const source = useMemo(
     () => computed(() => getSource(card, state, location)),
@@ -122,7 +126,6 @@ const CardContentMemo = observer(function CardContent({
   }
 
   const geometry = getCardScreenGeometry({
-    activePlayerIndex: state.getActivePlayerIndex(),
     area: layoutArea,
     card,
     isScaleDown: scaleDown,
@@ -131,6 +134,11 @@ const CardContentMemo = observer(function CardContent({
     position: [positionX, positionY],
     rotationDegrees: cardRotation,
   });
+  const zIndexBase =
+    geometry.area.type === "player" &&
+    layout.fullSizePlayerIndices.includes(card.player)
+      ? 5000
+      : 0;
 
   const item = useMemo(
     () =>
@@ -226,7 +234,7 @@ const CardContentMemo = observer(function CardContent({
       style={
         {
           pointerEvents: isDraggingOther ? "none" : "",
-          zIndex: zIndex + (isAnimating ? 1000 : 0),
+          zIndex: zIndexBase + zIndex + (isAnimating ? 1000 : 0),
           "--c": color,
           "--r": geometry.rotationDegrees + "deg",
           "--x": geometry.x + "px",

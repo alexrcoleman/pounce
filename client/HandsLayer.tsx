@@ -18,6 +18,10 @@ export default observer(function HandsLayer() {
   const layout = useBoardLayout();
   const hands = state.hands;
   const activePlayerIndex = state.getActivePlayerIndex();
+  const fullSizePlayerIndices =
+    layout.mode === "compact"
+      ? layout.fullSizePlayerIndices
+      : [activePlayerIndex];
   const board = state.board!;
   const cardsWithLocation: CardWithLocation[] = [
     ...board.piles.flatMap<CardWithLocation>((pile, pileIndex) =>
@@ -81,11 +85,11 @@ export default observer(function HandsLayer() {
     const card = cardWithLoc.card;
     const location = cardWithLoc.location;
     const isScaleDown =
-      location.type !== "field_stack" && card.player !== activePlayerIndex;
+      location.type !== "field_stack" &&
+      !fullSizePlayerIndices.includes(card.player);
     cardLocs.set(
       getCardKey(card),
       getCardScreenGeometry({
-        activePlayerIndex,
         card,
         isScaleDown,
         layout,
