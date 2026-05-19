@@ -24,11 +24,14 @@ export default observer(function ActivePlayerStackTargets({
   const stacks = state.board!.players[activePlayerIndex].stacks;
   const playerArea = { type: "player", playerIndex: activePlayerIndex } as const;
   const scale = layout.getScale(playerArea);
+  const isFullSizeActivePlayer =
+    layout.mode !== "compact" ||
+    layout.fullSizePlayerIndices.includes(activePlayerIndex);
   const cardScale = getCardScaleMultiplier({
     area: playerArea,
     cardPlayer: activePlayerIndex,
-    activePlayerIndex,
-    isScaleDown: false,
+    fullSizePlayerIndices: layout.fullSizePlayerIndices,
+    isScaleDown: !isFullSizeActivePlayer,
     mode: layout.mode,
   });
   return (

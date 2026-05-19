@@ -56,6 +56,7 @@
     inset 0 2px 1px rgba(255, 255, 255, 0.2),
     inset 0 -18px 30px rgba(0, 0, 0, 0.28);
   transform-origin: 0% 0%;
+  transition: transform 0.5s ease-in-out;
 }
 .pileSection::after {
   content: "";
@@ -119,4 +120,36 @@
   justify-content: center;
   padding: 16px;
   backdrop-filter: blur(1px);
+}
+
+.playerZoomTarget {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 30000;
+  padding: 0;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0);
+  cursor: zoom-in;
+  opacity: 0;
+  transform-origin: 0% 0%;
+  transition:
+    transform 0.5s ease-in-out,
+    opacity 0.2s ease-in-out,
+    background-color 0.2s ease-in-out;
+  touch-action: manipulation;
+}
+
+.playerZoomTarget:hover,
+.playerZoomTarget:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  opacity: 1;
+  outline: none;
+}
+
+.playerZoomTarget:active {
+  cursor: zoom-out;
+  background: rgba(255, 255, 255, 0.14);
+  opacity: 1;
 }

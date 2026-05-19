@@ -1,5 +1,6 @@
 import type { BoardState, CardState } from "../shared/GameUtils";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { CSSProperties } from "react";
 
 import { DndProvider } from "react-dnd";
 import DragReporter from "./DragReporter";
@@ -26,9 +27,12 @@ import {
   FIELD_LEFT,
   FIELD_SIZE,
   FIELD_TOP,
+  PLAYER_HEIGHT,
+  PLAYER_WIDTH,
   useBoardLayout,
   useResponsiveBoardLayout,
 } from "./BoardLayout";
+import { getPlayerLocation } from "../shared/CardLocations";
 type Props = {
   executeMove: (move: Move) => void;
   onUpdateHand: (card: CardState) => void;
@@ -41,9 +45,14 @@ export default observer(function Board({
 }: Props): JSX.Element | null {
   const { state, socket } = useClientContext();
   const board = state.board!;
+  const activePlayerIndex = state.getActivePlayerIndex();
+  const [focusedPlayerIndex, setFocusedPlayerIndex] = useState<number | null>(
+    null
+  );
   const { layout, ref } = useResponsiveBoardLayout({
-    activePlayerIndex: state.getActivePlayerIndex(),
+    activePlayerIndex,
     board,
+    focusedPlayerIndex,
     zoom,
   });
 
@@ -51,6 +60,26 @@ export default observer(function Board({
   useEffect(() => {
     setUseTouch(isTouchDevice());
   }, []);
+  useEffect(() => {
+    setFocusedPlayerIndex((current) =>
+      current != null &&
+      current >= 0 &&
+      current < board.players.length &&
+      current !== activePlayerIndex
+        ? current
+        : null
+    );
+  }, [activePlayerIndex, board.players.length]);
+  const togglePlayerFocus = useCallback(
+    (playerIndex: number) => {
+      setFocusedPlayerIndex((current) =>
+        current === playerIndex || playerIndex === activePlayerIndex
+          ? null
+          : playerIndex
+      );
+    },
+    [activePlayerIndex]
+  );
 
   // TODO: Make this tracked separately
   const onUpdateDragHover = onUpdateHand;
@@ -93,12 +122,85 @@ export default observer(function Board({
             {board.players.map((p, i) => (
               <PlayerArea player={p} playerIndex={i} key={p.socketId ?? i} />
             ))}
+            <PlayerZoomTargets onTogglePlayer={togglePlayerFocus} />
             <HandsLayer />
             <VictoryOverlay />
           </div>
         </BoardLayoutProvider>
       </div>
     </DndProvider>
+  );
+});
+
+const PLAYER_ZOOM_HIT_LEFT = -24;
+const PLAYER_ZOOM_HIT_TOP = 0;
+const PLAYER_ZOOM_HIT_WIDTH = PLAYER_WIDTH + 56;
+const PLAYER_ZOOM_HIT_HEIGHT = PLAYER_HEIGHT;
+
+const PlayerZoomTargets = observer(function PlayerZoomTargets({
+  onTogglePlayer,
+}: {
+  onTogglePlayer: (playerIndex: number) => void;
+}) {
+  const { state } = useClientContext();
+  const board = state.board;
+  const layout = useBoardLayout();
+  const activePlayerIndex = state.getActivePlayerIndex();
+
+  if (!board || layout.mode !== "compact" || activePlayerIndex < 0) {
+    return null;
+  }
+
+  return (
+    <>
+      {board.players.map((player, playerIndex) => {
+        const isActivePlayer = playerIndex === activePlayerIndex;
+        const isFocusedPlayer = layout.focusedPlayerIndex === playerIndex;
+        if (
+          (layout.focusedPlayerIndex == null && isActivePlayer) ||
+          (layout.focusedPlayerIndex != null && !isFocusedPlayer)
+        ) {
+          return null;
+        }
+
+        const [, playerTop] = getPlayerLocation(
+          playerIndex,
+          activePlayerIndex
+        );
+        const playerArea = { type: "player", playerIndex } as const;
+        const scale = layout.getScale(playerArea);
+        const [left, top] = layout.mapPoint(
+          [PLAYER_ZOOM_HIT_LEFT, playerTop + PLAYER_ZOOM_HIT_TOP],
+          playerArea
+        );
+        const label =
+          isFocusedPlayer || isActivePlayer
+            ? "Show all players"
+            : `Zoom ${player.name}'s board`;
+
+        return (
+          <button
+            aria-label={label}
+            className={styles.playerZoomTarget}
+            key={player.socketId ?? playerIndex}
+            onClick={(event) => {
+              event.stopPropagation();
+              onTogglePlayer(playerIndex);
+            }}
+            style={
+              {
+                "--player-color": player.color,
+                transform: `translate(${left}px, ${top}px) scale(${scale})`,
+                width: PLAYER_ZOOM_HIT_WIDTH,
+                height: PLAYER_ZOOM_HIT_HEIGHT,
+              } as CSSProperties
+            }
+            title={label}
+            type="button"
+          />
+        );
+      })}
+    </>
   );
 });
 

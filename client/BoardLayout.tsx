@@ -16,8 +16,8 @@ export const FIELD_TOP = 50;
 export const FIELD_SIZE = 577;
 
 const PLAYER_LEFT = 0;
-const PLAYER_WIDTH = 480;
-const PLAYER_HEIGHT = 225;
+export const PLAYER_WIDTH = 480;
+export const PLAYER_HEIGHT = 225;
 const COMPACT_BREAKPOINT = 700;
 const COMPACT_PADDING = 12;
 const COMPACT_TOP_PADDING = 42;
@@ -34,6 +34,8 @@ export type BoardLayoutArea =
 
 export type BoardLayout = {
   mode: BoardLayoutMode;
+  focusedPlayerIndex: number | null;
+  fullSizePlayerIndices: number[];
   mapPoint: (point: Point, area: BoardLayoutArea) => Point;
   getScale: (area: BoardLayoutArea) => number;
 };
@@ -51,6 +53,8 @@ type Viewport = {
 
 const identityLayout: BoardLayout = {
   mode: "standard",
+  focusedPlayerIndex: null,
+  fullSizePlayerIndices: [],
   mapPoint: (point) => point,
   getScale: () => 1,
 };
@@ -78,10 +82,12 @@ export function useBoardLayout() {
 export function useResponsiveBoardLayout({
   activePlayerIndex,
   board,
+  focusedPlayerIndex,
   zoom,
 }: {
   activePlayerIndex: number;
   board: BoardState;
+  focusedPlayerIndex: number | null;
   zoom: number;
 }) {
   const [node, setNode] = useState<HTMLDivElement | null>(null);
@@ -116,9 +122,17 @@ export function useResponsiveBoardLayout({
 
   const playerCount = board.players.length;
   const layout = useMemo(
-    () => createBoardLayout(playerCount, activePlayerIndex, viewport, zoom),
+    () =>
+      createBoardLayout(
+        playerCount,
+        activePlayerIndex,
+        focusedPlayerIndex,
+        viewport,
+        zoom
+      ),
     [
       activePlayerIndex,
+      focusedPlayerIndex,
       playerCount,
       viewport.height,
       viewport.width,
@@ -132,6 +146,7 @@ export function useResponsiveBoardLayout({
 function createBoardLayout(
   playerCount: number,
   activePlayerIndex: number,
+  focusedPlayerIndex: number | null,
   viewport: Viewport,
   zoom: number
 ): BoardLayout {
@@ -149,6 +164,7 @@ function createBoardLayout(
     return createCompactLayout(
       playerCount,
       activePlayerIndex,
+      focusedPlayerIndex,
       viewport,
       normalizedZoom
     );
@@ -182,6 +198,9 @@ function createStandardLayout(
 
   return {
     mode: "standard",
+    focusedPlayerIndex: null,
+    fullSizePlayerIndices:
+      activePlayerIndex >= 0 ? [activePlayerIndex] : [],
     mapPoint: ([x, y]) => [offsetX + x * scale, offsetY + y * scale],
     getScale: () => scale,
   };
@@ -190,12 +209,27 @@ function createStandardLayout(
 function createCompactLayout(
   playerCount: number,
   activePlayerIndex: number,
+  focusedPlayerIndex: number | null,
   viewport: Viewport,
   zoom: number
 ): BoardLayout {
   const usableWidth = Math.max(1, viewport.width - COMPACT_PADDING * 2);
+  const compactFocusPlayerIndex =
+    focusedPlayerIndex != null &&
+    focusedPlayerIndex >= 0 &&
+    focusedPlayerIndex < playerCount &&
+    focusedPlayerIndex !== activePlayerIndex
+      ? focusedPlayerIndex
+      : null;
   const opponents = Array.from({ length: playerCount }, (_, index) => index)
     .filter((index) => index !== activePlayerIndex);
+
+  const maxActiveScale = Math.min(0.68, usableWidth / PLAYER_WIDTH);
+  const activeScale = Math.min(maxActiveScale, maxActiveScale * zoom);
+  const activeHeight = PLAYER_HEIGHT * activeScale;
+  const activeWidth = PLAYER_WIDTH * activeScale;
+  const activeTop =
+    viewport.height - COMPACT_PADDING - COMPACT_ACTIVE_LIFT - activeHeight;
 
   const opponentColumns =
     opponents.length >= 3
@@ -215,17 +249,12 @@ function createCompactLayout(
   const opponentScale = Math.min(maxOpponentScale, maxOpponentScale * zoom);
   const opponentRowHeight = PLAYER_HEIGHT * opponentScale;
   const opponentAreaHeight =
-    opponentRows === 0
+    compactFocusPlayerIndex != null
+      ? activeHeight
+      : opponentRows === 0
       ? 0
       : opponentRows * opponentRowHeight +
         (opponentRows - 1) * COMPACT_SMALL_GAP;
-
-  const maxActiveScale = Math.min(0.68, usableWidth / PLAYER_WIDTH);
-  const activeScale = Math.min(maxActiveScale, maxActiveScale * zoom);
-  const activeHeight = PLAYER_HEIGHT * activeScale;
-  const activeWidth = PLAYER_WIDTH * activeScale;
-  const activeTop =
-    viewport.height - COMPACT_PADDING - COMPACT_ACTIVE_LIFT - activeHeight;
 
   const topGap = opponentRows > 0 ? COMPACT_GAP : 0;
   const middleTop = COMPACT_TOP_PADDING + opponentAreaHeight + topGap;
@@ -249,23 +278,40 @@ function createCompactLayout(
     scale: activeScale,
   }));
 
-  opponents.forEach((playerIndex, order) => {
-    const row = Math.floor(order / opponentColumns);
-    const column = order % opponentColumns;
-    const rowCount =
-      row === opponentRows - 1
-        ? opponents.length - row * opponentColumns
-        : opponentColumns;
-    const rowWidth =
-      rowCount * opponentSlotWidth + (rowCount - 1) * COMPACT_SMALL_GAP;
-    const rowLeft = (viewport.width - rowWidth) / 2;
-    const slotLeft = rowLeft + column * (opponentSlotWidth + COMPACT_SMALL_GAP);
-    playerSlots[playerIndex] = {
-      left: slotLeft + (opponentSlotWidth - PLAYER_WIDTH * opponentScale) / 2,
-      top: COMPACT_TOP_PADDING + row * (opponentRowHeight + COMPACT_SMALL_GAP),
-      scale: opponentScale,
-    };
-  });
+  if (compactFocusPlayerIndex != null) {
+    opponents.forEach((playerIndex) => {
+      const isFocusedPlayer = playerIndex === compactFocusPlayerIndex;
+      playerSlots[playerIndex] = {
+        left: isFocusedPlayer
+          ? (viewport.width - activeWidth) / 2
+          : viewport.width / 2,
+        top: isFocusedPlayer
+          ? COMPACT_TOP_PADDING
+          : COMPACT_TOP_PADDING + activeHeight / 2,
+        scale: isFocusedPlayer ? activeScale : 0,
+      };
+    });
+  } else {
+    opponents.forEach((playerIndex, order) => {
+      const row = Math.floor(order / opponentColumns);
+      const column = order % opponentColumns;
+      const rowCount =
+        row === opponentRows - 1
+          ? opponents.length - row * opponentColumns
+          : opponentColumns;
+      const rowWidth =
+        rowCount * opponentSlotWidth + (rowCount - 1) * COMPACT_SMALL_GAP;
+      const rowLeft = (viewport.width - rowWidth) / 2;
+      const slotLeft =
+        rowLeft + column * (opponentSlotWidth + COMPACT_SMALL_GAP);
+      playerSlots[playerIndex] = {
+        left: slotLeft + (opponentSlotWidth - PLAYER_WIDTH * opponentScale) / 2,
+        top:
+          COMPACT_TOP_PADDING + row * (opponentRowHeight + COMPACT_SMALL_GAP),
+        scale: opponentScale,
+      };
+    });
+  }
 
   playerSlots[activePlayerIndex] = {
     left: (viewport.width - activeWidth) / 2,
@@ -275,6 +321,11 @@ function createCompactLayout(
 
   return {
     mode: "compact",
+    focusedPlayerIndex: compactFocusPlayerIndex,
+    fullSizePlayerIndices:
+      compactFocusPlayerIndex != null
+        ? [activePlayerIndex, compactFocusPlayerIndex]
+        : [activePlayerIndex],
     mapPoint: ([x, y], area) => {
       if (area.type === "field") {
         return [

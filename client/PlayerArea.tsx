@@ -70,6 +70,7 @@ export default observer(function PlayerArea({ player, playerIndex }: Props) {
 
       {player.pounceDeck.length > 0 && (
         <div
+          className={styles.pounceCount}
           style={{
             zIndex: 10000,
             color: "white",

@@ -111,7 +111,6 @@ export function getCardRotationDegrees(
 }
 
 export function getCardScreenGeometry({
-  activePlayerIndex,
   area,
   card,
   isScaleDown,
@@ -120,7 +119,6 @@ export function getCardScreenGeometry({
   position,
   rotationDegrees,
 }: {
-  activePlayerIndex: number;
   area?: BoardLayoutArea;
   card: CardState;
   isScaleDown: boolean;
@@ -135,7 +133,7 @@ export function getCardScreenGeometry({
   const cardScale = getCardScaleMultiplier({
     area: layoutArea,
     cardPlayer: card.player,
-    activePlayerIndex,
+    fullSizePlayerIndices: layout.fullSizePlayerIndices,
     isScaleDown,
     mode: layout.mode,
   });
