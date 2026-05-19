@@ -11,9 +11,20 @@ export type ServerRoomState = RoomState & {
   interval: NodeJS.Timer;
 };
 
+export const ROOM_DELETE_GRACE_PERIOD_MS = 30 * 1000;
+
 const rooms: Record<string, ServerRoomState> = {};
+const roomDeleteTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 
 export function createRoom(io: Server, roomId: string) {
+  cancelRoomDelete(roomId);
+  if (rooms[roomId]) {
+    console.log("Reusing existing board for room: " + roomId);
+    broadcastUpdate(roomId);
+    broadcastHands(roomId);
+    return;
+  }
+
   const room = {
     ...createRoomState(0),
     io,
@@ -59,8 +70,35 @@ export function getRoom(roomId: string) {
   return rooms[roomId];
 }
 
+export function scheduleRoomDelete(
+  roomId: string,
+  delay = ROOM_DELETE_GRACE_PERIOD_MS
+) {
+  if (roomDeleteTimers[roomId]) {
+    return;
+  }
+
+  console.log("Scheduling room delete: " + roomId);
+  roomDeleteTimers[roomId] = setTimeout(() => {
+    delete roomDeleteTimers[roomId];
+    deleteRoom(roomId);
+  }, delay);
+}
+
+export function cancelRoomDelete(roomId: string) {
+  const timer = roomDeleteTimers[roomId];
+  if (!timer) {
+    return;
+  }
+
+  console.log("Canceling room delete: " + roomId);
+  clearTimeout(timer);
+  delete roomDeleteTimers[roomId];
+}
+
 export function deleteRoom(roomId: string) {
-  console.log("RoomS: ", Object.keys(rooms), " deleting " + roomId);
+  cancelRoomDelete(roomId);
+  console.log("Rooms: ", Object.keys(rooms), " deleting " + roomId);
   const room = getRoom(roomId);
   if (room) {
     clearInterval(room.interval);

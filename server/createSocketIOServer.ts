@@ -7,9 +7,9 @@ import {
   broadcastHands,
   broadcastUpdate,
   createRoom,
-  deleteRoom,
   getRoom,
   markRoomUpdated,
+  scheduleRoomDelete,
 } from "../server/Rooms";
 import {
   removeDisconnectedPlayers,
@@ -103,8 +103,8 @@ export default function createSocketIOServer() {
   });
   io.of("/").adapter.on("delete-room", (id) => {
     if (id.startsWith("pounce:")) {
-      console.log("Delete room: " + id);
-      deleteRoom(id);
+      console.log("Socket.IO room emptied: " + id);
+      scheduleRoomDelete(id);
     }
   });
   io.on("connection", (socket) => {
