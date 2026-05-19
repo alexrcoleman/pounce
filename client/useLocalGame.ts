@@ -26,6 +26,7 @@ import { Actions } from "./useGameSocket";
 import { type ActionAck, type ActionEnvelope } from "../shared/SocketTypes";
 
 const LOCAL_SOCKET_ID = "local-player";
+const LOCAL_PLAYER_SESSION_ID = "local-player-session";
 const DEFAULT_OFFLINE_AI_COUNT = 2;
 
 export default function useLocalGame(name: string | null) {
@@ -72,9 +73,16 @@ export default function useLocalGame(name: string | null) {
           );
           if (existingPlayer) {
             existingPlayer.name = joinArgs.name;
+            existingPlayer.playerSessionId = LOCAL_PLAYER_SESSION_ID;
             existingPlayer.disconnected = false;
+            existingPlayer.disconnectedAt = undefined;
           } else {
-            addPlayer(room.board, LOCAL_SOCKET_ID, joinArgs.name);
+            addPlayer(
+              room.board,
+              LOCAL_SOCKET_ID,
+              joinArgs.name,
+              LOCAL_PLAYER_SESSION_ID
+            );
           }
           if (!hasJoined) {
             hasJoined = true;
@@ -161,7 +169,11 @@ export default function useLocalGame(name: string | null) {
     setSocket(localSocket);
     setIsConnected(true);
     if (name) {
-      localSocket.emit("join_room", { roomId: "offline", name });
+      localSocket.emit("join_room", {
+        roomId: "offline",
+        name,
+        playerSessionId: LOCAL_PLAYER_SESSION_ID,
+      });
     }
     const interval = window.setInterval(() => {
       const { hasUpdate, hasHandUpdate } = tickRoom(room);
@@ -184,7 +196,11 @@ export default function useLocalGame(name: string | null) {
 
   useEffect(() => {
     if (socket && isConnected && name) {
-      socket.emit("join_room", { roomId: "offline", name });
+      socket.emit("join_room", {
+        roomId: "offline",
+        name,
+        playerSessionId: LOCAL_PLAYER_SESSION_ID,
+      });
     }
   }, [socket, name, isConnected]);
 
@@ -201,6 +217,8 @@ export default function useLocalGame(name: string | null) {
       },
       onAddAI: () => socket?.emit("add_ai"),
       onRemoveAI: () => socket?.emit("remove_ai"),
+      onRemoveDisconnectedPlayers: () =>
+        socket?.emit("remove_disconnected_players"),
       onStart: () => socket?.emit("start_game"),
       onRestart: () => socket?.emit("restart_game"),
       onRotate: () => socket?.emit("rotate_decks"),

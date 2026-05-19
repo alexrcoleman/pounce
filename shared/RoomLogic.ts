@@ -22,6 +22,8 @@ export type RoomTickResult = {
   hasHandUpdate: boolean;
 };
 
+export const DISCONNECTED_PLAYER_TIMEOUT_MS = 5 * 60 * 1000;
+
 export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
   const { board } = room;
   const aiCooldowns = room.aiCooldowns;
@@ -94,6 +96,11 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
     });
   }
 
+  if (removeDisconnectedPlayers(room, now, DISCONNECTED_PLAYER_TIMEOUT_MS)) {
+    hasUpdate = true;
+    hasHandUpdate = true;
+  }
+
   return { hasUpdate, hasHandUpdate };
 }
 
@@ -142,16 +149,48 @@ export function scheduleAIReactionBoard(room: RoomState): void {
 }
 
 export function startRoomGame(room: RoomState, now = Date.now()): void {
-  removePlayer(
-    room.board,
-    ...room.board.players
-      .map((p, i) => ({ p, i }))
-      .filter((pair) => pair.p.disconnected)
-      .map((pair) => pair.i)
-  );
+  removeDisconnectedPlayers(room);
   room.aiCooldowns = room.board.players.map(() => now + 2000 + Math.random());
   room.aiBoard = deepClone(room.board);
   startGame(room);
+}
+
+export function removeDisconnectedPlayers(
+  room: RoomState,
+  now = Date.now(),
+  timeoutMs = 0
+): boolean {
+  if (room.board.isActive) {
+    return false;
+  }
+
+  const playerIndices = room.board.players
+    .map((p, i) => ({ p, i }))
+    .filter(
+      ({ p }) =>
+        p.disconnected &&
+        (timeoutMs <= 0 ||
+          (p.disconnectedAt != null && now - p.disconnectedAt >= timeoutMs))
+    )
+    .map(({ i }) => i);
+
+  return removeRoomPlayers(room, playerIndices);
+}
+
+function removeRoomPlayers(room: RoomState, playerIndices: number[]): boolean {
+  if (playerIndices.length === 0) {
+    return false;
+  }
+
+  const sorted = playerIndices.slice().sort((a, b) => b - a);
+  sorted.forEach((index) => {
+    room.hands.splice(index, 1);
+    room.aiCooldowns.splice(index, 1);
+  });
+  removePlayer(room.board, ...playerIndices);
+  room.queuedHands = [];
+  room.aiBoard = deepClone(room.board);
+  return true;
 }
 
 export function resetRoom(room: RoomState): void {

@@ -42,6 +42,8 @@ const SettingsDialog = observer(function SettingsDialog({
   const isHost = state.getIsHost();
   const aiCount =
     state.board?.players.filter((p) => p.socketId == null).length ?? 0;
+  const disconnectedCount =
+    state.board?.players.filter((p) => p.disconnected).length ?? 0;
   const buildDate = useLocalBuildDate(process.env.NEXT_PUBLIC_BUILD_DATE);
   return (
     <Modal
@@ -75,6 +77,15 @@ const SettingsDialog = observer(function SettingsDialog({
                   }}
                 >
                   Rotate decks
+                </Button>
+                <Button
+                  disabled={isStarted || disconnectedCount === 0}
+                  onClick={() => {
+                    socket?.emit("remove_disconnected_players");
+                    props.onClose();
+                  }}
+                >
+                  Remove disconnected
                 </Button>
               </Flex>
             )}

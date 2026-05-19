@@ -12,6 +12,7 @@ import {
   markRoomUpdated,
 } from "../server/Rooms";
 import {
+  removeDisconnectedPlayers,
   resetRoom,
   setRoomAILevel,
   startRoomGame,
@@ -30,6 +31,7 @@ const socketData: Record<
   {
     name?: string;
     currentRoom?: string;
+    playerSessionId?: string;
   }
 > = {};
 
@@ -50,29 +52,49 @@ export default function createSocketIOServer() {
   io.of("/").adapter.on("leave-room", (id, userId) => {
     if (id.startsWith("pounce:")) {
       console.log(userId + " left " + id);
-      const board = getRoom(id).board;
-      const player = board.players.find((p) => p.socketId === userId);
-      if (player) {
-        player.disconnected = true;
+      if (markPlayerDisconnected(id, userId)) {
         markRoomUpdated(id);
         broadcastUpdate(id);
+        broadcastHands(id);
+      }
+      const user = socketData[userId];
+      if (user?.currentRoom === id) {
+        user.currentRoom = undefined;
       }
     }
   });
   io.of("/").adapter.on("join-room", (id, userId) => {
     if (id.startsWith("pounce:")) {
       const user = socketData[userId];
+      if (!user) {
+        return;
+      }
       user.currentRoom = id;
       const room = getRoom(id);
-      const player = room.board.players.find((p) => p.socketId === userId);
+      const player =
+        user.playerSessionId != null
+          ? room.board.players.find(
+              (p) => p.playerSessionId === user.playerSessionId
+            )
+          : room.board.players.find((p) => p.socketId === userId);
       if (!player) {
-        addPlayer(room.board, userId, socketData[userId].name);
+        addPlayer(room.board, userId, user.name, user.playerSessionId);
       } else {
+        const previousSocketId = player.socketId;
+        player.socketId = userId;
+        player.playerSessionId = user.playerSessionId ?? player.playerSessionId;
         player.disconnected = false;
-        player.name = socketData[userId].name ?? player.name;
+        player.disconnectedAt = undefined;
+        player.name = user.name ?? player.name;
+        if (previousSocketId && previousSocketId !== userId) {
+          if (socketData[previousSocketId]) {
+            socketData[previousSocketId].currentRoom = undefined;
+          }
+          io.of("/").sockets.get(previousSocketId)?.leave(id);
+        }
       }
       console.log(
-        userId + " entered " + id + " name=" + socketData[userId].name
+        userId + " entered " + id + " name=" + user.name
       );
       markRoomUpdated(id);
       broadcastUpdate(id);
@@ -99,6 +121,10 @@ export default function createSocketIOServer() {
         return;
       }
       user.name = String(args.name);
+      user.playerSessionId =
+        typeof args.playerSessionId === "string" && args.playerSessionId
+          ? args.playerSessionId
+          : socket.id;
       const roomId = "pounce:" + args.roomId;
       if (user.currentRoom != null) {
         await socket.leave(user.currentRoom);
@@ -166,6 +192,22 @@ export default function createSocketIOServer() {
         broadcastUpdate(user.currentRoom);
       }
     });
+    socket.on("remove_disconnected_players", () => {
+      if (user.currentRoom == null) {
+        return;
+      }
+
+      const room = getRoom(user.currentRoom);
+      if (!isHost(room.board, socket.id)) {
+        return;
+      }
+
+      if (removeDisconnectedPlayers(room)) {
+        markRoomUpdated(user.currentRoom);
+        broadcastUpdate(user.currentRoom);
+        broadcastHands(user.currentRoom);
+      }
+    });
     socket.on("start_game", () => {
       if (user.currentRoom == null) {
         return;
@@ -205,6 +247,17 @@ export default function createSocketIOServer() {
       markRoomUpdated(user.currentRoom);
       broadcastUpdate(user.currentRoom);
     });
+    socket.on("disconnecting", () => {
+      Array.from(socket.rooms)
+        .filter((roomId) => roomId.startsWith("pounce:"))
+        .forEach((roomId) => {
+          if (markPlayerDisconnected(roomId, socket.id)) {
+            markRoomUpdated(roomId);
+            broadcastUpdate(roomId);
+            broadcastHands(roomId);
+          }
+        });
+    });
     socket.on("disconnect", () => {
       delete socketData[socket.id];
     });
@@ -220,4 +273,43 @@ export default function createSocketIOServer() {
       broadcastHands(user.currentRoom);
     });
   });
+}
+
+function markPlayerDisconnected(roomId: string, socketId: string): boolean {
+  const room = getRoom(roomId);
+  if (!room) {
+    return false;
+  }
+
+  const playerIndex = room.board.players.findIndex(
+    (p) => p.socketId === socketId
+  );
+  if (playerIndex < 0) {
+    return false;
+  }
+
+  const player = room.board.players[playerIndex];
+  if (player.disconnected) {
+    return false;
+  }
+
+  player.disconnected = true;
+  player.disconnectedAt = Date.now();
+  room.hands[playerIndex] = {};
+  return true;
+}
+
+function isHost(
+  board: { players: { disconnected?: boolean; socketId: string | null }[] },
+  socketId: string
+) {
+  const playerIndex = board.players.findIndex((p) => p.socketId === socketId);
+  if (playerIndex < 0 || board.players[playerIndex].disconnected) {
+    return false;
+  }
+
+  const hostIndex = board.players.findIndex(
+    (p) => !p.disconnected && p.socketId != null
+  );
+  return hostIndex === playerIndex;
 }

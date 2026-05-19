@@ -14,6 +14,7 @@ import SocketState from "./SocketState";
 import { runInAction } from "mobx";
 
 export type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
+const PLAYER_SESSION_STORAGE_KEY = "pounce::playerSessionId";
 
 export default function useGameSocket(
   roomId: string | null,
@@ -22,9 +23,14 @@ export default function useGameSocket(
   const state = useLocalObservable(() => new SocketState());
   const [socket, setSocket] = useState<GameSocket | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [playerSessionId, setPlayerSessionId] = useState<string | null>(null);
   const moveAckTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>(
     {}
   );
+  useEffect(() => {
+    setPlayerSessionId(getOrCreatePlayerSessionId());
+  }, []);
+
   useEffect(() => {
     let socket: ClientSocket;
     socket = window.location.host === "localhost:3000" ? io(":3001") : io();
@@ -60,12 +66,12 @@ export default function useGameSocket(
   }, []);
   const isConnected = state.socketId !== "";
   useEffect(() => {
-    if (socket && isConnected && roomId && name) {
+    if (socket && isConnected && roomId && name && playerSessionId) {
       runInAction(() => state.clearBoard());
-      socket.emit("join_room", { roomId, name });
+      socket.emit("join_room", { roomId, name, playerSessionId });
       return;
     }
-  }, [socket, roomId, name, isConnected]);
+  }, [socket, roomId, name, playerSessionId, isConnected]);
 
   const actions = useMemo<Actions>(
     () => ({
@@ -93,6 +99,8 @@ export default function useGameSocket(
       },
       onAddAI: () => socket?.emit("add_ai"),
       onRemoveAI: () => socket?.emit("remove_ai"),
+      onRemoveDisconnectedPlayers: () =>
+        socket?.emit("remove_disconnected_players"),
       onStart: () => socket?.emit("start_game"),
       onRestart: () => socket?.emit("restart_game"),
       onRotate: () => socket?.emit("rotate_decks"),
@@ -127,4 +135,18 @@ export type Actions = {
   onUpdateHand: (card: CardState) => void;
   onUpdateGrabbedItem: (card: CardState | null) => void;
   setAILevel: (level: number) => void;
+  onRemoveDisconnectedPlayers: () => void;
 };
+
+function getOrCreatePlayerSessionId() {
+  const existing = sessionStorage.getItem(PLAYER_SESSION_STORAGE_KEY);
+  if (existing) {
+    return existing;
+  }
+
+  const nextId =
+    window.crypto?.randomUUID?.() ??
+    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  sessionStorage.setItem(PLAYER_SESSION_STORAGE_KEY, nextId);
+  return nextId;
+}

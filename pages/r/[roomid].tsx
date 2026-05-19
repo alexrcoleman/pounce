@@ -16,7 +16,10 @@ import Link from "next/link";
 const RoomPage = observer(
   ({ name, setName }: { name: string; setName: (name: string) => void }) => {
     const router = useRouter();
-    const roomId = String(router.query.roomid);
+    const roomId =
+      router.isReady && typeof router.query.roomid === "string"
+        ? router.query.roomid
+        : null;
     const [animations, setAnimations] = useState(true);
     const [scale, setScale] = useState(1);
     const { actions, isConnected, state, socket, error } = useGameSocket(
@@ -32,7 +35,7 @@ const RoomPage = observer(
         if (lsName) {
           setName(lsName);
         } else {
-          router.push("/?roomid=" + roomId);
+          router.push("/?roomid=" + (roomId ?? ""));
         }
       }
     }, [name, router]);

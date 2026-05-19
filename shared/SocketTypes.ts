@@ -23,7 +23,11 @@ export type ServerToClientEvents = {
   update: (args: BoardUpdate) => void;
 };
 export type ClientToServerEvents = {
-  join_room: (args: { roomId: string; name: string }) => void;
+  join_room: (args: {
+    roomId: string | null;
+    name: string;
+    playerSessionId: string;
+  }) => void;
   set_ai_level: (args: { speed: number }) => void;
   restart_game: () => void;
   update_hand: (args: {
@@ -35,4 +39,5 @@ export type ClientToServerEvents = {
   start_game: () => void;
   add_ai: () => void;
   remove_ai: () => void;
+  remove_disconnected_players: () => void;
 };

@@ -20,6 +20,8 @@ export type CardState = {
 export type PlayerState = {
   isSpectating?: boolean;
   disconnected?: boolean;
+  disconnectedAt?: number;
+  playerSessionId: string | null;
   socketId: string | null;
   name: string;
   color: string;
@@ -133,6 +135,7 @@ export function fixBoardPiles(
 
 function createPlayer(
   socketId: string | null,
+  playerSessionId: string | null,
   index: number,
   name: string,
   color: string
@@ -140,6 +143,7 @@ function createPlayer(
   return {
     name,
     socketId: socketId,
+    playerSessionId,
     color,
     stacks: [[], [], [], []],
     pounceDeck: [],
@@ -163,7 +167,9 @@ function randomName() {
 export function createBoard(playerCount: number): BoardState {
   const players = Array(playerCount)
     .fill(0)
-    .map((_, index) => createPlayer(null, index, randomName(), colors[index]));
+    .map((_, index) =>
+      createPlayer(null, null, index, randomName(), colors[index])
+    );
   const boardState = {
     isActive: false,
     players,
@@ -180,13 +186,15 @@ export function createBoard(playerCount: number): BoardState {
 export function addPlayer(
   board: BoardState,
   socketId: string | null,
-  name?: string
+  name?: string,
+  playerSessionId?: string | null
 ) {
   const roundCount = board.players[0]?.scores?.length ?? 0;
   const usedColors = board.players.map((p) => p.color);
   const available = colors.filter((c) => !usedColors.includes(c));
   const player = createPlayer(
     socketId,
+    playerSessionId ?? null,
     board.players.length,
     name ?? randomName(),
     available[0]
