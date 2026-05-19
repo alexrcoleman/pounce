@@ -23,6 +23,7 @@ export function createRoom(io: Server, roomId: string) {
     const currentRoom = rooms[roomId];
     const { hasUpdate, hasHandUpdate } = tickRoom(currentRoom);
     if (hasUpdate) {
+      markRoomUpdated(roomId);
       broadcastUpdate(roomId);
     }
     if (hasHandUpdate) {
@@ -38,8 +39,13 @@ export function broadcastUpdate(roomId: string) {
   room.io.to(roomId).emit("update", {
     board: room.board,
     time: Date.now(),
+    revision: room.revision,
   });
   scheduleAIReactionBoard(room);
+}
+
+export function markRoomUpdated(roomId: string) {
+  rooms[roomId].revision += 1;
 }
 
 export function broadcastHands(roomId: string) {

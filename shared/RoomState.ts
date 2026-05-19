@@ -7,6 +7,7 @@ import {
 
 export type RoomState = {
   board: BoardState;
+  revision: number;
   aiSpeed: number;
   timescale: number;
   aiCooldowns: number[];
@@ -23,6 +24,7 @@ export function createRoomState(playerCount: number): RoomState {
   const board = createBoard(playerCount);
   return {
     board,
+    revision: 0,
     aiSpeed: 3,
     aiCooldowns: [],
     hands: [],

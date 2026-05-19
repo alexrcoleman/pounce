@@ -89,7 +89,7 @@ export default observer(function Board({
               onUpdateDragHover={onUpdateDragHover}
               executeMove={executeMove}
             />
-            <CardsLayer />
+            <CardsLayer executeMove={executeMove} />
             {board.players.map((p, i) => (
               <PlayerArea player={p} playerIndex={i} key={p.socketId ?? i} />
             ))}

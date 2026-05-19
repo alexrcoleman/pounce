@@ -1,6 +1,6 @@
-import { BoardState, CardState, CursorState } from "../shared/GameUtils";
+import { CardState } from "../shared/GameUtils";
 import { Socket, io } from "socket.io-client";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { Move } from "../shared/MoveHandler";
 import { GameSocket } from "./GameConnection";
@@ -22,6 +22,9 @@ export default function useGameSocket(
   const state = useLocalObservable(() => new SocketState());
   const [socket, setSocket] = useState<GameSocket | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const moveAckTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>(
+    {}
+  );
   useEffect(() => {
     let socket: ClientSocket;
     socket = window.location.host === "localhost:3000" ? io(":3001") : io();
@@ -51,6 +54,8 @@ export default function useGameSocket(
       if (socket) {
         socket.close();
       }
+      Object.values(moveAckTimeouts.current).forEach(clearTimeout);
+      moveAckTimeouts.current = {};
     };
   }, []);
   const isConnected = state.socketId !== "";
@@ -64,7 +69,28 @@ export default function useGameSocket(
 
   const actions = useMemo<Actions>(
     () => ({
-      executeMove: (move: Move) => socket?.emit("move", move),
+      executeMove: (move: Move) => {
+        if (!socket) {
+          return;
+        }
+        const action = state.createOptimisticMove(move);
+        moveAckTimeouts.current[action.actionId] = setTimeout(() => {
+          delete moveAckTimeouts.current[action.actionId];
+          runInAction(() =>
+            state.onMoveAck({
+              actionId: action.actionId,
+              ok: false,
+              revision: state.serverRevision,
+              reason: "Move acknowledgement timed out",
+            })
+          );
+        }, 5000);
+        socket.emit("move", action, (ack) => {
+          clearTimeout(moveAckTimeouts.current[action.actionId]);
+          delete moveAckTimeouts.current[action.actionId];
+          runInAction(() => state.onMoveAck(ack));
+        });
+      },
       onAddAI: () => socket?.emit("add_ai"),
       onRemoveAI: () => socket?.emit("remove_ai"),
       onStart: () => socket?.emit("start_game"),
@@ -80,7 +106,7 @@ export default function useGameSocket(
         socket?.emit("set_ai_level", { speed: level });
       },
     }),
-    [socket]
+    [socket, state]
   );
   return {
     error,

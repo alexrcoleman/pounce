@@ -9,6 +9,7 @@ import {
   createRoom,
   deleteRoom,
   getRoom,
+  markRoomUpdated,
 } from "../server/Rooms";
 import {
   resetRoom,
@@ -53,6 +54,7 @@ export default function createSocketIOServer() {
       const player = board.players.find((p) => p.socketId === userId);
       if (player) {
         player.disconnected = true;
+        markRoomUpdated(id);
         broadcastUpdate(id);
       }
     }
@@ -72,6 +74,7 @@ export default function createSocketIOServer() {
       console.log(
         userId + " entered " + id + " name=" + socketData[userId].name
       );
+      markRoomUpdated(id);
       broadcastUpdate(id);
       broadcastHands(id);
     }
@@ -102,19 +105,42 @@ export default function createSocketIOServer() {
       }
       await socket.join(roomId);
     });
-    socket.on("move", (args) => {
+    socket.on("move", (args, ack) => {
       if (user.currentRoom == null) {
+        ack?.({
+          actionId: args.actionId,
+          ok: false,
+          revision: 0,
+          reason: "Not in a room",
+        });
         return;
       }
       const pid = getRoom(user.currentRoom).board.players.findIndex(
         (p) => p.socketId === socket.id
       );
       if (pid < 0) {
+        ack?.({
+          actionId: args.actionId,
+          ok: false,
+          revision: getRoom(user.currentRoom).revision,
+          reason: "No player in room",
+        });
         return;
       }
       const room = getRoom(user.currentRoom);
       const board = room.board;
-      executeMove(board, pid, args);
+      const result = executeMove(board, pid, args.payload);
+      if (result == null) {
+        ack?.({
+          actionId: args.actionId,
+          ok: false,
+          revision: room.revision,
+          reason: "Move rejected",
+        });
+        return;
+      }
+      markRoomUpdated(user.currentRoom);
+      ack?.({ actionId: args.actionId, ok: true, revision: room.revision });
       broadcastUpdate(user.currentRoom);
     });
     socket.on("add_ai", () => {
@@ -124,6 +150,7 @@ export default function createSocketIOServer() {
 
       const room = getRoom(user.currentRoom);
       addPlayer(room.board, null);
+      markRoomUpdated(user.currentRoom);
       broadcastUpdate(user.currentRoom);
     });
     socket.on("remove_ai", () => {
@@ -135,6 +162,7 @@ export default function createSocketIOServer() {
       const aiIndex = board.players.findIndex((p) => p.socketId == null);
       if (aiIndex >= 0) {
         removePlayer(board, aiIndex);
+        markRoomUpdated(user.currentRoom);
         broadcastUpdate(user.currentRoom);
       }
     });
@@ -144,6 +172,7 @@ export default function createSocketIOServer() {
       }
       const room = getRoom(user.currentRoom);
       startRoomGame(room);
+      markRoomUpdated(user.currentRoom);
       broadcastUpdate(user.currentRoom);
     });
     socket.on("rotate_decks", () => {
@@ -153,6 +182,7 @@ export default function createSocketIOServer() {
 
       const room = getRoom(user.currentRoom);
       rotateDecks(room.board);
+      markRoomUpdated(user.currentRoom);
       broadcastUpdate(user.currentRoom);
     });
     socket.on("restart_game", () => {
@@ -162,6 +192,7 @@ export default function createSocketIOServer() {
 
       const room = getRoom(user.currentRoom);
       resetRoom(room);
+      markRoomUpdated(user.currentRoom);
       broadcastUpdate(user.currentRoom);
       broadcastHands(user.currentRoom);
     });
@@ -171,6 +202,8 @@ export default function createSocketIOServer() {
       }
       const room = getRoom(user.currentRoom);
       setRoomAILevel(room, typeof args.speed === "number" ? args.speed : 3);
+      markRoomUpdated(user.currentRoom);
+      broadcastUpdate(user.currentRoom);
     });
     socket.on("disconnect", () => {
       delete socketData[socket.id];

@@ -23,6 +23,7 @@ import {
 } from "../shared/RoomLogic";
 import deepClone from "../shared/deepClone";
 import { Actions } from "./useGameSocket";
+import { type ActionAck, type ActionEnvelope } from "../shared/SocketTypes";
 
 const LOCAL_SOCKET_ID = "local-player";
 
@@ -40,9 +41,16 @@ export default function useLocalGame(name: string | null) {
 
     const emitUpdate = () => {
       runInAction(() => {
-        state.onUpdate({ board: deepClone(room.board), time: Date.now() });
+        state.onUpdate({
+          board: deepClone(room.board),
+          time: Date.now(),
+          revision: room.revision,
+        });
       });
       scheduleAIReactionBoard(room);
+    };
+    const markRoomUpdated = () => {
+      room.revision += 1;
     };
     const emitHands = () => {
       runInAction(() => {
@@ -71,6 +79,7 @@ export default function useLocalGame(name: string | null) {
             hasJoined = true;
             addPlayer(room.board, null);
           }
+          markRoomUpdated();
           emitUpdate();
           emitHands();
           return;
@@ -80,31 +89,56 @@ export default function useLocalGame(name: string | null) {
           (p) => p.socketId === LOCAL_SOCKET_ID
         );
         if (event === "move") {
-          executeMove(room.board, playerIndex, args[0] as Move);
+          const envelope = args[0] as ActionEnvelope<Move>;
+          const ack = args[1] as ((args: ActionAck) => void) | undefined;
+          const result = executeMove(room.board, playerIndex, envelope.payload);
+          if (result == null) {
+            ack?.({
+              actionId: envelope.actionId,
+              ok: false,
+              revision: room.revision,
+              reason: "Move rejected",
+            });
+            return;
+          }
+          markRoomUpdated();
+          ack?.({
+            actionId: envelope.actionId,
+            ok: true,
+            revision: room.revision,
+          });
           emitUpdate();
         } else if (event === "add_ai") {
           addPlayer(room.board, null);
+          markRoomUpdated();
           emitUpdate();
         } else if (event === "remove_ai") {
-          const aiIndex = room.board.players.findIndex((p) => p.socketId == null);
+          const aiIndex = room.board.players.findIndex(
+            (p) => p.socketId == null
+          );
           if (aiIndex >= 0) {
             removePlayer(room.board, aiIndex);
+            markRoomUpdated();
             emitUpdate();
           }
         } else if (event === "start_game") {
           startRoomGame(room);
+          markRoomUpdated();
           emitUpdate();
           emitHands();
         } else if (event === "rotate_decks") {
           rotateDecks(room.board);
+          markRoomUpdated();
           emitUpdate();
         } else if (event === "restart_game") {
           resetRoom(room);
+          markRoomUpdated();
           emitUpdate();
           emitHands();
         } else if (event === "set_ai_level") {
           const setAIArgs = args[0] as { speed: number };
           setRoomAILevel(room, setAIArgs.speed);
+          markRoomUpdated();
           emitUpdate();
         } else if (event === "update_hand") {
           updateRoomHand(
@@ -129,6 +163,7 @@ export default function useLocalGame(name: string | null) {
     const interval = window.setInterval(() => {
       const { hasUpdate, hasHandUpdate } = tickRoom(room);
       if (hasUpdate) {
+        room.revision += 1;
         emitUpdate();
       }
       if (hasHandUpdate) {
@@ -152,7 +187,15 @@ export default function useLocalGame(name: string | null) {
 
   const actions = useMemo<Actions>(
     () => ({
-      executeMove: (move: Move) => socket?.emit("move", move),
+      executeMove: (move: Move) => {
+        if (!socket) {
+          return;
+        }
+        const action = state.createOptimisticMove(move);
+        socket.emit("move", action, (ack) => {
+          runInAction(() => state.onMoveAck(ack));
+        });
+      },
       onAddAI: () => socket?.emit("add_ai"),
       onRemoveAI: () => socket?.emit("remove_ai"),
       onStart: () => socket?.emit("start_game"),
@@ -168,7 +211,7 @@ export default function useLocalGame(name: string | null) {
         socket?.emit("set_ai_level", { speed: level });
       },
     }),
-    [socket]
+    [socket, state]
   );
 
   return {

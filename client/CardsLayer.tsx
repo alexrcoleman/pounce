@@ -6,15 +6,19 @@ import { Move } from "../shared/MoveHandler";
 import { CardState } from "../shared/GameUtils";
 import { useClientContext } from "./ClientContext";
 
-export default observer(function CardsLayer() {
-  const { socket, state } = useClientContext();
+export default observer(function CardsLayer({
+  executeMove,
+}: {
+  executeMove: (move: Move) => void;
+}) {
+  const { state } = useClientContext();
   const board = state.board!;
   const cycleDeck = useCallback(() => {
-    socket?.emit("move", { type: "cycle" });
-  }, [socket]);
+    executeMove({ type: "cycle" });
+  }, [executeMove]);
   const flipDeck = useCallback(() => {
-    socket?.emit("move", { type: "flip_deck" });
-  }, [socket]);
+    executeMove({ type: "flip_deck" });
+  }, [executeMove]);
 
   const [postGameStage, setPostGameStage] = useState(0);
   const isActive = board.isActive;

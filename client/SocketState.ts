@@ -1,32 +1,58 @@
-import React from "react";
 import { BoardState, CursorState } from "../shared/GameUtils";
 import { makeAutoObservable } from "mobx";
+import deepClone from "../shared/deepClone";
+import { executeMove, type Move } from "../shared/MoveHandler";
+import {
+  type ActionAck,
+  type ActionEnvelope,
+  type BoardUpdate,
+} from "../shared/SocketTypes";
+
+type PendingMoveAction = {
+  actionId: string;
+  baseRevision: number;
+  move: Move;
+  acceptedRevision?: number;
+};
 
 export default class SocketState {
   board: BoardState | null = null;
+  serverBoard: BoardState | null = null;
+  serverRevision = 0;
   lastTime = 0;
   latency = 0;
   socketId = "";
   hands: CursorState[] = [];
+  pendingMoves: PendingMoveAction[] = [];
+  private nextActionNumber = 0;
   constructor() {
     makeAutoObservable(this);
   }
-  onUpdate(data: { board: BoardState; time: number }) {
-    // todo: merge board changes in more nicely
-    this.board = applyDeepUpdate(this.board, data.board);
+  onUpdate(data: BoardUpdate) {
+    if (data.revision < this.serverRevision) {
+      return;
+    }
+    this.serverBoard = applyDeepUpdate(this.serverBoard, data.board);
+    this.serverRevision = data.revision;
+    this.pendingMoves = this.pendingMoves.filter(
+      (action) =>
+        action.acceptedRevision == null ||
+        action.acceptedRevision > data.revision
+    );
     this.latency = Date.now() - data.time;
     this.lastTime = data.time;
+    this.recomputeBoard();
   }
   onConnect(socketId: string) {
     this.socketId = socketId;
-    this.board = null;
+    this.resetBoardState();
   }
   updateHands(hands: CursorState[]) {
     this.hands = applyDeepUpdate(this.hands, hands);
   }
   onDisconnect() {
     this.socketId = "";
-    this.board = null;
+    this.resetBoardState();
   }
   getActivePlayerIndex() {
     if (!this.board) {
@@ -48,7 +74,63 @@ export default class SocketState {
     return hostIndex === playerIndex;
   }
   clearBoard() {
+    this.resetBoardState();
+  }
+  createOptimisticMove(move: Move): ActionEnvelope<Move> {
+    const action = {
+      actionId: `${this.socketId || "local"}:${++this.nextActionNumber}`,
+      baseRevision: this.serverRevision,
+      move,
+    };
+    this.pendingMoves.push(action);
+    this.recomputeBoard();
+    return {
+      actionId: action.actionId,
+      baseRevision: action.baseRevision,
+      payload: move,
+    };
+  }
+  onMoveAck(ack: ActionAck) {
+    const action = this.pendingMoves.find((a) => a.actionId === ack.actionId);
+    if (!action) {
+      return;
+    }
+    if (ack.ok) {
+      action.acceptedRevision = ack.revision;
+      if (ack.revision <= this.serverRevision) {
+        this.pendingMoves = this.pendingMoves.filter(
+          (a) => a.actionId !== ack.actionId
+        );
+      }
+    } else {
+      this.pendingMoves = this.pendingMoves.filter(
+        (a) => a.actionId !== ack.actionId
+      );
+    }
+    this.recomputeBoard();
+  }
+  private resetBoardState() {
     this.board = null;
+    this.serverBoard = null;
+    this.serverRevision = 0;
+    this.pendingMoves = [];
+    this.hands = [];
+  }
+  private recomputeBoard() {
+    if (!this.serverBoard) {
+      this.board = null;
+      return;
+    }
+    const nextBoard = deepClone(this.serverBoard);
+    const playerIndex = nextBoard.players.findIndex(
+      (p) => p.socketId === this.socketId
+    );
+    if (playerIndex >= 0) {
+      this.pendingMoves.forEach((action) => {
+        executeMove(nextBoard, playerIndex, action.move);
+      });
+    }
+    this.board = applyDeepUpdate(this.board, nextBoard);
   }
 }
 
