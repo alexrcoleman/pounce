@@ -139,17 +139,24 @@
     opacity 0.2s ease-in-out,
     background-color 0.2s ease-in-out;
   touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
-.playerZoomTarget:hover,
 .playerZoomTarget:focus-visible {
-  background: rgba(255, 255, 255, 0.08);
   opacity: 1;
-  outline: none;
+  outline: 2px solid rgba(255, 255, 255, 0.6);
+  outline-offset: -2px;
 }
 
-.playerZoomTarget:active {
-  cursor: zoom-out;
-  background: rgba(255, 255, 255, 0.14);
-  opacity: 1;
+@media (hover: hover) and (pointer: fine) {
+  .playerZoomTarget:hover {
+    background: rgba(255, 255, 255, 0.08);
+    opacity: 1;
+  }
+
+  .playerZoomTarget:active {
+    cursor: zoom-out;
+    background: rgba(255, 255, 255, 0.14);
+    opacity: 1;
+  }
 }

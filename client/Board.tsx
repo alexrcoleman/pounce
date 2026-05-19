@@ -1,5 +1,5 @@
 import type { BoardState, CardState } from "../shared/GameUtils";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { DndProvider } from "react-dnd";
@@ -146,6 +146,7 @@ const PlayerZoomTargets = observer(function PlayerZoomTargets({
   const board = state.board;
   const layout = useBoardLayout();
   const activePlayerIndex = state.getActivePlayerIndex();
+  const handledPointerRef = useRef(false);
 
   if (!board || layout.mode !== "compact" || activePlayerIndex < 0) {
     return null;
@@ -183,8 +184,18 @@ const PlayerZoomTargets = observer(function PlayerZoomTargets({
             aria-label={label}
             className={styles.playerZoomTarget}
             key={player.socketId ?? playerIndex}
+            onPointerDown={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              handledPointerRef.current = true;
+              onTogglePlayer(playerIndex);
+            }}
             onClick={(event) => {
               event.stopPropagation();
+              if (handledPointerRef.current) {
+                handledPointerRef.current = false;
+                return;
+              }
               onTogglePlayer(playerIndex);
             }}
             style={
