@@ -10,6 +10,8 @@
   min-height: 0;
   background-color: tan;
   overflow: hidden; /* Prevents scrollbars from appearing */
+  position: relative;
+  isolation: isolate;
 }
 .hideAnimations * {
   transition: none !important;

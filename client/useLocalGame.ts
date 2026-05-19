@@ -26,6 +26,7 @@ import { Actions } from "./useGameSocket";
 import { type ActionAck, type ActionEnvelope } from "../shared/SocketTypes";
 
 const LOCAL_SOCKET_ID = "local-player";
+const DEFAULT_OFFLINE_AI_COUNT = 2;
 
 export default function useLocalGame(name: string | null) {
   const state = useLocalObservable(() => new SocketState());
@@ -77,7 +78,9 @@ export default function useLocalGame(name: string | null) {
           }
           if (!hasJoined) {
             hasJoined = true;
-            addPlayer(room.board, null);
+            for (let i = 0; i < DEFAULT_OFFLINE_AI_COUNT; i++) {
+              addPlayer(room.board, null);
+            }
           }
           markRoomUpdated();
           emitUpdate();

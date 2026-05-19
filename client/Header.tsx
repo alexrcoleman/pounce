@@ -1,5 +1,5 @@
 import styles from "./Header.module.css";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { observer } from "mobx-react-lite";
 import { Button, Card, Flex, InputNumber, Modal, Slider, Switch } from "antd";
 import { useClientContext } from "./ClientContext";
@@ -42,6 +42,7 @@ const SettingsDialog = observer(function SettingsDialog({
   const isHost = state.getIsHost();
   const aiCount =
     state.board?.players.filter((p) => p.socketId == null).length ?? 0;
+  const buildDate = useLocalBuildDate(process.env.NEXT_PUBLIC_BUILD_DATE);
   return (
     <Modal
       title="Settings"
@@ -91,7 +92,7 @@ const SettingsDialog = observer(function SettingsDialog({
               Count:{" "}
               <InputNumber
                 disabled={isStarted}
-                defaultValue={0}
+                value={aiCount}
                 max={5}
                 min={0}
                 onChange={(value) => {
@@ -155,9 +156,39 @@ const SettingsDialog = observer(function SettingsDialog({
           </Flex>
         </Card>
         <div className={styles.buildInfo}>
-          Build: {process.env.NEXT_PUBLIC_BUILD_DATE ?? "unknown"}
+          Build: {buildDate}
         </div>
       </Flex>
     </Modal>
   );
 });
+
+function useLocalBuildDate(buildDate: string | undefined) {
+  const [formattedDate, setFormattedDate] = useState("unknown");
+
+  useEffect(() => {
+    if (!buildDate) {
+      setFormattedDate("unknown");
+      return;
+    }
+
+    const date = new Date(buildDate);
+    if (Number.isNaN(date.getTime())) {
+      setFormattedDate(buildDate);
+      return;
+    }
+
+    setFormattedDate(
+      new Intl.DateTimeFormat(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZoneName: "short",
+      }).format(date)
+    );
+  }, [buildDate]);
+
+  return formattedDate;
+}
