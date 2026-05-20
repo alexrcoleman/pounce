@@ -21,7 +21,7 @@ function MyApp({ Component, pageProps }: AppProps) {
           name="viewport"
           content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
         />
-        <meta name="theme-color" content="#0b6d2d" />
+        <meta name="theme-color" content="#cd9b60" key="theme-color" />
       </Head>
       <PwaRegistration />
       <ConfigProvider theme={theme}>

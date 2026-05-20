@@ -46,8 +46,10 @@ export default function JoinForm({
     if (router.isReady) {
       setCurrentRoom(router.query.roomid?.toString().toUpperCase() ?? "");
       const storedName = localStorage.getItem("pounce::name") ?? "";
-      setCurrentName("");
-      setNamePlaceholder(getNamePlaceholder(placeholderName || storedName));
+      setCurrentName(
+        getRememberedName(placeholderName) || getRememberedName(storedName)
+      );
+      setNamePlaceholder("Your name");
     }
   }, [placeholderName, router.isReady, router.query.roomid]);
 
@@ -113,15 +115,17 @@ export default function JoinForm({
   const isNavigating = pendingAction != null;
   const canCreateRoom = currentName.trim().length > 0;
   const canJoinRoom = canCreateRoom && currentRoom.trim().length > 0;
-  const showOfflineDownload =
-    !isCheckingOfflineReady &&
-    isSupported &&
-    !isOfflineReady &&
-    (canInstall || installContext.isIOS || installContext.isStandalone);
-  const showOfflineReady =
-    !isCheckingOfflineReady && isSupported && isOfflineReady;
   const showMobileOfflinePrompt =
     installContext.isMobile || installContext.isStandalone;
+  const isInstalledApp = installContext.isStandalone;
+  const isOfflineSetupAvailable = isInstalledApp && !isOfflineReady;
+  const offlineSetupState = !showMobileOfflinePrompt
+    ? null
+    : !isInstalledApp
+    ? "install"
+    : isOfflineSetupAvailable
+    ? "download"
+    : "ready";
   const addToHomeLabel = installContext.isStandalone
     ? "Added to home screen"
     : "Add to home screen";
@@ -241,46 +245,43 @@ export default function JoinForm({
               </div>
             </section>
 
-            {showMobileOfflinePrompt ? (
+            {offlineSetupState ? (
               <section className={styles.utilitySection}>
-                <p className={styles.offlinePrompt}>
-                  Want to play offline?{" "}
-                  <button
-                    className={styles.inlineAction}
-                    type="button"
-                    disabled={installContext.isStandalone}
-                    onClick={() => setInstallHelpOpen(true)}
-                  >
-                    {addToHomeLabel.toLowerCase()}
-                  </button>
-                  {showOfflineDownload ? " and " : "."}
-                  {showOfflineDownload ? (
+                {offlineSetupState === "install" ? (
+                  <p className={styles.offlinePrompt}>
+                    Want to play offline?{" "}
                     <button
                       className={styles.inlineAction}
                       type="button"
-                      disabled={isPreparing}
+                      onClick={() => setInstallHelpOpen(true)}
+                    >
+                      add to home screen
+                    </button>
+                    .
+                  </p>
+                ) : offlineSetupState === "download" ? (
+                  <p className={styles.offlinePrompt}>
+                    Want to play offline?{" "}
+                    <button
+                      className={styles.inlineAction}
+                      type="button"
+                      disabled={
+                        !isSupported || isPreparing || isCheckingOfflineReady
+                      }
                       onClick={downloadForOffline}
                     >
-                      {isPreparing
-                        ? "downloading offline files"
+                      {isPreparing || isCheckingOfflineReady
+                        ? "preparing offline play"
                         : "download for offline play"}
                     </button>
-                  ) : null}
-                  {showOfflineDownload ? "." : null}
-                </p>
-                {showOfflineDownload ? (
-                  <div className={styles.utilityNote}>
-                    Save the app first, then cache the game files.
+                    .
+                  </p>
+                ) : (
+                  <div className={styles.offlineReady}>
+                    <span aria-hidden="true">{"\u2713"}</span>
+                    Offline ready
                   </div>
-                ) : null}
-                {showOfflineReady ? (
-                  <div className={styles.utilityNote}>Offline files ready</div>
-                ) : null}
-                {message ? (
-                  <div className={styles.offlineStatus} role="status">
-                    {message}
-                  </div>
-                ) : null}
+                )}
               </section>
             ) : null}
           </div>
@@ -374,6 +375,9 @@ function getInstallSteps(
   ];
 }
 
-function getNamePlaceholder(name: string) {
-  return name && name.toLowerCase() !== "player" ? name : "Your name";
+function getRememberedName(name: string) {
+  const trimmedName = name.trim();
+  return trimmedName && trimmedName.toLowerCase() !== "player"
+    ? trimmedName
+    : "";
 }

@@ -2,6 +2,7 @@ import { useRouter } from "next/router";
 import JoinForm from "../client/JoinForm";
 import { observer } from "mobx-react-lite";
 import { NextPage } from "next";
+import Head from "next/head";
 import { useEffect } from "react";
 type AppProps = {
   name?: string;
@@ -21,17 +22,22 @@ const Home: NextPage<AppProps> = observer(({ name, setName }: AppProps) => {
   }, [router]);
 
   return (
-    <JoinForm
-      placeholderName={name ?? ""}
-      onSubmit={(room, name) => {
-        setName?.(name);
-        return router.push(`/r/${room}`);
-      }}
-      onPlayOffline={(name) => {
-        setName?.(name);
-        return router.push("/offline");
-      }}
-    />
+    <>
+      <Head>
+        <meta name="theme-color" content="#16593c" key="theme-color" />
+      </Head>
+      <JoinForm
+        placeholderName={name ?? ""}
+        onSubmit={(room, name) => {
+          setName?.(name);
+          return router.push(`/r/${room}`);
+        }}
+        onPlayOffline={(name) => {
+          setName?.(name);
+          return router.push("/offline");
+        }}
+      />
+    </>
   );
 });
 

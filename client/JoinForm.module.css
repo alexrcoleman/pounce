@@ -231,11 +231,22 @@
   text-decoration: none;
 }
 
-.utilityNote {
+.offlineReady {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
   color: #5a5148;
   font-size: 12px;
+  font-weight: 800;
   line-height: 1.35;
   text-align: center;
+}
+
+.offlineReady > span {
+  color: #0b6d2d;
+  font-size: 14px;
+  line-height: 1;
 }
 
 .installSteps {
@@ -252,7 +263,6 @@
 
 @media (max-width: 520px) {
   .root {
-    align-items: flex-start;
     padding: 22px 14px;
   }
 
@@ -282,7 +292,6 @@
 
 @media (max-height: 680px) {
   .root {
-    align-items: flex-start;
     padding-top: 18px;
     padding-bottom: 18px;
   }
