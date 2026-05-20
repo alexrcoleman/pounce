@@ -31,6 +31,27 @@ const OfflinePage: NextPage<{
     }
   }, [name, setName]);
 
+  useEffect(() => {
+    const pauseIfActive = () => {
+      const board = state.board;
+      if (board?.isActive && !board.isPaused) {
+        socket?.emit("set_paused", { paused: true });
+      }
+    };
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        pauseIfActive();
+      }
+    };
+
+    window.addEventListener("blur", pauseIfActive);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("blur", pauseIfActive);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [socket, state]);
+
   const onLeaveRoom = useCallback(() => {
     router.push("/");
   }, [router]);

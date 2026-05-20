@@ -70,7 +70,18 @@
     inset 0 0 18px rgba(0, 0, 0, 0.3);
 }
 
-.startButton {
+.roundActions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  width: min(360px, calc(100% - 24px));
+}
+
+.startButton,
+.dealButton {
   min-width: 132px;
   height: 44px;
   padding: 0 24px;
@@ -90,17 +101,27 @@
 }
 
 .startButton:hover,
-.startButton:focus {
+.startButton:focus,
+.dealButton:hover,
+.dealButton:focus {
   border-color: rgba(255, 246, 205, 0.95);
   background:
     linear-gradient(180deg, #fff0bd, #e1a64f);
   color: #321c04;
 }
 
-.startButton:active {
+.startButton:active,
+.dealButton:active {
   background:
     linear-gradient(180deg, #d79a40, #f5cc7a);
   color: #321c04;
+}
+
+.dealButton {
+  background:
+    linear-gradient(180deg, #f9f3df, #cfc0a2);
+  border-color: rgba(255, 250, 228, 0.82);
+  color: #372719;
 }
 
 .scores {

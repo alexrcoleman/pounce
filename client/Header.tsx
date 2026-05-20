@@ -52,6 +52,7 @@ const SettingsDialog = observer(function SettingsDialog({
 } & Props) {
   const { state, socket } = useClientContext();
   const isStarted = state.board?.isActive ?? false;
+  const isPaused = state.board?.isPaused ?? false;
   const isHost = state.getIsHost();
   const aiCount =
     state.board?.players.filter((p) => p.socketId == null).length ?? 0;
@@ -78,7 +79,16 @@ const SettingsDialog = observer(function SettingsDialog({
         <Card title="Room">
           <Flex vertical gap={10}>
             {isHost && (
-              <Flex gap="10px">
+              <Flex gap="10px" wrap="wrap">
+                <Button
+                  disabled={!isStarted}
+                  onClick={() => {
+                    socket?.emit("set_paused", { paused: !isPaused });
+                    props.onClose();
+                  }}
+                >
+                  {isPaused ? "Resume" : "Pause"}
+                </Button>
                 <Button onClick={() => socket?.emit("restart_game")}>
                   Reset Room
                 </Button>

@@ -36,6 +36,8 @@ export type PlayerState = {
 export type BoardState = {
   pouncer?: number;
   isActive: boolean;
+  isDealt: boolean;
+  isPaused: boolean;
   players: PlayerState[];
   piles: CardState[][];
   pileLocs: [number, number, number][];
@@ -172,6 +174,8 @@ export function createBoard(playerCount: number): BoardState {
     );
   const boardState = {
     isActive: false,
+    isDealt: false,
+    isPaused: false,
     players,
     piles: Array(playerCount * 4)
       .fill(0)
@@ -202,7 +206,7 @@ export function addPlayer(
   player.scores = Array(roundCount).fill(null);
   board.players.push(player);
 
-  if (board.isActive) {
+  if (board.isActive || board.isDealt) {
     player.isSpectating = true;
   } else {
     board.piles.push([], [], [], []);
@@ -248,16 +252,37 @@ function updateQueuedHands(
 }
 export function startGame(room: StartGameRoomState) {
   const { board, queuedHands } = room;
+  if (!board.isDealt) {
+    const queuedHand = queuedHands.splice(0, 1);
+    if (queuedHand.length > 0) {
+      console.log("Playing queued hand");
+    }
+    resetBoard(board, queuedHand[0]);
+    updateQueuedHands(board, queuedHands, queuedHand[0]);
+    dealHands(board);
+    board.isDealt = true;
+  }
+  board.players.forEach((p) => (p.currentPoints = -26));
+  board.isActive = true;
+  board.isPaused = false;
+  room.hands = [];
+}
+
+export function dealGameHands(room: StartGameRoomState): boolean {
+  const { board, queuedHands } = room;
+  if (board.isActive || board.isDealt) {
+    return false;
+  }
   const queuedHand = queuedHands.splice(0, 1);
   if (queuedHand.length > 0) {
-    console.log("Playing queued hand");
+    console.log("Dealing queued hand");
   }
   resetBoard(board, queuedHand[0]);
   updateQueuedHands(board, queuedHands, queuedHand[0]);
   dealHands(board);
-  board.players.forEach((p) => (p.currentPoints = -26));
-  board.isActive = true;
+  board.isDealt = true;
   room.hands = [];
+  return true;
 }
 
 function dealHands(board: BoardState) {
@@ -278,6 +303,8 @@ function dealHands(board: BoardState) {
 export function resetBoard(boardState: BoardState, decks?: CardState[][]) {
   boardState.ticksSinceMove = 0;
   boardState.pouncer = undefined;
+  boardState.isDealt = false;
+  boardState.isPaused = false;
   boardState.players.forEach((player, index) => {
     player.deck =
       decks?.[index]?.map((c) => ({ ...c, player: index })) ??
@@ -313,6 +340,8 @@ export function scoreBoard(board: BoardState) {
     (p) => !p.isSpectating && p.pounceDeck.length === 0
   );
   board.isActive = false;
+  board.isDealt = false;
+  board.isPaused = false;
   board.pouncer = pouncer;
   board.players.forEach((player) => {
     if (!player.isSpectating) {

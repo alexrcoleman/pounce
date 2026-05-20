@@ -7,6 +7,7 @@ import DragReporter from "./DragReporter";
 import { HTML5Backend } from "react-dnd-html5-backend";
 import type { Move } from "../shared/MoveHandler";
 import PlayerArea from "./PlayerArea";
+import PauseOverlay from "./PauseOverlay";
 import ScoresTable from "./ScoresTable";
 import { TouchBackend } from "react-dnd-touch-backend";
 import VictoryOverlay from "./VictoryOverlay";
@@ -124,6 +125,7 @@ export default observer(function Board({
             ))}
             <PlayerZoomTargets onTogglePlayer={togglePlayerFocus} />
             <HandsLayer />
+            <PauseOverlay />
             <VictoryOverlay />
           </div>
         </BoardLayoutProvider>
@@ -217,10 +219,13 @@ const PlayerZoomTargets = observer(function PlayerZoomTargets({
 
 const PileSection = observer(function PileSection() {
   const { state, socket } = useClientContext();
+  const board = state.board!;
   const layout = useBoardLayout();
   const fieldArea = { type: "field" } as const;
   const [left, top] = layout.mapPoint([FIELD_LEFT, FIELD_TOP], fieldArea);
   const scale = layout.getScale(fieldArea);
+  const canManageRound = !board.isActive && state.getIsHost();
+  const canDealHands = canManageRound && !board.isDealt && board.pouncer == null;
 
   return (
     <div
@@ -232,13 +237,23 @@ const PileSection = observer(function PileSection() {
       }}
     >
       <div className={styles.pileSectionPattern} />
-      {!state.board!.isActive && state.getIsHost() && (
-        <Button
-          className={styles.startButton}
-          onClick={() => socket?.emit("start_game")}
-        >
-          Start Game
-        </Button>
+      {canManageRound && (
+        <div className={styles.roundActions}>
+          {canDealHands && (
+            <Button
+              className={styles.dealButton}
+              onClick={() => socket?.emit("deal_hands")}
+            >
+              Deal Hands
+            </Button>
+          )}
+          <Button
+            className={styles.startButton}
+            onClick={() => socket?.emit("start_game")}
+          >
+            Start Game
+          </Button>
+        </div>
       )}
     </div>
   );

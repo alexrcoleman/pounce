@@ -12,9 +12,11 @@ import {
   scheduleRoomDelete,
 } from "../server/Rooms";
 import {
+  dealRoomHands,
   removeDisconnectedPlayers,
   resetRoom,
   setRoomAILevel,
+  setRoomPaused,
   startRoomGame,
   updateRoomHand,
 } from "../shared/RoomLogic";
@@ -255,6 +257,38 @@ export default function createSocketIOServer() {
       startRoomGame(room);
       markRoomUpdated(user.currentRoom);
       broadcastUpdate(user.currentRoom);
+    });
+    socket.on("deal_hands", () => {
+      if (user.currentRoom == null) {
+        return;
+      }
+
+      const room = getRoom(user.currentRoom);
+      if (!isHost(room.board, socket.id)) {
+        return;
+      }
+
+      if (dealRoomHands(room)) {
+        markRoomUpdated(user.currentRoom);
+        broadcastUpdate(user.currentRoom);
+        broadcastHands(user.currentRoom);
+      }
+    });
+    socket.on("set_paused", (args) => {
+      if (user.currentRoom == null) {
+        return;
+      }
+
+      const room = getRoom(user.currentRoom);
+      if (!isHost(room.board, socket.id)) {
+        return;
+      }
+
+      if (setRoomPaused(room, args.paused)) {
+        markRoomUpdated(user.currentRoom);
+        broadcastUpdate(user.currentRoom);
+        broadcastHands(user.currentRoom);
+      }
     });
     socket.on("rotate_decks", () => {
       if (user.currentRoom == null) {

@@ -13,10 +13,12 @@ import {
 import { Move, executeMove } from "../shared/MoveHandler";
 import { createRoomState, RoomState } from "../shared/RoomState";
 import {
+  dealRoomHands,
   getRoomHands,
   resetRoom,
   scheduleAIReactionBoard,
   setRoomAILevel,
+  setRoomPaused,
   startRoomGame,
   tickRoom,
   updateRoomHand,
@@ -143,6 +145,19 @@ export default function useLocalGame(name: string | null) {
           markRoomUpdated();
           emitUpdate();
           emitHands();
+        } else if (event === "deal_hands") {
+          if (dealRoomHands(room)) {
+            markRoomUpdated();
+            emitUpdate();
+            emitHands();
+          }
+        } else if (event === "set_paused") {
+          const pauseArgs = args[0] as { paused: boolean };
+          if (setRoomPaused(room, pauseArgs.paused)) {
+            markRoomUpdated();
+            emitUpdate();
+            emitHands();
+          }
         } else if (event === "rotate_decks") {
           rotateDecks(room.board);
           markRoomUpdated();

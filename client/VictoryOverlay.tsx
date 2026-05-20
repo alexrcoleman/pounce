@@ -25,9 +25,14 @@ export default observer(function VictoryOverlay() {
             <Button>Leave Room</Button>
           </Link>
           {isHost ? (
-            <Button type="primary" onClick={() => socket?.emit("start_game")}>
-              Start Next Round
-            </Button>
+            <>
+              <Button onClick={() => socket?.emit("deal_hands")}>
+                Deal Hands
+              </Button>
+              <Button type="primary" onClick={() => socket?.emit("start_game")}>
+                Start Next Round
+              </Button>
+            </>
           ) : (
             "Waiting for host to start..."
           )}

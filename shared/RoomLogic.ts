@@ -2,6 +2,7 @@ import {
   CardState,
   CursorState,
   BoardState,
+  dealGameHands,
   isGameOver,
   removePlayer,
   resetBoard,
@@ -30,11 +31,11 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
   let hasUpdate = false;
   let hasHandUpdate = false;
 
-  if (board.ticksSinceMove >= 100) {
+  if (board.isActive && !board.isPaused && board.ticksSinceMove >= 100) {
     rotateDecks(board);
     hasUpdate = true;
   }
-  if (!board.isActive) {
+  if (!board.isActive || board.isPaused) {
     // no-op
   } else if (isGameOver(board)) {
     scoreBoard(board);
@@ -151,8 +152,43 @@ export function scheduleAIReactionBoard(room: RoomState): void {
 export function startRoomGame(room: RoomState, now = Date.now()): void {
   removeDisconnectedPlayers(room);
   room.aiCooldowns = room.board.players.map(() => now + 2000 + Math.random());
-  room.aiBoard = deepClone(room.board);
   startGame(room);
+  room.aiBoard = deepClone(room.board);
+}
+
+export function dealRoomHands(room: RoomState): boolean {
+  removeDisconnectedPlayers(room);
+  const didDeal = dealGameHands(room);
+  if (didDeal) {
+    room.aiBoard = deepClone(room.board);
+  }
+  return didDeal;
+}
+
+export function setRoomPaused(
+  room: RoomState,
+  isPaused: boolean,
+  now = Date.now()
+): boolean {
+  if (!room.board.isActive) {
+    if (!room.board.isPaused) {
+      return false;
+    }
+    room.board.isPaused = false;
+    return true;
+  }
+
+  if (room.board.isPaused === isPaused) {
+    return false;
+  }
+
+  room.board.isPaused = isPaused;
+  room.hands = [];
+  if (!isPaused) {
+    room.aiCooldowns = room.board.players.map(() => now + 750 + Math.random());
+    room.aiBoard = deepClone(room.board);
+  }
+  return true;
 }
 
 export function removeDisconnectedPlayers(

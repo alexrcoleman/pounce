@@ -77,6 +77,9 @@ export function executeMove(
   aiCursor?: AICursorData
 ): MoveResult | null {
   try {
+    if (!board.isActive || board.isPaused) {
+      throw new Error("Game is not accepting moves");
+    }
     if (isGameOver(board)) {
       throw new Error("Game is over");
     }

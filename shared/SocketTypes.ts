@@ -36,7 +36,9 @@ export type ClientToServerEvents = {
   }) => void;
   move: (args: ActionEnvelope<Move>, ack?: (args: ActionAck) => void) => void;
   rotate_decks: () => void;
+  deal_hands: () => void;
   start_game: () => void;
+  set_paused: (args: { paused: boolean }) => void;
   add_ai: () => void;
   remove_ai: () => void;
   set_ai_count: (args: { count: number }) => void;
