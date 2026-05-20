@@ -132,6 +132,12 @@ export default function useLocalGame(name: string | null) {
             markRoomUpdated();
             emitUpdate();
           }
+        } else if (event === "set_ai_count") {
+          const setAIArgs = args[0] as { count: number };
+          if (setRoomAICount(room, setAIArgs.count)) {
+            markRoomUpdated();
+            emitUpdate();
+          }
         } else if (event === "start_game") {
           startRoomGame(room);
           markRoomUpdated();
@@ -242,4 +248,44 @@ export default function useLocalGame(name: string | null) {
     state,
     socket,
   };
+}
+
+function setRoomAICount(room: RoomState, count: unknown): boolean {
+  if (room.board.isActive) {
+    return false;
+  }
+
+  const targetCount = normalizeAICount(count);
+  if (targetCount == null) {
+    return false;
+  }
+
+  const currentCount = room.board.players.filter((p) => p.socketId == null)
+    .length;
+  if (targetCount === currentCount) {
+    return false;
+  }
+
+  if (targetCount > currentCount) {
+    for (let i = currentCount; i < targetCount; i++) {
+      addPlayer(room.board, null);
+    }
+  } else {
+    for (let i = currentCount; i > targetCount; i--) {
+      const aiIndex = room.board.players.findIndex((p) => p.socketId == null);
+      if (aiIndex < 0) {
+        break;
+      }
+      removePlayer(room.board, aiIndex);
+    }
+  }
+  return true;
+}
+
+function normalizeAICount(count: unknown): number | null {
+  const numericCount = typeof count === "number" ? count : Number(count);
+  if (!Number.isFinite(numericCount)) {
+    return null;
+  }
+  return Math.max(0, Math.min(5, Math.trunc(numericCount)));
 }

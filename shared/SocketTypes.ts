@@ -39,5 +39,6 @@ export type ClientToServerEvents = {
   start_game: () => void;
   add_ai: () => void;
   remove_ai: () => void;
+  set_ai_count: (args: { count: number }) => void;
   remove_disconnected_players: () => void;
 };
