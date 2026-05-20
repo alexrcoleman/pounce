@@ -192,6 +192,43 @@ export default function createSocketIOServer() {
         broadcastUpdate(user.currentRoom);
       }
     });
+    socket.on("set_ai_count", (args) => {
+      if (user.currentRoom == null) {
+        return;
+      }
+
+      const room = getRoom(user.currentRoom);
+      if (!isHost(room.board, socket.id) || room.board.isActive) {
+        return;
+      }
+
+      const targetCount = normalizeAICount(args.count);
+      if (targetCount == null) {
+        return;
+      }
+      const currentCount = getAICount(room.board);
+      if (targetCount === currentCount) {
+        return;
+      }
+
+      if (targetCount > currentCount) {
+        for (let i = currentCount; i < targetCount; i++) {
+          addPlayer(room.board, null);
+        }
+      } else {
+        for (let i = currentCount; i > targetCount; i--) {
+          const aiIndex = room.board.players.findIndex(
+            (p) => p.socketId == null
+          );
+          if (aiIndex < 0) {
+            break;
+          }
+          removePlayer(room.board, aiIndex);
+        }
+      }
+      markRoomUpdated(user.currentRoom);
+      broadcastUpdate(user.currentRoom);
+    });
     socket.on("remove_disconnected_players", () => {
       if (user.currentRoom == null) {
         return;
@@ -312,4 +349,16 @@ function isHost(
     (p) => !p.disconnected && p.socketId != null
   );
   return hostIndex === playerIndex;
+}
+
+function normalizeAICount(count: unknown): number | null {
+  const numericCount = typeof count === "number" ? count : Number(count);
+  if (!Number.isFinite(numericCount)) {
+    return null;
+  }
+  return Math.max(0, Math.min(5, Math.trunc(numericCount)));
+}
+
+function getAICount(board: { players: { socketId: string | null }[] }): number {
+  return board.players.filter((p) => p.socketId == null).length;
 }

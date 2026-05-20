@@ -107,18 +107,10 @@ const SettingsDialog = observer(function SettingsDialog({
                 max={5}
                 min={0}
                 onChange={(value) => {
-                  // TODO: Ideally just tell the server the count we want
-                  if (value != null) {
-                    const count = Math.abs(value - aiCount);
-                    if (value > aiCount) {
-                      for (let i = 0; i < count; i++) {
-                        socket?.emit("add_ai");
-                      }
-                    } else {
-                      for (let i = 0; i < count; i++) {
-                        socket?.emit("remove_ai");
-                      }
-                    }
+                  const count =
+                    typeof value === "number" ? value : Number(value);
+                  if (Number.isFinite(count)) {
+                    socket?.emit("set_ai_count", { count });
                   }
                 }}
               />
