@@ -38,7 +38,9 @@ const socketData: Record<
 export default function createSocketIOServer() {
   const io = new Server<ClientToServerEvents, ServerToClientEvents>({
     cors: {
-      origin: process.env.WEB_APP_ORIGIN ?? "http://localhost:3000",
+      origin: process.env.WEB_APP_ORIGIN
+        ? process.env.WEB_APP_ORIGIN.split(",").map((origin) => origin.trim())
+        : ["http://localhost:3000", "http://localhost:3010"],
       methods: ["GET", "POST"],
     },
   });

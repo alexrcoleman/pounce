@@ -14,8 +14,21 @@ type Props = {
 
 export default observer(function Header(props: Props) {
   const [isSettingsOpen, setSettingsOpen] = useState(false);
+  const { state } = useClientContext();
+  const isStarted = state.board?.isActive ?? false;
+  const showRoomCode =
+    !isStarted &&
+    props.roomId != null &&
+    props.roomId.toLowerCase() !== "offline";
+
   return (
     <>
+      {showRoomCode ? (
+        <div className={styles.roomCodeBadge}>
+          <span>Room</span>
+          <strong>{props.roomId}</strong>
+        </div>
+      ) : null}
       <SettingsDialog
         isSettingsOpen={isSettingsOpen}
         onClose={() => setSettingsOpen(false)}

@@ -33,7 +33,7 @@ export default function useGameSocket(
 
   useEffect(() => {
     let socket: ClientSocket;
-    socket = window.location.host === "localhost:3000" ? io(":3001") : io();
+    socket = createSocket();
     socket.on("connect_error", () => {
       setError("No connection to socket server");
     });
@@ -137,6 +137,19 @@ export type Actions = {
   setAILevel: (level: number) => void;
   onRemoveDisconnectedPlayers: () => void;
 };
+
+function createSocket(): ClientSocket {
+  const { hostname, protocol } = window.location;
+  const isLocalHost =
+    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+
+  if (isLocalHost) {
+    const socketHost = hostname.includes(":") ? `[${hostname}]` : hostname;
+    return io(`${protocol}//${socketHost}:3001`);
+  }
+
+  return io();
+}
 
 function getOrCreatePlayerSessionId() {
   const existing = sessionStorage.getItem(PLAYER_SESSION_STORAGE_KEY);

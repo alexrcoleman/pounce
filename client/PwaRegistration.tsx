@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./PwaRegistration.module.css";
 
 const SKIP_WAITING_MESSAGE = "SKIP_WAITING";
+const DEV_SERVICE_WORKER_RELOAD_KEY = "pounce::devServiceWorkerReloaded";
 
 export default function PwaRegistration() {
   const [waitingWorker, setWaitingWorker] = useState<ServiceWorker | null>(
@@ -13,10 +14,12 @@ export default function PwaRegistration() {
   const shouldReloadOnControllerChangeRef = useRef(false);
 
   useEffect(() => {
-    if (
-      process.env.NODE_ENV !== "production" ||
-      !("serviceWorker" in navigator)
-    ) {
+    if (!("serviceWorker" in navigator)) {
+      return;
+    }
+
+    if (process.env.NODE_ENV !== "production") {
+      unregisterDevelopmentServiceWorkers();
       return;
     }
 
@@ -152,4 +155,28 @@ export default function PwaRegistration() {
       </button>
     </div>
   );
+}
+
+async function unregisterDevelopmentServiceWorkers() {
+  try {
+    const registrations = await navigator.serviceWorker.getRegistrations();
+    if (registrations.length === 0) {
+      sessionStorage.removeItem(DEV_SERVICE_WORKER_RELOAD_KEY);
+      return;
+    }
+
+    await Promise.all(
+      registrations.map((registration) => registration.unregister())
+    );
+
+    if (
+      navigator.serviceWorker.controller &&
+      sessionStorage.getItem(DEV_SERVICE_WORKER_RELOAD_KEY) !== "true"
+    ) {
+      sessionStorage.setItem(DEV_SERVICE_WORKER_RELOAD_KEY, "true");
+      window.location.reload();
+    }
+  } catch (error) {
+    console.warn("Unable to unregister development service worker", error);
+  }
 }

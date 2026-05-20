@@ -2,37 +2,309 @@
   width: 100vw;
   height: 100vh;
   height: 100dvh;
+  overflow: auto;
   display: flex;
-  gap: 10px;
   align-items: center;
   justify-content: center;
+  padding: 30px 18px;
+  background-color: #16593c;
+  background-image: linear-gradient(
+      rgba(9, 57, 36, 0.64),
+      rgba(9, 57, 36, 0.2)
+    ),
+    url("/felt-tile.png");
+  background-size: auto, 160px 160px;
 }
-.form {
-  width: 300px;
-  padding: 25px 30px;
-  background-color: rgb(243, 243, 243);
-  border-radius: 5px;
+
+.stage {
+  width: min(100%, 560px);
   display: flex;
   flex-direction: column;
-  align-items: stretch;
-  gap: 10px;
-  box-shadow: 0px 6px 18px rgba(0, 0, 0, 0.06);
+  gap: 18px;
 }
-.header {
+
+.brand {
   display: flex;
   align-items: center;
-  margin-bottom: 10px;
-  font-weight: 600;
-  font-size: 20px;
-  align-self: center;
+  justify-content: center;
+  gap: 14px;
+  color: white;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.34);
 }
-.header > img {
-  margin-right: 4px;
+
+.logo {
+  width: 56px;
+  height: 56px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  background: #f8f1de;
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.22);
+}
+
+.title {
+  margin: 0;
+  color: white;
+  font-size: 44px;
+  line-height: 0.95;
+  font-weight: 800;
+  letter-spacing: 0;
+}
+
+.subtitle {
+  margin-top: 4px;
+  color: #f6deb2;
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.form {
+  width: 100%;
+}
+
+.menu {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid rgba(73, 47, 26, 0.26);
+  border-radius: 8px;
+  background: #fbf4e5;
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.24);
+}
+
+.playerSection,
+.playSection,
+.joinSection,
+.utilitySection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px 20px;
+}
+
+.playerSection {
+  background: #fff9eb;
+  border-bottom: 1px solid rgba(86, 59, 34, 0.16);
+}
+
+.joinSection,
+.utilitySection {
+  border-top: 1px solid rgba(86, 59, 34, 0.16);
+}
+
+.utilitySection {
+  background: #f0eadb;
+}
+
+.sectionHeader {
+  color: #51412e;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.fieldLabel {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 7px;
+  color: #3f3326;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.textInput {
+  height: 44px;
+  border-color: rgba(76, 54, 34, 0.24);
+  border-radius: 6px;
+  color: #241b13;
+  font-weight: 650;
+}
+
+.textInput:focus,
+.textInput:hover {
+  border-color: #0c7a44;
+}
+
+.joinRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 136px;
+  gap: 10px;
+  align-items: end;
+}
+
+.choiceGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.primaryChoice,
+.offlineChoice,
+.joinAction,
+.utilityButton {
+  width: 100%;
+  height: 44px;
+  border-radius: 6px;
+  font-weight: 800;
+  box-shadow: none;
+}
+
+.primaryChoice,
+.offlineChoice {
+  height: 62px;
+  font-size: 16px;
+}
+
+.primaryChoice:global(.ant-btn-primary):not(:disabled) {
+  background: #0b6d2d;
+  border-color: #0b6d2d;
+  color: white;
+}
+
+.primaryChoice:global(.ant-btn-primary):not(:disabled):hover,
+.primaryChoice:global(.ant-btn-primary):not(:disabled):focus {
+  background: #0f7c38;
+  border-color: #0f7c38;
+  color: white;
+}
+
+.offlineChoice {
+  border-color: rgba(126, 35, 38, 0.34);
+  color: #7e2326;
+  background: #fffaf0;
+}
+
+.joinAction {
+  border-color: rgba(65, 45, 27, 0.28);
+  color: #2c251d;
+  background: #fffaf0;
+}
+
+.offlineChoice:hover,
+.offlineChoice:focus,
+.joinAction:hover,
+.joinAction:focus {
+  border-color: #9b2e31;
+  color: #7e2326;
 }
 
 .offlineStatus {
-  color: #555;
+  min-height: 16px;
+  color: #5a5148;
   font-size: 12px;
   line-height: 1.35;
   text-align: center;
+}
+
+.offlinePrompt {
+  margin: 0;
+  color: #4c4238;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.inlineAction {
+  appearance: none;
+  padding: 0;
+  color: #0b6d2d;
+  background: transparent;
+  border: none;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.inlineAction:hover,
+.inlineAction:focus {
+  color: #7e2326;
+}
+
+.inlineAction:disabled {
+  color: #6c6259;
+  cursor: default;
+  text-decoration: none;
+}
+
+.utilityNote {
+  color: #5a5148;
+  font-size: 12px;
+  line-height: 1.35;
+  text-align: center;
+}
+
+.installSteps {
+  margin: 0;
+  padding-left: 20px;
+  color: #332a22;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.installSteps > li + li {
+  margin-top: 6px;
+}
+
+@media (max-width: 520px) {
+  .root {
+    align-items: flex-start;
+    padding: 22px 14px;
+  }
+
+  .brand {
+    justify-content: flex-start;
+  }
+
+  .logo {
+    width: 48px;
+    height: 48px;
+  }
+
+  .title {
+    font-size: 36px;
+  }
+
+  .joinRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 360px) {
+  .choiceGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-height: 680px) {
+  .root {
+    align-items: flex-start;
+    padding-top: 18px;
+    padding-bottom: 18px;
+  }
+
+  .stage {
+    gap: 12px;
+  }
+
+  .logo {
+    width: 46px;
+    height: 46px;
+  }
+
+  .title {
+    font-size: 34px;
+  }
+
+  .playerSection,
+  .playSection,
+  .joinSection,
+  .utilitySection {
+    gap: 10px;
+    padding: 14px 16px;
+  }
 }

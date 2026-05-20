@@ -10,13 +10,17 @@ type BeforeInstallPromptEvent = Event & {
 export default function usePwaInstall() {
   const [installPrompt, setInstallPrompt] =
     useState<BeforeInstallPromptEvent | null>(null);
+  const [isInstalling, setIsInstalling] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const [isCheckingOfflineReady, setIsCheckingOfflineReady] = useState(true);
   const [isOfflineReady, setIsOfflineReady] = useState(false);
   const [isSupported, setIsSupported] = useState(false);
   const [message, setMessage] = useState("");
   const [installContext, setInstallContext] = useState<InstallContext>({
+    isAndroid: false,
+    isChrome: false,
     isIOS: false,
+    isMobile: false,
     isStandalone: false,
     shouldUseSafari: false,
   });
@@ -49,8 +53,7 @@ export default function usePwaInstall() {
     };
     const onAppInstalled = () => {
       setInstallPrompt(null);
-      setIsOfflineReady(true);
-      setMessage("Pounce is installed and ready offline.");
+      setMessage("Pounce was added to your home screen.");
     };
     window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
     window.addEventListener("appinstalled", onAppInstalled);
@@ -61,22 +64,58 @@ export default function usePwaInstall() {
     };
   }, []);
 
+  const addToHomeScreen = useCallback(async () => {
+    setMessage("");
+
+    if (installContext.isStandalone) {
+      setMessage("Pounce is already on your home screen.");
+      return;
+    }
+
+    if (installContext.isIOS) {
+      if (installContext.shouldUseSafari) {
+        setMessage(
+          "Open this page in Safari, then tap Share and Add to Home Screen."
+        );
+      } else {
+        setMessage("Tap Share, then Add to Home Screen.");
+      }
+      return;
+    }
+
+    if (!installPrompt) {
+      setMessage("Use your browser's install option to add Pounce.");
+      return;
+    }
+
+    setIsInstalling(true);
+    try {
+      await installPrompt.prompt();
+      const choice = await installPrompt.userChoice;
+      setInstallPrompt(null);
+      if (choice.outcome === "accepted") {
+        setMessage("Pounce is being added to your home screen.");
+      } else {
+        setMessage("Home screen install was dismissed.");
+      }
+    } catch (error) {
+      console.warn("Unable to install Pounce", error);
+      setMessage("Home screen install did not finish.");
+    } finally {
+      setIsInstalling(false);
+    }
+  }, [installContext, installPrompt]);
+
   const downloadForOffline = useCallback(async () => {
     setIsPreparing(true);
     setMessage("");
-    let installAccepted = false;
     try {
-      if (installPrompt) {
-        await installPrompt.prompt();
-        const choice = await installPrompt.userChoice;
-        setInstallPrompt(null);
-        if (choice.outcome === "accepted") {
-          installAccepted = true;
-        }
-      } else if (isSupported) {
-        setMessage("Offline files are being saved.");
+      if (!isSupported) {
+        setMessage("Offline download is not supported in this browser.");
+        return;
       }
 
+      setMessage("Offline files are being saved.");
       await waitForServiceWorkerReady();
       await cacheOfflineAssets();
       const isReady = await isOfflineCacheReady();
@@ -86,18 +125,8 @@ export default function usePwaInstall() {
         return;
       }
 
-      if (installAccepted) {
-        setMessage("Pounce is installing and offline files are ready.");
-      } else if (installContext.isIOS && installContext.isStandalone) {
+      if (installContext.isIOS && installContext.isStandalone) {
         setMessage("Pounce is saved and ready for offline play.");
-      } else if (installContext.isIOS && installContext.shouldUseSafari) {
-        setMessage(
-          "Offline files are ready. Open this page in Safari, then tap Share and Add to Home Screen."
-        );
-      } else if (installContext.isIOS) {
-        setMessage(
-          "Offline files are ready. Tap Share, then Add to Home Screen."
-        );
       } else {
         setMessage("Offline files are ready.");
       }
@@ -107,13 +136,15 @@ export default function usePwaInstall() {
     } finally {
       setIsPreparing(false);
     }
-  }, [installContext, installPrompt, isSupported]);
+  }, [installContext, isSupported]);
 
   return {
+    addToHomeScreen,
     canInstall: installPrompt != null,
     downloadForOffline,
     installContext,
     isCheckingOfflineReady,
+    isInstalling,
     isOfflineReady,
     isPreparing,
     isSupported,
@@ -122,7 +153,10 @@ export default function usePwaInstall() {
 }
 
 type InstallContext = {
+  isAndroid: boolean;
+  isChrome: boolean;
   isIOS: boolean;
+  isMobile: boolean;
   isStandalone: boolean;
   shouldUseSafari: boolean;
 };
@@ -135,6 +169,10 @@ function getInstallContext(): InstallContext {
   const isTouchMac =
     navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
   const isIOS = /iPad|iPhone|iPod/.test(userAgent) || isTouchMac;
+  const isAndroid = /Android/.test(userAgent);
+  const isChrome =
+    /Chrome|CriOS/.test(userAgent) &&
+    !/Edg|EdgiOS|OPR|OPiOS|SamsungBrowser/.test(userAgent);
   const isStandalone =
     window.matchMedia("(display-mode: standalone)").matches ||
     navigatorWithStandalone.standalone === true;
@@ -142,7 +180,10 @@ function getInstallContext(): InstallContext {
     /Safari/.test(userAgent) && !/CriOS|FxiOS|EdgiOS|OPiOS/.test(userAgent);
 
   return {
+    isAndroid,
+    isChrome,
     isIOS,
+    isMobile: isIOS || isAndroid,
     isStandalone,
     shouldUseSafari: isIOS && !isSafari,
   };
