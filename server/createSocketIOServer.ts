@@ -15,6 +15,7 @@ import {
   dealRoomHands,
   removeDisconnectedPlayers,
   resetRoom,
+  setRoomFairHandRotation,
   setRoomAILevel,
   setRoomPaused,
   startRoomGame,
@@ -247,6 +248,21 @@ export default function createSocketIOServer() {
         markRoomUpdated(user.currentRoom);
         broadcastUpdate(user.currentRoom);
         broadcastHands(user.currentRoom);
+      }
+    });
+    socket.on("set_fair_hand_rotation", (args) => {
+      if (user.currentRoom == null) {
+        return;
+      }
+
+      const room = getRoom(user.currentRoom);
+      if (!isHost(room.board, socket.id)) {
+        return;
+      }
+
+      if (setRoomFairHandRotation(room, args.enabled)) {
+        markRoomUpdated(user.currentRoom);
+        broadcastUpdate(user.currentRoom);
       }
     });
     socket.on("start_game", () => {

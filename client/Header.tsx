@@ -1,7 +1,16 @@
 import styles from "./Header.module.css";
 import { useEffect, useState } from "react";
 import { observer } from "mobx-react-lite";
-import { Button, Card, Flex, InputNumber, Modal, Slider, Switch } from "antd";
+import {
+  Button,
+  Card,
+  Flex,
+  InputNumber,
+  Modal,
+  Slider,
+  Switch,
+  Tooltip,
+} from "antd";
 import { useClientContext } from "./ClientContext";
 
 type Props = {
@@ -11,6 +20,9 @@ type Props = {
   scale: number;
   setScale: (scale: number) => void;
 };
+
+const FAIR_HAND_ROTATION_HELP =
+  "When on, Pounce keeps one shuffled set of hands for a short series and rotates them each round, so everyone gets a turn with the same luck. Leave it off for a brand-new shuffle every round.";
 
 export default observer(function Header(props: Props) {
   const [isSettingsOpen, setSettingsOpen] = useState(false);
@@ -59,6 +71,14 @@ const SettingsDialog = observer(function SettingsDialog({
   const disconnectedCount =
     state.board?.players.filter((p) => p.disconnected).length ?? 0;
   const buildDate = useLocalBuildDate(process.env.NEXT_PUBLIC_BUILD_DATE);
+  const [isFairHandHelpOpen, setFairHandHelpOpen] = useState(false);
+
+  useEffect(() => {
+    if (!props.isSettingsOpen) {
+      setFairHandHelpOpen(false);
+    }
+  }, [props.isSettingsOpen]);
+
   return (
     <Modal
       title="Settings"
@@ -115,6 +135,35 @@ const SettingsDialog = observer(function SettingsDialog({
             <div>
               Room Code: <b>{props.roomId}</b>
             </div>
+            <Flex align="center" gap={10} className={styles.settingRow}>
+              <Flex align="center" gap={6}>
+                <span>Fair hand rotation</span>
+                <Tooltip
+                  title={FAIR_HAND_ROTATION_HELP}
+                  open={isFairHandHelpOpen}
+                >
+                  <button
+                    type="button"
+                    className={styles.infoButton}
+                    aria-label="How fair hand rotation works"
+                    onBlur={() => setFairHandHelpOpen(false)}
+                    onClick={() => setFairHandHelpOpen(true)}
+                    onFocus={() => setFairHandHelpOpen(true)}
+                    onMouseEnter={() => setFairHandHelpOpen(true)}
+                    onMouseLeave={() => setFairHandHelpOpen(false)}
+                  >
+                    i
+                  </button>
+                </Tooltip>
+              </Flex>
+              <Switch
+                checked={state.roomSettings.fairHandRotation}
+                disabled={!isHost}
+                onChange={(enabled) =>
+                  socket?.emit("set_fair_hand_rotation", { enabled })
+                }
+              />
+            </Flex>
             <Button danger onClick={props.onLeaveRoom}>
               Leave Room
             </Button>

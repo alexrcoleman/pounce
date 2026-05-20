@@ -17,6 +17,7 @@ import {
   getRoomHands,
   resetRoom,
   scheduleAIReactionBoard,
+  setRoomFairHandRotation,
   setRoomAILevel,
   setRoomPaused,
   startRoomGame,
@@ -47,6 +48,7 @@ export default function useLocalGame(name: string | null) {
       runInAction(() => {
         state.onUpdate({
           board: deepClone(room.board),
+          settings: deepClone(room.settings),
           time: Date.now(),
           revision: room.revision,
         });
@@ -172,6 +174,17 @@ export default function useLocalGame(name: string | null) {
           setRoomAILevel(room, setAIArgs.speed);
           markRoomUpdated();
           emitUpdate();
+        } else if (event === "set_fair_hand_rotation") {
+          const setFairHandRotationArgs = args[0] as { enabled: boolean };
+          if (
+            setRoomFairHandRotation(
+              room,
+              setFairHandRotationArgs.enabled
+            )
+          ) {
+            markRoomUpdated();
+            emitUpdate();
+          }
         } else if (event === "update_hand") {
           updateRoomHand(
             room,

@@ -5,6 +5,10 @@ import {
   createBoard,
 } from "./GameUtils";
 
+export type RoomSettings = {
+  fairHandRotation: boolean;
+};
+
 export type RoomState = {
   board: BoardState;
   revision: number;
@@ -18,6 +22,7 @@ export type RoomState = {
   aiBoard: BoardState;
   queuedHands: CardState[][][];
   autoStart: boolean;
+  settings: RoomSettings;
 };
 
 export function createRoomState(playerCount: number): RoomState {
@@ -31,6 +36,9 @@ export function createRoomState(playerCount: number): RoomState {
     aiBoard: JSON.parse(JSON.stringify(board)),
     queuedHands: [],
     autoStart: false,
+    settings: {
+      fairHandRotation: false,
+    },
     timescale: 1,
   };
 }

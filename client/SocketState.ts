@@ -2,6 +2,7 @@ import { BoardState, CursorState } from "../shared/GameUtils";
 import { makeAutoObservable } from "mobx";
 import deepClone from "../shared/deepClone";
 import { executeMove, type Move } from "../shared/MoveHandler";
+import type { RoomSettings } from "../shared/RoomState";
 import {
   type ActionAck,
   type ActionEnvelope,
@@ -15,9 +16,16 @@ type PendingMoveAction = {
   acceptedRevision?: number;
 };
 
+function createDefaultRoomSettings(): RoomSettings {
+  return {
+    fairHandRotation: false,
+  };
+}
+
 export default class SocketState {
   board: BoardState | null = null;
   serverBoard: BoardState | null = null;
+  roomSettings: RoomSettings = createDefaultRoomSettings();
   serverRevision = 0;
   lastTime = 0;
   latency = 0;
@@ -33,6 +41,7 @@ export default class SocketState {
       return;
     }
     this.serverBoard = applyDeepUpdate(this.serverBoard, data.board);
+    this.roomSettings = applyDeepUpdate(this.roomSettings, data.settings);
     this.serverRevision = data.revision;
     this.pendingMoves = this.pendingMoves.filter(
       (action) =>
@@ -112,6 +121,7 @@ export default class SocketState {
   private resetBoardState() {
     this.board = null;
     this.serverBoard = null;
+    this.roomSettings = createDefaultRoomSettings();
     this.serverRevision = 0;
     this.pendingMoves = [];
     this.hands = [];

@@ -47,6 +47,9 @@ type StartGameRoomState = {
   board: BoardState;
   hands: CursorState[];
   queuedHands: CardState[][][];
+  settings: {
+    fairHandRotation: boolean;
+  };
 };
 
 function createUnshuffledDeck(player: number): CardState[] {
@@ -235,8 +238,14 @@ export function isGameOver(board: BoardState) {
 function updateQueuedHands(
   board: BoardState,
   queuedHands: CardState[][][],
-  queuedHand: CardState[][] | undefined
+  queuedHand: CardState[][] | undefined,
+  fairHandRotation: boolean
 ) {
+  if (!fairHandRotation) {
+    queuedHands.length = 0;
+    return;
+  }
+
   if (queuedHands.length === 0 && queuedHand == null) {
     // Queue up all combinations of this hand for fairness
     console.log("Queueing up hands for next game");
@@ -251,16 +260,9 @@ function updateQueuedHands(
   }
 }
 export function startGame(room: StartGameRoomState) {
-  const { board, queuedHands } = room;
+  const { board } = room;
   if (!board.isDealt) {
-    const queuedHand = queuedHands.splice(0, 1);
-    if (queuedHand.length > 0) {
-      console.log("Playing queued hand");
-    }
-    resetBoard(board, queuedHand[0]);
-    updateQueuedHands(board, queuedHands, queuedHand[0]);
-    dealHands(board);
-    board.isDealt = true;
+    dealGameHands(room);
   }
   board.players.forEach((p) => (p.currentPoints = -26));
   board.isActive = true;
@@ -273,12 +275,13 @@ export function dealGameHands(room: StartGameRoomState): boolean {
   if (board.isActive || board.isDealt) {
     return false;
   }
-  const queuedHand = queuedHands.splice(0, 1);
+  const fairHandRotation = room.settings.fairHandRotation;
+  const queuedHand = fairHandRotation ? queuedHands.splice(0, 1) : [];
   if (queuedHand.length > 0) {
     console.log("Dealing queued hand");
   }
   resetBoard(board, queuedHand[0]);
-  updateQueuedHands(board, queuedHands, queuedHand[0]);
+  updateQueuedHands(board, queuedHands, queuedHand[0], fairHandRotation);
   dealHands(board);
   board.isDealt = true;
   room.hands = [];

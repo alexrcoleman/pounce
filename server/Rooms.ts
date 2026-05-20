@@ -49,6 +49,7 @@ export function broadcastUpdate(roomId: string) {
   const room = rooms[roomId];
   room.io.to(roomId).emit("update", {
     board: room.board,
+    settings: room.settings,
     time: Date.now(),
     revision: room.revision,
   });

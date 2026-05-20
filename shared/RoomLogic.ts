@@ -235,8 +235,25 @@ export function resetRoom(room: RoomState): void {
     p.scores = [];
     p.totalPoints = 0;
   });
+  room.queuedHands = [];
   room.hands = [];
   room.aiBoard = deepClone(room.board);
+}
+
+export function setRoomFairHandRotation(
+  room: RoomState,
+  enabled: unknown
+): boolean {
+  const fairHandRotation = enabled === true;
+  if (room.settings.fairHandRotation === fairHandRotation) {
+    return false;
+  }
+
+  room.settings.fairHandRotation = fairHandRotation;
+  if (!fairHandRotation) {
+    room.queuedHands = [];
+  }
+  return true;
 }
 
 export function setRoomAILevel(room: RoomState, speed: number): void {

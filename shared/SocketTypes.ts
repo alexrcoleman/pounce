@@ -1,5 +1,6 @@
 import { BoardState, CardState, CursorState } from "./GameUtils";
 import { Move } from "./MoveHandler";
+import type { RoomSettings } from "./RoomState";
 
 export type ActionEnvelope<T> = {
   actionId: string;
@@ -13,6 +14,7 @@ export type ActionAck =
 
 export type BoardUpdate = {
   board: BoardState;
+  settings: RoomSettings;
   time: number;
   revision: number;
 };
@@ -42,5 +44,6 @@ export type ClientToServerEvents = {
   add_ai: () => void;
   remove_ai: () => void;
   set_ai_count: (args: { count: number }) => void;
+  set_fair_hand_rotation: (args: { enabled: boolean }) => void;
   remove_disconnected_players: () => void;
 };
