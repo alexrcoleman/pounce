@@ -96,7 +96,7 @@ const SettingsDialog = observer(function SettingsDialog({
               className={styles.backButton}
               onClick={() => setPage("main")}
             >
-              Back
+              Back to settings
             </button>
           ) : null}
           <span>{modalTitle}</span>
@@ -106,19 +106,26 @@ const SettingsDialog = observer(function SettingsDialog({
       width={440}
       centered
       open={props.isSettingsOpen}
-      onOk={props.onClose}
       onCancel={props.onClose}
-      okText="Done"
-      cancelButtonProps={{ style: { display: "none" } }}
+      closable={false}
+      footer={null}
       styles={{
         body: {
           overflowY: "auto",
-          maxHeight: "calc(100dvh - 190px)",
+          maxHeight: "calc(100dvh - 126px)",
         },
       }}
     >
       {page === "main" ? (
         <div className={styles.settingsPage}>
+          <Button
+            block
+            size="large"
+            className={styles.backToGameListButton}
+            onClick={props.onClose}
+          >
+            Back to game
+          </Button>
           <button
             type="button"
             className={styles.settingsNavButton}
@@ -126,11 +133,8 @@ const SettingsDialog = observer(function SettingsDialog({
           >
             <span>
               <strong>Room</strong>
-              <small>{isHost ? "Round controls and AI players" : roomLabel}</small>
             </span>
-            <span className={styles.navArrow} aria-hidden="true">
-              &gt;
-            </span>
+            <span className={styles.navArrow} aria-hidden="true" />
           </button>
           <button
             type="button"
@@ -139,11 +143,8 @@ const SettingsDialog = observer(function SettingsDialog({
           >
             <span>
               <strong>Appearance</strong>
-              <small>{Math.round(props.scale * 100)}% zoom</small>
             </span>
-            <span className={styles.navArrow} aria-hidden="true">
-              &gt;
-            </span>
+            <span className={styles.navArrow} aria-hidden="true" />
           </button>
           <Button
             danger

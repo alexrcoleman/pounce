@@ -61,43 +61,32 @@
 
 .settingsModal :global(.ant-modal-content) {
   overflow: hidden;
-  border: 1px solid rgba(73, 47, 26, 0.18);
-  border-radius: 8px;
-  background: #fbf4e5;
+  padding: 0;
+  border: 1px solid rgba(43, 35, 29, 0.16);
+  border-radius: 12px;
+  background: #f7f4ed;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
 }
 
 .settingsModal :global(.ant-modal-header) {
   margin: 0;
-  padding: 18px 20px 14px;
-  background: #fff8e8;
-  border-bottom: 1px solid rgba(86, 59, 34, 0.14);
+  padding: 17px 18px 13px;
+  background: #ffffff;
+  border-bottom: 1px solid rgba(43, 35, 29, 0.1);
 }
 
 .settingsModal :global(.ant-modal-body) {
-  padding: 16px 20px 18px;
-  background: #fbf4e5;
-}
-
-.settingsModal :global(.ant-modal-footer) {
-  margin: 0;
-  padding: 12px 20px 16px;
-  background: #fbf4e5;
-  border-top: 1px solid rgba(86, 59, 34, 0.12);
-}
-
-.settingsModal :global(.ant-modal-footer .ant-btn) {
-  min-width: 88px;
-  height: 38px;
-  border-radius: 6px;
-  font-weight: 800;
+  padding: 12px;
+  background: #f7f4ed;
 }
 
 .settingsTitle {
-  min-height: 26px;
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) 64px;
+  position: relative;
+  min-height: 30px;
+  display: flex;
   align-items: center;
+  justify-content: center;
+  padding: 0 42px;
   color: #2e261e;
   font-size: 20px;
   font-weight: 800;
@@ -106,53 +95,82 @@
 }
 
 .settingsTitle > span {
-  grid-column: 2;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .backButton {
-  grid-column: 1;
-  width: fit-content;
+  position: absolute;
+  left: 0;
+  top: 50%;
+  max-width: 120px;
+  overflow: hidden;
   padding: 6px 0;
-  color: #0b6d2d;
+  color: #5b4e40;
   font: inherit;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 800;
+  line-height: 1.1;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   cursor: pointer;
   background: transparent;
   border: none;
+  transform: translateY(-50%);
 }
 
 .backButton:hover,
 .backButton:focus {
-  color: #7e2326;
+  color: #2e261e;
 }
 
 .settingsPage {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+}
+
+.backToGameListButton {
+  height: 46px;
+  color: #2e261e;
+  border-color: rgba(43, 35, 29, 0.16);
+  border-radius: 10px;
+  font-weight: 800;
+  background: #ffffff;
+  box-shadow: 0 1px 0 rgba(43, 35, 29, 0.04);
+}
+
+.backToGameListButton:hover,
+.backToGameListButton:focus {
+  color: #2e261e;
+  border-color: rgba(43, 35, 29, 0.28);
+  background: #fbfbf8;
 }
 
 .settingsNavButton {
   width: 100%;
-  min-height: 64px;
+  min-height: 48px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 14px;
-  padding: 13px 14px;
+  padding: 0 14px 0 16px;
   color: #2e261e;
   text-align: left;
   cursor: pointer;
-  background: #fffaf0;
-  border: 1px solid rgba(73, 47, 26, 0.2);
-  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid rgba(43, 35, 29, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 1px 0 rgba(43, 35, 29, 0.04);
 }
 
 .settingsNavButton:hover,
 .settingsNavButton:focus {
-  border-color: rgba(11, 109, 45, 0.44);
-  background: #fffdf5;
+  border-color: rgba(43, 35, 29, 0.24);
+  background: #fbfbf8;
 }
 
 .settingsNavButton strong,
@@ -174,39 +192,45 @@
 }
 
 .navArrow {
-  color: #0b6d2d;
-  font-size: 20px;
-  font-weight: 900;
-  line-height: 1;
+  width: 9px;
+  height: 9px;
+  margin-right: 2px;
+  border-color: #6a5b4d;
+  border-style: solid;
+  border-width: 0 2px 2px 0;
+  transform: rotate(-45deg);
 }
 
 .leaveButton {
-  height: 44px;
-  border-radius: 6px;
+  height: 42px;
+  margin-top: 2px;
+  border-radius: 8px;
   font-weight: 800;
 }
 
 .settingsSection {
-  overflow: hidden;
-  background: #fffaf0;
-  border: 1px solid rgba(73, 47, 26, 0.18);
-  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .settingsSection > h3 {
   margin: 0;
-  padding: 10px 14px;
-  color: #51412e;
+  padding: 0 2px;
+  color: #6a5b4d;
   font-size: 13px;
   font-weight: 900;
   line-height: 1.1;
-  background: #f0eadb;
-  border-bottom: 1px solid rgba(86, 59, 34, 0.14);
 }
 
 .settingsSectionBody {
+  overflow: hidden;
   display: flex;
   flex-direction: column;
+  background: #ffffff;
+  border: 1px solid rgba(43, 35, 29, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 1px 0 rgba(43, 35, 29, 0.04);
 }
 
 .settingRow {
@@ -220,7 +244,7 @@
 
 .settingRow + .settingRow,
 .settingsSectionBody > .sliderBlock {
-  border-top: 1px solid rgba(86, 59, 34, 0.12);
+  border-top: 1px solid rgba(43, 35, 29, 0.1);
 }
 
 .settingTitle {
@@ -253,7 +277,7 @@
 .buttonGrid :global(.ant-btn) {
   min-width: 0;
   height: 40px;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 13px;
   font-weight: 800;
 }
@@ -263,41 +287,41 @@
   grid-template-columns: 42px 74px 42px;
   align-items: center;
   overflow: hidden;
-  border: 1px solid rgba(73, 47, 26, 0.22);
+  border: 1px solid rgba(43, 35, 29, 0.18);
   border-radius: 8px;
-  background: #fbf4e5;
+  background: #f7f4ed;
 }
 
 .counterButton {
   width: 42px;
   height: 42px;
   padding: 0;
-  color: #0b6d2d;
+  color: #2e261e;
   font-size: 22px;
   font-weight: 900;
   line-height: 1;
   cursor: pointer;
-  background: #fffdf5;
+  background: #ffffff;
   border: none;
 }
 
 .counterButton:first-child {
-  border-right: 1px solid rgba(73, 47, 26, 0.16);
+  border-right: 1px solid rgba(43, 35, 29, 0.12);
 }
 
 .counterButton:last-child {
-  border-left: 1px solid rgba(73, 47, 26, 0.16);
+  border-left: 1px solid rgba(43, 35, 29, 0.12);
 }
 
 .counterButton:hover,
 .counterButton:focus {
-  background: #f3f8ee;
+  background: #f7f4ed;
 }
 
 .counterButton:disabled {
   color: rgba(46, 38, 30, 0.28);
   cursor: default;
-  background: #f0eadb;
+  background: #ede8df;
 }
 
 .counterValue {

@@ -108,6 +108,10 @@ export default observer(function Board({
           <div className={styles.rootInside}>
             <PileSection />
             <ScoresTableTabOverlay board={board} />
+            <MobileScoreboardButton
+              board={board}
+              enabled={useTouch || layout.mode === "compact"}
+            />
             <HandPlatesLayer />
             <ActivePlayerStackTargets
               executeMove={executeMove}
@@ -289,3 +293,83 @@ function ScoresTableTabOverlay({ board }: { board: BoardState }) {
     </div>
   );
 }
+
+const MobileScoreboardButton = observer(function MobileScoreboardButton({
+  board,
+  enabled,
+}: {
+  board: BoardState;
+  enabled: boolean;
+}) {
+  const [isOpen, setOpen] = useState(false);
+  const canShow = enabled && board.pouncer == null;
+
+  useEffect(() => {
+    if (!canShow) {
+      setOpen(false);
+    }
+  }, [canShow]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [isOpen]);
+
+  if (!canShow) {
+    return null;
+  }
+
+  return (
+    <>
+      <button
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
+        className={styles.scoreboardButton}
+        onClick={() => setOpen(true)}
+        type="button"
+      >
+        Scores
+      </button>
+      {isOpen ? (
+        <div
+          className={styles.scoreboardModalOverlay}
+          onClick={() => setOpen(false)}
+        >
+          <div
+            aria-label="Scoreboard"
+            aria-modal="true"
+            className={styles.scoreboardDialog}
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <button
+              aria-label="Close scoreboard"
+              className={styles.scoreboardCloseButton}
+              onClick={() => setOpen(false)}
+              type="button"
+            >
+              X
+            </button>
+            <div className={styles.scoreboardTableWrapper}>
+              <ScoresTable board={board} />
+            </div>
+            <div className={styles.scoreboardActions}>
+              <Button type="primary" onClick={() => setOpen(false)}>
+                Done
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+});
