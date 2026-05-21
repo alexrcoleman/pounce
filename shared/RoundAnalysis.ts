@@ -27,6 +27,7 @@ export type RoundAnalysis = {
   roundEndedAt: number;
   durationMs: number;
   pouncerIndex: number | null;
+  moveLog: RoundAnalysisMoveEvent[];
   playerReports: PlayerRoundAnalysis[];
 };
 
@@ -52,6 +53,7 @@ export type PlayerRoundAnalysis = {
     longestMissMs: number;
   };
   highlights: RoundAnalysisHighlight[];
+  moves: RoundAnalysisMoveEvent[];
 };
 
 export type RoundAnalysisHighlight = {
@@ -88,6 +90,11 @@ export type RoundAnalysisActionContext = {
   playerIndex?: number;
   playerName: string;
   description: string;
+};
+
+export type RoundAnalysisMoveEvent = RoundAnalysisActionContext & {
+  id: string;
+  moveType: Move["type"] | "manual_rotate" | "auto_rotate";
 };
 
 type CenterPlaySource =
@@ -163,6 +170,7 @@ export function analyzeRoundSnapshots(
   const finalBoard = finalSnapshot.board;
   const playerCount = finalBoard.players.length;
   const moveStatsByPlayer = collectMoveStats(orderedSnapshots, playerCount);
+  const moveLog = collectMoveLog(orderedSnapshots, firstSnapshot.time);
   const openWindows = Array.from({ length: playerCount }, () => new Map<
     string,
     OpenCenterPlayWindow
@@ -349,6 +357,7 @@ export function analyzeRoundSnapshots(
     roundEndedAt: finalSnapshot.time,
     durationMs: Math.max(0, finalSnapshot.time - firstSnapshot.time),
     pouncerIndex: pouncerIndex >= 0 ? pouncerIndex : null,
+    moveLog,
     playerReports: finalBoard.players.map((player, playerIndex) => {
       const highlights = highlightsByPlayer[playerIndex]
         .sort((a, b) => b.sortScore - a.sortScore)
@@ -406,9 +415,49 @@ export function analyzeRoundSnapshots(
           ),
         },
         highlights,
+        moves: moveLog.filter((move) => move.playerIndex === playerIndex),
       };
     }),
   };
+}
+
+function collectMoveLog(
+  snapshots: RoundSnapshot[],
+  roundStartedAt: number
+): RoundAnalysisMoveEvent[] {
+  return snapshots.flatMap((snapshot, index) => {
+    const actionContext = getSnapshotActionContext(
+      snapshot,
+      roundStartedAt,
+      snapshots[index - 1]
+    );
+    const moveType = getSnapshotMoveType(snapshot);
+    if (!actionContext || !moveType) {
+      return [];
+    }
+
+    return [
+      {
+        ...actionContext,
+        id: `move:${index}:${actionContext.playerIndex ?? "table"}:${
+          actionContext.offsetMs
+        }`,
+        moveType,
+      },
+    ];
+  });
+}
+
+function getSnapshotMoveType(
+  snapshot: RoundSnapshot
+): RoundAnalysisMoveEvent["moveType"] | undefined {
+  if (snapshot.reason === "manual_rotate") {
+    return "manual_rotate";
+  }
+  if (snapshot.reason === "auto_rotate") {
+    return "auto_rotate";
+  }
+  return snapshot.move?.type;
 }
 
 function collectMoveStats(

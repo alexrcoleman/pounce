@@ -4,6 +4,7 @@ import type {
   PlayerRoundAnalysis,
   RoundAnalysis,
   RoundAnalysisHighlight,
+  RoundAnalysisMoveEvent,
 } from "../shared/RoundAnalysis";
 import type { CardState } from "../shared/GameUtils";
 import { Drawer, Modal } from "antd";
@@ -36,6 +37,7 @@ export default function RoundAnalysisPanel({
     useState(defaultPlayerIndex);
   const [selectedHighlight, setSelectedHighlight] =
     useState<RoundAnalysisHighlight | null>(null);
+  const [isFullMoveLogOpen, setIsFullMoveLogOpen] = useState(false);
   const useDrawerPreview = useMediaQuery("(max-width: 640px)");
 
   useEffect(() => {
@@ -63,6 +65,8 @@ export default function RoundAnalysisPanel({
     analysis.playerReports.find(
       (report) => report.playerIndex === selectedPlayerIndex
     ) ?? analysis.playerReports[0];
+  const selectedMoves = collapseMoveEvents(selectedReport.moves ?? []);
+  const fullMoveLog = collapseMoveEvents(analysis.moveLog ?? []);
 
   return (
     <section className={styles.root} data-testid="round-analysis-panel">
@@ -152,6 +156,10 @@ export default function RoundAnalysisPanel({
           player.
         </p>
       )}
+      <AllMovesSection
+        moves={selectedMoves}
+        onOpenFullLog={() => setIsFullMoveLogOpen(true)}
+      />
       {useDrawerPreview ? (
         <Drawer
           className={styles.snapshotDrawer}
@@ -172,6 +180,28 @@ export default function RoundAnalysisPanel({
           width={760}
         >
           {selectedHighlight && <MomentSnapshot highlight={selectedHighlight} />}
+        </Modal>
+      )}
+      {useDrawerPreview ? (
+        <Drawer
+          className={styles.snapshotDrawer}
+          height="86dvh"
+          onClose={() => setIsFullMoveLogOpen(false)}
+          open={isFullMoveLogOpen}
+          placement="bottom"
+          title="Full game log"
+        >
+          <MoveLog moves={fullMoveLog} showPlayer />
+        </Drawer>
+      ) : (
+        <Modal
+          footer={null}
+          onCancel={() => setIsFullMoveLogOpen(false)}
+          open={isFullMoveLogOpen}
+          title="Full game log"
+          width={640}
+        >
+          <MoveLog moves={fullMoveLog} showPlayer />
         </Modal>
       )}
     </section>
@@ -217,6 +247,80 @@ function Moment({
           </div>
         </div>
       </button>
+    </li>
+  );
+}
+
+type DisplayedMoveEvent = RoundAnalysisMoveEvent & {
+  repeatCount: number;
+  endOffsetMs: number;
+};
+
+function AllMovesSection({
+  moves,
+  onOpenFullLog,
+}: {
+  moves: DisplayedMoveEvent[];
+  onOpenFullLog: () => void;
+}) {
+  return (
+    <div className={styles.movesSection}>
+      <div className={styles.movesHeaderRow}>
+        <div className={styles.momentsHeader}>All moves</div>
+        <button
+          className={styles.secondaryAction}
+          onClick={onOpenFullLog}
+          type="button"
+        >
+          Full game log
+        </button>
+      </div>
+      <MoveLog moves={moves} showPlayer={false} />
+    </div>
+  );
+}
+
+function MoveLog({
+  moves,
+  showPlayer,
+}: {
+  moves: DisplayedMoveEvent[];
+  showPlayer: boolean;
+}) {
+  if (moves.length === 0) {
+    return <p className={styles.emptyText}>No recorded moves.</p>;
+  }
+
+  return (
+    <ol className={styles.moveList}>
+      {moves.map((move) => (
+        <MoveRow key={move.id} move={move} showPlayer={showPlayer} />
+      ))}
+    </ol>
+  );
+}
+
+function MoveRow({
+  move,
+  showPlayer,
+}: {
+  move: DisplayedMoveEvent;
+  showPlayer: boolean;
+}) {
+  return (
+    <li className={styles.moveItem}>
+      <div className={styles.moveTime}>{formatMoveTime(move)}</div>
+      <div className={styles.moveBody}>
+        <div className={styles.moveDescription}>
+          {showPlayer && (
+            <>
+              <span className={styles.moveActor}>{move.playerName}</span>{" "}
+            </>
+          )}
+          {formatMoveDescription(move)}
+        </div>
+        <div className={styles.moveMeta}>{getMoveTypeLabel(move.moveType)}</div>
+      </div>
     </li>
   );
 }
@@ -558,6 +662,72 @@ function formatActionContext(
       ? "You"
       : action.playerName || "Someone";
   return `${actor} ${action.description}`;
+}
+
+function collapseMoveEvents(
+  moves: RoundAnalysisMoveEvent[]
+): DisplayedMoveEvent[] {
+  return moves.reduce<DisplayedMoveEvent[]>((collapsed, move) => {
+    const previous = collapsed[collapsed.length - 1];
+    if (previous && canCollapseMove(previous, move)) {
+      previous.repeatCount += 1;
+      previous.endOffsetMs = move.offsetMs;
+      return collapsed;
+    }
+
+    collapsed.push({
+      ...move,
+      repeatCount: 1,
+      endOffsetMs: move.offsetMs,
+    });
+    return collapsed;
+  }, []);
+}
+
+function canCollapseMove(
+  previous: DisplayedMoveEvent,
+  move: RoundAnalysisMoveEvent
+): boolean {
+  return (
+    previous.moveType === "cycle" &&
+    move.moveType === "cycle" &&
+    previous.playerIndex === move.playerIndex &&
+    previous.playerName === move.playerName
+  );
+}
+
+function formatMoveDescription(move: DisplayedMoveEvent): string {
+  if (move.moveType === "cycle" && move.repeatCount > 1) {
+    return `cycled the deck ${move.repeatCount} times`;
+  }
+
+  return move.description;
+}
+
+function formatMoveTime(move: DisplayedMoveEvent): string {
+  if (move.repeatCount > 1 && move.endOffsetMs > move.offsetMs) {
+    return `${formatDuration(move.offsetMs)}-${formatDuration(
+      move.endOffsetMs
+    )}`;
+  }
+
+  return formatDuration(move.offsetMs);
+}
+
+function getMoveTypeLabel(moveType: RoundAnalysisMoveEvent["moveType"]): string {
+  if (moveType === "c2c") {
+    return "center";
+  }
+  if (moveType === "c2s" || moveType === "s2s") {
+    return "solitaire";
+  }
+  if (moveType === "cycle" || moveType === "flip_deck") {
+    return "deck";
+  }
+  if (moveType === "manual_rotate" || moveType === "auto_rotate") {
+    return "table";
+  }
+  return "layout";
 }
 
 function useMediaQuery(query: string): boolean {
