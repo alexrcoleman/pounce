@@ -129,8 +129,9 @@ export default function RoundAnalysisPanel({
         </ol>
       ) : (
         <p className={styles.emptyText}>
-          No missed center or pounce-helper windows over {formatDuration(750)}
-          showed up for this player.
+          No missed center windows over {formatDuration(750)} or
+          pounce-helper windows over {formatDuration(3000)} showed up for this
+          player.
         </p>
       )}
     </section>
@@ -153,7 +154,10 @@ function Moment({ highlight }: { highlight: RoundAnalysisHighlight }) {
         {highlight.severity}
       </div>
       <div className={styles.momentBody}>
-        <div className={styles.momentTitle}>{highlight.title}</div>
+        <div className={styles.momentTitleRow}>
+          <div className={styles.momentTitle}>{highlight.title}</div>
+          <div className={styles.pointValue}>+{highlight.pointValue} pts</div>
+        </div>
         <div className={styles.momentDetail}>{highlight.detail}</div>
         <div className={styles.momentMeta}>
           {formatDuration(highlight.durationMs)} window

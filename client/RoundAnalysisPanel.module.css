@@ -174,9 +174,29 @@
   min-width: 0;
 }
 
+.momentTitleRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .momentTitle {
+  min-width: 0;
   font-weight: 800;
   line-height: 1.15;
+}
+
+.pointValue {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border: 1px solid #bfd5c9;
+  border-radius: 4px;
+  background: #edf7f1;
+  color: #17683b;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.1;
 }
 
 .momentDetail {
