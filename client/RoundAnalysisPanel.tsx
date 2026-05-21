@@ -5,9 +5,8 @@ import type {
   RoundAnalysis,
   RoundAnalysisHighlight,
 } from "../shared/RoundAnalysis";
-import { formatCard } from "../shared/RoundAnalysis";
 import type { CardState } from "../shared/GameUtils";
-import { Modal } from "antd";
+import { Drawer, Modal } from "antd";
 import styles from "./RoundAnalysisPanel.module.css";
 
 type Props = {
@@ -37,6 +36,7 @@ export default function RoundAnalysisPanel({
     useState(defaultPlayerIndex);
   const [selectedHighlight, setSelectedHighlight] =
     useState<RoundAnalysisHighlight | null>(null);
+  const useDrawerPreview = useMediaQuery("(max-width: 640px)");
 
   useEffect(() => {
     setSelectedPlayerIndex(defaultPlayerIndex);
@@ -152,17 +152,28 @@ export default function RoundAnalysisPanel({
           player.
         </p>
       )}
-      <Modal
-        footer={null}
-        onCancel={() => setSelectedHighlight(null)}
-        open={selectedHighlight != null}
-        title={selectedHighlight?.title}
-        width={760}
-      >
-        {selectedHighlight && (
-          <MomentSnapshot highlight={selectedHighlight} />
-        )}
-      </Modal>
+      {useDrawerPreview ? (
+        <Drawer
+          className={styles.snapshotDrawer}
+          height="86dvh"
+          onClose={() => setSelectedHighlight(null)}
+          open={selectedHighlight != null}
+          placement="bottom"
+          title={selectedHighlight?.title}
+        >
+          {selectedHighlight && <MomentSnapshot highlight={selectedHighlight} />}
+        </Drawer>
+      ) : (
+        <Modal
+          footer={null}
+          onCancel={() => setSelectedHighlight(null)}
+          open={selectedHighlight != null}
+          title={selectedHighlight?.title}
+          width={760}
+        >
+          {selectedHighlight && <MomentSnapshot highlight={selectedHighlight} />}
+        </Modal>
+      )}
     </section>
   );
 }
@@ -254,7 +265,7 @@ function MomentSnapshot({ highlight }: { highlight: RoundAnalysisHighlight }) {
                 cards={stack}
                 highlightCard={highlight.card}
                 key={index}
-                label={`Stack ${index + 1}`}
+                label={`S${index + 1}`}
               />
             ))}
           </div>
@@ -306,14 +317,12 @@ function SnapshotTopPile({
   const topCard = cards[cards.length - 1];
 
   return (
-    <div className={styles.snapshotPile}>
-      <div className={styles.snapshotPileLabel}>
-        {label} <span>{cards.length}</span>
-      </div>
+    <div className={styles.labeledCard}>
+      <span className={styles.labeledCardLabel}>{label}</span>
       {topCard ? (
         <CardPill card={topCard} highlightCard={highlightCard} />
       ) : (
-        <div className={styles.emptyPile}>Empty</div>
+        <span className={styles.emptyMiniCard}>Empty</span>
       )}
     </div>
   );
@@ -329,8 +338,8 @@ function SnapshotStack({
   label: string;
 }) {
   return (
-    <div className={styles.snapshotPile}>
-      <div className={styles.snapshotPileLabel}>
+    <div className={styles.stackColumn}>
+      <div className={styles.stackColumnLabel}>
         {label} <span>{cards.length}</span>
       </div>
       {cards.length > 0 ? (
@@ -344,7 +353,7 @@ function SnapshotStack({
           ))}
         </div>
       ) : (
-        <div className={styles.emptyPile}>Empty</div>
+        <span className={styles.emptyMiniCard}>Empty</span>
       )}
     </div>
   );
@@ -365,47 +374,28 @@ function OtherPlayerSnapshot({
   return (
     <div className={styles.otherPlayer}>
       <div className={styles.otherPlayerName}>{player.name}</div>
-      <div className={styles.otherPlayerCards}>
-        <LabeledCard
-          card={player.pounceDeck[player.pounceDeck.length - 1]}
+      <div className={styles.visiblePileGrid}>
+        <SnapshotTopPile
+          cards={player.pounceDeck}
           highlightCard={highlightCard}
-          label="P"
+          label="Pounce"
         />
-        <LabeledCard
-          card={player.flippedDeck[player.flippedDeck.length - 1]}
+        <SnapshotTopPile
+          cards={player.flippedDeck}
           highlightCard={highlightCard}
-          label="W"
+          label="Waste"
         />
+      </div>
+      <div className={styles.solitaireStackGrid}>
         {player.stacks.map((stack, index) => (
-          <LabeledCard
-            card={stack[stack.length - 1]}
+          <SnapshotStack
+            cards={stack}
             highlightCard={highlightCard}
             key={index}
             label={`S${index + 1}`}
           />
         ))}
       </div>
-    </div>
-  );
-}
-
-function LabeledCard({
-  card,
-  highlightCard,
-  label,
-}: {
-  card?: CardState;
-  highlightCard: CardState;
-  label: string;
-}) {
-  return (
-    <div className={styles.labeledCard}>
-      <span className={styles.labeledCardLabel}>{label}</span>
-      {card ? (
-        <CardPill card={card} highlightCard={highlightCard} />
-      ) : (
-        <span className={styles.emptyMiniCard}>Empty</span>
-      )}
     </div>
   );
 }
@@ -424,12 +414,14 @@ function CardPill({
   return (
     <span
       className={
-        isSameCard(card, highlightCard)
-          ? `${styles.cardPill} ${styles.highlightCard}`
-          : styles.cardPill
+        [
+          styles.cardPill,
+          isRedSuit(card) ? styles.redCard : styles.blackCard,
+          isSameCard(card, highlightCard) ? styles.highlightCard : "",
+        ].join(" ")
       }
     >
-      {formatCard(card)}
+      {formatCompactCard(card)}
     </span>
   );
 }
@@ -480,4 +472,44 @@ function isSameCard(card: CardState, other: CardState): boolean {
     card.suit === other.suit &&
     card.value === other.value
   );
+}
+
+function formatCompactCard(card: CardState): string {
+  const value =
+    card.value === 1
+      ? "A"
+      : card.value === 11
+      ? "J"
+      : card.value === 12
+      ? "Q"
+      : card.value === 13
+      ? "K"
+      : String(card.value);
+  const suit =
+    card.suit === "clubs"
+      ? "♣"
+      : card.suit === "diamonds"
+      ? "♦"
+      : card.suit === "hearts"
+      ? "♥"
+      : "♠";
+  return `${value}${suit}`;
+}
+
+function isRedSuit(card: CardState): boolean {
+  return card.suit === "diamonds" || card.suit === "hearts";
+}
+
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia(query);
+    const updateMatches = () => setMatches(mediaQuery.matches);
+    updateMatches();
+    mediaQuery.addEventListener("change", updateMatches);
+    return () => mediaQuery.removeEventListener("change", updateMatches);
+  }, [query]);
+
+  return matches;
 }
