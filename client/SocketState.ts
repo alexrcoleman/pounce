@@ -8,6 +8,7 @@ import {
   type ActionEnvelope,
   type BoardUpdate,
 } from "../shared/SocketTypes";
+import type { RoundAnalysis } from "../shared/RoundAnalysis";
 
 type PendingMoveAction = {
   actionId: string;
@@ -32,6 +33,7 @@ export default class SocketState {
   socketId = "";
   hands: CursorState[] = [];
   pendingMoves: PendingMoveAction[] = [];
+  roundAnalysis: RoundAnalysis | null = null;
   private nextActionNumber = 0;
   constructor() {
     makeAutoObservable(this);
@@ -50,6 +52,10 @@ export default class SocketState {
     );
     this.latency = Date.now() - data.time;
     this.lastTime = data.time;
+    this.roundAnalysis = applyDeepUpdate(
+      this.roundAnalysis,
+      data.roundAnalysis ?? null
+    );
     this.recomputeBoard();
   }
   onConnect(socketId: string) {
@@ -125,6 +131,7 @@ export default class SocketState {
     this.serverRevision = 0;
     this.pendingMoves = [];
     this.hands = [];
+    this.roundAnalysis = null;
   }
   private recomputeBoard() {
     if (!this.serverBoard) {

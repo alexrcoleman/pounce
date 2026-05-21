@@ -4,6 +4,7 @@ import {
   CursorState,
   createBoard,
 } from "./GameUtils";
+import type { RoundAnalysis, RoundSnapshot } from "./RoundAnalysis";
 
 export type RoomSettings = {
   fairHandRotation: boolean;
@@ -23,6 +24,8 @@ export type RoomState = {
   queuedHands: CardState[][][];
   autoStart: boolean;
   settings: RoomSettings;
+  roundSnapshots: RoundSnapshot[];
+  lastRoundAnalysis: RoundAnalysis | null;
 };
 
 export function createRoomState(playerCount: number): RoomState {
@@ -40,5 +43,7 @@ export function createRoomState(playerCount: number): RoomState {
       fairHandRotation: false,
     },
     timescale: 1,
+    roundSnapshots: [],
+    lastRoundAnalysis: null,
   };
 }

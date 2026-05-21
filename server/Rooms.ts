@@ -52,6 +52,7 @@ export function broadcastUpdate(roomId: string) {
     settings: room.settings,
     time: Date.now(),
     revision: room.revision,
+    roundAnalysis: room.lastRoundAnalysis,
   });
   scheduleAIReactionBoard(room);
 }
