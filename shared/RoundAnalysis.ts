@@ -180,10 +180,11 @@ export function analyzeRoundSnapshots(
   }));
   const highlightsByPlayer = Array.from({ length: playerCount }, () => [] as RoundAnalysisHighlight[]);
 
-  orderedSnapshots.forEach((snapshot) => {
+  orderedSnapshots.forEach((snapshot, snapshotIndex) => {
     const actionContext = getSnapshotActionContext(
       snapshot,
-      firstSnapshot.time
+      firstSnapshot.time,
+      orderedSnapshots[snapshotIndex - 1]
     );
 
     snapshot.board.players.forEach((player, playerIndex) => {
@@ -428,24 +429,35 @@ function collectMoveStats(
   snapshots.forEach((snapshot, index) => {
     const move = snapshot.move;
     const playerIndex = snapshot.playerIndex;
+    const previousSnapshot = snapshots[index - 1];
     if (!move || playerIndex == null || !stats[playerIndex]) {
       return;
     }
 
     if (move.type === "c2c") {
-      const movedCard = getMovedCenterCard(snapshot);
+      const movedCard = getMovedCenterCard(snapshot, previousSnapshot);
       if (movedCard && movedCard.player === playerIndex) {
         stats[playerIndex].centerCardKeys.add(cardKey(movedCard));
         stats[playerIndex].cardsPlayedToCenter =
           stats[playerIndex].centerCardKeys.size;
       }
     } else if (move.type === "c2s" || move.type === "s2s") {
-      stats[playerIndex].solitaireMoves += 1;
-    } else if (move.type === "cycle") {
-      stats[playerIndex].deckCycles += getDeckCycles(
-        snapshots[index - 1]?.board,
-        playerIndex
+      const movedCards = getMovedSolitaireCards(
+        snapshot,
+        previousSnapshot,
+        playerIndex,
+        move.dest
       );
+      if (movedCards.length > 0) {
+        stats[playerIndex].solitaireMoves += 1;
+      }
+    } else if (move.type === "cycle") {
+      if (didPlayerDeckChange(snapshot, previousSnapshot, playerIndex)) {
+        stats[playerIndex].deckCycles += getDeckCycles(
+          previousSnapshot?.board,
+          playerIndex
+        );
+      }
     }
   });
 
@@ -504,7 +516,8 @@ function addWindowAction(
 
 function getSnapshotActionContext(
   snapshot: RoundSnapshot,
-  roundStartedAt: number
+  roundStartedAt: number,
+  previousSnapshot?: RoundSnapshot
 ): RoundAnalysisActionContext | undefined {
   const offsetMs = Math.max(0, snapshot.time - roundStartedAt);
 
@@ -532,49 +545,162 @@ function getSnapshotActionContext(
 
   const playerName =
     snapshot.board.players[playerIndex]?.name ?? `Player ${playerIndex + 1}`;
+  const description = getMoveDescription(
+    snapshot,
+    previousSnapshot,
+    playerIndex,
+    move
+  );
+  if (!description) {
+    return undefined;
+  }
 
   return {
     offsetMs,
     playerIndex,
     playerName,
-    description: getMoveDescription(snapshot, playerIndex, move),
+    description,
   };
 }
 
 function getMoveDescription(
   snapshot: RoundSnapshot,
+  previousSnapshot: RoundSnapshot | undefined,
   playerIndex: number,
   move: Move
-): string {
+): string | undefined {
   if (move.type === "cycle") {
+    if (!didPlayerDeckChange(snapshot, previousSnapshot, playerIndex)) {
+      return undefined;
+    }
     return "cycled the deck";
   }
   if (move.type === "flip_deck") {
+    if (!didPlayerDeckChange(snapshot, previousSnapshot, playerIndex)) {
+      return undefined;
+    }
     return "flipped the deck";
   }
   if (move.type === "move_field_stack") {
     return "moved a center pile";
   }
   if (move.type === "c2c") {
-    const movedCard = getMovedCenterCard(snapshot);
+    const movedCard = getMovedCenterCard(snapshot, previousSnapshot);
+    if (!movedCard) {
+      return undefined;
+    }
     return movedCard
       ? `played ${formatCard(movedCard)} to center`
       : "played a card to center";
   }
   if (move.type === "c2s") {
-    const movedCard = peek(
-      snapshot.board.players[playerIndex]?.stacks[move.dest] ?? []
-    );
+    const movedCard = getMovedSolitaireCards(
+      snapshot,
+      previousSnapshot,
+      playerIndex,
+      move.dest
+    )[0];
+    if (!movedCard) {
+      return undefined;
+    }
     const sourceLabel = move.source === "pounce" ? "pounce" : "waste";
-    return movedCard
-      ? `moved ${formatCard(movedCard)} from ${sourceLabel} to S${move.dest + 1}`
-      : `moved a card from ${sourceLabel} to S${move.dest + 1}`;
+    return `moved ${formatCard(movedCard)} from ${sourceLabel} to S${
+      move.dest + 1
+    }`;
   }
 
-  const destStack = snapshot.board.players[playerIndex]?.stacks[move.dest] ?? [];
-  const movedCard = destStack[destStack.length - move.count];
-  const cardLabel = movedCard ? formatCard(movedCard) : `${move.count} cards`;
+  const movedCards = getMovedSolitaireCards(
+    snapshot,
+    previousSnapshot,
+    playerIndex,
+    move.dest
+  );
+  if (movedCards.length === 0) {
+    return undefined;
+  }
+  const cardLabel =
+    movedCards.length === 1 ? formatCard(movedCards[0]) : `${move.count} cards`;
   return `moved ${cardLabel} from S${move.source + 1} to S${move.dest + 1}`;
+}
+
+function getMovedSolitaireCards(
+  snapshot: RoundSnapshot,
+  previousSnapshot: RoundSnapshot | undefined,
+  playerIndex: number,
+  destStackIndex: number
+): CardState[] {
+  const currentStack =
+    snapshot.board.players[playerIndex]?.stacks[destStackIndex] ?? [];
+  if (!previousSnapshot) {
+    return currentStack.length > 0 ? [currentStack[currentStack.length - 1]] : [];
+  }
+
+  return getAddedCards(
+    previousSnapshot.board.players[playerIndex]?.stacks[destStackIndex] ?? [],
+    currentStack
+  );
+}
+
+function getAddedCards(
+  previousCards: CardState[],
+  currentCards: CardState[]
+): CardState[] {
+  const previousCounts = new Map<string, number>();
+  previousCards.forEach((card) => {
+    const key = cardKey(card);
+    previousCounts.set(key, (previousCounts.get(key) ?? 0) + 1);
+  });
+
+  return currentCards.filter((card) => {
+    const key = cardKey(card);
+    const previousCount = previousCounts.get(key) ?? 0;
+    if (previousCount > 0) {
+      previousCounts.set(key, previousCount - 1);
+      return false;
+    }
+    return true;
+  });
+}
+
+function getAddedCardsAcrossPiles(
+  previousPiles: CardState[][],
+  currentPiles: CardState[][]
+): CardState[] {
+  const previousCards = previousPiles.flat();
+  const currentCards = currentPiles.flat();
+  return getAddedCards(previousCards, currentCards);
+}
+
+function didPlayerDeckChange(
+  snapshot: RoundSnapshot,
+  previousSnapshot: RoundSnapshot | undefined,
+  playerIndex: number
+): boolean {
+  if (!previousSnapshot) {
+    return true;
+  }
+
+  const previousPlayer = previousSnapshot.board.players[playerIndex];
+  const currentPlayer = snapshot.board.players[playerIndex];
+  if (!previousPlayer || !currentPlayer) {
+    return false;
+  }
+
+  return (
+    previousPlayer.deck.length !== currentPlayer.deck.length ||
+    previousPlayer.flippedDeck.length !== currentPlayer.flippedDeck.length ||
+    optionalCardKey(peek(previousPlayer.deck)) !==
+      optionalCardKey(peek(currentPlayer.deck)) ||
+    optionalCardKey(peek(previousPlayer.flippedDeck)) !==
+      optionalCardKey(peek(currentPlayer.flippedDeck))
+  );
+}
+
+function optionalCardKey(card: CardState | undefined): string | undefined {
+  if (!card) {
+    return undefined;
+  }
+  return cardKey(card);
 }
 
 export function enumerateAvailableCenterPlays(
@@ -1027,10 +1153,28 @@ function isOwnCenterPlay(
   );
 }
 
-function getMovedCenterCard(snapshot: RoundSnapshot): CardState | undefined {
+function getMovedCenterCard(
+  snapshot: RoundSnapshot,
+  previousSnapshot?: RoundSnapshot
+): CardState | undefined {
   if (snapshot.move?.type !== "c2c") {
     return undefined;
   }
+
+  if (previousSnapshot) {
+    const destAddedCards = getAddedCards(
+      previousSnapshot.board.piles[snapshot.move.dest] ?? [],
+      snapshot.board.piles[snapshot.move.dest] ?? []
+    );
+    return (
+      destAddedCards[0] ??
+      getAddedCardsAcrossPiles(
+        previousSnapshot.board.piles,
+        snapshot.board.piles
+      )[0]
+    );
+  }
+
   return peek(snapshot.board.piles[snapshot.move.dest] ?? []);
 }
 
