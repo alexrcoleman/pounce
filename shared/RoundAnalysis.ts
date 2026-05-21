@@ -67,7 +67,9 @@ export type RoundAnalysisHighlight = {
     | "missed_pounce_connector"
     | "missed_pounce_slot"
     | "delayed_center_play"
-    | "delayed_pounce_helper";
+    | "delayed_pounce_helper"
+    | "buried_center_shuffle"
+    | "delayed_buried_center_shuffle";
   severity: "high" | "medium" | "low";
   title: string;
   detail: string;
@@ -129,7 +131,8 @@ type SolitaireSource =
 type PounceHelperBenefit =
   | "play_pounce_to_solitaire"
   | "connect_pounce_card"
-  | "free_slot_for_pounce";
+  | "free_slot_for_pounce"
+  | "connect_slot_for_pounce";
 
 type AvailablePounceHelper = {
   id: string;
@@ -140,9 +143,33 @@ type AvailablePounceHelper = {
   destTopCard?: CardState;
   pounceCard: CardState;
   benefit: PounceHelperBenefit;
+  slotSourceStackIndex?: number;
+  slotSourceCard?: CardState;
 };
 
 type OpenPounceHelperWindow = AvailablePounceHelper & {
+  firstSeen: number;
+  lastSeen: number;
+  firstSeenBoard: BoardState;
+  openedByAction?: RoundAnalysisActionContext;
+  windowActions: RoundAnalysisActionContext[];
+  seenCount: number;
+};
+
+type AvailableBuriedCenterShuffle = {
+  id: string;
+  playerIndex: number;
+  card: CardState;
+  sourceStackIndex: number;
+  destStackIndex: number;
+  movingRootCard: CardState;
+  moveCount: number;
+  destTopCard?: CardState;
+  destPileIndex: number;
+  pounceSlotCard?: CardState;
+};
+
+type OpenBuriedCenterShuffleWindow = AvailableBuriedCenterShuffle & {
   firstSeen: number;
   lastSeen: number;
   firstSeenBoard: BoardState;
@@ -180,6 +207,10 @@ export function analyzeRoundSnapshots(
   const openPounceHelperWindows = Array.from(
     { length: playerCount },
     () => new Map<string, OpenPounceHelperWindow>()
+  );
+  const openBuriedCenterShuffleWindows = Array.from(
+    { length: playerCount },
+    () => new Map<string, OpenBuriedCenterShuffleWindow>()
   );
   const opportunityStatsByPlayer = Array.from({ length: playerCount }, () => ({
     centerMissed: 0,
@@ -319,6 +350,64 @@ export function analyzeRoundSnapshots(
           seenCount: 1,
         });
       });
+
+      const currentBuriedCenterShuffles =
+        enumerateAvailableBuriedCenterShuffles(snapshot.board, playerIndex);
+      const currentBuriedCenterShuffleIds = new Set(
+        currentBuriedCenterShuffles.map((play) => play.id)
+      );
+      const playerOpenBuriedCenterShuffleWindows =
+        openBuriedCenterShuffleWindows[playerIndex];
+
+      Array.from(playerOpenBuriedCenterShuffleWindows.values()).forEach(
+        (openWindow) => {
+          if (currentBuriedCenterShuffleIds.has(openWindow.id)) {
+            return;
+          }
+
+          playerOpenBuriedCenterShuffleWindows.delete(openWindow.id);
+          addWindowAction(openWindow, snapshot, actionContext);
+          const wasOwnSetup = isOwnBuriedCenterShuffleSetup(
+            openWindow,
+            snapshot
+          );
+          const highlight = createBuriedCenterShuffleHighlight(
+            openWindow,
+            snapshot,
+            firstSnapshot.time,
+            actionContext
+          );
+          if (!wasOwnSetup && highlight) {
+            opportunityStatsByPlayer[playerIndex].centerMissed += 1;
+          }
+          if (highlight) {
+            highlightsByPlayer[playerIndex].push(highlight);
+            if (isDelayedHighlight(highlight)) {
+              opportunityStatsByPlayer[playerIndex].delayedPlays += 1;
+            }
+          }
+        }
+      );
+
+      currentBuriedCenterShuffles.forEach((play) => {
+        const openWindow = playerOpenBuriedCenterShuffleWindows.get(play.id);
+        if (openWindow) {
+          addWindowAction(openWindow, snapshot, actionContext);
+          openWindow.lastSeen = snapshot.time;
+          openWindow.seenCount += 1;
+          return;
+        }
+
+        playerOpenBuriedCenterShuffleWindows.set(play.id, {
+          ...play,
+          firstSeen: snapshot.time,
+          lastSeen: snapshot.time,
+          firstSeenBoard: snapshot.board,
+          openedByAction: actionContext,
+          windowActions: [],
+          seenCount: 1,
+        });
+      });
     });
   });
 
@@ -346,6 +435,20 @@ export function analyzeRoundSnapshots(
       );
       if (highlight) {
         opportunityStatsByPlayer[playerIndex].solitaireMissed += 1;
+        highlightsByPlayer[playerIndex].push(highlight);
+      }
+    });
+  });
+
+  openBuriedCenterShuffleWindows.forEach((playerOpenWindows, playerIndex) => {
+    Array.from(playerOpenWindows.values()).forEach((openWindow) => {
+      const highlight = createBuriedCenterShuffleHighlight(
+        openWindow,
+        finalSnapshot,
+        firstSnapshot.time
+      );
+      if (highlight) {
+        opportunityStatsByPlayer[playerIndex].centerMissed += 1;
         highlightsByPlayer[playerIndex].push(highlight);
       }
     });
@@ -839,6 +942,15 @@ export function enumerateAvailablePounceHelpers(
         destStackIndex,
         pounceCard
       );
+      addPounceSlotConnectorIfUseful(
+        helpers,
+        playerIndex,
+        deckCard,
+        destStack,
+        destStackIndex,
+        player.stacks,
+        pounceCard
+      );
     });
   }
 
@@ -884,6 +996,123 @@ export function enumerateAvailablePounceHelpers(
   return helpers;
 }
 
+export function enumerateAvailableBuriedCenterShuffles(
+  board: BoardState,
+  playerIndex: number
+): AvailableBuriedCenterShuffle[] {
+  const player = board.players[playerIndex];
+  if (!player || player.isSpectating) {
+    return [];
+  }
+
+  const playsById = new Map<string, AvailableBuriedCenterShuffle>();
+
+  player.stacks.forEach((sourceStack, sourceStackIndex) => {
+    if (sourceStack.length < 2) {
+      return;
+    }
+
+    sourceStack.forEach((card, cardIndex) => {
+      if (cardIndex >= sourceStack.length - 1) {
+        return;
+      }
+
+      const destPileIndex = board.piles.findIndex((pile) =>
+        canPlayOnCenterPile(pile, card)
+      );
+      if (destPileIndex < 0) {
+        return;
+      }
+
+      const movingRootCard = sourceStack[cardIndex + 1];
+      const moveCount = sourceStack.length - cardIndex - 1;
+
+      player.stacks.forEach((destStack, destStackIndex) => {
+        if (
+          sourceStackIndex === destStackIndex ||
+          !canMoveToSolitairePile(movingRootCard, destStack)
+        ) {
+          return;
+        }
+
+        const play: AvailableBuriedCenterShuffle = {
+          id: `${playerIndex}:buried-center:${sourceStackIndex}:${cardKey(
+            card
+          )}`,
+          playerIndex,
+          card,
+          sourceStackIndex,
+          destStackIndex,
+          movingRootCard,
+          moveCount,
+          destTopCard: peek(destStack),
+          destPileIndex,
+          pounceSlotCard: getPounceSlotCardAfterBuriedCenterShuffle(
+            player,
+            sourceStackIndex,
+            destStackIndex,
+            cardIndex
+          ),
+        };
+        const existing = playsById.get(play.id);
+        if (!existing || isBetterBuriedCenterShuffle(play, existing)) {
+          playsById.set(play.id, play);
+        }
+      });
+    });
+  });
+
+  return Array.from(playsById.values());
+}
+
+function isBetterBuriedCenterShuffle(
+  candidate: AvailableBuriedCenterShuffle,
+  existing: AvailableBuriedCenterShuffle
+): boolean {
+  if (!!candidate.pounceSlotCard !== !!existing.pounceSlotCard) {
+    return !!candidate.pounceSlotCard;
+  }
+  if (candidate.destStackIndex !== existing.destStackIndex) {
+    return candidate.destStackIndex < existing.destStackIndex;
+  }
+  return candidate.destPileIndex < existing.destPileIndex;
+}
+
+function getPounceSlotCardAfterBuriedCenterShuffle(
+  player: NonNullable<BoardState["players"][number]>,
+  sourceStackIndex: number,
+  destStackIndex: number,
+  buriedCardIndex: number
+): CardState | undefined {
+  const pounceCard = peek(player.pounceDeck);
+  if (!pounceCard) {
+    return undefined;
+  }
+
+  const pounceAlreadyHadAHome = player.stacks.some((stack) =>
+    canMoveToSolitairePile(pounceCard, stack)
+  );
+  if (pounceAlreadyHadAHome) {
+    return undefined;
+  }
+
+  const sourceStack = player.stacks[sourceStackIndex];
+  const destStack = player.stacks[destStackIndex];
+  const movedTail = sourceStack.slice(buriedCardIndex + 1);
+  const sourceAfterCenterPlay = sourceStack.slice(0, buriedCardIndex);
+
+  if (sourceAfterCenterPlay.length === 0) {
+    return pounceCard;
+  }
+
+  const destAfterSetup = destStack.concat(movedTail);
+  if (canMoveToSolitairePile(destAfterSetup[0], sourceAfterCenterPlay)) {
+    return pounceCard;
+  }
+
+  return undefined;
+}
+
 function addPounceConnectorIfUseful(
   helpers: AvailablePounceHelper[],
   playerIndex: number,
@@ -916,6 +1145,56 @@ function addPounceConnectorIfUseful(
     destTopCard: peek(destStack),
     pounceCard,
     benefit: "connect_pounce_card",
+  });
+}
+
+function addPounceSlotConnectorIfUseful(
+  helpers: AvailablePounceHelper[],
+  playerIndex: number,
+  deckCard: CardState,
+  destStack: CardState[],
+  destStackIndex: number,
+  stacks: CardState[][],
+  pounceCard: CardState
+): void {
+  if (
+    stacks.some((stack) => stack.length === 0) ||
+    stacks.some((stack) => canMoveToSolitairePile(pounceCard, stack)) ||
+    !canMoveToSolitairePile(deckCard, destStack)
+  ) {
+    return;
+  }
+
+  const destAfterDeckMove = destStack.concat(deckCard);
+  if (canMoveToSolitairePile(pounceCard, destAfterDeckMove)) {
+    return;
+  }
+
+  stacks.forEach((sourceStack, sourceStackIndex) => {
+    const movingRootCard = sourceStack[0];
+    if (
+      sourceStackIndex === destStackIndex ||
+      !movingRootCard ||
+      canMoveToSolitairePile(movingRootCard, destStack) ||
+      !canMoveToSolitairePile(movingRootCard, destAfterDeckMove)
+    ) {
+      return;
+    }
+
+    helpers.push({
+      id: `${playerIndex}:connect-slot:${destStackIndex}:${sourceStackIndex}:${cardKey(
+        deckCard
+      )}:${cardKey(movingRootCard)}:${cardKey(pounceCard)}`,
+      playerIndex,
+      source: { type: "deck" },
+      card: deckCard,
+      destStackIndex,
+      destTopCard: peek(destStack),
+      pounceCard,
+      benefit: "connect_slot_for_pounce",
+      slotSourceStackIndex: sourceStackIndex,
+      slotSourceCard: movingRootCard,
+    });
   });
 }
 
@@ -1050,6 +1329,65 @@ function createPounceHelperHighlight(
   };
 }
 
+function createBuriedCenterShuffleHighlight(
+  openWindow: OpenBuriedCenterShuffleWindow,
+  closingSnapshot: RoundSnapshot,
+  roundStartedAt: number,
+  closedByAction?: RoundAnalysisActionContext
+): RoundAnalysisHighlight | null {
+  const isOwnSetup = isOwnBuriedCenterShuffleSetup(
+    openWindow,
+    closingSnapshot
+  );
+  const durationMs = Math.max(0, closingSnapshot.time - openWindow.firstSeen);
+  if (isOwnSetup && durationMs < MIN_DELAYED_PLAY_WINDOW_MS) {
+    return null;
+  }
+  if (durationMs < MIN_SOLITAIRE_HELPER_WINDOW_MS) {
+    return null;
+  }
+
+  const kind = isOwnSetup
+    ? "delayed_buried_center_shuffle"
+    : "buried_center_shuffle";
+  const cardLabel = formatCard(openWindow.card);
+  const sourceLabel = `solitaire stack ${openWindow.sourceStackIndex + 1}`;
+  const durationLabel = formatDuration(durationMs);
+  const pointValue = getBuriedCenterShufflePointValue(openWindow);
+
+  return {
+    id: `${openWindow.id}:${openWindow.firstSeen}:${closingSnapshot.time}`,
+    kind,
+    severity: getBuriedCenterShuffleSeverity(openWindow, kind, durationMs),
+    title: getBuriedCenterShuffleTitle(openWindow, kind, cardLabel),
+    detail: getBuriedCenterShuffleDetail(
+      openWindow,
+      kind,
+      cardLabel,
+      sourceLabel,
+      durationLabel
+    ),
+    card: openWindow.card,
+    cardLabel,
+    sourceLabel,
+    pointValue,
+    board: openWindow.firstSeenBoard,
+    openedByAction: openWindow.openedByAction,
+    closedByAction,
+    closedReason: getBuriedCenterShuffleCloseReason(
+      openWindow,
+      kind,
+      closingSnapshot
+    ),
+    windowActions: openWindow.windowActions,
+    durationMs,
+    firstSeenOffsetMs: Math.max(0, openWindow.firstSeen - roundStartedAt),
+    lastSeenOffsetMs: Math.max(0, closingSnapshot.time - roundStartedAt),
+    sortScore: getBuriedCenterShuffleSortScore(openWindow, durationMs),
+    playerIndex: openWindow.playerIndex,
+  };
+}
+
 function getCenterPointValue(openWindow: OpenCenterPlayWindow): number {
   const centerPointValue = openWindow.source.type === "pounce" ? 3 : 1;
   return centerPointValue + (getFreedPounceSlotCard(openWindow) ? 2 : 0);
@@ -1099,6 +1437,103 @@ function getPounceHelperPointValue(
     return 2;
   }
   return 2;
+}
+
+function getBuriedCenterShufflePointValue(
+  openWindow: OpenBuriedCenterShuffleWindow
+): number {
+  return 1 + (openWindow.pounceSlotCard ? 2 : 0);
+}
+
+function getBuriedCenterShuffleSeverity(
+  openWindow: OpenBuriedCenterShuffleWindow,
+  kind: RoundAnalysisHighlight["kind"],
+  durationMs: number
+): RoundAnalysisHighlight["severity"] {
+  if (kind === "delayed_buried_center_shuffle") {
+    return "low";
+  }
+  if (openWindow.pounceSlotCard || durationMs >= 8000) {
+    return "high";
+  }
+  return "medium";
+}
+
+function getBuriedCenterShuffleSortScore(
+  openWindow: OpenBuriedCenterShuffleWindow,
+  durationMs: number
+): number {
+  return (openWindow.pounceSlotCard ? 270000 : 230000) + durationMs;
+}
+
+function getBuriedCenterShuffleTitle(
+  openWindow: OpenBuriedCenterShuffleWindow,
+  kind: RoundAnalysisHighlight["kind"],
+  cardLabel: string
+): string {
+  if (kind === "delayed_buried_center_shuffle") {
+    return `Delayed uncovering ${cardLabel}`;
+  }
+  if (openWindow.pounceSlotCard) {
+    return `Could uncover ${cardLabel} and open a slot`;
+  }
+  return `Could uncover ${cardLabel}`;
+}
+
+function getBuriedCenterShuffleDetail(
+  openWindow: OpenBuriedCenterShuffleWindow,
+  kind: RoundAnalysisHighlight["kind"],
+  cardLabel: string,
+  sourceLabel: string,
+  durationLabel: string
+): string {
+  const movingLabel =
+    openWindow.moveCount === 1
+      ? formatCard(openWindow.movingRootCard)
+      : `${openWindow.moveCount} cards starting with ${formatCard(
+          openWindow.movingRootCard
+        )}`;
+  const destLabel = formatSolitaireDest(openWindow.destTopCard);
+  const timingLabel =
+    kind === "delayed_buried_center_shuffle"
+      ? `; this line was available for ${durationLabel} before you started it`
+      : `; this line was available for ${durationLabel}`;
+  const pounceDetail = openWindow.pounceSlotCard
+    ? ` After ${cardLabel} goes to center, this can also open a slot for your pounce card ${formatCard(
+        openWindow.pounceSlotCard
+      )}.`
+    : "";
+
+  return `Moving ${movingLabel} from your ${sourceLabel} to ${destLabel} would expose ${cardLabel} to play to center${timingLabel}.${pounceDetail}`;
+}
+
+function getBuriedCenterShuffleCloseReason(
+  openWindow: OpenBuriedCenterShuffleWindow,
+  kind: RoundAnalysisHighlight["kind"],
+  closingSnapshot: RoundSnapshot
+): string {
+  if (closingSnapshot.reason === "round_end") {
+    return "The round ended while this buried-card line was still available.";
+  }
+  if (kind === "delayed_buried_center_shuffle") {
+    return "You eventually started this shuffle.";
+  }
+
+  const movedCenterCard = getMovedCenterCard(closingSnapshot);
+  if (
+    closingSnapshot.playerIndex != null &&
+    closingSnapshot.playerIndex !== openWindow.playerIndex &&
+    movedCenterCard?.suit === openWindow.card.suit &&
+    movedCenterCard.value === openWindow.card.value
+  ) {
+    return "Another player took the center spot before you could uncover it.";
+  }
+
+  if (closingSnapshot.playerIndex === openWindow.playerIndex) {
+    return "Your move changed the solitaire layout before this line was completed.";
+  }
+
+  return "The buried-card line was no longer available.";
 }
 
 function getWindowCloseReason(
@@ -1160,6 +1595,19 @@ function isOwnPounceHelperPlay(
   );
 }
 
+function isOwnBuriedCenterShuffleSetup(
+  openWindow: OpenBuriedCenterShuffleWindow,
+  closingSnapshot: RoundSnapshot
+): boolean {
+  const move = closingSnapshot.move;
+  return (
+    closingSnapshot.playerIndex === openWindow.playerIndex &&
+    move?.type === "s2s" &&
+    move.source === openWindow.sourceStackIndex &&
+    move.count === openWindow.moveCount
+  );
+}
+
 function isOwnBetterPounceHelperPlay(
   openWindow: OpenPounceHelperWindow,
   closingSnapshot: RoundSnapshot
@@ -1193,6 +1641,9 @@ function getPounceHelperKind(
   if (benefit === "free_slot_for_pounce") {
     return "missed_pounce_slot";
   }
+  if (benefit === "connect_slot_for_pounce") {
+    return "missed_pounce_slot";
+  }
   return "missed_pounce_connector";
 }
 
@@ -1210,6 +1661,9 @@ function getPounceHelperTitle(
   }
   if (openWindow.benefit === "free_slot_for_pounce") {
     return `Could free a slot for ${pounceCardLabel}`;
+  }
+  if (openWindow.benefit === "connect_slot_for_pounce") {
+    return `${cardLabel} set up a slot for ${pounceCardLabel}`;
   }
   return `${cardLabel} connected ${pounceCardLabel}`;
 }
@@ -1230,6 +1684,12 @@ function getPounceHelperDetail(
     if (openWindow.benefit === "free_slot_for_pounce") {
       return `${cardLabel} could move from your ${sourceLabel} to ${destLabel}, freeing an empty slot for your pounce card ${pounceCardLabel}, for ${durationLabel} before you played it.`;
     }
+    if (openWindow.benefit === "connect_slot_for_pounce") {
+      const slotCardLabel = openWindow.slotSourceCard
+        ? formatCard(openWindow.slotSourceCard)
+        : "a solitaire stack";
+      return `${cardLabel} could move from your ${sourceLabel} to ${destLabel}, letting ${slotCardLabel} move there and free a slot for your pounce card ${pounceCardLabel}, for ${durationLabel} before you started it.`;
+    }
     return `${cardLabel} could move from your ${sourceLabel} to ${destLabel}, connecting your pounce card ${pounceCardLabel}, for ${durationLabel} before you played it.`;
   }
   if (openWindow.benefit === "play_pounce_to_solitaire") {
@@ -1237,6 +1697,12 @@ function getPounceHelperDetail(
   }
   if (openWindow.benefit === "free_slot_for_pounce") {
     return `${cardLabel} could move from your ${sourceLabel} to ${destLabel}, freeing an empty slot for your pounce card ${pounceCardLabel} for ${durationLabel}.`;
+  }
+  if (openWindow.benefit === "connect_slot_for_pounce") {
+    const slotCardLabel = openWindow.slotSourceCard
+      ? formatCard(openWindow.slotSourceCard)
+      : "a solitaire stack";
+    return `${cardLabel} could move from your ${sourceLabel} to ${destLabel}, letting ${slotCardLabel} move there and free a slot for your pounce card ${pounceCardLabel} for ${durationLabel}.`;
   }
   return `${cardLabel} could move from your ${sourceLabel} to ${destLabel}, connecting your pounce card ${pounceCardLabel} for ${durationLabel}.`;
 }
@@ -1250,6 +1716,8 @@ function getPounceHelperSortScore(
       ? 280000
       : openWindow.benefit === "free_slot_for_pounce"
       ? 255000
+      : openWindow.benefit === "connect_slot_for_pounce"
+      ? 250000
       : 240000;
   return benefitScore + durationMs;
 }
@@ -1421,7 +1889,8 @@ function isMissedCenterHighlight(highlight: RoundAnalysisHighlight): boolean {
     highlight.kind === "missed_center_play" ||
     highlight.kind === "cycled_past_playable" ||
     highlight.kind === "beaten_to_center" ||
-    highlight.kind === "round_end_available"
+    highlight.kind === "round_end_available" ||
+    highlight.kind === "buried_center_shuffle"
   );
 }
 
@@ -1438,7 +1907,8 @@ function isMissedPounceHelperHighlight(
 function isDelayedHighlight(highlight: RoundAnalysisHighlight): boolean {
   return (
     highlight.kind === "delayed_center_play" ||
-    highlight.kind === "delayed_pounce_helper"
+    highlight.kind === "delayed_pounce_helper" ||
+    highlight.kind === "delayed_buried_center_shuffle"
   );
 }
 
