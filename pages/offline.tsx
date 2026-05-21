@@ -88,6 +88,7 @@ const OfflinePage: NextPage<{
       >
         <ClientContext.Provider value={{ state, socket }}>
           <Header
+            useAnimations={animations}
             setUseAnimations={setAnimations}
             onLeaveRoom={onLeaveRoom}
             roomId="Offline"

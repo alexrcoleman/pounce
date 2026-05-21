@@ -90,6 +90,7 @@ const RoomPage = observer(
         >
           <ClientContext.Provider value={{ state, socket: socket }}>
             <Header
+              useAnimations={animations}
               setUseAnimations={setAnimations}
               onLeaveRoom={onLeaveRoom}
               roomId={roomId}

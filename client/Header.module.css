@@ -55,8 +55,294 @@
   flex-direction: column;
 }
 
-.settingRow {
+.settingsModal :global(.ant-modal) {
+  max-width: calc(100vw - 24px);
+}
+
+.settingsModal :global(.ant-modal-content) {
+  overflow: hidden;
+  border: 1px solid rgba(73, 47, 26, 0.18);
+  border-radius: 8px;
+  background: #fbf4e5;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+}
+
+.settingsModal :global(.ant-modal-header) {
+  margin: 0;
+  padding: 18px 20px 14px;
+  background: #fff8e8;
+  border-bottom: 1px solid rgba(86, 59, 34, 0.14);
+}
+
+.settingsModal :global(.ant-modal-body) {
+  padding: 16px 20px 18px;
+  background: #fbf4e5;
+}
+
+.settingsModal :global(.ant-modal-footer) {
+  margin: 0;
+  padding: 12px 20px 16px;
+  background: #fbf4e5;
+  border-top: 1px solid rgba(86, 59, 34, 0.12);
+}
+
+.settingsModal :global(.ant-modal-footer .ant-btn) {
+  min-width: 88px;
+  height: 38px;
+  border-radius: 6px;
+  font-weight: 800;
+}
+
+.settingsTitle {
+  min-height: 26px;
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr) 64px;
+  align-items: center;
+  color: #2e261e;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.settingsTitle > span {
+  grid-column: 2;
+}
+
+.backButton {
+  grid-column: 1;
+  width: fit-content;
+  padding: 6px 0;
+  color: #0b6d2d;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+  background: transparent;
+  border: none;
+}
+
+.backButton:hover,
+.backButton:focus {
+  color: #7e2326;
+}
+
+.settingsPage {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settingsNavButton {
+  width: 100%;
+  min-height: 64px;
+  display: flex;
+  align-items: center;
   justify-content: space-between;
+  gap: 14px;
+  padding: 13px 14px;
+  color: #2e261e;
+  text-align: left;
+  cursor: pointer;
+  background: #fffaf0;
+  border: 1px solid rgba(73, 47, 26, 0.2);
+  border-radius: 8px;
+}
+
+.settingsNavButton:hover,
+.settingsNavButton:focus {
+  border-color: rgba(11, 109, 45, 0.44);
+  background: #fffdf5;
+}
+
+.settingsNavButton strong,
+.settingsNavButton small {
+  display: block;
+}
+
+.settingsNavButton strong {
+  font-size: 16px;
+  line-height: 1.2;
+}
+
+.settingsNavButton small {
+  margin-top: 4px;
+  color: #6a5b4d;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.navArrow {
+  color: #0b6d2d;
+  font-size: 20px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.leaveButton {
+  height: 44px;
+  border-radius: 6px;
+  font-weight: 800;
+}
+
+.settingsSection {
+  overflow: hidden;
+  background: #fffaf0;
+  border: 1px solid rgba(73, 47, 26, 0.18);
+  border-radius: 8px;
+}
+
+.settingsSection > h3 {
+  margin: 0;
+  padding: 10px 14px;
+  color: #51412e;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.1;
+  background: #f0eadb;
+  border-bottom: 1px solid rgba(86, 59, 34, 0.14);
+}
+
+.settingsSectionBody {
+  display: flex;
+  flex-direction: column;
+}
+
+.settingRow {
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 8px 14px;
+}
+
+.settingRow + .settingRow,
+.settingsSectionBody > .sliderBlock {
+  border-top: 1px solid rgba(86, 59, 34, 0.12);
+}
+
+.settingTitle {
+  min-width: 0;
+  color: #2e261e;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
+.settingValue {
+  max-width: 58%;
+  overflow: hidden;
+  color: #5b4e40;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.25;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.buttonGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.buttonGrid :global(.ant-btn) {
+  min-width: 0;
+  height: 40px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.counterControl {
+  display: grid;
+  grid-template-columns: 42px 74px 42px;
+  align-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(73, 47, 26, 0.22);
+  border-radius: 8px;
+  background: #fbf4e5;
+}
+
+.counterButton {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  color: #0b6d2d;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  background: #fffdf5;
+  border: none;
+}
+
+.counterButton:first-child {
+  border-right: 1px solid rgba(73, 47, 26, 0.16);
+}
+
+.counterButton:last-child {
+  border-left: 1px solid rgba(73, 47, 26, 0.16);
+}
+
+.counterButton:hover,
+.counterButton:focus {
+  background: #f3f8ee;
+}
+
+.counterButton:disabled {
+  color: rgba(46, 38, 30, 0.28);
+  cursor: default;
+  background: #f0eadb;
+}
+
+.counterValue {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: #2e261e;
+  line-height: 1;
+}
+
+.counterValue strong {
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.counterValue span {
+  margin-top: 3px;
+  color: #6a5b4d;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.inlineSlider {
+  width: min(190px, 42vw);
+}
+
+.sliderBlock {
+  padding: 10px 14px 4px;
+}
+
+.sliderHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  color: #2e261e;
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.sliderHeader > strong {
+  color: #5b4e40;
+  font-size: 13px;
 }
 
 .infoButton {
