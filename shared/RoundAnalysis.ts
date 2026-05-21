@@ -945,13 +945,17 @@ function createHighlightForClosedWindow(
   const durationLabel = formatDuration(durationMs);
   const severity = getSeverity(openWindow, durationMs);
   const pointValue = getCenterPointValue(openWindow);
+  const followUpDetail = getFreedPounceSlotDetail(openWindow);
 
   return {
     id: `${openWindow.id}:${openWindow.firstSeen}:${closingSnapshot.time}`,
     kind,
     severity,
     title: getHighlightTitle(kind, cardLabel),
-    detail: getHighlightDetail(kind, cardLabel, sourceLabel, durationLabel),
+    detail: appendFollowUpDetail(
+      getHighlightDetail(kind, cardLabel, sourceLabel, durationLabel),
+      followUpDetail
+    ),
     card: openWindow.card,
     cardLabel,
     sourceLabel,
@@ -1047,7 +1051,45 @@ function createPounceHelperHighlight(
 }
 
 function getCenterPointValue(openWindow: OpenCenterPlayWindow): number {
-  return openWindow.source.type === "pounce" ? 3 : 1;
+  const centerPointValue = openWindow.source.type === "pounce" ? 3 : 1;
+  return centerPointValue + (getFreedPounceSlotCard(openWindow) ? 2 : 0);
+}
+
+function getFreedPounceSlotCard(
+  openWindow: OpenCenterPlayWindow
+): CardState | undefined {
+  if (openWindow.source.type !== "solitaire") {
+    return undefined;
+  }
+
+  const player = openWindow.firstSeenBoard.players[openWindow.playerIndex];
+  const sourceStack = player?.stacks[openWindow.source.index];
+  const pounceCard = peek(player?.pounceDeck ?? []);
+  if (!player || !sourceStack || sourceStack.length !== 1 || !pounceCard) {
+    return undefined;
+  }
+
+  const pounceAlreadyHadAHome = player.stacks.some((stack) =>
+    canMoveToSolitairePile(pounceCard, stack)
+  );
+  return pounceAlreadyHadAHome ? undefined : pounceCard;
+}
+
+function getFreedPounceSlotDetail(
+  openWindow: OpenCenterPlayWindow
+): string | null {
+  const pounceCard = getFreedPounceSlotCard(openWindow);
+  if (!pounceCard) {
+    return null;
+  }
+
+  return `Playing it would also free a slot for your pounce card ${formatCard(
+    pounceCard
+  )}.`;
+}
+
+function appendFollowUpDetail(detail: string, followUpDetail: string | null) {
+  return followUpDetail ? `${detail} ${followUpDetail}` : detail;
 }
 
 function getPounceHelperPointValue(
