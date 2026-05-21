@@ -1,4 +1,4 @@
-const CACHE_NAME = "pounce-offline-v10";
+const CACHE_NAME = "pounce-offline-v11";
 const GAME_ASSET_MANIFEST_URL = "/game-assets.json";
 const OFFLINE_PAGES = ["/", "/offline"];
 const APP_SHELL = [...OFFLINE_PAGES, GAME_ASSET_MANIFEST_URL];
@@ -53,7 +53,8 @@ self.addEventListener("fetch", (event) => {
     url.pathname === "/manifest.webmanifest" ||
     url.pathname.endsWith(".svg") ||
     url.pathname.endsWith(".png") ||
-    url.pathname.endsWith(".webp")
+    url.pathname.endsWith(".webp") ||
+    url.pathname.endsWith(".woff2")
   ) {
     event.respondWith(networkFirst(request, undefined, { cache: "reload" }));
     return;

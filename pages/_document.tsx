@@ -26,15 +26,10 @@ export default function MyDocument() {
             href={asset.href}
             as={asset.as}
             type={asset.type}
+            crossOrigin={asset.crossOrigin}
           />
         ))}
 
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@1,900&family=Single+Day&display=swap"
-          rel="stylesheet"
-        />
       </Head>
       <body>
         <Main />

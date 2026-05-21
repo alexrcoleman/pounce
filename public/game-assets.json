@@ -31,6 +31,12 @@
       "href": "/notebook.png",
       "as": "image",
       "type": "image/png"
+    },
+    {
+      "href": "/fonts/single-day-korean-400-normal.woff2",
+      "as": "font",
+      "type": "font/woff2",
+      "crossOrigin": "anonymous"
     }
   ],
   "offline": [

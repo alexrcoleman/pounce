@@ -5,8 +5,9 @@ export type FaceCardRank = "jack" | "queen" | "king";
 
 type PreloadAsset = {
   href: string;
-  as: "image";
+  as: "font" | "image";
   type: string;
+  crossOrigin?: string;
 };
 
 type GameAssetManifest = {

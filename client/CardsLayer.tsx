@@ -21,10 +21,10 @@ export default observer(function CardsLayer({
   }, [executeMove]);
 
   const [postGameStage, setPostGameStage] = useState(0);
-  const isActive = board.isActive;
+  const shouldRunPostGameCleanup = !board.isActive && board.pouncer != null;
   useEffect(() => {
     let timeouts: NodeJS.Timeout[] = [];
-    if (!isActive) {
+    if (shouldRunPostGameCleanup) {
       for (let i = 1; i <= 3; i++) {
         timeouts.push(
           setTimeout(() => {
@@ -38,7 +38,7 @@ export default observer(function CardsLayer({
     return () => {
       timeouts.forEach(clearTimeout);
     };
-  }, [isActive]);
+  }, [shouldRunPostGameCleanup]);
   const cards = board.piles
     .flatMap((pile, pileIndex) =>
       pile.map((card, index) => {
