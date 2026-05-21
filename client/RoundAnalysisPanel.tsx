@@ -90,27 +90,27 @@ export default function RoundAnalysisPanel({
 
       <div className={styles.statGrid}>
         <Stat
-          label="Center cards"
+          label="Center cards played"
           value={selectedReport.summary.cardsPlayedToCenter}
         />
         <Stat
-          label="Solitaire moves"
+          label="Solitaire moves played"
           value={selectedReport.summary.solitaireMoves}
         />
         <Stat
-          label="Cards cycled"
-          value={selectedReport.summary.cardsCycled}
+          label="3-card deck cycles/sec"
+          value={formatRate(selectedReport.summary.deckCyclesPerSecond)}
         />
         <Stat
-          label="Missed center"
+          label="Center plays missed"
           value={selectedReport.summary.missedCenterPlays}
         />
         <Stat
-          label="Pounce helpers"
+          label="Pounce-helper plays missed"
           value={selectedReport.summary.missedPounceHelpers}
         />
         <Stat
-          label="Longest window"
+          label="Longest missed-play window"
           value={formatDuration(selectedReport.summary.longestMissMs)}
         />
       </div>
@@ -189,4 +189,8 @@ function formatDuration(durationMs: number): string {
     return `${Math.round(durationMs)}ms`;
   }
   return `${(durationMs / 1000).toFixed(1)}s`;
+}
+
+function formatRate(rate: number): string {
+  return `${rate.toFixed(2)}/s`;
 }

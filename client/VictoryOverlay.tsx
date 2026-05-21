@@ -32,10 +32,12 @@ export default observer(function VictoryOverlay() {
         {isAnalysisOpen ? (
           <>
             <div className={styles.title}>Game Analysis</div>
-            <RoundAnalysisPanel
-              activePlayerIndex={activePlayerIndex}
-              analysis={state.roundAnalysis}
-            />
+            <div className={styles.analysisBody}>
+              <RoundAnalysisPanel
+                activePlayerIndex={activePlayerIndex}
+                analysis={state.roundAnalysis}
+              />
+            </div>
           </>
         ) : (
           <>
@@ -47,7 +49,15 @@ export default observer(function VictoryOverlay() {
             <ScoresTable board={board} />
           </>
         )}
-        <Flex justify="end" align="center" className={styles.actions}>
+        <Flex
+          justify="end"
+          align="center"
+          className={
+            isAnalysisOpen
+              ? `${styles.actions} ${styles.analysisActions}`
+              : styles.actions
+          }
+        >
           {isAnalysisOpen ? (
             <Button onClick={() => setAnalysisOpen(false)}>
               Back to Scoreboard

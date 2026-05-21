@@ -43,7 +43,8 @@ export type PlayerRoundAnalysis = {
     beatenToCenter: number;
     solitaireMoves: number;
     cardsPlayedToCenter: number;
-    cardsCycled: number;
+    deckCycles: number;
+    deckCyclesPerSecond: number;
     totalMissedMs: number;
     longestMissMs: number;
   };
@@ -302,7 +303,11 @@ export function analyzeRoundSnapshots(
           ).length,
           solitaireMoves: moveStats.solitaireMoves,
           cardsPlayedToCenter: moveStats.cardsPlayedToCenter,
-          cardsCycled: moveStats.cardsCycled,
+          deckCycles: moveStats.deckCycles,
+          deckCyclesPerSecond: getRatePerSecond(
+            moveStats.deckCycles,
+            Math.max(0, finalSnapshot.time - firstSnapshot.time)
+          ),
           totalMissedMs: missedHighlights.reduce(
             (sum, highlight) => sum + highlight.durationMs,
             0
@@ -324,12 +329,12 @@ function collectMoveStats(
 ): {
   solitaireMoves: number;
   cardsPlayedToCenter: number;
-  cardsCycled: number;
+  deckCycles: number;
 }[] {
   const stats = Array.from({ length: playerCount }, () => ({
     solitaireMoves: 0,
     cardsPlayedToCenter: 0,
-    cardsCycled: 0,
+    deckCycles: 0,
   }));
 
   snapshots.forEach((snapshot, index) => {
@@ -343,10 +348,9 @@ function collectMoveStats(
       stats[playerIndex].cardsPlayedToCenter += 1;
     } else if (move.type === "c2s" || move.type === "s2s") {
       stats[playerIndex].solitaireMoves += 1;
-    } else if (move.type === "cycle" || move.type === "flip_deck") {
-      stats[playerIndex].cardsCycled += getCardsCycled(
+    } else if (move.type === "cycle") {
+      stats[playerIndex].deckCycles += getDeckCycles(
         snapshots[index - 1]?.board,
-        snapshot.board,
         playerIndex
       );
     }
@@ -355,21 +359,24 @@ function collectMoveStats(
   return stats;
 }
 
-function getCardsCycled(
+function getDeckCycles(
   previousBoard: BoardState | undefined,
-  currentBoard: BoardState,
   playerIndex: number
 ): number {
   const previousPlayer = previousBoard?.players[playerIndex];
-  const currentPlayer = currentBoard.players[playerIndex];
-  if (!previousPlayer || !currentPlayer) {
+  if (!previousPlayer || previousPlayer.deck.length === 0) {
     return 0;
   }
 
-  return Math.max(
-    0,
-    currentPlayer.flippedDeck.length - previousPlayer.flippedDeck.length
-  );
+  return 1;
+}
+
+function getRatePerSecond(count: number, durationMs: number): number {
+  if (durationMs <= 0) {
+    return 0;
+  }
+
+  return count / (durationMs / 1000);
 }
 
 export function enumerateAvailableCenterPlays(
