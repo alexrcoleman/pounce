@@ -244,6 +244,7 @@ function MomentSnapshot({ highlight }: { highlight: RoundAnalysisHighlight }) {
         Board state {formatDuration(highlight.firstSeenOffsetMs)} into the
         round. The highlighted card is the key card for this moment.
       </div>
+      <SnapshotContext highlight={highlight} />
       {player && (
         <div className={styles.snapshotSection}>
           <div className={styles.snapshotHeader}>{player.name}</div>
@@ -301,6 +302,56 @@ function MomentSnapshot({ highlight }: { highlight: RoundAnalysisHighlight }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function SnapshotContext({
+  highlight,
+}: {
+  highlight: RoundAnalysisHighlight;
+}) {
+  if (!highlight.openedByAction && highlight.windowActions.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className={styles.contextPanel}>
+      {highlight.openedByAction && (
+        <div>
+          <div className={styles.contextLabel}>Window opened after</div>
+          <div className={styles.contextText}>
+            {formatActionContext(highlight.openedByAction, highlight)}
+            <span className={styles.contextTime}>
+              {" "}
+              at {formatDuration(highlight.openedByAction.offsetMs)}
+            </span>
+          </div>
+        </div>
+      )}
+      <div>
+        <div className={styles.contextLabel}>What you did next</div>
+        {highlight.windowActions.length > 0 ? (
+          <ol className={styles.contextList}>
+            {highlight.windowActions.map((action, index) => (
+              <li key={`${action.offsetMs}:${index}`}>
+                {formatActionContext(action, highlight)}
+                <span className={styles.contextTime}>
+                  {" "}
+                  after{" "}
+                  {formatDuration(
+                    Math.max(0, action.offsetMs - highlight.firstSeenOffsetMs)
+                  )}
+                </span>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <div className={styles.contextText}>
+            No moves from you were recorded before the window closed.
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -498,6 +549,17 @@ function formatCompactCard(card: CardState): string {
 
 function isRedSuit(card: CardState): boolean {
   return card.suit === "diamonds" || card.suit === "hearts";
+}
+
+function formatActionContext(
+  action: RoundAnalysisHighlight["windowActions"][number],
+  highlight: RoundAnalysisHighlight
+): string {
+  const actor =
+    action.playerIndex === highlight.playerIndex
+      ? "You"
+      : action.playerName || "Someone";
+  return `${actor} ${action.description}`;
 }
 
 function useMediaQuery(query: string): boolean {

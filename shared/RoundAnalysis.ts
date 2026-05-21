@@ -74,11 +74,20 @@ export type RoundAnalysisHighlight = {
   sourceLabel: string;
   pointValue: number;
   board: BoardState;
+  openedByAction?: RoundAnalysisActionContext;
+  windowActions: RoundAnalysisActionContext[];
   durationMs: number;
   firstSeenOffsetMs: number;
   lastSeenOffsetMs: number;
   sortScore: number;
   playerIndex: number;
+};
+
+export type RoundAnalysisActionContext = {
+  offsetMs: number;
+  playerIndex?: number;
+  playerName: string;
+  description: string;
 };
 
 type CenterPlaySource =
@@ -98,6 +107,8 @@ type OpenCenterPlayWindow = AvailableCenterPlay & {
   firstSeen: number;
   lastSeen: number;
   firstSeenBoard: BoardState;
+  openedByAction?: RoundAnalysisActionContext;
+  windowActions: RoundAnalysisActionContext[];
   seenCount: number;
 };
 
@@ -126,12 +137,15 @@ type OpenPounceHelperWindow = AvailablePounceHelper & {
   firstSeen: number;
   lastSeen: number;
   firstSeenBoard: BoardState;
+  openedByAction?: RoundAnalysisActionContext;
+  windowActions: RoundAnalysisActionContext[];
   seenCount: number;
 };
 
 const MIN_MISSED_WINDOW_MS = 750;
 const MIN_SOLITAIRE_HELPER_WINDOW_MS = 3000;
 const MIN_DELAYED_PLAY_WINDOW_MS = 5000;
+const MAX_WINDOW_ACTIONS = 3;
 const MAX_HIGHLIGHTS_PER_PLAYER = 5;
 
 export function analyzeRoundSnapshots(
@@ -167,6 +181,11 @@ export function analyzeRoundSnapshots(
   const highlightsByPlayer = Array.from({ length: playerCount }, () => [] as RoundAnalysisHighlight[]);
 
   orderedSnapshots.forEach((snapshot) => {
+    const actionContext = getSnapshotActionContext(
+      snapshot,
+      firstSnapshot.time
+    );
+
     snapshot.board.players.forEach((player, playerIndex) => {
       if (player.isSpectating) {
         return;
@@ -185,6 +204,7 @@ export function analyzeRoundSnapshots(
         }
 
         playerOpenWindows.delete(openWindow.id);
+        addWindowAction(openWindow, snapshot, actionContext);
         const wasOwnPlay = isOwnCenterPlay(openWindow, snapshot);
         const highlight = createHighlightForClosedWindow(
           openWindow,
@@ -207,6 +227,7 @@ export function analyzeRoundSnapshots(
       currentPlays.forEach((play) => {
         const openWindow = playerOpenWindows.get(play.id);
         if (openWindow) {
+          addWindowAction(openWindow, snapshot, actionContext);
           openWindow.lastSeen = snapshot.time;
           openWindow.seenCount += 1;
           openWindow.destPileIndex = play.destPileIndex;
@@ -218,6 +239,8 @@ export function analyzeRoundSnapshots(
           firstSeen: snapshot.time,
           lastSeen: snapshot.time,
           firstSeenBoard: snapshot.board,
+          openedByAction: actionContext,
+          windowActions: [],
           seenCount: 1,
         });
       });
@@ -239,6 +262,7 @@ export function analyzeRoundSnapshots(
           }
 
           playerOpenPounceHelperWindows.delete(openWindow.id);
+          addWindowAction(openWindow, snapshot, actionContext);
           const wasOwnPlay = isOwnPounceHelperPlay(openWindow, snapshot);
           const wasBetterPlay = isOwnBetterPounceHelperPlay(
             openWindow,
@@ -266,6 +290,7 @@ export function analyzeRoundSnapshots(
       currentPounceHelpers.forEach((play) => {
         const openWindow = playerOpenPounceHelperWindows.get(play.id);
         if (openWindow) {
+          addWindowAction(openWindow, snapshot, actionContext);
           openWindow.lastSeen = snapshot.time;
           openWindow.seenCount += 1;
           return;
@@ -276,6 +301,8 @@ export function analyzeRoundSnapshots(
           firstSeen: snapshot.time,
           lastSeen: snapshot.time,
           firstSeenBoard: snapshot.board,
+          openedByAction: actionContext,
+          windowActions: [],
           seenCount: 1,
         });
       });
@@ -452,6 +479,102 @@ function getPlayRate(played: number, missed: number): number | null {
   }
 
   return played / total;
+}
+
+function addWindowAction(
+  openWindow: {
+    firstSeen: number;
+    playerIndex: number;
+    windowActions: RoundAnalysisActionContext[];
+  },
+  snapshot: RoundSnapshot,
+  actionContext: RoundAnalysisActionContext | undefined
+): void {
+  if (
+    !actionContext ||
+    snapshot.time <= openWindow.firstSeen ||
+    actionContext.playerIndex !== openWindow.playerIndex ||
+    openWindow.windowActions.length >= MAX_WINDOW_ACTIONS
+  ) {
+    return;
+  }
+
+  openWindow.windowActions.push(actionContext);
+}
+
+function getSnapshotActionContext(
+  snapshot: RoundSnapshot,
+  roundStartedAt: number
+): RoundAnalysisActionContext | undefined {
+  const offsetMs = Math.max(0, snapshot.time - roundStartedAt);
+
+  if (snapshot.reason === "manual_rotate") {
+    return {
+      offsetMs,
+      playerName: "Table",
+      description: "rotated all decks",
+    };
+  }
+
+  if (snapshot.reason === "auto_rotate") {
+    return {
+      offsetMs,
+      playerName: "Table",
+      description: "auto-rotated all decks",
+    };
+  }
+
+  const playerIndex = snapshot.playerIndex;
+  const move = snapshot.move;
+  if (snapshot.reason !== "move" || playerIndex == null || !move) {
+    return undefined;
+  }
+
+  const playerName =
+    snapshot.board.players[playerIndex]?.name ?? `Player ${playerIndex + 1}`;
+
+  return {
+    offsetMs,
+    playerIndex,
+    playerName,
+    description: getMoveDescription(snapshot, playerIndex, move),
+  };
+}
+
+function getMoveDescription(
+  snapshot: RoundSnapshot,
+  playerIndex: number,
+  move: Move
+): string {
+  if (move.type === "cycle") {
+    return "cycled the deck";
+  }
+  if (move.type === "flip_deck") {
+    return "flipped the deck";
+  }
+  if (move.type === "move_field_stack") {
+    return "moved a center pile";
+  }
+  if (move.type === "c2c") {
+    const movedCard = getMovedCenterCard(snapshot);
+    return movedCard
+      ? `played ${formatCard(movedCard)} to center`
+      : "played a card to center";
+  }
+  if (move.type === "c2s") {
+    const movedCard = peek(
+      snapshot.board.players[playerIndex]?.stacks[move.dest] ?? []
+    );
+    const sourceLabel = move.source === "pounce" ? "pounce" : "waste";
+    return movedCard
+      ? `moved ${formatCard(movedCard)} from ${sourceLabel} to S${move.dest + 1}`
+      : `moved a card from ${sourceLabel} to S${move.dest + 1}`;
+  }
+
+  const destStack = snapshot.board.players[playerIndex]?.stacks[move.dest] ?? [];
+  const movedCard = destStack[destStack.length - move.count];
+  const cardLabel = movedCard ? formatCard(movedCard) : `${move.count} cards`;
+  return `moved ${cardLabel} from S${move.source + 1} to S${move.dest + 1}`;
 }
 
 export function enumerateAvailableCenterPlays(
@@ -652,6 +775,8 @@ function createHighlightForClosedWindow(
     sourceLabel,
     pointValue,
     board: openWindow.firstSeenBoard,
+    openedByAction: openWindow.openedByAction,
+    windowActions: openWindow.windowActions,
     durationMs,
     firstSeenOffsetMs: Math.max(0, openWindow.firstSeen - roundStartedAt),
     lastSeenOffsetMs: Math.max(0, closingSnapshot.time - roundStartedAt),
@@ -718,6 +843,8 @@ function createPounceHelperHighlight(
     sourceLabel,
     pointValue,
     board: openWindow.firstSeenBoard,
+    openedByAction: openWindow.openedByAction,
+    windowActions: openWindow.windowActions,
     durationMs,
     firstSeenOffsetMs: Math.max(0, openWindow.firstSeen - roundStartedAt),
     lastSeenOffsetMs: Math.max(0, closingSnapshot.time - roundStartedAt),
