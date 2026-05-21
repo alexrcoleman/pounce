@@ -45,6 +45,9 @@ export type PlayerRoundAnalysis = {
     cardsPlayedToCenter: number;
     deckCycles: number;
     deckCyclesPerSecond: number;
+    centerPlayRate: number | null;
+    solitairePlayRate: number | null;
+    delayedPlays: number;
     totalMissedMs: number;
     longestMissMs: number;
   };
@@ -60,7 +63,9 @@ export type RoundAnalysisHighlight = {
     | "round_end_available"
     | "missed_pounce_solitaire"
     | "missed_pounce_connector"
-    | "missed_pounce_slot";
+    | "missed_pounce_slot"
+    | "delayed_center_play"
+    | "delayed_pounce_helper";
   severity: "high" | "medium" | "low";
   title: string;
   detail: string;
@@ -68,10 +73,12 @@ export type RoundAnalysisHighlight = {
   cardLabel: string;
   sourceLabel: string;
   pointValue: number;
+  board: BoardState;
   durationMs: number;
   firstSeenOffsetMs: number;
   lastSeenOffsetMs: number;
   sortScore: number;
+  playerIndex: number;
 };
 
 type CenterPlaySource =
@@ -90,6 +97,7 @@ type AvailableCenterPlay = {
 type OpenCenterPlayWindow = AvailableCenterPlay & {
   firstSeen: number;
   lastSeen: number;
+  firstSeenBoard: BoardState;
   seenCount: number;
 };
 
@@ -117,11 +125,13 @@ type AvailablePounceHelper = {
 type OpenPounceHelperWindow = AvailablePounceHelper & {
   firstSeen: number;
   lastSeen: number;
+  firstSeenBoard: BoardState;
   seenCount: number;
 };
 
 const MIN_MISSED_WINDOW_MS = 750;
 const MIN_SOLITAIRE_HELPER_WINDOW_MS = 3000;
+const MIN_DELAYED_PLAY_WINDOW_MS = 5000;
 const MAX_HIGHLIGHTS_PER_PLAYER = 5;
 
 export function analyzeRoundSnapshots(
@@ -147,6 +157,13 @@ export function analyzeRoundSnapshots(
     { length: playerCount },
     () => new Map<string, OpenPounceHelperWindow>()
   );
+  const opportunityStatsByPlayer = Array.from({ length: playerCount }, () => ({
+    centerMissed: 0,
+    centerPlayed: 0,
+    solitaireMissed: 0,
+    solitairePlayed: 0,
+    delayedPlays: 0,
+  }));
   const highlightsByPlayer = Array.from({ length: playerCount }, () => [] as RoundAnalysisHighlight[]);
 
   orderedSnapshots.forEach((snapshot) => {
@@ -168,13 +185,22 @@ export function analyzeRoundSnapshots(
         }
 
         playerOpenWindows.delete(openWindow.id);
+        const wasOwnPlay = isOwnCenterPlay(openWindow, snapshot);
         const highlight = createHighlightForClosedWindow(
           openWindow,
           snapshot,
           firstSnapshot.time
         );
+        if (wasOwnPlay) {
+          opportunityStatsByPlayer[playerIndex].centerPlayed += 1;
+        } else if (highlight) {
+          opportunityStatsByPlayer[playerIndex].centerMissed += 1;
+        }
         if (highlight) {
           highlightsByPlayer[playerIndex].push(highlight);
+          if (isDelayedHighlight(highlight)) {
+            opportunityStatsByPlayer[playerIndex].delayedPlays += 1;
+          }
         }
       });
 
@@ -191,6 +217,7 @@ export function analyzeRoundSnapshots(
           ...play,
           firstSeen: snapshot.time,
           lastSeen: snapshot.time,
+          firstSeenBoard: snapshot.board,
           seenCount: 1,
         });
       });
@@ -212,13 +239,26 @@ export function analyzeRoundSnapshots(
           }
 
           playerOpenPounceHelperWindows.delete(openWindow.id);
+          const wasOwnPlay = isOwnPounceHelperPlay(openWindow, snapshot);
+          const wasBetterPlay = isOwnBetterPounceHelperPlay(
+            openWindow,
+            snapshot
+          );
           const highlight = createPounceHelperHighlight(
             openWindow,
             snapshot,
             firstSnapshot.time
           );
+          if (wasOwnPlay) {
+            opportunityStatsByPlayer[playerIndex].solitairePlayed += 1;
+          } else if (!wasBetterPlay && highlight) {
+            opportunityStatsByPlayer[playerIndex].solitaireMissed += 1;
+          }
           if (highlight) {
             highlightsByPlayer[playerIndex].push(highlight);
+            if (isDelayedHighlight(highlight)) {
+              opportunityStatsByPlayer[playerIndex].delayedPlays += 1;
+            }
           }
         }
       );
@@ -235,6 +275,7 @@ export function analyzeRoundSnapshots(
           ...play,
           firstSeen: snapshot.time,
           lastSeen: snapshot.time,
+          firstSeenBoard: snapshot.board,
           seenCount: 1,
         });
       });
@@ -250,6 +291,7 @@ export function analyzeRoundSnapshots(
         "round_end_available"
       );
       if (highlight) {
+        opportunityStatsByPlayer[playerIndex].centerMissed += 1;
         highlightsByPlayer[playerIndex].push(highlight);
       }
     });
@@ -263,6 +305,7 @@ export function analyzeRoundSnapshots(
         firstSnapshot.time
       );
       if (highlight) {
+        opportunityStatsByPlayer[playerIndex].solitaireMissed += 1;
         highlightsByPlayer[playerIndex].push(highlight);
       }
     });
@@ -282,11 +325,17 @@ export function analyzeRoundSnapshots(
       const highlights = highlightsByPlayer[playerIndex]
         .sort((a, b) => b.sortScore - a.sortScore)
         .slice(0, MAX_HIGHLIGHTS_PER_PLAYER);
-      const missedHighlights = highlightsByPlayer[playerIndex];
-      const missedCenterHighlights = missedHighlights.filter(isCenterHighlight);
+      const allHighlights = highlightsByPlayer[playerIndex];
+      const missedHighlights = allHighlights.filter(
+        (highlight) => !isDelayedHighlight(highlight)
+      );
+      const missedCenterHighlights = missedHighlights.filter(
+        isMissedCenterHighlight
+      );
       const missedPounceHelperHighlights =
-        missedHighlights.filter(isPounceHelperHighlight);
+        missedHighlights.filter(isMissedPounceHelperHighlight);
       const moveStats = moveStatsByPlayer[playerIndex];
+      const opportunityStats = opportunityStatsByPlayer[playerIndex];
 
       return {
         playerIndex,
@@ -310,6 +359,15 @@ export function analyzeRoundSnapshots(
             moveStats.deckCycles,
             Math.max(0, finalSnapshot.time - firstSnapshot.time)
           ),
+          centerPlayRate: getPlayRate(
+            opportunityStats.centerPlayed,
+            opportunityStats.centerMissed
+          ),
+          solitairePlayRate: getPlayRate(
+            opportunityStats.solitairePlayed,
+            opportunityStats.solitaireMissed
+          ),
+          delayedPlays: opportunityStats.delayedPlays,
           totalMissedMs: missedHighlights.reduce(
             (sum, highlight) => sum + highlight.durationMs,
             0
@@ -385,6 +443,15 @@ function getRatePerSecond(count: number, durationMs: number): number {
   }
 
   return count / (durationMs / 1000);
+}
+
+function getPlayRate(played: number, missed: number): number | null {
+  const total = played + missed;
+  if (total === 0) {
+    return null;
+  }
+
+  return played / total;
 }
 
 export function enumerateAvailableCenterPlays(
@@ -556,16 +623,18 @@ function createHighlightForClosedWindow(
   roundStartedAt: number,
   forcedKind?: RoundAnalysisHighlight["kind"]
 ): RoundAnalysisHighlight | null {
-  if (isOwnCenterPlay(openWindow, closingSnapshot)) {
+  const durationMs = Math.max(0, closingSnapshot.time - openWindow.firstSeen);
+  const isOwnPlay = isOwnCenterPlay(openWindow, closingSnapshot);
+  if (isOwnPlay && durationMs < MIN_DELAYED_PLAY_WINDOW_MS) {
     return null;
   }
-
-  const durationMs = Math.max(0, closingSnapshot.time - openWindow.firstSeen);
   if (durationMs < MIN_MISSED_WINDOW_MS) {
     return null;
   }
 
-  const kind = forcedKind ?? getMissedPlayKind(openWindow, closingSnapshot);
+  const kind = isOwnPlay
+    ? "delayed_center_play"
+    : forcedKind ?? getMissedPlayKind(openWindow, closingSnapshot);
   const cardLabel = formatCard(openWindow.card);
   const sourceLabel = formatSource(openWindow.source);
   const durationLabel = formatDuration(durationMs);
@@ -582,10 +651,12 @@ function createHighlightForClosedWindow(
     cardLabel,
     sourceLabel,
     pointValue,
+    board: openWindow.firstSeenBoard,
     durationMs,
     firstSeenOffsetMs: Math.max(0, openWindow.firstSeen - roundStartedAt),
     lastSeenOffsetMs: Math.max(0, closingSnapshot.time - roundStartedAt),
     sortScore: getSortScore(openWindow, kind, durationMs),
+    playerIndex: openWindow.playerIndex,
   };
 }
 
@@ -594,16 +665,23 @@ function createPounceHelperHighlight(
   closingSnapshot: RoundSnapshot,
   roundStartedAt: number
 ): RoundAnalysisHighlight | null {
-  if (isOwnPounceHelperPlay(openWindow, closingSnapshot)) {
+  const isOwnPlay = isOwnPounceHelperPlay(openWindow, closingSnapshot);
+  const isBetterPlay = isOwnBetterPounceHelperPlay(openWindow, closingSnapshot);
+  if (isBetterPlay) {
     return null;
   }
 
   const durationMs = Math.max(0, closingSnapshot.time - openWindow.firstSeen);
+  if (isOwnPlay && durationMs < MIN_DELAYED_PLAY_WINDOW_MS) {
+    return null;
+  }
   if (durationMs < MIN_SOLITAIRE_HELPER_WINDOW_MS) {
     return null;
   }
 
-  const kind = getPounceHelperKind(openWindow.benefit);
+  const kind = isOwnPlay
+    ? "delayed_pounce_helper"
+    : getPounceHelperKind(openWindow.benefit);
   const cardLabel = formatCard(openWindow.card);
   const pounceCardLabel = formatCard(openWindow.pounceCard);
   const sourceLabel = formatSolitaireSource(openWindow.source);
@@ -615,10 +693,20 @@ function createPounceHelperHighlight(
     id: `${openWindow.id}:${openWindow.firstSeen}:${closingSnapshot.time}`,
     kind,
     severity:
-      openWindow.benefit === "play_pounce_to_solitaire" ? "high" : "medium",
-    title: getPounceHelperTitle(openWindow, cardLabel, pounceCardLabel),
+      kind === "delayed_pounce_helper"
+        ? "low"
+        : openWindow.benefit === "play_pounce_to_solitaire"
+        ? "high"
+        : "medium",
+    title: getPounceHelperTitle(
+      openWindow,
+      kind,
+      cardLabel,
+      pounceCardLabel
+    ),
     detail: getPounceHelperDetail(
       openWindow,
+      kind,
       cardLabel,
       sourceLabel,
       destLabel,
@@ -629,10 +717,12 @@ function createPounceHelperHighlight(
     cardLabel,
     sourceLabel,
     pointValue,
+    board: openWindow.firstSeenBoard,
     durationMs,
     firstSeenOffsetMs: Math.max(0, openWindow.firstSeen - roundStartedAt),
     lastSeenOffsetMs: Math.max(0, closingSnapshot.time - roundStartedAt),
     sortScore: getPounceHelperSortScore(openWindow, durationMs),
+    playerIndex: openWindow.playerIndex,
   };
 }
 
@@ -660,10 +750,12 @@ function isOwnPounceHelperPlay(
 
   if (
     move.type === "c2s" &&
-    move.dest === openWindow.destStackIndex &&
     move.source === openWindow.source.type
   ) {
-    return true;
+    return (
+      move.dest === openWindow.destStackIndex ||
+      openWindow.source.type === "pounce"
+    );
   }
 
   return (
@@ -673,6 +765,30 @@ function isOwnPounceHelperPlay(
     move.dest === openWindow.destStackIndex &&
     move.count === openWindow.source.count
   );
+}
+
+function isOwnBetterPounceHelperPlay(
+  openWindow: OpenPounceHelperWindow,
+  closingSnapshot: RoundSnapshot
+): boolean {
+  const move = closingSnapshot.move;
+  if (closingSnapshot.playerIndex !== openWindow.playerIndex || !move) {
+    return false;
+  }
+  if (move.type !== "c2c") {
+    return false;
+  }
+
+  const movedCard = getMovedCenterCard(closingSnapshot);
+  if (
+    movedCard?.player !== openWindow.card.player ||
+    movedCard.suit !== openWindow.card.suit ||
+    movedCard.value !== openWindow.card.value
+  ) {
+    return false;
+  }
+
+  return solitaireSourceKey(openWindow.source) === sourceKey(move.source);
 }
 
 function getPounceHelperKind(
@@ -689,9 +805,13 @@ function getPounceHelperKind(
 
 function getPounceHelperTitle(
   openWindow: OpenPounceHelperWindow,
+  kind: RoundAnalysisHighlight["kind"],
   cardLabel: string,
   pounceCardLabel: string
 ): string {
+  if (kind === "delayed_pounce_helper") {
+    return `Delayed ${cardLabel}`;
+  }
   if (openWindow.benefit === "play_pounce_to_solitaire") {
     return `Pounce card ${pounceCardLabel} had a home`;
   }
@@ -703,12 +823,22 @@ function getPounceHelperTitle(
 
 function getPounceHelperDetail(
   openWindow: OpenPounceHelperWindow,
+  kind: RoundAnalysisHighlight["kind"],
   cardLabel: string,
   sourceLabel: string,
   destLabel: string,
   pounceCardLabel: string,
   durationLabel: string
 ): string {
+  if (kind === "delayed_pounce_helper") {
+    if (openWindow.benefit === "play_pounce_to_solitaire") {
+      return `Your pounce card ${pounceCardLabel} could move to ${destLabel} for ${durationLabel} before you played it.`;
+    }
+    if (openWindow.benefit === "free_slot_for_pounce") {
+      return `${cardLabel} could move from your ${sourceLabel} to ${destLabel}, freeing an empty slot for your pounce card ${pounceCardLabel}, for ${durationLabel} before you played it.`;
+    }
+    return `${cardLabel} could move from your ${sourceLabel} to ${destLabel}, connecting your pounce card ${pounceCardLabel}, for ${durationLabel} before you played it.`;
+  }
   if (openWindow.benefit === "play_pounce_to_solitaire") {
     return `Your pounce card ${pounceCardLabel} could move to ${destLabel} for ${durationLabel}.`;
   }
@@ -816,6 +946,9 @@ function getHighlightTitle(
   kind: RoundAnalysisHighlight["kind"],
   cardLabel: string
 ): string {
+  if (kind === "delayed_center_play") {
+    return `Delayed ${cardLabel}`;
+  }
   if (kind === "cycled_past_playable") {
     return `Cycled past ${cardLabel}`;
   }
@@ -834,6 +967,12 @@ function getHighlightDetail(
   sourceLabel: string,
   durationLabel: string
 ): string {
+  if (kind === "delayed_center_play") {
+    if (sourceLabel === "pounce pile") {
+      return `Your pounce card ${cardLabel} was playable to center for ${durationLabel} before you played it.`;
+    }
+    return `${cardLabel} was playable from your ${sourceLabel} for ${durationLabel} before you played it to center.`;
+  }
   if (kind === "cycled_past_playable") {
     return `${cardLabel} was playable from your ${sourceLabel} for ${durationLabel} before you cycled.`;
   }
@@ -866,7 +1005,7 @@ function cardKey(card: CardState): string {
   return `${card.player}:${card.suit}:${card.value}`;
 }
 
-function isCenterHighlight(highlight: RoundAnalysisHighlight): boolean {
+function isMissedCenterHighlight(highlight: RoundAnalysisHighlight): boolean {
   return (
     highlight.kind === "missed_center_play" ||
     highlight.kind === "cycled_past_playable" ||
@@ -875,11 +1014,20 @@ function isCenterHighlight(highlight: RoundAnalysisHighlight): boolean {
   );
 }
 
-function isPounceHelperHighlight(highlight: RoundAnalysisHighlight): boolean {
+function isMissedPounceHelperHighlight(
+  highlight: RoundAnalysisHighlight
+): boolean {
   return (
     highlight.kind === "missed_pounce_solitaire" ||
     highlight.kind === "missed_pounce_connector" ||
     highlight.kind === "missed_pounce_slot"
+  );
+}
+
+function isDelayedHighlight(highlight: RoundAnalysisHighlight): boolean {
+  return (
+    highlight.kind === "delayed_center_play" ||
+    highlight.kind === "delayed_pounce_helper"
   );
 }
 
