@@ -242,6 +242,10 @@
   color: #242018;
 }
 
+.snapshotDrawer :global(.ant-drawer-body) {
+  padding: 14px;
+}
+
 .snapshotIntro {
   color: #5f5546;
   line-height: 1.35;
@@ -263,24 +267,24 @@
 .visiblePileGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
 .solitaireStackGrid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 
-.snapshotPile {
+.stackColumn {
   min-width: 0;
-  padding: 8px;
+  padding: 6px;
   border: 1px solid #d8ded8;
   border-radius: 6px;
   background: #fbfdfb;
 }
 
-.snapshotPileLabel {
+.stackColumnLabel {
   display: flex;
   justify-content: space-between;
   gap: 8px;
@@ -293,33 +297,36 @@
 .stackRun {
   display: flex;
   flex-direction: column;
-  flex-wrap: wrap;
   gap: 4px;
   max-height: 220px;
   overflow-y: auto;
 }
 
 .cardPill {
+  display: inline-flex;
+  justify-content: center;
+  min-width: 28px;
   padding: 2px 5px;
   border: 1px solid #d8ded8;
   border-radius: 4px;
   background: #ffffff;
-  color: #382f22;
   font-size: 12px;
   font-weight: 800;
   line-height: 1.2;
 }
 
+.redCard {
+  color: #a92f2a;
+}
+
+.blackCard {
+  color: #272119;
+}
+
 .highlightCard {
   border-color: #17683b;
   background: #dff2e7;
-  color: #123f27;
   box-shadow: 0 0 0 1px rgba(23, 104, 59, 0.18);
-}
-
-.emptyPile {
-  color: #7c705e;
-  font-size: 12px;
 }
 
 .centerPileGrid {
@@ -341,21 +348,23 @@
   background: #fbfdfb;
 }
 
+.otherPlayer .visiblePileGrid {
+  margin-bottom: 8px;
+}
+
 .otherPlayerName {
   margin-bottom: 6px;
   font-weight: 800;
-}
-
-.otherPlayerCards {
-  display: grid;
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 6px;
 }
 
 .labeledCard {
   display: grid;
   gap: 3px;
   min-width: 0;
+  padding: 6px;
+  border: 1px solid #d8ded8;
+  border-radius: 6px;
+  background: #fbfdfb;
 }
 
 .labeledCardLabel {
@@ -389,14 +398,8 @@
     grid-template-columns: 1fr;
   }
 
-  .moment,
-  .visiblePileGrid,
-  .solitaireStackGrid {
+  .moment {
     grid-template-columns: 1fr;
-  }
-
-  .otherPlayerCards {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .severity {
