@@ -5,6 +5,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Move } from "../shared/MoveHandler";
 import { GameSocket } from "./GameConnection";
 import {
+  type ActionAck,
   ServerToClientEvents,
   ClientToServerEvents,
 } from "../shared/SocketTypes";
@@ -12,6 +13,7 @@ import {
 import { useLocalObservable } from "mobx-react-lite";
 import SocketState from "./SocketState";
 import { runInAction } from "mobx";
+import { toastRejectedMove } from "./moveRejectionToast";
 
 export type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 const PLAYER_SESSION_STORAGE_KEY = "pounce::playerSessionId";
@@ -82,18 +84,31 @@ export default function useGameSocket(
         const action = state.createOptimisticMove(move);
         moveAckTimeouts.current[action.actionId] = setTimeout(() => {
           delete moveAckTimeouts.current[action.actionId];
-          runInAction(() =>
-            state.onMoveAck({
-              actionId: action.actionId,
-              ok: false,
-              revision: state.serverRevision,
-              reason: "Move acknowledgement timed out",
-            })
-          );
+          const timeoutAck: ActionAck = {
+            actionId: action.actionId,
+            ok: false,
+            revision: state.serverRevision,
+            reason: "Move acknowledgement timed out",
+          };
+          toastRejectedMove({
+            board: state.serverBoard,
+            move: action.payload,
+            playerIndex: state.getActivePlayerIndex(),
+            reason: timeoutAck.reason,
+          });
+          runInAction(() => state.onMoveAck(timeoutAck));
         }, 5000);
         socket.emit("move", action, (ack) => {
           clearTimeout(moveAckTimeouts.current[action.actionId]);
           delete moveAckTimeouts.current[action.actionId];
+          if (!ack.ok) {
+            toastRejectedMove({
+              board: state.serverBoard,
+              move: action.payload,
+              playerIndex: state.getActivePlayerIndex(),
+              reason: ack.reason,
+            });
+          }
           runInAction(() => state.onMoveAck(ack));
         });
       },

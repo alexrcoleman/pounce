@@ -28,6 +28,7 @@ import {
 import deepClone from "../shared/deepClone";
 import { Actions } from "./useGameSocket";
 import { type ActionAck, type ActionEnvelope } from "../shared/SocketTypes";
+import { toastRejectedMove } from "./moveRejectionToast";
 
 const LOCAL_SOCKET_ID = "local-player";
 const LOCAL_PLAYER_SESSION_ID = "local-player-session";
@@ -250,6 +251,14 @@ export default function useLocalGame(name: string | null) {
         }
         const action = state.createOptimisticMove(move);
         socket.emit("move", action, (ack) => {
+          if (!ack.ok) {
+            toastRejectedMove({
+              board: state.serverBoard,
+              move: action.payload,
+              playerIndex: state.getActivePlayerIndex(),
+              reason: ack.reason,
+            });
+          }
           runInAction(() => state.onMoveAck(ack));
         });
       },
