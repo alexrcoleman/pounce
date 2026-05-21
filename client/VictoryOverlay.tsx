@@ -70,9 +70,11 @@ export default observer(function VictoryOverlay() {
               Game Analysis
             </Button>
           )}
-          <Link legacyBehavior href="/" passHref>
-            <Button>Leave Room</Button>
-          </Link>
+          {!isAnalysisOpen && (
+            <Link legacyBehavior href="/" passHref>
+              <Button>Leave Room</Button>
+            </Link>
+          )}
           {!isAnalysisOpen &&
             (isHost ? (
               <>

@@ -67,6 +67,7 @@ export type RoundAnalysisHighlight = {
   card: CardState;
   cardLabel: string;
   sourceLabel: string;
+  pointValue: number;
   durationMs: number;
   firstSeenOffsetMs: number;
   lastSeenOffsetMs: number;
@@ -120,6 +121,7 @@ type OpenPounceHelperWindow = AvailablePounceHelper & {
 };
 
 const MIN_MISSED_WINDOW_MS = 750;
+const MIN_SOLITAIRE_HELPER_WINDOW_MS = 3000;
 const MAX_HIGHLIGHTS_PER_PLAYER = 5;
 
 export function analyzeRoundSnapshots(
@@ -335,6 +337,7 @@ function collectMoveStats(
     solitaireMoves: 0,
     cardsPlayedToCenter: 0,
     deckCycles: 0,
+    centerCardKeys: new Set<string>(),
   }));
 
   snapshots.forEach((snapshot, index) => {
@@ -345,7 +348,12 @@ function collectMoveStats(
     }
 
     if (move.type === "c2c") {
-      stats[playerIndex].cardsPlayedToCenter += 1;
+      const movedCard = getMovedCenterCard(snapshot);
+      if (movedCard && movedCard.player === playerIndex) {
+        stats[playerIndex].centerCardKeys.add(cardKey(movedCard));
+        stats[playerIndex].cardsPlayedToCenter =
+          stats[playerIndex].centerCardKeys.size;
+      }
     } else if (move.type === "c2s" || move.type === "s2s") {
       stats[playerIndex].solitaireMoves += 1;
     } else if (move.type === "cycle") {
@@ -356,7 +364,7 @@ function collectMoveStats(
     }
   });
 
-  return stats;
+  return stats.map(({ centerCardKeys, ...stat }) => stat);
 }
 
 function getDeckCycles(
@@ -471,22 +479,6 @@ export function enumerateAvailablePounceHelpers(
       return;
     }
 
-    player.stacks.forEach((destStack, destStackIndex) => {
-      if (sourceStackIndex === destStackIndex) {
-        return;
-      }
-
-      addPounceConnectorIfUseful(
-        helpers,
-        playerIndex,
-        { type: "solitaire", index: sourceStackIndex, count: 1 },
-        sourceCard,
-        destStack,
-        destStackIndex,
-        pounceCard
-      );
-    });
-
     if (
       !player.stacks.some((stack) => stack.length === 0) &&
       sourceStack.length > 0
@@ -578,6 +570,7 @@ function createHighlightForClosedWindow(
   const sourceLabel = formatSource(openWindow.source);
   const durationLabel = formatDuration(durationMs);
   const severity = getSeverity(openWindow, durationMs);
+  const pointValue = getCenterPointValue(openWindow);
 
   return {
     id: `${openWindow.id}:${openWindow.firstSeen}:${closingSnapshot.time}`,
@@ -588,6 +581,7 @@ function createHighlightForClosedWindow(
     card: openWindow.card,
     cardLabel,
     sourceLabel,
+    pointValue,
     durationMs,
     firstSeenOffsetMs: Math.max(0, openWindow.firstSeen - roundStartedAt),
     lastSeenOffsetMs: Math.max(0, closingSnapshot.time - roundStartedAt),
@@ -605,7 +599,7 @@ function createPounceHelperHighlight(
   }
 
   const durationMs = Math.max(0, closingSnapshot.time - openWindow.firstSeen);
-  if (durationMs < MIN_MISSED_WINDOW_MS) {
+  if (durationMs < MIN_SOLITAIRE_HELPER_WINDOW_MS) {
     return null;
   }
 
@@ -615,6 +609,7 @@ function createPounceHelperHighlight(
   const sourceLabel = formatSolitaireSource(openWindow.source);
   const destLabel = formatSolitaireDest(openWindow.destTopCard);
   const durationLabel = formatDuration(durationMs);
+  const pointValue = getPounceHelperPointValue(openWindow);
 
   return {
     id: `${openWindow.id}:${openWindow.firstSeen}:${closingSnapshot.time}`,
@@ -633,11 +628,25 @@ function createPounceHelperHighlight(
     card: openWindow.card,
     cardLabel,
     sourceLabel,
+    pointValue,
     durationMs,
     firstSeenOffsetMs: Math.max(0, openWindow.firstSeen - roundStartedAt),
     lastSeenOffsetMs: Math.max(0, closingSnapshot.time - roundStartedAt),
     sortScore: getPounceHelperSortScore(openWindow, durationMs),
   };
+}
+
+function getCenterPointValue(openWindow: OpenCenterPlayWindow): number {
+  return openWindow.source.type === "pounce" ? 3 : 1;
+}
+
+function getPounceHelperPointValue(
+  openWindow: OpenPounceHelperWindow
+): number {
+  if (openWindow.benefit === "connect_pounce_card") {
+    return 2;
+  }
+  return 2;
 }
 
 function isOwnPounceHelperPlay(
