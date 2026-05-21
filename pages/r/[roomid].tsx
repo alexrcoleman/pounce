@@ -4,6 +4,7 @@ import Board from "../../client/Board";
 import Head from "next/head";
 import Header from "../../client/Header";
 import JoinForm from "../../client/JoinForm";
+import LoadingState from "../../client/LoadingState";
 import type { NextPage } from "next";
 import joinClasses from "../../client/joinClasses";
 import styles from "../../client/Home.module.css";
@@ -42,32 +43,37 @@ const RoomPage = observer(
 
     if (error) {
       return (
-        <div className={styles.loadingStateText}>
-          <Flex vertical align="center" gap="10px">
-            <span>{error}</span>
-            <Flex align="center" gap="10px">
-              <Link legacyBehavior passHref href="/">
-                <Button>Back to Home</Button>
-              </Link>
-              <Button
-                onClick={() => {
-                  window.location.reload();
-                }}
-              >
-                Reload
-              </Button>
-            </Flex>
+        <LoadingState title={error} isError showSpinner={false}>
+          <Flex align="center" gap="10px">
+            <Link legacyBehavior passHref href="/">
+              <Button>Back to Home</Button>
+            </Link>
+            <Button
+              onClick={() => {
+                window.location.reload();
+              }}
+            >
+              Reload
+            </Button>
           </Flex>
-        </div>
+        </LoadingState>
       );
     }
     if (!isConnected) {
-      return <div className={styles.loadingStateText}>Connecting...</div>;
+      return (
+        <LoadingState
+          title="Connecting"
+          detail="Finding your room and syncing the table."
+        />
+      );
     }
     const board = state.board;
     if (board == null) {
       return (
-        <div className={styles.loadingStateText}>Waiting to join room...</div>
+        <LoadingState
+          title="Waiting to join room"
+          detail="Getting the board ready for play."
+        />
       );
     }
 

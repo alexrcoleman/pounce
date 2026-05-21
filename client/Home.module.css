@@ -22,17 +22,99 @@
   height: 100vh;
   height: 100dvh;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 16px;
-  background-color: #cd9b60;
+  padding: 24px;
+  background-color: #16593c;
+  background-image: linear-gradient(
+      rgba(9, 57, 36, 0.72),
+      rgba(9, 57, 36, 0.28)
+    ),
+    url("/felt-tile.png");
+  background-size: auto, 160px 160px;
   text-align: center;
 }
 
+.loadingPanel {
+  width: min(100%, 360px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 24px 22px;
+  color: #2e261e;
+  background: #fbf4e5;
+  border: 1px solid rgba(73, 47, 26, 0.22);
+  border-radius: 8px;
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.24);
+}
+
+.loadingPanelError {
+  border-color: rgba(126, 35, 38, 0.3);
+}
+
+.loadingSpinner {
+  width: 34px;
+  height: 34px;
+  border: 3px solid rgba(12, 122, 68, 0.18);
+  border-top-color: #0b6d2d;
+  border-right-color: #0b6d2d;
+  border-radius: 50%;
+  animation: loadingSpin 0.85s linear infinite;
+}
+
+.loadingCopy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
 .loadingStateText {
-  color: white;
-  font-size: 28px;
+  color: #2e261e;
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.loadingStateDetail {
+  color: #6a5b4d;
+  font-size: 13px;
   font-weight: 700;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+  line-height: 1.35;
+}
+
+.loadingActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.loadingActions :global(.ant-btn) {
+  border-radius: 6px;
+  font-weight: 700;
+}
+
+@keyframes loadingSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loadingSpinner {
+    animation-duration: 1.8s;
+  }
+}
+
+@media (max-width: 420px) {
+  .loadingState {
+    padding: 18px;
+  }
+
+  .loadingPanel {
+    padding: 22px 18px;
+  }
 }
