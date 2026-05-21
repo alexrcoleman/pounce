@@ -131,7 +131,8 @@ type SolitaireSource =
 type PounceHelperBenefit =
   | "play_pounce_to_solitaire"
   | "connect_pounce_card"
-  | "free_slot_for_pounce";
+  | "free_slot_for_pounce"
+  | "connect_slot_for_pounce";
 
 type AvailablePounceHelper = {
   id: string;
@@ -142,6 +143,8 @@ type AvailablePounceHelper = {
   destTopCard?: CardState;
   pounceCard: CardState;
   benefit: PounceHelperBenefit;
+  slotSourceStackIndex?: number;
+  slotSourceCard?: CardState;
 };
 
 type OpenPounceHelperWindow = AvailablePounceHelper & {
@@ -939,6 +942,15 @@ export function enumerateAvailablePounceHelpers(
         destStackIndex,
         pounceCard
       );
+      addPounceSlotConnectorIfUseful(
+        helpers,
+        playerIndex,
+        deckCard,
+        destStack,
+        destStackIndex,
+        player.stacks,
+        pounceCard
+      );
     });
   }
 
@@ -1133,6 +1145,56 @@ function addPounceConnectorIfUseful(
     destTopCard: peek(destStack),
     pounceCard,
     benefit: "connect_pounce_card",
+  });
+}
+
+function addPounceSlotConnectorIfUseful(
+  helpers: AvailablePounceHelper[],
+  playerIndex: number,
+  deckCard: CardState,
+  destStack: CardState[],
+  destStackIndex: number,
+  stacks: CardState[][],
+  pounceCard: CardState
+): void {
+  if (
+    stacks.some((stack) => stack.length === 0) ||
+    stacks.some((stack) => canMoveToSolitairePile(pounceCard, stack)) ||
+    !canMoveToSolitairePile(deckCard, destStack)
+  ) {
+    return;
+  }
+
+  const destAfterDeckMove = destStack.concat(deckCard);
+  if (canMoveToSolitairePile(pounceCard, destAfterDeckMove)) {
+    return;
+  }
+
+  stacks.forEach((sourceStack, sourceStackIndex) => {
+    const movingRootCard = sourceStack[0];
+    if (
+      sourceStackIndex === destStackIndex ||
+      !movingRootCard ||
+      canMoveToSolitairePile(movingRootCard, destStack) ||
+      !canMoveToSolitairePile(movingRootCard, destAfterDeckMove)
+    ) {
+      return;
+    }
+
+    helpers.push({
+      id: `${playerIndex}:connect-slot:${destStackIndex}:${sourceStackIndex}:${cardKey(
+        deckCard
+      )}:${cardKey(movingRootCard)}:${cardKey(pounceCard)}`,
+      playerIndex,
+      source: { type: "deck" },
+      card: deckCard,
+      destStackIndex,
+      destTopCard: peek(destStack),
+      pounceCard,
+      benefit: "connect_slot_for_pounce",
+      slotSourceStackIndex: sourceStackIndex,
+      slotSourceCard: movingRootCard,
+    });
   });
 }
 
@@ -1579,6 +1641,9 @@ function getPounceHelperKind(
   if (benefit === "free_slot_for_pounce") {
     return "missed_pounce_slot";
   }
+  if (benefit === "connect_slot_for_pounce") {
+    return "missed_pounce_slot";
+  }
   return "missed_pounce_connector";
 }
 
@@ -1596,6 +1661,9 @@ function getPounceHelperTitle(
   }
   if (openWindow.benefit === "free_slot_for_pounce") {
     return `Could free a slot for ${pounceCardLabel}`;
+  }
+  if (openWindow.benefit === "connect_slot_for_pounce") {
+    return `${cardLabel} set up a slot for ${pounceCardLabel}`;
   }
   return `${cardLabel} connected ${pounceCardLabel}`;
 }
@@ -1616,6 +1684,12 @@ function getPounceHelperDetail(
     if (openWindow.benefit === "free_slot_for_pounce") {
       return `${cardLabel} could move from your ${sourceLabel} to ${destLabel}, freeing an empty slot for your pounce card ${pounceCardLabel}, for ${durationLabel} before you played it.`;
     }
+    if (openWindow.benefit === "connect_slot_for_pounce") {
+      const slotCardLabel = openWindow.slotSourceCard
+        ? formatCard(openWindow.slotSourceCard)
+        : "a solitaire stack";
+      return `${cardLabel} could move from your ${sourceLabel} to ${destLabel}, letting ${slotCardLabel} move there and free a slot for your pounce card ${pounceCardLabel}, for ${durationLabel} before you started it.`;
+    }
     return `${cardLabel} could move from your ${sourceLabel} to ${destLabel}, connecting your pounce card ${pounceCardLabel}, for ${durationLabel} before you played it.`;
   }
   if (openWindow.benefit === "play_pounce_to_solitaire") {
@@ -1623,6 +1697,12 @@ function getPounceHelperDetail(
   }
   if (openWindow.benefit === "free_slot_for_pounce") {
     return `${cardLabel} could move from your ${sourceLabel} to ${destLabel}, freeing an empty slot for your pounce card ${pounceCardLabel} for ${durationLabel}.`;
+  }
+  if (openWindow.benefit === "connect_slot_for_pounce") {
+    const slotCardLabel = openWindow.slotSourceCard
+      ? formatCard(openWindow.slotSourceCard)
+      : "a solitaire stack";
+    return `${cardLabel} could move from your ${sourceLabel} to ${destLabel}, letting ${slotCardLabel} move there and free a slot for your pounce card ${pounceCardLabel} for ${durationLabel}.`;
   }
   return `${cardLabel} could move from your ${sourceLabel} to ${destLabel}, connecting your pounce card ${pounceCardLabel} for ${durationLabel}.`;
 }
@@ -1636,6 +1716,8 @@ function getPounceHelperSortScore(
       ? 280000
       : openWindow.benefit === "free_slot_for_pounce"
       ? 255000
+      : openWindow.benefit === "connect_slot_for_pounce"
+      ? 250000
       : 240000;
   return benefitScore + durationMs;
 }
