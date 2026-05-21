@@ -64,7 +64,7 @@
   padding: 0;
   border: 1px solid rgba(43, 35, 29, 0.16);
   border-radius: 12px;
-  background: #f7f4ed;
+  background: #ffffff;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
 }
 
@@ -77,7 +77,7 @@
 
 .settingsModal :global(.ant-modal-body) {
   padding: 12px;
-  background: #f7f4ed;
+  background: #ffffff;
 }
 
 .settingsTitle {
@@ -289,7 +289,7 @@
   overflow: hidden;
   border: 1px solid rgba(43, 35, 29, 0.18);
   border-radius: 8px;
-  background: #f7f4ed;
+  background: #ffffff;
 }
 
 .counterButton {
@@ -315,13 +315,13 @@
 
 .counterButton:hover,
 .counterButton:focus {
-  background: #f7f4ed;
+  background: #fbfbf8;
 }
 
 .counterButton:disabled {
   color: rgba(46, 38, 30, 0.28);
   cursor: default;
-  background: #ede8df;
+  background: #f1f1ef;
 }
 
 .counterValue {
