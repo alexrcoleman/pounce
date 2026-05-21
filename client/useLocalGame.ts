@@ -15,6 +15,7 @@ import { createRoomState, RoomState } from "../shared/RoomState";
 import {
   dealRoomHands,
   getRoomHands,
+  recordRoundSnapshot,
   resetRoom,
   scheduleAIReactionBoard,
   setRoomAILevel,
@@ -49,6 +50,7 @@ export default function useLocalGame(name: string | null) {
           board: deepClone(room.board),
           time: Date.now(),
           revision: room.revision,
+          roundAnalysis: deepClone(room.lastRoundAnalysis),
         });
       });
       scheduleAIReactionBoard(room);
@@ -114,6 +116,7 @@ export default function useLocalGame(name: string | null) {
             });
             return;
           }
+          recordRoundSnapshot(room, "move", Date.now(), playerIndex, envelope.payload);
           markRoomUpdated();
           ack?.({
             actionId: envelope.actionId,
@@ -160,6 +163,7 @@ export default function useLocalGame(name: string | null) {
           }
         } else if (event === "rotate_decks") {
           rotateDecks(room.board);
+          recordRoundSnapshot(room, "manual_rotate", Date.now());
           markRoomUpdated();
           emitUpdate();
         } else if (event === "restart_game") {

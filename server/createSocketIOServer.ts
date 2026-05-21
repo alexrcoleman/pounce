@@ -13,6 +13,7 @@ import {
 } from "../server/Rooms";
 import {
   dealRoomHands,
+  recordRoundSnapshot,
   removeDisconnectedPlayers,
   resetRoom,
   setRoomAILevel,
@@ -169,6 +170,7 @@ export default function createSocketIOServer() {
         });
         return;
       }
+      recordRoundSnapshot(room, "move", Date.now(), pid, args.payload);
       markRoomUpdated(user.currentRoom);
       ack?.({ actionId: args.actionId, ok: true, revision: room.revision });
       broadcastUpdate(user.currentRoom);
@@ -297,6 +299,7 @@ export default function createSocketIOServer() {
 
       const room = getRoom(user.currentRoom);
       rotateDecks(room.board);
+      recordRoundSnapshot(room, "manual_rotate", Date.now());
       markRoomUpdated(user.currentRoom);
       broadcastUpdate(user.currentRoom);
     });

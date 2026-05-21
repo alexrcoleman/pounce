@@ -1,5 +1,6 @@
 import { BoardState, CardState, CursorState } from "./GameUtils";
 import { Move } from "./MoveHandler";
+import type { RoundAnalysis } from "./RoundAnalysis";
 
 export type ActionEnvelope<T> = {
   actionId: string;
@@ -15,6 +16,7 @@ export type BoardUpdate = {
   board: BoardState;
   time: number;
   revision: number;
+  roundAnalysis?: RoundAnalysis | null;
 };
 
 export type ServerToClientEvents = {

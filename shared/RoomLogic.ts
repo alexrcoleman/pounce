@@ -12,11 +12,15 @@ import {
 } from "./GameUtils";
 
 import { RoomState } from "./RoomState";
-import { executeMove, getDistance } from "./MoveHandler";
+import { executeMove, getDistance, type Move } from "./MoveHandler";
 import { getApproximateCardLocation } from "./CardLocations";
 import { getBasicAIMove } from "./ComputerV1";
 import deepClone from "./deepClone";
 import { peek } from "./CardUtils";
+import {
+  analyzeRoundSnapshots,
+  type RoundSnapshotReason,
+} from "./RoundAnalysis";
 
 export type RoomTickResult = {
   hasUpdate: boolean;
@@ -33,11 +37,13 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
 
   if (board.isActive && !board.isPaused && board.ticksSinceMove >= 100) {
     rotateDecks(board);
+    recordRoundSnapshot(room, "auto_rotate", now);
     hasUpdate = true;
   }
   if (!board.isActive || board.isPaused) {
     // no-op
   } else if (isGameOver(board)) {
+    finishRoundAnalysis(room, now);
     scoreBoard(board);
     hasUpdate = true;
     if (room.autoStart) {
@@ -58,6 +64,9 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       const move = getBasicAIMove(visibleBoard, index, hand);
 
       const moveResult = move ? executeMove(board, index, move, hand) : null;
+      if (move && moveResult != null) {
+        recordRoundSnapshot(room, "move", now, index, move);
+      }
 
       let cooldownDist = {
         mean: 3500 / room.aiSpeed,
@@ -153,6 +162,7 @@ export function startRoomGame(room: RoomState, now = Date.now()): void {
   removeDisconnectedPlayers(room);
   room.aiCooldowns = room.board.players.map(() => now + 2000 + Math.random());
   startGame(room);
+  startRoundAnalysis(room, now);
   room.aiBoard = deepClone(room.board);
 }
 
@@ -160,6 +170,8 @@ export function dealRoomHands(room: RoomState): boolean {
   removeDisconnectedPlayers(room);
   const didDeal = dealGameHands(room);
   if (didDeal) {
+    room.lastRoundAnalysis = null;
+    room.roundSnapshots = [];
     room.aiBoard = deepClone(room.board);
   }
   return didDeal;
@@ -236,6 +248,8 @@ export function resetRoom(room: RoomState): void {
     p.totalPoints = 0;
   });
   room.hands = [];
+  room.roundSnapshots = [];
+  room.lastRoundAnalysis = null;
   room.aiBoard = deepClone(room.board);
 }
 
@@ -278,4 +292,49 @@ export function updateRoomHand(
   if (item !== undefined) {
     hands[playerIndex].item = item;
   }
+}
+
+export function recordRoundSnapshot(
+  room: RoomState,
+  reason: RoundSnapshotReason,
+  now = Date.now(),
+  playerIndex?: number,
+  move?: Move
+): void {
+  if (!room.board.isActive) {
+    return;
+  }
+
+  room.roundSnapshots.push({
+    time: now,
+    reason,
+    playerIndex,
+    move,
+    board: deepClone(room.board),
+  });
+}
+
+function startRoundAnalysis(room: RoomState, now: number): void {
+  room.lastRoundAnalysis = null;
+  room.roundSnapshots = [
+    {
+      time: now,
+      reason: "round_start",
+      board: deepClone(room.board),
+    },
+  ];
+}
+
+function finishRoundAnalysis(room: RoomState, now: number): void {
+  if (room.roundSnapshots.length === 0) {
+    return;
+  }
+
+  const snapshots = room.roundSnapshots.concat({
+    time: now,
+    reason: "round_end",
+    board: deepClone(room.board),
+  });
+  room.lastRoundAnalysis = analyzeRoundSnapshots(snapshots);
+  room.roundSnapshots = [];
 }
