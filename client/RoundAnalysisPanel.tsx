@@ -212,9 +212,17 @@ function Moment({
 
 function MomentSnapshot({ highlight }: { highlight: RoundAnalysisHighlight }) {
   const board = highlight.board;
-  const player =
-    board.players[highlight.playerIndex] ??
-    board.players.find((candidate) => !candidate.isSpectating);
+  const playerIndex =
+    board.players[highlight.playerIndex] != null
+      ? highlight.playerIndex
+      : board.players.findIndex((candidate) => !candidate.isSpectating);
+  const player = playerIndex >= 0 ? board.players[playerIndex] : undefined;
+  const otherPlayers = board.players
+    .map((candidate, index) => ({ player: candidate, index }))
+    .filter(
+      ({ player: candidate, index }) =>
+        index !== playerIndex && !candidate.isSpectating
+    );
   const centerPiles = board.piles
     .map((pile, index) => ({ index, card: pile[pile.length - 1] }))
     .filter(({ card }) => card != null);
@@ -228,19 +236,21 @@ function MomentSnapshot({ highlight }: { highlight: RoundAnalysisHighlight }) {
       {player && (
         <div className={styles.snapshotSection}>
           <div className={styles.snapshotHeader}>{player.name}</div>
-          <div className={styles.snapshotGrid}>
-            <SnapshotPile
+          <div className={styles.visiblePileGrid}>
+            <SnapshotTopPile
               cards={player.pounceDeck}
               highlightCard={highlight.card}
               label="Pounce"
             />
-            <SnapshotPile
+            <SnapshotTopPile
               cards={player.flippedDeck}
               highlightCard={highlight.card}
               label="Waste"
             />
+          </div>
+          <div className={styles.solitaireStackGrid}>
             {player.stacks.map((stack, index) => (
-              <SnapshotPile
+              <SnapshotStack
                 cards={stack}
                 highlightCard={highlight.card}
                 key={index}
@@ -266,11 +276,50 @@ function MomentSnapshot({ highlight }: { highlight: RoundAnalysisHighlight }) {
           <p className={styles.emptyText}>No center piles had cards yet.</p>
         )}
       </div>
+      {otherPlayers.length > 0 && (
+        <div className={styles.snapshotSection}>
+          <div className={styles.snapshotHeader}>Other players</div>
+          <div className={styles.otherPlayerGrid}>
+            {otherPlayers.map(({ player: otherPlayer, index }) => (
+              <OtherPlayerSnapshot
+                highlightCard={highlight.card}
+                key={index}
+                player={otherPlayer}
+              />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function SnapshotPile({
+function SnapshotTopPile({
+  cards,
+  highlightCard,
+  label,
+}: {
+  cards: CardState[];
+  highlightCard: CardState;
+  label: string;
+}) {
+  const topCard = cards[cards.length - 1];
+
+  return (
+    <div className={styles.snapshotPile}>
+      <div className={styles.snapshotPileLabel}>
+        {label} <span>{cards.length}</span>
+      </div>
+      {topCard ? (
+        <CardPill card={topCard} highlightCard={highlightCard} />
+      ) : (
+        <div className={styles.emptyPile}>Empty</div>
+      )}
+    </div>
+  );
+}
+
+function SnapshotStack({
   cards,
   highlightCard,
   label,
@@ -285,7 +334,7 @@ function SnapshotPile({
         {label} <span>{cards.length}</span>
       </div>
       {cards.length > 0 ? (
-        <div className={styles.cardRun}>
+        <div className={styles.stackRun}>
           {cards.map((card, index) => (
             <CardPill
               card={card}
@@ -296,6 +345,66 @@ function SnapshotPile({
         </div>
       ) : (
         <div className={styles.emptyPile}>Empty</div>
+      )}
+    </div>
+  );
+}
+
+function OtherPlayerSnapshot({
+  highlightCard,
+  player,
+}: {
+  highlightCard: CardState;
+  player: {
+    name: string;
+    pounceDeck: CardState[];
+    flippedDeck: CardState[];
+    stacks: CardState[][];
+  };
+}) {
+  return (
+    <div className={styles.otherPlayer}>
+      <div className={styles.otherPlayerName}>{player.name}</div>
+      <div className={styles.otherPlayerCards}>
+        <LabeledCard
+          card={player.pounceDeck[player.pounceDeck.length - 1]}
+          highlightCard={highlightCard}
+          label="P"
+        />
+        <LabeledCard
+          card={player.flippedDeck[player.flippedDeck.length - 1]}
+          highlightCard={highlightCard}
+          label="W"
+        />
+        {player.stacks.map((stack, index) => (
+          <LabeledCard
+            card={stack[stack.length - 1]}
+            highlightCard={highlightCard}
+            key={index}
+            label={`S${index + 1}`}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function LabeledCard({
+  card,
+  highlightCard,
+  label,
+}: {
+  card?: CardState;
+  highlightCard: CardState;
+  label: string;
+}) {
+  return (
+    <div className={styles.labeledCard}>
+      <span className={styles.labeledCardLabel}>{label}</span>
+      {card ? (
+        <CardPill card={card} highlightCard={highlightCard} />
+      ) : (
+        <span className={styles.emptyMiniCard}>Empty</span>
       )}
     </div>
   );

@@ -260,9 +260,15 @@
   text-transform: uppercase;
 }
 
-.snapshotGrid {
+.visiblePileGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.solitaireStackGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -284,11 +290,12 @@
   font-weight: 800;
 }
 
-.cardRun {
+.stackRun {
   display: flex;
+  flex-direction: column;
   flex-wrap: wrap;
   gap: 4px;
-  max-height: 126px;
+  max-height: 220px;
   overflow-y: auto;
 }
 
@@ -321,6 +328,51 @@
   gap: 6px;
 }
 
+.otherPlayerGrid {
+  display: grid;
+  gap: 8px;
+}
+
+.otherPlayer {
+  min-width: 0;
+  padding: 8px;
+  border: 1px solid #d8ded8;
+  border-radius: 6px;
+  background: #fbfdfb;
+}
+
+.otherPlayerName {
+  margin-bottom: 6px;
+  font-weight: 800;
+}
+
+.otherPlayerCards {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.labeledCard {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.labeledCardLabel {
+  color: #7c705e;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.emptyMiniCard {
+  padding: 2px 5px;
+  border: 1px dashed #cfd8d0;
+  border-radius: 4px;
+  color: #7c705e;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
 @media (min-width: 720px) {
   .header {
     grid-template-columns: minmax(0, 1fr) auto;
@@ -338,8 +390,13 @@
   }
 
   .moment,
-  .snapshotGrid {
+  .visiblePileGrid,
+  .solitaireStackGrid {
     grid-template-columns: 1fr;
+  }
+
+  .otherPlayerCards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .severity {
