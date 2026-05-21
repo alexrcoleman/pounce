@@ -390,9 +390,7 @@ function SnapshotStack({
 }) {
   return (
     <div className={styles.stackColumn}>
-      <div className={styles.stackColumnLabel}>
-        {label} <span>{cards.length}</span>
-      </div>
+      <div className={styles.stackColumnLabel}>{label}</div>
       {cards.length > 0 ? (
         <div className={styles.stackRun}>
           {cards.map((card, index) => (
