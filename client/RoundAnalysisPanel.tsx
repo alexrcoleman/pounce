@@ -348,6 +348,7 @@ function MomentSnapshot({ highlight }: { highlight: RoundAnalysisHighlight }) {
         Board state {formatDuration(highlight.firstSeenOffsetMs)} into the
         round. The highlighted card is the key card for this moment.
       </div>
+      <div className={styles.snapshotDetail}>{highlight.detail}</div>
       <SnapshotContext highlight={highlight} />
       {player && (
         <div className={styles.snapshotSection}>
@@ -415,7 +416,12 @@ function SnapshotContext({
 }: {
   highlight: RoundAnalysisHighlight;
 }) {
-  if (!highlight.openedByAction && highlight.windowActions.length === 0) {
+  if (
+    !highlight.openedByAction &&
+    !highlight.closedByAction &&
+    !highlight.closedReason &&
+    highlight.windowActions.length === 0
+  ) {
     return null;
   }
 
@@ -431,6 +437,35 @@ function SnapshotContext({
               at {formatDuration(highlight.openedByAction.offsetMs)}
             </span>
           </div>
+        </div>
+      )}
+      {(highlight.closedByAction || highlight.closedReason) && (
+        <div>
+          <div className={styles.contextLabel}>Window closed after</div>
+          {highlight.closedByAction ? (
+            <>
+              <div className={styles.contextText}>
+                {formatActionContext(highlight.closedByAction, highlight)}
+                <span className={styles.contextTime}>
+                  {" "}
+                  at {formatDuration(highlight.closedByAction.offsetMs)}
+                </span>
+              </div>
+              {highlight.closedReason && (
+                <div className={styles.contextReason}>
+                  {highlight.closedReason}
+                </div>
+              )}
+            </>
+          ) : (
+            <div className={styles.contextText}>
+              {highlight.closedReason}
+              <span className={styles.contextTime}>
+                {" "}
+                at {formatDuration(highlight.lastSeenOffsetMs)}
+              </span>
+            </div>
+          )}
         </div>
       )}
       <div>

@@ -77,6 +77,8 @@ export type RoundAnalysisHighlight = {
   pointValue: number;
   board: BoardState;
   openedByAction?: RoundAnalysisActionContext;
+  closedByAction?: RoundAnalysisActionContext;
+  closedReason?: string;
   windowActions: RoundAnalysisActionContext[];
   durationMs: number;
   firstSeenOffsetMs: number;
@@ -218,7 +220,8 @@ export function analyzeRoundSnapshots(
         const highlight = createHighlightForClosedWindow(
           openWindow,
           snapshot,
-          firstSnapshot.time
+          firstSnapshot.time,
+          { closedByAction: actionContext }
         );
         if (wasOwnPlay) {
           opportunityStatsByPlayer[playerIndex].centerPlayed += 1;
@@ -280,7 +283,8 @@ export function analyzeRoundSnapshots(
           const highlight = createPounceHelperHighlight(
             openWindow,
             snapshot,
-            firstSnapshot.time
+            firstSnapshot.time,
+            actionContext
           );
           if (wasOwnPlay) {
             opportunityStatsByPlayer[playerIndex].solitairePlayed += 1;
@@ -324,7 +328,7 @@ export function analyzeRoundSnapshots(
         openWindow,
         finalSnapshot,
         firstSnapshot.time,
-        "round_end_available"
+        { forcedKind: "round_end_available" }
       );
       if (highlight) {
         opportunityStatsByPlayer[playerIndex].centerMissed += 1;
@@ -919,7 +923,10 @@ function createHighlightForClosedWindow(
   openWindow: OpenCenterPlayWindow,
   closingSnapshot: RoundSnapshot,
   roundStartedAt: number,
-  forcedKind?: RoundAnalysisHighlight["kind"]
+  options: {
+    forcedKind?: RoundAnalysisHighlight["kind"];
+    closedByAction?: RoundAnalysisActionContext;
+  } = {}
 ): RoundAnalysisHighlight | null {
   const durationMs = Math.max(0, closingSnapshot.time - openWindow.firstSeen);
   const isOwnPlay = isOwnCenterPlay(openWindow, closingSnapshot);
@@ -932,7 +939,7 @@ function createHighlightForClosedWindow(
 
   const kind = isOwnPlay
     ? "delayed_center_play"
-    : forcedKind ?? getMissedPlayKind(openWindow, closingSnapshot);
+    : options.forcedKind ?? getMissedPlayKind(openWindow, closingSnapshot);
   const cardLabel = formatCard(openWindow.card);
   const sourceLabel = formatSource(openWindow.source);
   const durationLabel = formatDuration(durationMs);
@@ -951,6 +958,11 @@ function createHighlightForClosedWindow(
     pointValue,
     board: openWindow.firstSeenBoard,
     openedByAction: openWindow.openedByAction,
+    closedByAction: options.closedByAction,
+    closedReason: getWindowCloseReason(
+      kind,
+      closingSnapshot.reason === "round_end"
+    ),
     windowActions: openWindow.windowActions,
     durationMs,
     firstSeenOffsetMs: Math.max(0, openWindow.firstSeen - roundStartedAt),
@@ -963,7 +975,8 @@ function createHighlightForClosedWindow(
 function createPounceHelperHighlight(
   openWindow: OpenPounceHelperWindow,
   closingSnapshot: RoundSnapshot,
-  roundStartedAt: number
+  roundStartedAt: number,
+  closedByAction?: RoundAnalysisActionContext
 ): RoundAnalysisHighlight | null {
   const isOwnPlay = isOwnPounceHelperPlay(openWindow, closingSnapshot);
   const isBetterPlay = isOwnBetterPounceHelperPlay(openWindow, closingSnapshot);
@@ -1019,6 +1032,11 @@ function createPounceHelperHighlight(
     pointValue,
     board: openWindow.firstSeenBoard,
     openedByAction: openWindow.openedByAction,
+    closedByAction,
+    closedReason: getWindowCloseReason(
+      kind,
+      closingSnapshot.reason === "round_end"
+    ),
     windowActions: openWindow.windowActions,
     durationMs,
     firstSeenOffsetMs: Math.max(0, openWindow.firstSeen - roundStartedAt),
@@ -1039,6 +1057,37 @@ function getPounceHelperPointValue(
     return 2;
   }
   return 2;
+}
+
+function getWindowCloseReason(
+  kind: RoundAnalysisHighlight["kind"],
+  wasRoundEnd = false
+): string {
+  if (wasRoundEnd) {
+    return "The round ended while this play was still available.";
+  }
+  if (kind === "delayed_center_play" || kind === "delayed_pounce_helper") {
+    return "You eventually made this play.";
+  }
+  if (kind === "cycled_past_playable") {
+    return "You cycled past the playable waste card.";
+  }
+  if (kind === "beaten_to_center") {
+    return "Another player took the center spot first.";
+  }
+  if (kind === "round_end_available") {
+    return "The round ended while this play was still available.";
+  }
+  if (kind === "missed_center_play") {
+    return "The card was no longer playable to center.";
+  }
+  if (kind === "missed_pounce_solitaire") {
+    return "The pounce-card move was no longer available.";
+  }
+  if (kind === "missed_pounce_slot") {
+    return "The slot-opening move was no longer available.";
+  }
+  return "The pounce-helper move was no longer available.";
 }
 
 function isOwnPounceHelperPlay(
