@@ -1,0 +1,70 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+concurrency:
+  group: cloud-run-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PROJECT_ID: pounce-409615
+  SERVICE: pounce
+  REGION: us-east4
+  NODE_VERSION: 18.x
+
+jobs:
+  deploy:
+    name: Type check and deploy
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Check deploy configuration
+        env:
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        run: |
+          test -n "$GCP_WORKLOAD_IDENTITY_PROVIDER" || { echo "::error::Set repository secret GCP_WORKLOAD_IDENTITY_PROVIDER."; exit 1; }
+          test -n "$GCP_SERVICE_ACCOUNT" || { echo "::error::Set repository secret GCP_SERVICE_ACCOUNT."; exit 1; }
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Deploy to Cloud Run
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          source: .
+
+      - name: Show deployed URL
+        run: echo "${{ steps.deploy.outputs.url }}"
