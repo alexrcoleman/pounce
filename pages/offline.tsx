@@ -5,6 +5,7 @@ import Board from "../client/Board";
 import { ClientContext } from "../client/ClientContext";
 import Head from "next/head";
 import Header from "../client/Header";
+import LoadingState from "../client/LoadingState";
 import type { NextPage } from "next";
 import joinClasses from "../client/joinClasses";
 import styles from "../client/Home.module.css";
@@ -118,12 +119,11 @@ function OfflineLoadingState({
       <Head>
         <title>Pounce | Offline</title>
       </Head>
-      <div className={styles.loadingState}>
-        <div className={styles.loadingStateText}>{message}</div>
+      <LoadingState title={message} detail="This usually takes a moment.">
         <Button size="large" onClick={onLeaveRoom}>
           Back home
         </Button>
-      </div>
+      </LoadingState>
     </>
   );
 }

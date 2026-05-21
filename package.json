@@ -23,7 +23,8 @@
     "react-dnd-touch-backend": "^14.1.1",
     "react-dom": "^18.2.0",
     "socket.io": "^4.4.0",
-    "socket.io-client": "^4.4.0"
+    "socket.io-client": "^4.4.0",
+    "sonner": "^2.0.7"
   },
   "devDependencies": {
     "@babel/core": "^7.16.5",

@@ -1,4 +1,5 @@
 import { ConfigProvider } from "antd";
+import { Toaster } from "sonner";
 import "../styles/globals.css";
 
 import type { AppProps } from "next/app";
@@ -27,6 +28,7 @@ function MyApp({ Component, pageProps }: AppProps) {
       <ConfigProvider theme={theme}>
         <Component {...pageProps} name={name} setName={setName} />
       </ConfigProvider>
+      <Toaster position="top-center" richColors visibleToasts={1} />
     </>
   );
 }
