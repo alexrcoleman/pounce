@@ -621,6 +621,15 @@ function getPracticeFocus(report: PlayerRoundAnalysis): string {
   if (report.summary.missedPounceHelpers > 0) {
     return "Look for solitaire moves that connect or free your pounce card; those are now called out in the key moments.";
   }
+  if (
+    report.highlights.some(
+      (highlight) =>
+        highlight.kind === "buried_center_shuffle" ||
+        highlight.kind === "delayed_buried_center_shuffle"
+    )
+  ) {
+    return "Look for partial-stack shuffles that expose a buried card for center; those are the subtle tactics now called out in key moments.";
+  }
   if (report.summary.cycledPastPlayableCards >= 2) {
     return "Slow the deck rhythm just enough to check whether the waste card can go center before cycling.";
   }
