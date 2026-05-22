@@ -20,6 +20,8 @@ type PendingMoveAction = {
 function createDefaultRoomSettings(): RoomSettings {
   return {
     fairHandRotation: false,
+    aiSpeed: 3,
+    simulationMode: false,
   };
 }
 

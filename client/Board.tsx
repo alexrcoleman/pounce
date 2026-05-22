@@ -245,14 +245,8 @@ const PileSection = observer(function PileSection({
     roomId != null && roomId.toLowerCase() !== "offline" ? roomId : "Offline";
   const roomLabel = roomCode === "Offline" ? "Table" : "Room code";
   const isOfflineRoom = roomCode === "Offline";
-  const [aiDifficulty, setAIDifficulty] = useState<"easy" | "medium" | "hard">(
-    "easy"
-  );
-  const selectAIDifficulty = (
-    difficulty: "easy" | "medium" | "hard",
-    speed: number
-  ) => {
-    setAIDifficulty(difficulty);
+  const aiSpeed = state.roomSettings.aiSpeed ?? 3;
+  const selectAIDifficulty = (speed: number) => {
     socket?.emit("set_ai_level", { speed });
   };
 
@@ -303,22 +297,22 @@ const PileSection = observer(function PileSection({
               {isOfflineRoom ? (
                 <div className={styles.aiDifficultyControl}>
                   <button
-                    aria-pressed={aiDifficulty === "easy"}
-                    onClick={() => selectAIDifficulty("easy", 3)}
+                    aria-pressed={aiSpeed === 3}
+                    onClick={() => selectAIDifficulty(3)}
                     type="button"
                   >
                     Easy
                   </button>
                   <button
-                    aria-pressed={aiDifficulty === "medium"}
-                    onClick={() => selectAIDifficulty("medium", 4)}
+                    aria-pressed={aiSpeed === 4}
+                    onClick={() => selectAIDifficulty(4)}
                     type="button"
                   >
                     Medium
                   </button>
                   <button
-                    aria-pressed={aiDifficulty === "hard"}
-                    onClick={() => selectAIDifficulty("hard", 5)}
+                    aria-pressed={aiSpeed === 5}
+                    onClick={() => selectAIDifficulty(5)}
                     type="button"
                   >
                     Hard

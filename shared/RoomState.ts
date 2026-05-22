@@ -8,6 +8,8 @@ import type { RoundAnalysis, RoundSnapshot } from "./RoundAnalysis";
 
 export type RoomSettings = {
   fairHandRotation: boolean;
+  aiSpeed: number;
+  simulationMode: boolean;
 };
 
 export type RoomState = {
@@ -41,6 +43,8 @@ export function createRoomState(playerCount: number): RoomState {
     autoStart: false,
     settings: {
       fairHandRotation: false,
+      aiSpeed: 3,
+      simulationMode: false,
     },
     timescale: 1,
     roundSnapshots: [],
