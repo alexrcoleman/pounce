@@ -38,6 +38,7 @@ type MoveResult = {
   cursorMove?: CardState;
   cursorMoveItem?: CardState;
   clearCursor?: boolean;
+  boardChanged?: boolean;
 };
 type AICursorData = CursorState | undefined;
 
@@ -151,6 +152,10 @@ export function executeMove(
     } else {
       const _unused: never = move;
       throw new Error("Invalid move type");
+    }
+
+    if (moveResult.cursorMove == null) {
+      moveResult.boardChanged = true;
     }
 
     player.currentPoints =

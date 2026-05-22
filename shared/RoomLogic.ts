@@ -64,7 +64,8 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       const move = getBasicAIMove(visibleBoard, index, hand);
 
       const moveResult = move ? executeMove(board, index, move, hand) : null;
-      if (move && moveResult != null) {
+      // AI cursor movement is an intention, not a completed board move.
+      if (move && moveResult?.boardChanged) {
         recordRoundSnapshot(room, "move", now, index, move);
       }
 
