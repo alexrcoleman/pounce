@@ -314,7 +314,11 @@ export function analyzeRoundSnapshots(
 
           playerOpenPounceHelperWindows.delete(openWindow.id);
           addWindowAction(openWindow, snapshot, actionContext);
-          const wasOwnPlay = isOwnPounceHelperPlay(openWindow, snapshot);
+          const wasOwnPlay = isOwnPounceHelperPlay(
+            openWindow,
+            snapshot,
+            previousSnapshot
+          );
           const wasBetterPlay = isOwnBetterPounceHelperPlay(
             openWindow,
             snapshot
@@ -387,7 +391,8 @@ export function analyzeRoundSnapshots(
           addWindowAction(openWindow, snapshot, actionContext);
           const wasOwnSetup = isOwnBuriedCenterShuffleSetup(
             openWindow,
-            snapshot
+            snapshot,
+            previousSnapshot
           );
           const highlight = createBuriedCenterShuffleHighlight(
             openWindow,
@@ -616,13 +621,13 @@ function collectMoveStats(
           stats[playerIndex].centerCardKeys.size;
       }
     } else if (move.type === "c2s" || move.type === "s2s") {
-      const movedCards = getMovedSolitaireCards(
+      const moveDiff = getSolitaireMoveDiff(
         snapshot,
         previousSnapshot,
         playerIndex,
-        move.dest
+        move
       );
-      if (movedCards.length > 0) {
+      if (moveDiff && moveDiff.movedCards.length > 0) {
         stats[playerIndex].solitaireMoves += 1;
       }
     } else if (move.type === "cycle") {
@@ -768,33 +773,142 @@ function getMoveDescription(
       : "played a card to center";
   }
   if (move.type === "c2s") {
-    const movedCard = getMovedSolitaireCards(
+    const moveDiff = getSolitaireMoveDiff(
       snapshot,
       previousSnapshot,
       playerIndex,
-      move.dest
-    )[0];
+      move
+    );
+    const movedCard = moveDiff?.movedCards[0];
     if (!movedCard) {
       return undefined;
     }
     const sourceLabel = move.source === "pounce" ? "pounce" : "waste";
     return `moved ${formatCard(movedCard)} from ${sourceLabel} to S${
-      move.dest + 1
+      (moveDiff?.destStackIndex ?? move.dest) + 1
     }`;
   }
 
-  const movedCards = getMovedSolitaireCards(
+  const moveDiff = getSolitaireMoveDiff(
     snapshot,
     previousSnapshot,
     playerIndex,
-    move.dest
+    move
   );
+  const movedCards = moveDiff?.movedCards ?? [];
   if (movedCards.length === 0) {
     return undefined;
   }
   const cardLabel =
     movedCards.length === 1 ? formatCard(movedCards[0]) : `${move.count} cards`;
-  return `moved ${cardLabel} from S${move.source + 1} to S${move.dest + 1}`;
+  const sourceStackIndex = moveDiff?.sourceStackIndex ?? move.source;
+  const destStackIndex = moveDiff?.destStackIndex ?? move.dest;
+  return `moved ${cardLabel} from S${sourceStackIndex + 1} to S${
+    destStackIndex + 1
+  }`;
+}
+
+type SolitaireMove = Extract<Move, { type: "c2s" | "s2s" }>;
+
+type SolitaireMoveDiff = {
+  sourceStackIndex?: number;
+  destStackIndex: number;
+  movedCards: CardState[];
+};
+
+type StackCardChange = {
+  stackIndex: number;
+  cards: CardState[];
+};
+
+function getSolitaireMoveDiff(
+  snapshot: RoundSnapshot,
+  previousSnapshot: RoundSnapshot | undefined,
+  playerIndex: number,
+  move: SolitaireMove
+): SolitaireMoveDiff | null {
+  if (!previousSnapshot) {
+    const movedCards = getMovedSolitaireCards(
+      snapshot,
+      previousSnapshot,
+      playerIndex,
+      move.dest
+    );
+    return movedCards.length > 0
+      ? {
+          sourceStackIndex: move.type === "s2s" ? move.source : undefined,
+          destStackIndex: move.dest,
+          movedCards,
+        }
+      : null;
+  }
+
+  const expectedCount = move.type === "s2s" ? move.count : 1;
+  const previousStacks =
+    previousSnapshot.board.players[playerIndex]?.stacks ?? [];
+  const currentStacks = snapshot.board.players[playerIndex]?.stacks ?? [];
+  const addedChanges = getStackCardChanges(previousStacks, currentStacks);
+  const destChange = getPreferredStackCardChange(
+    addedChanges,
+    move.dest,
+    expectedCount
+  );
+  if (!destChange) {
+    return null;
+  }
+
+  const removedChanges =
+    move.type === "s2s"
+      ? getStackCardChanges(currentStacks, previousStacks)
+      : [];
+  const sourceChange =
+    move.type === "s2s"
+      ? getPreferredStackCardChange(removedChanges, move.source, expectedCount)
+      : undefined;
+
+  return {
+    sourceStackIndex:
+      move.type === "s2s"
+        ? sourceChange?.stackIndex ?? move.source
+        : undefined,
+    destStackIndex: destChange.stackIndex,
+    movedCards: destChange.cards,
+  };
+}
+
+function getStackCardChanges(
+  previousStacks: CardState[][],
+  currentStacks: CardState[][]
+): StackCardChange[] {
+  const stackCount = Math.max(previousStacks.length, currentStacks.length);
+  const changes: StackCardChange[] = [];
+
+  for (let stackIndex = 0; stackIndex < stackCount; stackIndex += 1) {
+    const cards = getAddedCards(
+      previousStacks[stackIndex] ?? [],
+      currentStacks[stackIndex] ?? []
+    );
+    if (cards.length > 0) {
+      changes.push({ stackIndex, cards });
+    }
+  }
+
+  return changes;
+}
+
+function getPreferredStackCardChange(
+  changes: StackCardChange[],
+  preferredStackIndex: number,
+  expectedCount: number
+): StackCardChange | undefined {
+  return (
+    changes.find(
+      (change) =>
+        change.stackIndex === preferredStackIndex && change.cards.length > 0
+    ) ??
+    changes.find((change) => change.cards.length === expectedCount) ??
+    changes[0]
+  );
 }
 
 function getMovedSolitaireCards(
@@ -1633,7 +1747,8 @@ function getWindowCloseReason(
 
 function isOwnPounceHelperPlay(
   openWindow: OpenPounceHelperWindow,
-  closingSnapshot: RoundSnapshot
+  closingSnapshot: RoundSnapshot,
+  previousSnapshot?: RoundSnapshot
 ): boolean {
   const move = closingSnapshot.move;
   if (closingSnapshot.playerIndex !== openWindow.playerIndex || !move) {
@@ -1644,18 +1759,41 @@ function isOwnPounceHelperPlay(
     move.type === "c2s" &&
     move.source === openWindow.source.type
   ) {
+    const moveDiff = getSolitaireMoveDiff(
+      closingSnapshot,
+      previousSnapshot,
+      openWindow.playerIndex,
+      move
+    );
+    if (!moveDiff) {
+      return false;
+    }
+
     return (
-      move.dest === openWindow.destStackIndex ||
-      openWindow.source.type === "pounce"
+      cardKey(moveDiff.movedCards[0]) === cardKey(openWindow.card) &&
+      (moveDiff.destStackIndex === openWindow.destStackIndex ||
+        openWindow.source.type === "pounce")
     );
   }
 
+  if (move.type !== "s2s" || openWindow.source.type !== "solitaire") {
+    return false;
+  }
+
+  const moveDiff = getSolitaireMoveDiff(
+    closingSnapshot,
+    previousSnapshot,
+    openWindow.playerIndex,
+    move
+  );
+  if (!moveDiff) {
+    return false;
+  }
+
   return (
-    move.type === "s2s" &&
-    openWindow.source.type === "solitaire" &&
-    move.source === openWindow.source.index &&
-    move.dest === openWindow.destStackIndex &&
-    move.count === openWindow.source.count
+    moveDiff.sourceStackIndex === openWindow.source.index &&
+    moveDiff.destStackIndex === openWindow.destStackIndex &&
+    moveDiff.movedCards.length === openWindow.source.count
   );
 }
 
@@ -1674,25 +1812,41 @@ function isOwnPounceOrWasteSolitairePlay(
   }
 
   return (
-    getMovedSolitaireCards(
+    getSolitaireMoveDiff(
       snapshot,
       previousSnapshot,
       playerIndex,
-      move.dest
-    ).length > 0
+      move
+    ) != null
   );
 }
 
 function isOwnBuriedCenterShuffleSetup(
   openWindow: OpenBuriedCenterShuffleWindow,
-  closingSnapshot: RoundSnapshot
+  closingSnapshot: RoundSnapshot,
+  previousSnapshot?: RoundSnapshot
 ): boolean {
   const move = closingSnapshot.move;
+  if (
+    closingSnapshot.playerIndex !== openWindow.playerIndex ||
+    move?.type !== "s2s"
+  ) {
+    return false;
+  }
+
+  const moveDiff = getSolitaireMoveDiff(
+    closingSnapshot,
+    previousSnapshot,
+    openWindow.playerIndex,
+    move
+  );
+  if (!moveDiff) {
+    return false;
+  }
+
   return (
-    closingSnapshot.playerIndex === openWindow.playerIndex &&
-    move?.type === "s2s" &&
-    move.source === openWindow.sourceStackIndex &&
-    move.count === openWindow.moveCount
+    moveDiff.sourceStackIndex === openWindow.sourceStackIndex &&
+    moveDiff.movedCards.length === openWindow.moveCount
   );
 }
 
