@@ -32,13 +32,13 @@ export default observer(function HandPlatesLayer() {
           activePlayerIndex
         );
         const isActivePlayer = playerIndex === activePlayerIndex;
-        const isCompactFullSizePlayer =
-          layout.mode === "compact" &&
+        const isTouchFullSizePlayer =
+          layout.mode !== "standard" &&
           layout.fullSizePlayerIndices.includes(playerIndex);
-        const plateTopOffset = isCompactFullSizePlayer
+        const plateTopOffset = isTouchFullSizePlayer
           ? COMPACT_ACTIVE_HAND_PLATE_TOP_OFFSET
           : HAND_PLATE_TOP_OFFSET;
-        const plateHeight = isCompactFullSizePlayer
+        const plateHeight = isTouchFullSizePlayer
           ? COMPACT_ACTIVE_HAND_PLATE_HEIGHT
           : HAND_PLATE_HEIGHT;
         const area = { type: "player", playerIndex } as const;
@@ -52,7 +52,7 @@ export default observer(function HandPlatesLayer() {
           <div
             className={joinClasses(
               styles.plate,
-              (isActivePlayer || isCompactFullSizePlayer) &&
+              (isActivePlayer || isTouchFullSizePlayer) &&
                 styles.activePlate
             )}
             key={player.socketId ?? playerIndex}

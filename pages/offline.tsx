@@ -22,6 +22,7 @@ const OfflinePage: NextPage<{
   const [animations, setAnimations] = useState(true);
   const [settingsRequest, setSettingsRequest] =
     useState<SettingsOpenRequest | null>(null);
+  const [leftHandedMode, setLeftHandedMode] = useState(false);
   const [scale, setScale] = useState(1);
   const playerName = name || "Player";
   const { actions, isConnected, state, socket } = useLocalGame(playerName);
@@ -99,6 +100,8 @@ const OfflinePage: NextPage<{
           <Header
             useAnimations={animations}
             setUseAnimations={setAnimations}
+            leftHandedMode={leftHandedMode}
+            setLeftHandedMode={setLeftHandedMode}
             onLeaveRoom={onLeaveRoom}
             settingsRequest={settingsRequest}
             roomId="Offline"
@@ -109,6 +112,7 @@ const OfflinePage: NextPage<{
             <Board
               onUpdateHand={actions.onUpdateHand}
               executeMove={actions.executeMove}
+              isLeftHandedLayout={leftHandedMode}
               onOpenRoomSettings={onOpenRoomSettings}
               roomId="Offline"
               zoom={scale}

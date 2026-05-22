@@ -16,12 +16,12 @@ export function getCardScaleMultiplier({
   isScaleDown: boolean;
   mode: BoardLayoutMode;
 }) {
-  const compactActiveScale =
-    mode === "compact" &&
+  const touchActiveScale =
+    mode !== "standard" &&
     area.type === "player" &&
     fullSizePlayerIndices.includes(cardPlayer)
       ? COMPACT_ACTIVE_CARD_SCALE
       : 1;
 
-  return (isScaleDown ? 0.9 : CARD_BASE_SCALE) * compactActiveScale;
+  return (isScaleDown ? 0.9 : CARD_BASE_SCALE) * touchActiveScale;
 }

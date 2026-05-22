@@ -38,11 +38,13 @@ type Props = {
   executeMove: (move: Move) => void;
   onOpenRoomSettings: () => void;
   onUpdateHand: (card: CardState) => void;
+  isLeftHandedLayout: boolean;
   roomId?: string | null;
   zoom: number;
 };
 export default observer(function Board({
   executeMove,
+  isLeftHandedLayout,
   onOpenRoomSettings,
   onUpdateHand,
   roomId,
@@ -54,14 +56,16 @@ export default observer(function Board({
   const [focusedPlayerIndex, setFocusedPlayerIndex] = useState<number | null>(
     null
   );
+  const [useTouch, setUseTouch] = useState<boolean | null>(null);
   const { layout, ref } = useResponsiveBoardLayout({
     activePlayerIndex,
     board,
     focusedPlayerIndex,
+    isLeftHanded: isLeftHandedLayout,
+    isTouchDevice: useTouch === true,
     zoom,
   });
 
-  const [useTouch, setUseTouch] = useState<boolean | null>(null);
   useEffect(() => {
     setUseTouch(isTouchDevice());
   }, []);

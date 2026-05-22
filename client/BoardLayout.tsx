@@ -19,15 +19,25 @@ const PLAYER_LEFT = 0;
 export const PLAYER_WIDTH = 480;
 export const PLAYER_HEIGHT = 225;
 const COMPACT_BREAKPOINT = 700;
+const TABLET_PORTRAIT_BREAKPOINT = 1024;
+const COMPACT_LANDSCAPE_MAX_WIDTH = 1180;
+const COMPACT_LANDSCAPE_MAX_HEIGHT = 820;
 const COMPACT_PADDING = 12;
 const COMPACT_TOP_PADDING = 42;
 const COMPACT_GAP = 12;
 const COMPACT_SMALL_GAP = 8;
 const COMPACT_ACTIVE_LIFT = 24;
+const PLAYER_VISUAL_LEFT = -20;
+const PLAYER_VISUAL_WIDTH = 528;
+const TOUCH_LANDSCAPE_PADDING = 12;
+const TOUCH_LANDSCAPE_GAP = 12;
+const TOUCH_LANDSCAPE_TOP_PADDING = 42;
+const TOUCH_LANDSCAPE_SIDE_WIDTH_RATIO = 0.5;
+const TOUCH_LANDSCAPE_MAX_ACTIVE_SCALE = 1;
 
 type Point = [number, number];
 
-export type BoardLayoutMode = "standard" | "compact";
+export type BoardLayoutMode = "standard" | "compact" | "touchLandscape";
 export type BoardLayoutArea =
   | { type: "field" }
   | { type: "player"; playerIndex: number };
@@ -83,11 +93,15 @@ export function useResponsiveBoardLayout({
   activePlayerIndex,
   board,
   focusedPlayerIndex,
+  isLeftHanded,
+  isTouchDevice,
   zoom,
 }: {
   activePlayerIndex: number;
   board: BoardState;
   focusedPlayerIndex: number | null;
+  isLeftHanded: boolean;
+  isTouchDevice: boolean;
   zoom: number;
 }) {
   const [node, setNode] = useState<HTMLDivElement | null>(null);
@@ -128,11 +142,15 @@ export function useResponsiveBoardLayout({
         activePlayerIndex,
         focusedPlayerIndex,
         viewport,
+        isTouchDevice,
+        isLeftHanded,
         zoom
       ),
     [
       activePlayerIndex,
       focusedPlayerIndex,
+      isLeftHanded,
+      isTouchDevice,
       playerCount,
       viewport.height,
       viewport.width,
@@ -148,6 +166,8 @@ function createBoardLayout(
   activePlayerIndex: number,
   focusedPlayerIndex: number | null,
   viewport: Viewport,
+  isTouchDevice: boolean,
+  isLeftHanded: boolean,
   zoom: number
 ): BoardLayout {
   if (viewport.width <= 0 || viewport.height <= 0) {
@@ -157,8 +177,18 @@ function createBoardLayout(
   const normalizedZoom = clamp(zoom, 0.5, 2);
   const shouldUseCompact =
     activePlayerIndex >= 0 &&
-    viewport.width <= COMPACT_BREAKPOINT &&
+    (isTouchDevice ||
+      viewport.width <= COMPACT_BREAKPOINT ||
+      viewport.width <= TABLET_PORTRAIT_BREAKPOINT) &&
     viewport.height > viewport.width;
+  const shouldUseTouchCompactSizing =
+    isTouchDevice || viewport.width > COMPACT_BREAKPOINT;
+  const shouldUseTouchLandscape =
+    activePlayerIndex >= 0 &&
+    viewport.width > viewport.height &&
+    (isTouchDevice ||
+      (viewport.width <= COMPACT_LANDSCAPE_MAX_WIDTH &&
+        viewport.height <= COMPACT_LANDSCAPE_MAX_HEIGHT));
 
   if (shouldUseCompact) {
     return createCompactLayout(
@@ -166,6 +196,17 @@ function createBoardLayout(
       activePlayerIndex,
       focusedPlayerIndex,
       viewport,
+      shouldUseTouchCompactSizing,
+      normalizedZoom
+    );
+  }
+
+  if (shouldUseTouchLandscape) {
+    return createTouchLandscapeLayout(
+      playerCount,
+      activePlayerIndex,
+      viewport,
+      isLeftHanded,
       normalizedZoom
     );
   }
@@ -211,6 +252,7 @@ function createCompactLayout(
   activePlayerIndex: number,
   focusedPlayerIndex: number | null,
   viewport: Viewport,
+  useTouchSizing: boolean,
   zoom: number
 ): BoardLayout {
   const usableWidth = Math.max(1, viewport.width - COMPACT_PADDING * 2);
@@ -224,13 +266,6 @@ function createCompactLayout(
   const opponents = Array.from({ length: playerCount }, (_, index) => index)
     .filter((index) => index !== activePlayerIndex);
 
-  const maxActiveScale = Math.min(0.68, usableWidth / PLAYER_WIDTH);
-  const activeScale = Math.min(maxActiveScale, maxActiveScale * zoom);
-  const activeHeight = PLAYER_HEIGHT * activeScale;
-  const activeWidth = PLAYER_WIDTH * activeScale;
-  const activeTop =
-    viewport.height - COMPACT_PADDING - COMPACT_ACTIVE_LIFT - activeHeight;
-
   const opponentColumns =
     opponents.length >= 3
       ? Math.min(3, Math.ceil(opponents.length / 2))
@@ -242,11 +277,49 @@ function createCompactLayout(
       ? 0
       : (usableWidth - COMPACT_SMALL_GAP * (opponentColumns - 1)) /
         opponentColumns;
-  const maxOpponentScale =
+  const zoomToFit = Math.min(zoom, 1);
+  const activeScaleTarget = useTouchSizing
+    ? (usableWidth / PLAYER_VISUAL_WIDTH) * zoomToFit
+    : Math.min(0.68, usableWidth / PLAYER_WIDTH) * zoomToFit;
+  const opponentScaleTarget =
     opponents.length === 0
       ? 0
-      : Math.min(0.32, opponentSlotWidth / PLAYER_WIDTH);
-  const opponentScale = Math.min(maxOpponentScale, maxOpponentScale * zoom);
+      : useTouchSizing
+      ? (opponentSlotWidth / PLAYER_VISUAL_WIDTH) * zoomToFit
+      : Math.min(0.32, opponentSlotWidth / PLAYER_WIDTH) * zoomToFit;
+  const fieldScaleTarget =
+    (useTouchSizing
+      ? usableWidth / FIELD_SIZE
+      : Math.min(1, usableWidth / FIELD_SIZE)) * zoomToFit;
+  const topGap = opponents.length > 0 ? COMPACT_GAP : 0;
+  const opponentRowGap =
+    opponentRows > 0 ? (opponentRows - 1) * COMPACT_SMALL_GAP : 0;
+  const compactFixedHeight =
+    COMPACT_TOP_PADDING +
+    topGap +
+    COMPACT_GAP +
+    COMPACT_PADDING +
+    COMPACT_ACTIVE_LIFT +
+    opponentRowGap;
+  const scaledTargetHeight =
+    (compactFocusPlayerIndex != null
+      ? PLAYER_HEIGHT * activeScaleTarget
+      : opponentRows * PLAYER_HEIGHT * opponentScaleTarget) +
+    FIELD_SIZE * fieldScaleTarget +
+    PLAYER_HEIGHT * activeScaleTarget;
+  const verticalScale =
+    useTouchSizing && scaledTargetHeight > 0
+      ? Math.min(
+          1,
+          Math.max(0.1, (viewport.height - compactFixedHeight) / scaledTargetHeight)
+        )
+      : 1;
+  const activeScale = Math.max(0.1, activeScaleTarget * verticalScale);
+  const activeHeight = PLAYER_HEIGHT * activeScale;
+  const activeTop =
+    viewport.height - COMPACT_PADDING - COMPACT_ACTIVE_LIFT - activeHeight;
+
+  const opponentScale = Math.max(0, opponentScaleTarget * verticalScale);
   const opponentRowHeight = PLAYER_HEIGHT * opponentScale;
   const opponentAreaHeight =
     compactFocusPlayerIndex != null
@@ -256,24 +329,19 @@ function createCompactLayout(
       : opponentRows * opponentRowHeight +
         (opponentRows - 1) * COMPACT_SMALL_GAP;
 
-  const topGap = opponentRows > 0 ? COMPACT_GAP : 0;
   const middleTop = COMPACT_TOP_PADDING + opponentAreaHeight + topGap;
   const middleHeight = activeTop - COMPACT_GAP - middleTop;
   const maxFieldScale = Math.min(
-    1,
-    usableWidth / FIELD_SIZE,
+    fieldScaleTarget * verticalScale,
     Math.max(1, middleHeight) / FIELD_SIZE
   );
-  const fieldScale = Math.max(
-    0.1,
-    Math.min(maxFieldScale, maxFieldScale * zoom)
-  );
+  const fieldScale = Math.max(0.1, maxFieldScale);
   const fieldSize = FIELD_SIZE * fieldScale;
   const fieldLeft = (viewport.width - fieldSize) / 2;
   const fieldTop = middleTop + Math.max(0, (middleHeight - fieldSize) / 2);
 
   const playerSlots = Array.from({ length: playerCount }, () => ({
-    left: (viewport.width - activeWidth) / 2,
+    left: getCenteredPlayerSlotLeft(0, viewport.width, activeScale),
     top: activeTop,
     scale: activeScale,
   }));
@@ -283,7 +351,7 @@ function createCompactLayout(
       const isFocusedPlayer = playerIndex === compactFocusPlayerIndex;
       playerSlots[playerIndex] = {
         left: isFocusedPlayer
-          ? (viewport.width - activeWidth) / 2
+          ? getCenteredPlayerSlotLeft(0, viewport.width, activeScale)
           : viewport.width / 2,
         top: isFocusedPlayer
           ? COMPACT_TOP_PADDING
@@ -305,7 +373,11 @@ function createCompactLayout(
       const slotLeft =
         rowLeft + column * (opponentSlotWidth + COMPACT_SMALL_GAP);
       playerSlots[playerIndex] = {
-        left: slotLeft + (opponentSlotWidth - PLAYER_WIDTH * opponentScale) / 2,
+        left: getCenteredPlayerSlotLeft(
+          slotLeft,
+          opponentSlotWidth,
+          opponentScale
+        ),
         top:
           COMPACT_TOP_PADDING + row * (opponentRowHeight + COMPACT_SMALL_GAP),
         scale: opponentScale,
@@ -314,7 +386,7 @@ function createCompactLayout(
   }
 
   playerSlots[activePlayerIndex] = {
-    left: (viewport.width - activeWidth) / 2,
+    left: getCenteredPlayerSlotLeft(0, viewport.width, activeScale),
     top: activeTop,
     scale: activeScale,
   };
@@ -326,6 +398,138 @@ function createCompactLayout(
       compactFocusPlayerIndex != null
         ? [activePlayerIndex, compactFocusPlayerIndex]
         : [activePlayerIndex],
+    mapPoint: ([x, y], area) => {
+      if (area.type === "field") {
+        return [
+          fieldLeft + (x - FIELD_LEFT) * fieldScale,
+          fieldTop + (y - FIELD_TOP) * fieldScale,
+        ];
+      }
+
+      const slot =
+        playerSlots[area.playerIndex] ?? playerSlots[activePlayerIndex];
+      const [, playerTop] = getPlayerLocation(
+        area.playerIndex,
+        activePlayerIndex
+      );
+      return [
+        slot.left + (x - PLAYER_LEFT) * slot.scale,
+        slot.top + (y - playerTop) * slot.scale,
+      ];
+    },
+    getScale: (area) =>
+      area.type === "field"
+        ? fieldScale
+        : (playerSlots[area.playerIndex] ?? playerSlots[activePlayerIndex])
+            .scale,
+  };
+}
+
+function createTouchLandscapeLayout(
+  playerCount: number,
+  activePlayerIndex: number,
+  viewport: Viewport,
+  isLeftHanded: boolean,
+  zoom: number
+): BoardLayout {
+  const usableHeight = Math.max(1, viewport.height - TOUCH_LANDSCAPE_PADDING * 2);
+  const sideWidth = Math.max(
+    1,
+    Math.min(
+      viewport.width * TOUCH_LANDSCAPE_SIDE_WIDTH_RATIO,
+      viewport.width - TOUCH_LANDSCAPE_PADDING * 2
+    )
+  );
+  const zoomToFit = Math.min(zoom, 1);
+  const activeScale = Math.max(
+    0.1,
+    Math.min(
+      TOUCH_LANDSCAPE_MAX_ACTIVE_SCALE,
+      sideWidth / PLAYER_VISUAL_WIDTH,
+      (usableHeight * 0.58) / PLAYER_HEIGHT
+    ) * zoomToFit
+  );
+  const activeVisualWidth = PLAYER_VISUAL_WIDTH * activeScale;
+  const dockVisualLeft = isLeftHanded
+    ? TOUCH_LANDSCAPE_PADDING
+    : viewport.width - TOUCH_LANDSCAPE_PADDING - activeVisualWidth;
+  const activeTop =
+    viewport.height - TOUCH_LANDSCAPE_PADDING - PLAYER_HEIGHT * activeScale;
+  const fieldRegionLeft = isLeftHanded
+    ? dockVisualLeft + activeVisualWidth + TOUCH_LANDSCAPE_GAP
+    : TOUCH_LANDSCAPE_PADDING;
+  const fieldRegionRight = isLeftHanded
+    ? viewport.width - TOUCH_LANDSCAPE_PADDING
+    : dockVisualLeft - TOUCH_LANDSCAPE_GAP;
+  const fieldRegionWidth = Math.max(1, fieldRegionRight - fieldRegionLeft);
+  const fieldScale = Math.max(
+    0.1,
+    Math.min(fieldRegionWidth / FIELD_SIZE, usableHeight / FIELD_SIZE)
+  );
+  const fieldSize = FIELD_SIZE * fieldScale;
+  const fieldLeft =
+    fieldRegionLeft + Math.max(0, (fieldRegionWidth - fieldSize) / 2);
+  const fieldTop =
+    TOUCH_LANDSCAPE_PADDING + Math.max(0, (usableHeight - fieldSize) / 2);
+  const opponents = Array.from({ length: playerCount }, (_, index) => index)
+    .filter((index) => index !== activePlayerIndex);
+  const useVerticalOpponentList = opponents.length <= 3;
+  const opponentColumns = useVerticalOpponentList ? 1 : 2;
+  const opponentRows =
+    opponents.length === 0 ? 0 : Math.ceil(opponents.length / opponentColumns);
+  const opponentSlotWidth =
+    opponents.length === 0
+      ? 0
+      : (activeVisualWidth - TOUCH_LANDSCAPE_GAP * (opponentColumns - 1)) /
+        opponentColumns;
+  const opponentAreaHeight = Math.max(
+    1,
+    activeTop - TOUCH_LANDSCAPE_TOP_PADDING - TOUCH_LANDSCAPE_GAP
+  );
+  const opponentScale =
+    opponents.length === 0
+      ? 0
+      : Math.max(
+          0.1,
+          Math.min(
+            opponentSlotWidth / PLAYER_VISUAL_WIDTH,
+            (opponentAreaHeight -
+              Math.max(0, opponentRows - 1) * TOUCH_LANDSCAPE_GAP) /
+              (opponentRows * PLAYER_HEIGHT),
+            useVerticalOpponentList ? activeScale : activeScale * 0.58
+          )
+        );
+  const opponentRowHeight = PLAYER_HEIGHT * opponentScale;
+  const playerSlots = Array.from({ length: playerCount }, () => ({
+    left: dockVisualLeft - PLAYER_VISUAL_LEFT * activeScale,
+    top: activeTop,
+    scale: activeScale,
+  }));
+
+  opponents.forEach((playerIndex, order) => {
+    const row = Math.floor(order / opponentColumns);
+    const column = order % opponentColumns;
+    const rowCount =
+      row === opponentRows - 1
+        ? opponents.length - row * opponentColumns
+        : opponentColumns;
+    const rowWidth =
+      rowCount * opponentSlotWidth + (rowCount - 1) * TOUCH_LANDSCAPE_GAP;
+    const rowLeft = dockVisualLeft + (activeVisualWidth - rowWidth) / 2;
+    const slotLeft = rowLeft + column * (opponentSlotWidth + TOUCH_LANDSCAPE_GAP);
+    playerSlots[playerIndex] = {
+      left: getCenteredPlayerSlotLeft(slotLeft, opponentSlotWidth, opponentScale),
+      top:
+        TOUCH_LANDSCAPE_TOP_PADDING +
+        row * (opponentRowHeight + TOUCH_LANDSCAPE_GAP),
+      scale: opponentScale,
+    };
+  });
+
+  return {
+    mode: "touchLandscape",
+    focusedPlayerIndex: null,
+    fullSizePlayerIndices: [activePlayerIndex],
     mapPoint: ([x, y], area) => {
       if (area.type === "field") {
         return [
@@ -370,4 +574,16 @@ function getStandardBounds(playerCount: number, activePlayerIndex: number) {
 
 function clamp(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, value));
+}
+
+function getCenteredPlayerSlotLeft(
+  regionLeft: number,
+  regionWidth: number,
+  scale: number
+) {
+  return (
+    regionLeft +
+    (regionWidth - PLAYER_VISUAL_WIDTH * scale) / 2 -
+    PLAYER_VISUAL_LEFT * scale
+  );
 }

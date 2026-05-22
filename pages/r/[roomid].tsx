@@ -25,6 +25,7 @@ const RoomPage = observer(
     const [animations, setAnimations] = useState(true);
     const [settingsRequest, setSettingsRequest] =
       useState<SettingsOpenRequest | null>(null);
+    const [leftHandedMode, setLeftHandedMode] = useState(false);
     const [scale, setScale] = useState(1);
     const { actions, isConnected, state, socket, error } = useGameSocket(
       roomId,
@@ -101,6 +102,8 @@ const RoomPage = observer(
             <Header
               useAnimations={animations}
               setUseAnimations={setAnimations}
+              leftHandedMode={leftHandedMode}
+              setLeftHandedMode={setLeftHandedMode}
               onLeaveRoom={onLeaveRoom}
               settingsRequest={settingsRequest}
               roomId={roomId}
@@ -111,6 +114,7 @@ const RoomPage = observer(
               <Board
                 onUpdateHand={actions.onUpdateHand}
                 executeMove={actions.executeMove}
+                isLeftHandedLayout={leftHandedMode}
                 onOpenRoomSettings={onOpenRoomSettings}
                 roomId={roomId}
                 zoom={scale}
