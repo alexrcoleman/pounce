@@ -1289,7 +1289,7 @@ function createPounceHelperHighlight(
   if (isOwnPlay && durationMs < MIN_DELAYED_PLAY_WINDOW_MS) {
     return null;
   }
-  if (durationMs < MIN_SOLITAIRE_HELPER_WINDOW_MS) {
+  if (durationMs < getPounceHelperMinimumWindowMs(openWindow)) {
     return null;
   }
 
@@ -1334,9 +1334,10 @@ function createPounceHelperHighlight(
     board: openWindow.firstSeenBoard,
     openedByAction: openWindow.openedByAction,
     closedByAction,
-    closedReason: getWindowCloseReason(
+    closedReason: getPounceHelperCloseReason(
+      openWindow,
       kind,
-      closingSnapshot.reason === "round_end"
+      closingSnapshot
     ),
     windowActions: openWindow.windowActions,
     durationMs,
@@ -1455,6 +1456,37 @@ function getPounceHelperPointValue(
     return 2;
   }
   return 2;
+}
+
+function getPounceHelperMinimumWindowMs(
+  openWindow: OpenPounceHelperWindow
+): number {
+  return openWindow.source.type === "deck"
+    ? MIN_MISSED_WINDOW_MS
+    : MIN_SOLITAIRE_HELPER_WINDOW_MS;
+}
+
+function getPounceHelperCloseReason(
+  openWindow: OpenPounceHelperWindow,
+  kind: RoundAnalysisHighlight["kind"],
+  closingSnapshot: RoundSnapshot
+): string {
+  const move = closingSnapshot.move;
+  if (
+    openWindow.source.type === "deck" &&
+    closingSnapshot.playerIndex === openWindow.playerIndex &&
+    (move?.type === "cycle" || move?.type === "flip_deck")
+  ) {
+    if (openWindow.benefit === "connect_slot_for_pounce") {
+      return "You cycled past the waste card that could set up a pounce slot.";
+    }
+    if (openWindow.benefit === "connect_pounce_card") {
+      return "You cycled past the waste card that could connect your pounce card.";
+    }
+    return "You cycled past the waste card that could help your pounce pile.";
+  }
+
+  return getWindowCloseReason(kind, closingSnapshot.reason === "round_end");
 }
 
 function getBuriedCenterShufflePointValue(
