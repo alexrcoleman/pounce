@@ -275,15 +275,22 @@ export function setRoomAILevel(room: RoomState, speed: number): void {
   if (isSimulationMode) {
     room.autoStart = true;
     room.timescale = 100;
+    room.settings.aiSpeed = room.aiSpeed;
+    room.settings.simulationMode = true;
     room.board.players.forEach((p) => {
       if (p.socketId != null) {
         p.isSpectating = true;
       }
     });
   } else {
+    const normalizedSpeed = Number.isFinite(speed)
+      ? Math.max(1, Math.min(500, speed))
+      : 3;
     room.timescale = 1;
     room.autoStart = false;
-    room.aiSpeed = Math.max(1, Math.min(500, speed));
+    room.aiSpeed = normalizedSpeed;
+    room.settings.aiSpeed = normalizedSpeed;
+    room.settings.simulationMode = false;
   }
 }
 

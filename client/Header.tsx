@@ -393,7 +393,7 @@ const SettingsDialog = observer(function SettingsDialog({
                 control={
                   <Slider
                     className={styles.inlineSlider}
-                    defaultValue={3}
+                    value={state.roomSettings.aiSpeed ?? 3}
                     min={1}
                     max={10}
                     step={1}
@@ -407,6 +407,7 @@ const SettingsDialog = observer(function SettingsDialog({
                 title="Simulation mode"
                 control={
                   <Switch
+                    checked={state.roomSettings.simulationMode ?? false}
                     onChange={(v) =>
                       socket?.emit("set_ai_level", { speed: v ? 1000 : 3 })
                     }

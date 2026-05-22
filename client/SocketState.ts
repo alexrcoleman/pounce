@@ -20,6 +20,8 @@ type PendingMoveAction = {
 function createDefaultRoomSettings(): RoomSettings {
   return {
     fairHandRotation: false,
+    aiSpeed: 3,
+    simulationMode: false,
   };
 }
 
@@ -138,6 +140,10 @@ export default class SocketState {
       this.board = null;
       return;
     }
+    if (this.pendingMoves.length === 0) {
+      this.board = this.serverBoard;
+      return;
+    }
     const nextBoard = deepClone(this.serverBoard);
     const playerIndex = nextBoard.players.findIndex(
       (p) => p.socketId === this.socketId
@@ -147,7 +153,8 @@ export default class SocketState {
         executeMove(nextBoard, playerIndex, action.move);
       });
     }
-    this.board = applyDeepUpdate(this.board, nextBoard);
+    const currentBoard = this.board === this.serverBoard ? null : this.board;
+    this.board = applyDeepUpdate(currentBoard, nextBoard);
   }
 }
 
