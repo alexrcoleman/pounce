@@ -23,6 +23,11 @@ export type RoomState = {
    * What the AI currently sees the board as, which gives it reaction delay.
    */
   aiBoard: BoardState;
+  /**
+   * Per-AI center piles that should bypass the delayed board briefly because
+   * the AI is acting on, or just acted on, that pile.
+   */
+  aiWatchedPileExpiresAt: number[][];
   queuedHands: CardState[][][];
   autoStart: boolean;
   settings: RoomSettings;
@@ -39,6 +44,9 @@ export function createRoomState(playerCount: number): RoomState {
     aiCooldowns: [],
     hands: [],
     aiBoard: JSON.parse(JSON.stringify(board)),
+    aiWatchedPileExpiresAt: board.players.map(() =>
+      Array(board.piles.length).fill(0)
+    ),
     queuedHands: [],
     autoStart: false,
     settings: {

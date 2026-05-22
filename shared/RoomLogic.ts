@@ -28,6 +28,8 @@ export type RoomTickResult = {
 };
 
 export const DISCONNECTED_PLAYER_TIMEOUT_MS = 5 * 60 * 1000;
+const AI_WATCHED_PILE_MIN_DURATION_MS = 3000;
+const AI_WATCHED_PILE_REACTION_MULTIPLIER = 2;
 
 export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
   const { board } = room;
@@ -60,9 +62,12 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       }
       hasUpdate = true;
       const hand = (room.hands[index] = room.hands[index] ?? {});
-      const visibleBoard = getVisibleBoard(room, index);
+      const visibleBoard = getVisibleBoard(room, index, now);
       const move = getBasicAIMove(visibleBoard, index, hand);
 
+      if (move) {
+        rememberAIMoveFocus(room, index, move, now);
+      }
       const moveResult = move ? executeMove(board, index, move, hand) : null;
       // AI cursor movement is an intention, not a completed board move.
       if (move && moveResult?.boardChanged) {
@@ -115,11 +120,16 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
   return { hasUpdate, hasHandUpdate };
 }
 
-function getVisibleBoard(room: RoomState, playerIndex: number) {
+function getVisibleBoard(
+  room: RoomState,
+  playerIndex: number,
+  now = Date.now()
+) {
   const visibleBoard = deepClone(room.aiBoard);
   const realBoard = room.board;
   const player = realBoard.players[playerIndex];
   visibleBoard.players[playerIndex] = player;
+  const watchedPileExpiresAt = getAIWatchedPileExpirations(room, playerIndex);
 
   const pounceCard = peek(player.pounceDeck);
   const nonEmptyPileCount = realBoard.piles.filter((p) => p.length > 1).length;
@@ -132,6 +142,7 @@ function getVisibleBoard(room: RoomState, playerIndex: number) {
       topCard.value < pounceCard.value &&
       topCard.value >= pounceCard.value - 3;
     if (
+      (watchedPileExpiresAt[i] ?? 0) > now ||
       peek(p)?.player === playerIndex ||
       p.length <= 1 ||
       nonEmptyPileCount < 4 ||
@@ -152,6 +163,68 @@ export function getReactionDelay(room: RoomState): number {
   return (2500 / room.aiSpeed + 100) / room.timescale;
 }
 
+function rememberAIMoveFocus(
+  room: RoomState,
+  playerIndex: number,
+  move: Move,
+  now: number
+): void {
+  const pileIndex = getAIMoveFocusedCenterPile(move);
+  if (
+    pileIndex == null ||
+    pileIndex < 0 ||
+    pileIndex >= room.board.piles.length
+  ) {
+    return;
+  }
+
+  const watchedPileExpiresAt = getAIWatchedPileExpirations(room, playerIndex);
+  watchedPileExpiresAt[pileIndex] = Math.max(
+    watchedPileExpiresAt[pileIndex] ?? 0,
+    now + getAIPileWatchDuration(room)
+  );
+}
+
+function getAIMoveFocusedCenterPile(move: Move): number | null {
+  if (move.type === "c2c") {
+    return move.dest;
+  }
+  if (move.type === "move_field_stack") {
+    return move.index;
+  }
+  return null;
+}
+
+function getAIPileWatchDuration(room: RoomState): number {
+  return Math.max(
+    getReactionDelay(room) * AI_WATCHED_PILE_REACTION_MULTIPLIER,
+    AI_WATCHED_PILE_MIN_DURATION_MS / room.timescale
+  );
+}
+
+function getAIWatchedPileExpirations(
+  room: RoomState,
+  playerIndex: number
+): number[] {
+  const allWatches =
+    room.aiWatchedPileExpiresAt ?? (room.aiWatchedPileExpiresAt = []);
+  allWatches.length = room.board.players.length;
+  for (let index = 0; index < allWatches.length; index++) {
+    allWatches[index] = allWatches[index] ?? [];
+    allWatches[index].length = room.board.piles.length;
+    for (let pileIndex = 0; pileIndex < allWatches[index].length; pileIndex++) {
+      allWatches[index][pileIndex] = allWatches[index][pileIndex] ?? 0;
+    }
+  }
+  return allWatches[playerIndex] ?? [];
+}
+
+function resetAIVisibilityMemory(room: RoomState): void {
+  room.aiWatchedPileExpiresAt = room.board.players.map(() =>
+    Array(room.board.piles.length).fill(0)
+  );
+}
+
 export function scheduleAIReactionBoard(room: RoomState): void {
   const visibleBoard = deepClone(room.board);
   setTimeout(() => {
@@ -165,6 +238,7 @@ export function startRoomGame(room: RoomState, now = Date.now()): void {
   startGame(room);
   startRoundAnalysis(room, now);
   room.aiBoard = deepClone(room.board);
+  resetAIVisibilityMemory(room);
 }
 
 export function dealRoomHands(room: RoomState): boolean {
@@ -174,6 +248,7 @@ export function dealRoomHands(room: RoomState): boolean {
     room.lastRoundAnalysis = null;
     room.roundSnapshots = [];
     room.aiBoard = deepClone(room.board);
+    resetAIVisibilityMemory(room);
   }
   return didDeal;
 }
@@ -200,6 +275,7 @@ export function setRoomPaused(
   if (!isPaused) {
     room.aiCooldowns = room.board.players.map(() => now + 750 + Math.random());
     room.aiBoard = deepClone(room.board);
+    resetAIVisibilityMemory(room);
   }
   return true;
 }
@@ -239,6 +315,7 @@ function removeRoomPlayers(room: RoomState, playerIndices: number[]): boolean {
   removePlayer(room.board, ...playerIndices);
   room.queuedHands = [];
   room.aiBoard = deepClone(room.board);
+  resetAIVisibilityMemory(room);
   return true;
 }
 
@@ -253,6 +330,7 @@ export function resetRoom(room: RoomState): void {
   room.roundSnapshots = [];
   room.lastRoundAnalysis = null;
   room.aiBoard = deepClone(room.board);
+  resetAIVisibilityMemory(room);
 }
 
 export function setRoomFairHandRotation(
