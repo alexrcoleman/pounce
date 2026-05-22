@@ -136,6 +136,9 @@ export function executeMove(
       );
     } else if (move.type === "flip_deck") {
       const player = board.players[playerIndex];
+      if (player.deck.length === 0 && player.flippedDeck.length === 0) {
+        throw new Error("No deck cards to flip");
+      }
       if (player.deck.length === 0) {
         player.deck = player.flippedDeck.reverse();
         player.flippedDeck = [];
@@ -304,6 +307,9 @@ function cycleDeck(
   aiCursor: AICursorData
 ): MoveResult {
   const player = boardState.players[playerIndex];
+  if (player.deck.length === 0 && player.flippedDeck.length === 0) {
+    throw new Error("No deck cards to cycle");
+  }
   if (player.deck.length === 0) {
     if (aiCursor && !cardEquals(aiCursor.location, peek(player.flippedDeck))) {
       return { cursorMove: peek(player.flippedDeck) };
