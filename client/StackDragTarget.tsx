@@ -13,7 +13,7 @@ import {
 
 type Props = {
   stack: CardState[];
-  onDrop: (source: CardDnDItem) => void;
+  onDrop: (source: CardDnDItem, clientOffset?: DropClientOffset | null) => void;
   left: number;
   top: number;
   scale?: number;
@@ -22,6 +22,33 @@ type Props = {
 };
 
 const buffer = 4;
+
+export type DropClientOffset = {
+  x: number;
+  y: number;
+};
+
+export function canDropOnSolitaireStack(
+  item: CardDnDItem,
+  stack: CardState[],
+  hasEmptyStack: boolean
+): boolean {
+  const card = peek(stack);
+  const highestCard = stack[0];
+  if (card == null) {
+    return true;
+  }
+  if (!couldMatch(item.card, card)) {
+    return false;
+  }
+  if (item.card.value === card.value - 1) {
+    return true;
+  }
+  if (item.card.value === highestCard.value + 1) {
+    return hasEmptyStack;
+  }
+  return false;
+}
 
 export default observer(function StackDragTarget({
   onDrop,
@@ -44,31 +71,22 @@ export default observer(function StackDragTarget({
   const [{ isOver, canDrop }, drop] = useDrop(
     () => ({
       accept: "card",
-      drop: (item: CardDnDItem) => onDrop(item),
+      drop: (item: CardDnDItem, monitor) =>
+        onDrop(item, monitor.getClientOffset()),
       collect: (monitor) => ({
         isOver: !!monitor.isOver(),
         canDrop: !!monitor.canDrop(),
       }),
-      canDrop: (item) => {
-        if (card == null) {
-          return true;
-        }
-        if (!couldMatch(item.card, card)) {
-          return false;
-        }
-        if (item.card.value === card.value - 1) {
-          return true;
-        }
-        if (item.card.value === highestCard.value + 1) {
-          return hasEmptyStack;
-          // Technically could tuck another solitaire pile, but gets tricky (not quite right)
-          // (item.source.type === "solitaire" && item.source.slotIndex === 0)
-        }
-        return false;
-      },
+      canDrop: (item) => canDropOnSolitaireStack(item, stack, hasEmptyStack),
       hover: () => card && onUpdateDragTarget(card),
     }),
-    [onDrop, JSON.stringify(card), JSON.stringify(highestCard), hasEmptyStack]
+    [
+      onDrop,
+      stack,
+      JSON.stringify(card),
+      JSON.stringify(highestCard),
+      hasEmptyStack,
+    ]
   );
   // if (!canDrop) {
   //   return null;
