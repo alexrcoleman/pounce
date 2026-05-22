@@ -222,16 +222,24 @@ export function analyzeRoundSnapshots(
   const highlightsByPlayer = Array.from({ length: playerCount }, () => [] as RoundAnalysisHighlight[]);
 
   orderedSnapshots.forEach((snapshot, snapshotIndex) => {
+    const previousSnapshot = orderedSnapshots[snapshotIndex - 1];
     const actionContext = getSnapshotActionContext(
       snapshot,
       firstSnapshot.time,
-      orderedSnapshots[snapshotIndex - 1]
+      previousSnapshot
     );
 
     snapshot.board.players.forEach((player, playerIndex) => {
       if (player.isSpectating) {
         return;
       }
+      const wasOwnPounceOrWasteSolitairePlay =
+        isOwnPounceOrWasteSolitairePlay(
+          snapshot,
+          previousSnapshot,
+          playerIndex
+        );
+      let countedOwnPounceOrWasteSolitairePlay = false;
 
       const currentPlays = enumerateAvailableCenterPlays(
         snapshot.board,
@@ -319,6 +327,9 @@ export function analyzeRoundSnapshots(
           );
           if (wasOwnPlay) {
             opportunityStatsByPlayer[playerIndex].solitairePlayed += 1;
+            if (wasOwnPounceOrWasteSolitairePlay) {
+              countedOwnPounceOrWasteSolitairePlay = true;
+            }
           } else if (!wasBetterPlay && highlight) {
             opportunityStatsByPlayer[playerIndex].solitaireMissed += 1;
           }
@@ -330,6 +341,13 @@ export function analyzeRoundSnapshots(
           }
         }
       );
+
+      if (
+        wasOwnPounceOrWasteSolitairePlay &&
+        !countedOwnPounceOrWasteSolitairePlay
+      ) {
+        opportunityStatsByPlayer[playerIndex].solitairePlayed += 1;
+      }
 
       currentPounceHelpers.forEach((play) => {
         const openWindow = playerOpenPounceHelperWindows.get(play.id);
@@ -1592,6 +1610,30 @@ function isOwnPounceHelperPlay(
     move.source === openWindow.source.index &&
     move.dest === openWindow.destStackIndex &&
     move.count === openWindow.source.count
+  );
+}
+
+function isOwnPounceOrWasteSolitairePlay(
+  snapshot: RoundSnapshot,
+  previousSnapshot: RoundSnapshot | undefined,
+  playerIndex: number
+): boolean {
+  const move = snapshot.move;
+  if (
+    snapshot.playerIndex !== playerIndex ||
+    move?.type !== "c2s" ||
+    (move.source !== "pounce" && move.source !== "deck")
+  ) {
+    return false;
+  }
+
+  return (
+    getMovedSolitaireCards(
+      snapshot,
+      previousSnapshot,
+      playerIndex,
+      move.dest
+    ).length > 0
   );
 }
 
