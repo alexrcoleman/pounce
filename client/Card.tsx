@@ -43,11 +43,18 @@ const CardContentMemo = observer(function CardContent({
   const layout = useBoardLayout();
   const onUpdateHand = useCallback(
     (card: CardState) => {
-      socket?.emit("update_hand", { item: card });
+      socket?.emit("update_hand", { location: card, item: card });
     },
     [socket]
   );
   const onHover = isHandTarget ? onUpdateHand : undefined;
+  const updateCursorTarget = useCallback(() => {
+    onHover && onHover(card);
+  }, [card, onHover]);
+  const handleClick = useCallback(() => {
+    updateCursorTarget();
+    onClick && onClick();
+  }, [onClick, updateCursorTarget]);
   const board = state.board!;
   const player = board.players[card.player];
 
@@ -243,10 +250,19 @@ const CardContentMemo = observer(function CardContent({
           opacity: isDragging ? 0.4 : 1,
         } as any
       }
-      onMouseEnter={() => onHover && onHover(card)}
-      onTouchStart={() => onHover && onHover(card)}
+      onMouseEnter={updateCursorTarget}
+      onPointerDown={(event) => {
+        if (event.pointerType !== "mouse") {
+          updateCursorTarget();
+        }
+      }}
+      onTouchStart={() => {
+        if (!window.PointerEvent) {
+          updateCursorTarget();
+        }
+      }}
       title={`${zIndex + 1} card(s)`}
-      onClick={onClick}
+      onClick={onClick ? handleClick : undefined}
       ref={drag}
     >
       <div className={styles.rotator}>
