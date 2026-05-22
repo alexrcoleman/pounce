@@ -167,6 +167,25 @@ type OpenPounceHelperWindow = AvailablePounceHelper & {
   seenCount: number;
 };
 
+type DirectSolitaireSource = { type: "pounce" } | { type: "deck" };
+
+type AvailableDirectSolitairePlay = {
+  id: string;
+  playerIndex: number;
+  source: DirectSolitaireSource;
+  card: CardState;
+  destStackIndex: number;
+};
+
+type OpenDirectSolitairePlayWindow = AvailableDirectSolitairePlay & {
+  firstSeen: number;
+  lastSeen: number;
+  firstSeenBoard: BoardState;
+  openedByAction?: RoundAnalysisActionContext;
+  windowActions: RoundAnalysisActionContext[];
+  seenCount: number;
+};
+
 type AvailableBuriedCenterShuffle = {
   id: string;
   playerIndex: number;
@@ -218,6 +237,10 @@ export function analyzeRoundSnapshots(
   const openPounceHelperWindows = Array.from(
     { length: playerCount },
     () => new Map<string, OpenPounceHelperWindow>()
+  );
+  const openDirectSolitairePlayWindows = Array.from(
+    { length: playerCount },
+    () => new Map<string, OpenDirectSolitairePlayWindow>()
   );
   const openBuriedCenterShuffleWindows = Array.from(
     { length: playerCount },
@@ -307,6 +330,54 @@ export function analyzeRoundSnapshots(
         });
       });
 
+      const currentDirectSolitairePlays =
+        enumerateAvailableDirectSolitairePlays(snapshot.board, playerIndex);
+      const currentDirectSolitairePlayIds = new Set(
+        currentDirectSolitairePlays.map((play) => play.id)
+      );
+      const playerOpenDirectSolitairePlayWindows =
+        openDirectSolitairePlayWindows[playerIndex];
+
+      Array.from(playerOpenDirectSolitairePlayWindows.values()).forEach(
+        (openWindow) => {
+          if (currentDirectSolitairePlayIds.has(openWindow.id)) {
+            return;
+          }
+
+          playerOpenDirectSolitairePlayWindows.delete(openWindow.id);
+          addWindowAction(openWindow, snapshot, actionContext);
+          if (
+            isOwnDirectSolitairePlay(openWindow, snapshot, previousSnapshot)
+          ) {
+            opportunityStatsByPlayer[playerIndex].solitairePlayed += 1;
+            countedOwnPounceOrWasteSolitairePlay = true;
+          } else if (isMissedDirectSolitairePlay(openWindow, snapshot)) {
+            opportunityStatsByPlayer[playerIndex].solitaireMissed += 1;
+          }
+        }
+      );
+
+      currentDirectSolitairePlays.forEach((play) => {
+        const openWindow = playerOpenDirectSolitairePlayWindows.get(play.id);
+        if (openWindow) {
+          addWindowAction(openWindow, snapshot, actionContext);
+          openWindow.lastSeen = snapshot.time;
+          openWindow.seenCount += 1;
+          openWindow.destStackIndex = play.destStackIndex;
+          return;
+        }
+
+        playerOpenDirectSolitairePlayWindows.set(play.id, {
+          ...play,
+          firstSeen: snapshot.time,
+          lastSeen: snapshot.time,
+          firstSeenBoard: snapshot.board,
+          openedByAction: actionContext,
+          windowActions: [],
+          seenCount: 1,
+        });
+      });
+
       const currentPounceHelpers = enumerateAvailablePounceHelpers(
         snapshot.board,
         playerIndex
@@ -336,12 +407,13 @@ export function analyzeRoundSnapshots(
             firstSnapshot.time,
             actionContext
           );
-          if (wasOwnPlay) {
+          if (wasOwnPlay && !isDirectPounceHelper(openWindow)) {
             opportunityStatsByPlayer[playerIndex].solitairePlayed += 1;
-            if (wasOwnPounceOrWasteSolitairePlay) {
-              countedOwnPounceOrWasteSolitairePlay = true;
-            }
-          } else if (!wasBetterPlay && highlight) {
+          } else if (
+            !isDirectPounceHelper(openWindow) &&
+            !wasBetterPlay &&
+            highlight
+          ) {
             opportunityStatsByPlayer[playerIndex].solitaireMissed += 1;
           }
           if (highlight) {
@@ -451,6 +523,14 @@ export function analyzeRoundSnapshots(
       if (highlight) {
         opportunityStatsByPlayer[playerIndex].centerMissed += 1;
         highlightsByPlayer[playerIndex].push(highlight);
+      }
+    });
+  });
+
+  openDirectSolitairePlayWindows.forEach((playerOpenWindows, playerIndex) => {
+    Array.from(playerOpenWindows.values()).forEach((openWindow) => {
+      if (isMissedDirectSolitairePlay(openWindow, finalSnapshot)) {
+        opportunityStatsByPlayer[playerIndex].solitaireMissed += 1;
       }
     });
   });
@@ -967,6 +1047,44 @@ export function enumerateAvailableCenterPlays(
         source,
         card,
         destPileIndex,
+      },
+    ];
+  });
+}
+
+export function enumerateAvailableDirectSolitairePlays(
+  board: BoardState,
+  playerIndex: number
+): AvailableDirectSolitairePlay[] {
+  const player = board.players[playerIndex];
+  if (!player || player.isSpectating) {
+    return [];
+  }
+
+  const sources: { source: DirectSolitaireSource; card?: CardState }[] = [
+    { source: { type: "pounce" }, card: peek(player.pounceDeck) },
+    { source: { type: "deck" }, card: peek(player.flippedDeck) },
+  ];
+
+  return sources.flatMap(({ source, card }) => {
+    if (!card) {
+      return [];
+    }
+
+    const destStackIndex = player.stacks.findIndex((stack) =>
+      canMoveToSolitairePile(card, stack)
+    );
+    if (destStackIndex < 0) {
+      return [];
+    }
+
+    return [
+      {
+        id: `${playerIndex}:direct-solitaire:${source.type}:${cardKey(card)}`,
+        playerIndex,
+        source,
+        card,
+        destStackIndex,
       },
     ];
   });
@@ -1710,6 +1828,82 @@ function isOwnPounceHelperPlay(
     move.dest === openWindow.destStackIndex &&
     move.count === openWindow.source.count
   );
+}
+
+function isDirectPounceHelper(openWindow: OpenPounceHelperWindow): boolean {
+  return openWindow.source.type === "pounce" || openWindow.source.type === "deck";
+}
+
+function isOwnDirectSolitairePlay(
+  openWindow: OpenDirectSolitairePlayWindow,
+  closingSnapshot: RoundSnapshot,
+  previousSnapshot: RoundSnapshot | undefined
+): boolean {
+  const move = closingSnapshot.move;
+  if (
+    closingSnapshot.playerIndex !== openWindow.playerIndex ||
+    move?.type !== "c2s" ||
+    move.source !== openWindow.source.type
+  ) {
+    return false;
+  }
+
+  return getMovedSolitaireCards(
+    closingSnapshot,
+    previousSnapshot,
+    openWindow.playerIndex,
+    move.dest
+  ).some((card) => cardKey(card) === cardKey(openWindow.card));
+}
+
+function isMissedDirectSolitairePlay(
+  openWindow: OpenDirectSolitairePlayWindow,
+  closingSnapshot: RoundSnapshot
+): boolean {
+  if (isOwnBetterDirectSolitairePlay(openWindow, closingSnapshot)) {
+    return false;
+  }
+
+  const durationMs = Math.max(0, closingSnapshot.time - openWindow.firstSeen);
+  return (
+    durationMs >=
+    getDirectSolitaireMinimumWindowMs(openWindow, closingSnapshot)
+  );
+}
+
+function isOwnBetterDirectSolitairePlay(
+  openWindow: OpenDirectSolitairePlayWindow,
+  closingSnapshot: RoundSnapshot
+): boolean {
+  const move = closingSnapshot.move;
+  if (
+    closingSnapshot.playerIndex !== openWindow.playerIndex ||
+    move?.type !== "c2c" ||
+    sourceKey(move.source) !== openWindow.source.type
+  ) {
+    return false;
+  }
+
+  const movedCard = getMovedCenterCard(closingSnapshot);
+  return movedCard ? cardKey(movedCard) === cardKey(openWindow.card) : false;
+}
+
+function getDirectSolitaireMinimumWindowMs(
+  openWindow: OpenDirectSolitairePlayWindow,
+  closingSnapshot: RoundSnapshot
+): number {
+  const move = closingSnapshot.move;
+  if (
+    openWindow.source.type === "deck" &&
+    closingSnapshot.playerIndex === openWindow.playerIndex &&
+    (move?.type === "cycle" || move?.type === "flip_deck")
+  ) {
+    return 0;
+  }
+
+  return openWindow.source.type === "deck"
+    ? MIN_MISSED_WINDOW_MS
+    : MIN_SOLITAIRE_HELPER_WINDOW_MS;
 }
 
 function isOwnPounceOrWasteSolitairePlay(
