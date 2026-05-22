@@ -26,7 +26,7 @@ export type RoundSnapshot = {
 };
 
 export type RoundAnalysis = {
-  version: 2;
+  version: 3;
   roundStartedAt: number;
   roundEndedAt: number;
   durationMs: number;
@@ -52,8 +52,15 @@ export type PlayerRoundAnalysis = {
     cardsPlayedToCenter: number;
     deckCycles: number;
     deckCyclesPerSecond: number;
+    centerPlaysMade: number;
+    centerPlayOpportunities: number;
     centerPlayRate: number | null;
+    solitairePlaysMade: number;
+    solitairePlayOpportunities: number;
     solitairePlayRate: number | null;
+    contestedCenterWins: number;
+    contestedCenterOpportunities: number;
+    contestedCenterWinRate: number | null;
     delayedPlays: number;
     totalMissedMs: number;
     longestMissMs: number;
@@ -229,6 +236,10 @@ export function analyzeRoundSnapshots(
   const finalBoard = finalSnapshot.board;
   const playerCount = finalBoard.players.length;
   const moveStatsByPlayer = collectMoveStats(orderedSnapshots, playerCount);
+  const contestedCenterStatsByPlayer = collectContestedCenterStats(
+    orderedSnapshots,
+    playerCount
+  );
   const moveLog = collectMoveLog(orderedSnapshots, firstSnapshot.time);
   const openWindows = Array.from({ length: playerCount }, () => new Map<
     string,
@@ -253,7 +264,10 @@ export function analyzeRoundSnapshots(
     solitairePlayed: 0,
     delayedPlays: 0,
   }));
-  const highlightsByPlayer = Array.from({ length: playerCount }, () => [] as RoundAnalysisHighlight[]);
+  const highlightsByPlayer = Array.from(
+    { length: playerCount },
+    () => [] as RoundAnalysisHighlight[]
+  );
 
   orderedSnapshots.forEach((snapshot, snapshotIndex) => {
     const previousSnapshot = orderedSnapshots[snapshotIndex - 1];
@@ -569,7 +583,7 @@ export function analyzeRoundSnapshots(
   const dealSimulationByPlayer = getDealSimulationByPlayer(firstSnapshot.board);
 
   return {
-    version: 2,
+    version: 3,
     roundStartedAt: firstSnapshot.time,
     roundEndedAt: finalSnapshot.time,
     durationMs: Math.max(0, finalSnapshot.time - firstSnapshot.time),
@@ -590,6 +604,12 @@ export function analyzeRoundSnapshots(
         missedHighlights.filter(isMissedPounceHelperHighlight);
       const moveStats = moveStatsByPlayer[playerIndex];
       const opportunityStats = opportunityStatsByPlayer[playerIndex];
+      const contestedCenterStats =
+        contestedCenterStatsByPlayer[playerIndex];
+      const centerPlayOpportunities =
+        opportunityStats.centerPlayed + opportunityStats.centerMissed;
+      const solitairePlayOpportunities =
+        opportunityStats.solitairePlayed + opportunityStats.solitaireMissed;
 
       return {
         playerIndex,
@@ -619,13 +639,24 @@ export function analyzeRoundSnapshots(
             moveStats.deckCycles,
             Math.max(0, finalSnapshot.time - firstSnapshot.time)
           ),
-          centerPlayRate: getPlayRate(
+          centerPlaysMade: opportunityStats.centerPlayed,
+          centerPlayOpportunities,
+          centerPlayRate: getRate(
             opportunityStats.centerPlayed,
-            opportunityStats.centerMissed
+            centerPlayOpportunities
           ),
-          solitairePlayRate: getPlayRate(
+          solitairePlaysMade: opportunityStats.solitairePlayed,
+          solitairePlayOpportunities,
+          solitairePlayRate: getRate(
             opportunityStats.solitairePlayed,
-            opportunityStats.solitaireMissed
+            solitairePlayOpportunities
+          ),
+          contestedCenterWins: contestedCenterStats.contestedCenterWins,
+          contestedCenterOpportunities:
+            contestedCenterStats.contestedCenterOpportunities,
+          contestedCenterWinRate: getRate(
+            contestedCenterStats.contestedCenterWins,
+            contestedCenterStats.contestedCenterOpportunities
           ),
           delayedPlays: opportunityStats.delayedPlays,
           totalMissedMs: missedHighlights.reduce(
@@ -771,6 +802,74 @@ function collectMoveStats(
   return stats.map(({ centerCardKeys, ...stat }) => stat);
 }
 
+function collectContestedCenterStats(
+  snapshots: RoundSnapshot[],
+  playerCount: number
+): {
+  contestedCenterWins: number;
+  contestedCenterOpportunities: number;
+}[] {
+  const stats = Array.from({ length: playerCount }, () => ({
+    contestedCenterWins: 0,
+    contestedCenterOpportunities: 0,
+  }));
+  const openContests = new Map<
+    number,
+    {
+      eligiblePlayerIndices: number[];
+    }
+  >();
+
+  snapshots.forEach((snapshot, index) => {
+    if (snapshot.move?.type !== "c2c") {
+      return;
+    }
+
+    const previousSnapshot = snapshots[index - 1];
+    const pileIndex = getMovedCenterPileIndex(snapshot, previousSnapshot);
+    if (pileIndex == null) {
+      return;
+    }
+
+    const existingContest = openContests.get(pileIndex);
+    if (existingContest) {
+      openContests.delete(pileIndex);
+      const winningPlayerIndex = snapshot.playerIndex;
+      if (
+        winningPlayerIndex != null &&
+        existingContest.eligiblePlayerIndices.includes(winningPlayerIndex)
+      ) {
+        stats[winningPlayerIndex].contestedCenterWins += 1;
+      }
+    }
+
+    if (isRoundEndingBoard(snapshot.board)) {
+      return;
+    }
+
+    const eligiblePlayerIndices = getCenterPileEligiblePlayerIndices(
+      snapshot.board,
+      pileIndex
+    );
+    if (eligiblePlayerIndices.length < 2) {
+      return;
+    }
+
+    eligiblePlayerIndices.forEach((playerIndex) => {
+      stats[playerIndex].contestedCenterOpportunities += 1;
+    });
+    openContests.set(pileIndex, { eligiblePlayerIndices });
+  });
+
+  return stats;
+}
+
+function isRoundEndingBoard(board: BoardState): boolean {
+  return board.players.some(
+    (player) => !player.isSpectating && player.pounceDeck.length === 0
+  );
+}
+
 function getDeckCycles(
   previousBoard: BoardState | undefined,
   playerIndex: number
@@ -791,13 +890,12 @@ function getRatePerSecond(count: number, durationMs: number): number {
   return count / (durationMs / 1000);
 }
 
-function getPlayRate(played: number, missed: number): number | null {
-  const total = played + missed;
-  if (total === 0) {
+function getRate(numerator: number, denominator: number): number | null {
+  if (denominator === 0) {
     return null;
   }
 
-  return played / total;
+  return numerator / denominator;
 }
 
 function addWindowAction(
@@ -1014,12 +1112,42 @@ export function enumerateAvailableCenterPlays(
   board: BoardState,
   playerIndex: number
 ): AvailableCenterPlay[] {
+  return enumerateCenterPlaySources(board, playerIndex).flatMap(
+    ({ source, card }) => {
+      if (!card) {
+        return [];
+      }
+
+      const destPileIndex = board.piles.findIndex((pile) =>
+        canPlayOnCenterPile(pile, card)
+      );
+      if (destPileIndex < 0) {
+        return [];
+      }
+
+      return [
+        {
+          id: `${playerIndex}:${sourceKey(source)}:${cardKey(card)}`,
+          playerIndex,
+          source,
+          card,
+          destPileIndex,
+        },
+      ];
+    }
+  );
+}
+
+function enumerateCenterPlaySources(
+  board: BoardState,
+  playerIndex: number
+): { source: CenterPlaySource; card?: CardState }[] {
   const player = board.players[playerIndex];
   if (!player || player.isSpectating) {
     return [];
   }
 
-  const sources: { source: CenterPlaySource; card?: CardState }[] = [
+  return [
     { source: { type: "pounce" }, card: peek(player.pounceDeck) },
     { source: { type: "deck" }, card: peek(player.flippedDeck) },
     ...player.stacks.map((stack, index) => ({
@@ -1027,29 +1155,28 @@ export function enumerateAvailableCenterPlays(
       card: peek(stack),
     })),
   ];
+}
 
-  return sources.flatMap(({ source, card }) => {
-    if (!card) {
-      return [];
+function getCenterPileEligiblePlayerIndices(
+  board: BoardState,
+  pileIndex: number
+): number[] {
+  const pile = board.piles[pileIndex];
+  if (!pile) {
+    return [];
+  }
+
+  return board.players.reduce<number[]>((playerIndices, player, playerIndex) => {
+    if (
+      !player.isSpectating &&
+      enumerateCenterPlaySources(board, playerIndex).some(
+        ({ card }) => card != null && canPlayOnCenterPile(pile, card)
+      )
+    ) {
+      playerIndices.push(playerIndex);
     }
-
-    const destPileIndex = board.piles.findIndex((pile) =>
-      canPlayOnCenterPile(pile, card)
-    );
-    if (destPileIndex < 0) {
-      return [];
-    }
-
-    return [
-      {
-        id: `${playerIndex}:${sourceKey(source)}:${cardKey(card)}`,
-        playerIndex,
-        source,
-        card,
-        destPileIndex,
-      },
-    ];
-  });
+    return playerIndices;
+  }, []);
 }
 
 export function enumerateAvailableDirectSolitairePlays(
@@ -2104,10 +2231,15 @@ function getMovedCenterCard(
     return undefined;
   }
 
+  const pileIndex = getMovedCenterPileIndex(snapshot, previousSnapshot);
+  if (pileIndex == null) {
+    return undefined;
+  }
+
   if (previousSnapshot) {
     const destAddedCards = getAddedCards(
-      previousSnapshot.board.piles[snapshot.move.dest] ?? [],
-      snapshot.board.piles[snapshot.move.dest] ?? []
+      previousSnapshot.board.piles[pileIndex] ?? [],
+      snapshot.board.piles[pileIndex] ?? []
     );
     return (
       destAddedCards[0] ??
@@ -2118,7 +2250,41 @@ function getMovedCenterCard(
     );
   }
 
-  return peek(snapshot.board.piles[snapshot.move.dest] ?? []);
+  return peek(snapshot.board.piles[pileIndex] ?? []);
+}
+
+function getMovedCenterPileIndex(
+  snapshot: RoundSnapshot,
+  previousSnapshot?: RoundSnapshot
+): number | undefined {
+  if (snapshot.move?.type !== "c2c") {
+    return undefined;
+  }
+
+  if (!previousSnapshot) {
+    return snapshot.board.piles[snapshot.move.dest]
+      ? snapshot.move.dest
+      : undefined;
+  }
+
+  const moveDest = snapshot.move.dest;
+  if (
+    getAddedCards(
+      previousSnapshot.board.piles[moveDest] ?? [],
+      snapshot.board.piles[moveDest] ?? []
+    ).length > 0
+  ) {
+    return moveDest;
+  }
+
+  const addedPileIndex = snapshot.board.piles.findIndex((pile, pileIndex) => {
+    return (
+      getAddedCards(previousSnapshot.board.piles[pileIndex] ?? [], pile)
+        .length > 0
+    );
+  });
+
+  return addedPileIndex >= 0 ? addedPileIndex : undefined;
 }
 
 function getSeverity(

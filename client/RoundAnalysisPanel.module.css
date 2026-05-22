@@ -91,13 +91,33 @@
   min-width: 0;
 }
 
-.scoreComparisonActual {
+.scoreComparisonLead {
   min-width: 0;
-  font-size: 21px;
-  line-height: 1;
+  font-size: 16px;
+  line-height: 1.1;
+  overflow-wrap: anywhere;
 }
 
 .scoreComparisonMeta {
+  min-width: 0;
+  color: #5f5546;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.15;
+}
+
+.rateValue {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.rateValueMain {
+  min-width: 0;
+  line-height: 1;
+}
+
+.rateValueMeta {
   min-width: 0;
   color: #5f5546;
   font-size: 11px;

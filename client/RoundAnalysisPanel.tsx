@@ -127,7 +127,14 @@ export default function RoundAnalysisPanel({
         />
         <Stat
           label="3-card deck cycles/sec"
-          value={formatRate(selectedReport.summary.deckCyclesPerSecond)}
+          value={
+            <RateValue
+              ratio={`${selectedReport.summary.deckCycles}/${formatDuration(
+                analysis.durationMs
+              )}`}
+              value={formatRate(selectedReport.summary.deckCyclesPerSecond)}
+            />
+          }
         />
         <Stat
           label="Center plays missed"
@@ -135,7 +142,29 @@ export default function RoundAnalysisPanel({
         />
         <Stat
           label="Center play rate"
-          value={formatPercent(selectedReport.summary.centerPlayRate)}
+          value={
+            <RateValue
+              ratio={formatRatio(
+                selectedReport.summary.centerPlaysMade,
+                selectedReport.summary.centerPlayOpportunities
+              )}
+              value={formatPercent(selectedReport.summary.centerPlayRate)}
+            />
+          }
+        />
+        <Stat
+          label="Contested center win rate"
+          value={
+            <RateValue
+              ratio={formatRatio(
+                selectedReport.summary.contestedCenterWins,
+                selectedReport.summary.contestedCenterOpportunities
+              )}
+              value={formatPercent(
+                selectedReport.summary.contestedCenterWinRate
+              )}
+            />
+          }
         />
         <Stat
           label="Pounce-helper plays missed"
@@ -143,7 +172,15 @@ export default function RoundAnalysisPanel({
         />
         <Stat
           label="Productive solitaire rate"
-          value={formatPercent(selectedReport.summary.solitairePlayRate)}
+          value={
+            <RateValue
+              ratio={formatRatio(
+                selectedReport.summary.solitairePlaysMade,
+                selectedReport.summary.solitairePlayOpportunities
+              )}
+              value={formatPercent(selectedReport.summary.solitairePlayRate)}
+            />
+          }
         />
         <Stat label="Delayed plays" value={selectedReport.summary.delayedPlays} />
         <Stat
@@ -249,15 +286,24 @@ function ScoreComparison({
 
   return (
     <div className={styles.scoreComparison}>
-      <div className={styles.scoreComparisonActual}>
-        {formatSignedScore(actualScore)} actual
-      </div>
-      <div className={styles.scoreComparisonMeta}>
-        Predicted {formatSignedScore(predictedScore)}
-      </div>
-      <div className={styles.scoreComparisonMeta}>
+      <div className={styles.scoreComparisonLead}>
         {formatPerformanceDelta(delta)}
       </div>
+      <div className={styles.scoreComparisonMeta}>
+        Predicted {formatScore(predictedScore)}
+      </div>
+      <div className={styles.scoreComparisonMeta}>
+        Actual {formatScore(actualScore)}
+      </div>
+    </div>
+  );
+}
+
+function RateValue({ value, ratio }: { value: string; ratio: string }) {
+  return (
+    <div className={styles.rateValue}>
+      <div className={styles.rateValueMain}>{value}</div>
+      <div className={styles.rateValueMeta}>{ratio}</div>
     </div>
   );
 }
@@ -799,9 +845,9 @@ function formatRate(rate: number): string {
   return `${rate.toFixed(2)}/s`;
 }
 
-function formatSignedScore(score: number): string {
+function formatScore(score: number): string {
   const rounded = Math.round(score * 10) / 10;
-  return `${rounded >= 0 ? "+" : ""}${rounded.toFixed(1)}`;
+  return rounded.toFixed(1);
 }
 
 function formatPerformanceDelta(delta: number): string {
@@ -811,7 +857,7 @@ function formatPerformanceDelta(delta: number): string {
   }
 
   if (rounded > 0) {
-    return `Beat prediction by ${formatSignedScore(rounded)}`;
+    return `Beat prediction by ${rounded.toFixed(1)}`;
   }
 
   return `Below prediction by ${Math.abs(rounded).toFixed(1)}`;
@@ -827,6 +873,10 @@ function formatPercent(rate: number | null): string {
     return "n/a";
   }
   return `${Math.round(rate * 100)}%`;
+}
+
+function formatRatio(numerator: number, denominator: number): string {
+  return `${numerator}/${denominator}`;
 }
 
 function isSameCard(card: CardState, other: CardState): boolean {
