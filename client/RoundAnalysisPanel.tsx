@@ -100,10 +100,13 @@ export default function RoundAnalysisPanel({
       <div className={styles.statGrid}>
         {selectedReport.dealSimulation && (
           <Stat
-            label="Predicted score"
-            value={formatSignedScore(
-              selectedReport.dealSimulation.predictedScore
-            )}
+            label="Deal performance"
+            value={
+              <ScoreComparison
+                actualScore={selectedReport.score}
+                predictedScore={selectedReport.dealSimulation.predictedScore}
+              />
+            }
           />
         )}
         {selectedReport.dealSimulation && (
@@ -226,11 +229,35 @@ export default function RoundAnalysisPanel({
   );
 }
 
-function Stat({ label, value }: { label: string; value: string | number }) {
+function Stat({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className={styles.stat}>
       <div className={styles.statValue}>{value}</div>
       <div className={styles.statLabel}>{label}</div>
+    </div>
+  );
+}
+
+function ScoreComparison({
+  actualScore,
+  predictedScore,
+}: {
+  actualScore: number;
+  predictedScore: number;
+}) {
+  const delta = actualScore - predictedScore;
+
+  return (
+    <div className={styles.scoreComparison}>
+      <div className={styles.scoreComparisonActual}>
+        {formatSignedScore(actualScore)} actual
+      </div>
+      <div className={styles.scoreComparisonMeta}>
+        Predicted {formatSignedScore(predictedScore)}
+      </div>
+      <div className={styles.scoreComparisonMeta}>
+        {formatPerformanceDelta(delta)}
+      </div>
     </div>
   );
 }
@@ -775,6 +802,19 @@ function formatRate(rate: number): string {
 function formatSignedScore(score: number): string {
   const rounded = Math.round(score * 10) / 10;
   return `${rounded >= 0 ? "+" : ""}${rounded.toFixed(1)}`;
+}
+
+function formatPerformanceDelta(delta: number): string {
+  const rounded = Math.round(delta * 10) / 10;
+  if (Math.abs(rounded) < 0.05) {
+    return "Matched prediction";
+  }
+
+  if (rounded > 0) {
+    return `Beat prediction by ${formatSignedScore(rounded)}`;
+  }
+
+  return `Below prediction by ${Math.abs(rounded).toFixed(1)}`;
 }
 
 function getDealRankSize(analysis: RoundAnalysis): number {
