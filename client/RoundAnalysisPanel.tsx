@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import type {
   PlayerRoundAnalysis,
@@ -236,10 +236,14 @@ function Moment({
         </div>
         <div className={styles.momentBody}>
           <div className={styles.momentTitleRow}>
-            <div className={styles.momentTitle}>{highlight.title}</div>
+            <div className={styles.momentTitle}>
+              <CardText text={highlight.title} />
+            </div>
             <div className={styles.pointValue}>+{highlight.pointValue} pts</div>
           </div>
-          <div className={styles.momentDetail}>{highlight.detail}</div>
+          <div className={styles.momentDetail}>
+            <CardText text={highlight.detail} />
+          </div>
           <div className={styles.momentMeta}>
             {formatDuration(highlight.durationMs)} window
             <span aria-hidden="true"> | </span>
@@ -317,7 +321,7 @@ function MoveRow({
               <span className={styles.moveActor}>{move.playerName}</span>{" "}
             </>
           )}
-          {formatMoveDescription(move)}
+          <CardText text={formatMoveDescription(move)} />
         </div>
         <div className={styles.moveMeta}>{getMoveTypeLabel(move.moveType)}</div>
       </div>
@@ -348,7 +352,9 @@ function MomentSnapshot({ highlight }: { highlight: RoundAnalysisHighlight }) {
         Board state {formatDuration(highlight.firstSeenOffsetMs)} into the
         round. The highlighted card is the key card for this moment.
       </div>
-      <div className={styles.snapshotDetail}>{highlight.detail}</div>
+      <div className={styles.snapshotDetail}>
+        <CardText text={highlight.detail} />
+      </div>
       <SnapshotContext highlight={highlight} />
       {player && (
         <div className={styles.snapshotSection}>
@@ -431,7 +437,9 @@ function SnapshotContext({
         <div>
           <div className={styles.contextLabel}>Window opened after</div>
           <div className={styles.contextText}>
-            {formatActionContext(highlight.openedByAction, highlight)}
+            <CardText
+              text={formatActionContext(highlight.openedByAction, highlight)}
+            />
             <span className={styles.contextTime}>
               {" "}
               at {formatDuration(highlight.openedByAction.offsetMs)}
@@ -445,7 +453,12 @@ function SnapshotContext({
           {highlight.closedByAction ? (
             <>
               <div className={styles.contextText}>
-                {formatActionContext(highlight.closedByAction, highlight)}
+                <CardText
+                  text={formatActionContext(
+                    highlight.closedByAction,
+                    highlight
+                  )}
+                />
                 <span className={styles.contextTime}>
                   {" "}
                   at {formatDuration(highlight.closedByAction.offsetMs)}
@@ -453,13 +466,13 @@ function SnapshotContext({
               </div>
               {highlight.closedReason && (
                 <div className={styles.contextReason}>
-                  {highlight.closedReason}
+                  <CardText text={highlight.closedReason} />
                 </div>
               )}
             </>
           ) : (
             <div className={styles.contextText}>
-              {highlight.closedReason}
+              <CardText text={highlight.closedReason ?? ""} />
               <span className={styles.contextTime}>
                 {" "}
                 at {formatDuration(highlight.lastSeenOffsetMs)}
@@ -474,7 +487,7 @@ function SnapshotContext({
           <ol className={styles.contextList}>
             {highlight.windowActions.map((action, index) => (
               <li key={`${action.offsetMs}:${index}`}>
-                {formatActionContext(action, highlight)}
+                <CardText text={formatActionContext(action, highlight)} />
                 <span className={styles.contextTime}>
                   {" "}
                   after{" "}
@@ -614,6 +627,53 @@ function CardPill({
   );
 }
 
+function CardText({ text }: { text: string }) {
+  return <>{renderCardText(text)}</>;
+}
+
+const CARD_TEXT_PATTERN =
+  /\b(A|J|Q|K|10|[2-9]) (clubs|diamonds|hearts|spades)\b/gi;
+
+function renderCardText(text: string): ReactNode[] {
+  const nodes: ReactNode[] = [];
+  CARD_TEXT_PATTERN.lastIndex = 0;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = CARD_TEXT_PATTERN.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      nodes.push(text.slice(lastIndex, match.index));
+    }
+
+    const value = normalizeCardValueLabel(match[1]);
+    const suit = match[2].toLowerCase() as CardState["suit"];
+    nodes.push(
+      <span
+        aria-label={match[0]}
+        className={[
+          styles.inlineCard,
+          isRedSuitName(suit) ? styles.redCard : styles.blackCard,
+        ].join(" ")}
+        key={`${match.index}:${match[0]}`}
+      >
+        {value}
+        {getSuitSymbol(suit)}
+      </span>
+    );
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    nodes.push(text.slice(lastIndex));
+  }
+
+  return nodes;
+}
+
+function normalizeCardValueLabel(value: string): string {
+  return value.length === 1 ? value.toUpperCase() : value;
+}
+
 function getPracticeFocus(report: PlayerRoundAnalysis): string {
   if (report.summary.delayedPlays > 0) {
     return "You found some plays, but the delayed moments show where the round gave you several seconds to act sooner.";
@@ -682,19 +742,28 @@ function formatCompactCard(card: CardState): string {
       : card.value === 13
       ? "K"
       : String(card.value);
-  const suit =
-    card.suit === "clubs"
-      ? "♣"
-      : card.suit === "diamonds"
-      ? "♦"
-      : card.suit === "hearts"
-      ? "♥"
-      : "♠";
-  return `${value}${suit}`;
+  return `${value}${getSuitSymbol(card.suit)}`;
 }
 
 function isRedSuit(card: CardState): boolean {
-  return card.suit === "diamonds" || card.suit === "hearts";
+  return isRedSuitName(card.suit);
+}
+
+function getSuitSymbol(suit: CardState["suit"]): string {
+  if (suit === "clubs") {
+    return "\u2663";
+  }
+  if (suit === "diamonds") {
+    return "\u2666";
+  }
+  if (suit === "hearts") {
+    return "\u2665";
+  }
+  return "\u2660";
+}
+
+function isRedSuitName(suit: CardState["suit"]): boolean {
+  return suit === "diamonds" || suit === "hearts";
 }
 
 function formatActionContext(
