@@ -470,6 +470,12 @@
   line-height: 1.2;
 }
 
+.inlineCard {
+  display: inline-block;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
 .redCard {
   color: #a92f2a;
 }

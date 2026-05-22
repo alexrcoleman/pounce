@@ -182,7 +182,7 @@ const MIN_MISSED_WINDOW_MS = 750;
 const MIN_SOLITAIRE_HELPER_WINDOW_MS = 3000;
 const MIN_DELAYED_PLAY_WINDOW_MS = 5000;
 const MAX_WINDOW_ACTIONS = 3;
-const MAX_HIGHLIGHTS_PER_PLAYER = 5;
+const MAX_HIGHLIGHTS_PER_PLAYER = 30;
 
 export function analyzeRoundSnapshots(
   snapshots: RoundSnapshot[]
