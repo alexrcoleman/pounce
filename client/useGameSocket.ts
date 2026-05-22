@@ -17,6 +17,7 @@ import { toastRejectedMove } from "./moveRejectionToast";
 
 export type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 const PLAYER_SESSION_STORAGE_KEY = "pounce::playerSessionId";
+const DEFAULT_SOCKET_PORT = "3001";
 
 export default function useGameSocket(
   roomId: string | null,
@@ -160,7 +161,9 @@ function createSocket(): ClientSocket {
 
   if (isLocalHost) {
     const socketHost = hostname.includes(":") ? `[${hostname}]` : hostname;
-    return io(`${protocol}//${socketHost}:3001`);
+    const socketPort =
+      process.env.NEXT_PUBLIC_SOCKET_PORT || DEFAULT_SOCKET_PORT;
+    return io(`${protocol}//${socketHost}:${socketPort}`);
   }
 
   return io();

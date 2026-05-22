@@ -237,10 +237,24 @@ const PileSection = observer(function PileSection({
   const fieldArea = { type: "field" } as const;
   const [left, top] = layout.mapPoint([FIELD_LEFT, FIELD_TOP], fieldArea);
   const scale = layout.getScale(fieldArea);
-  const canManageRound = !board.isActive && state.getIsHost();
+  const isHost = state.getIsHost();
+  const canManageRound = !board.isActive && isHost;
   const canDealHands = canManageRound && !board.isDealt && board.pouncer == null;
   const canStartGame = canManageRound && board.isDealt && board.pouncer == null;
-  const showStartPanel = canDealHands || canStartGame;
+  const waitingForHostMessage =
+    !isHost && !board.isActive && board.pouncer == null
+      ? board.isDealt
+        ? "Waiting for host to start"
+        : "Waiting for host to deal"
+      : null;
+  const isWaitingForHost = waitingForHostMessage != null;
+  const showStartPanel =
+    canDealHands || canStartGame || isWaitingForHost;
+  const startPanelClassName = isWaitingForHost
+    ? `${styles.startPanel} ${styles.startPanelWaiting}`
+    : canStartGame
+    ? `${styles.startPanel} ${styles.startPanelReady}`
+    : styles.startPanel;
   const roomCode =
     roomId != null && roomId.toLowerCase() !== "offline" ? roomId : "Offline";
   const roomLabel = roomCode === "Offline" ? "Table" : "Room code";
@@ -261,15 +275,14 @@ const PileSection = observer(function PileSection({
     >
       <div className={styles.pileSectionPattern} />
       {showStartPanel && (
-        <div
-          className={
-            canStartGame
-              ? `${styles.startPanel} ${styles.startPanelReady}`
-              : styles.startPanel
-          }
-        >
+        <div className={startPanelClassName}>
           <div className={styles.startPanelHeader}>
-            {canStartGame ? (
+            {isWaitingForHost ? (
+              <>
+                <span>Game state</span>
+                <strong>{waitingForHostMessage}</strong>
+              </>
+            ) : canStartGame ? (
               <>
                 <span>Ready</span>
                 <strong>Hands dealt</strong>
@@ -281,60 +294,61 @@ const PileSection = observer(function PileSection({
               </>
             )}
           </div>
-          {canStartGame ? (
-            <div
-              className={`${styles.startActions} ${styles.startActionsSingle}`}
-            >
-              <Button
-                className={styles.dealButton}
-                onClick={() => socket?.emit("start_game")}
+          {!isWaitingForHost &&
+            (canStartGame ? (
+              <div
+                className={`${styles.startActions} ${styles.startActionsSingle}`}
               >
-                Start game
-              </Button>
-            </div>
-          ) : (
-            <>
-              {isOfflineRoom ? (
-                <div className={styles.aiDifficultyControl}>
-                  <button
-                    aria-pressed={aiSpeed === 3}
-                    onClick={() => selectAIDifficulty(3)}
-                    type="button"
-                  >
-                    Easy
-                  </button>
-                  <button
-                    aria-pressed={aiSpeed === 4}
-                    onClick={() => selectAIDifficulty(4)}
-                    type="button"
-                  >
-                    Medium
-                  </button>
-                  <button
-                    aria-pressed={aiSpeed === 5}
-                    onClick={() => selectAIDifficulty(5)}
-                    type="button"
-                  >
-                    Hard
-                  </button>
-                </div>
-              ) : null}
-              <div className={styles.startActions}>
-                <Button
-                  className={styles.roomSettingsButton}
-                  onClick={onOpenRoomSettings}
-                >
-                  Room settings
-                </Button>
                 <Button
                   className={styles.dealButton}
-                  onClick={() => socket?.emit("deal_hands")}
+                  onClick={() => socket?.emit("start_game")}
                 >
-                  Deal
+                  Start game
                 </Button>
               </div>
-            </>
-          )}
+            ) : (
+              <>
+                {isOfflineRoom ? (
+                  <div className={styles.aiDifficultyControl}>
+                    <button
+                      aria-pressed={aiSpeed === 3}
+                      onClick={() => selectAIDifficulty(3)}
+                      type="button"
+                    >
+                      Easy
+                    </button>
+                    <button
+                      aria-pressed={aiSpeed === 4}
+                      onClick={() => selectAIDifficulty(4)}
+                      type="button"
+                    >
+                      Medium
+                    </button>
+                    <button
+                      aria-pressed={aiSpeed === 5}
+                      onClick={() => selectAIDifficulty(5)}
+                      type="button"
+                    >
+                      Hard
+                    </button>
+                  </div>
+                ) : null}
+                <div className={styles.startActions}>
+                  <Button
+                    className={styles.roomSettingsButton}
+                    onClick={onOpenRoomSettings}
+                  >
+                    Room settings
+                  </Button>
+                  <Button
+                    className={styles.dealButton}
+                    onClick={() => socket?.emit("deal_hands")}
+                  >
+                    Deal
+                  </Button>
+                </div>
+              </>
+            ))}
         </div>
       )}
     </div>

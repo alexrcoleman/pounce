@@ -91,6 +91,11 @@
   gap: 12px;
 }
 
+.startPanelWaiting {
+  width: min(310px, calc(100% - 28px));
+  gap: 12px;
+}
+
 .startPanelHeader {
   display: flex;
   flex-direction: column;
@@ -119,6 +124,11 @@
 
 .startPanelReady .startPanelHeader strong {
   font-size: 28px;
+}
+
+.startPanelWaiting .startPanelHeader strong {
+  font-size: 24px;
+  line-height: 1.08;
 }
 
 .startActions {

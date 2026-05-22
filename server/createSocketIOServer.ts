@@ -39,6 +39,8 @@ const socketData: Record<
   }
 > = {};
 
+const DEFAULT_SOCKET_PORT = 3001;
+
 export default function createSocketIOServer() {
   const io = new Server<ClientToServerEvents, ServerToClientEvents>({
     cors: {
@@ -48,7 +50,8 @@ export default function createSocketIOServer() {
       methods: ["GET", "POST"],
     },
   });
-  io.listen(3001);
+  const port = Number(process.env.PORT ?? DEFAULT_SOCKET_PORT);
+  io.listen(Number.isFinite(port) ? port : DEFAULT_SOCKET_PORT);
   io.of("/").adapter.on("create-room", (id) => {
     if (id.startsWith("pounce:")) {
       console.log("Set up new board for room: " + id);
