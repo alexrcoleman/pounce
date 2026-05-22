@@ -3,6 +3,10 @@ import {
   canPlayOnCenterPile,
   peek,
 } from "./CardUtils";
+import {
+  simulateDealQuality,
+  type DealSimulationPlayerResult,
+} from "./DealSimulation";
 import type { BoardState, CardState } from "./GameUtils";
 import type { Move } from "./MoveHandler";
 
@@ -22,7 +26,7 @@ export type RoundSnapshot = {
 };
 
 export type RoundAnalysis = {
-  version: 1;
+  version: 2;
   roundStartedAt: number;
   roundEndedAt: number;
   durationMs: number;
@@ -37,6 +41,8 @@ export type PlayerRoundAnalysis = {
   playerColor: string;
   score: number;
   pounceCardsLeft: number;
+  pounceDeck: RoundAnalysisPounceDeckCard[];
+  dealSimulation?: DealSimulationPlayerResult;
   summary: {
     missedCenterPlays: number;
     missedPounceHelpers: number;
@@ -54,6 +60,11 @@ export type PlayerRoundAnalysis = {
   };
   highlights: RoundAnalysisHighlight[];
   moves: RoundAnalysisMoveEvent[];
+};
+
+export type RoundAnalysisPounceDeckCard = {
+  card: CardState;
+  played: boolean;
 };
 
 export type RoundAnalysisHighlight = {
@@ -475,9 +486,10 @@ export function analyzeRoundSnapshots(
   const pouncerIndex = finalBoard.players.findIndex(
     (player) => !player.isSpectating && player.pounceDeck.length === 0
   );
+  const dealSimulationByPlayer = getDealSimulationByPlayer(firstSnapshot.board);
 
   return {
-    version: 1,
+    version: 2,
     roundStartedAt: firstSnapshot.time,
     roundEndedAt: finalSnapshot.time,
     durationMs: Math.max(0, finalSnapshot.time - firstSnapshot.time),
@@ -505,6 +517,12 @@ export function analyzeRoundSnapshots(
         playerColor: player.color,
         score: player.currentPoints,
         pounceCardsLeft: player.pounceDeck.length,
+        pounceDeck: getPounceDeckReport(
+          firstSnapshot.board,
+          finalBoard,
+          playerIndex
+        ),
+        dealSimulation: dealSimulationByPlayer.get(playerIndex),
         summary: {
           missedCenterPlays: missedCenterHighlights.length,
           missedPounceHelpers: missedPounceHelperHighlights.length,
@@ -544,6 +562,41 @@ export function analyzeRoundSnapshots(
       };
     }),
   };
+}
+
+function getDealSimulationByPlayer(
+  startBoard: BoardState
+): Map<number, DealSimulationPlayerResult> {
+  try {
+    return new Map(
+      simulateDealQuality(startBoard).map((result) => [
+        result.playerIndex,
+        result,
+      ])
+    );
+  } catch (error) {
+    console.warn("Unable to simulate deal quality", error);
+    return new Map();
+  }
+}
+
+function getPounceDeckReport(
+  startBoard: BoardState,
+  finalBoard: BoardState,
+  playerIndex: number
+): RoundAnalysisPounceDeckCard[] {
+  const initialPounceDeck = startBoard.players[playerIndex]?.pounceDeck ?? [];
+  const remainingPounceCards = new Set(
+    (finalBoard.players[playerIndex]?.pounceDeck ?? []).map(cardKey)
+  );
+
+  return initialPounceDeck
+    .slice()
+    .reverse()
+    .map((card) => ({
+      card,
+      played: !remainingPounceCards.has(cardKey(card)),
+    }));
 }
 
 function collectMoveLog(

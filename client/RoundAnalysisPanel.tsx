@@ -98,6 +98,22 @@ export default function RoundAnalysisPanel({
       </div>
 
       <div className={styles.statGrid}>
+        {selectedReport.dealSimulation && (
+          <Stat
+            label="Predicted score"
+            value={formatSignedScore(
+              selectedReport.dealSimulation.predictedScore
+            )}
+          />
+        )}
+        {selectedReport.dealSimulation && (
+          <Stat
+            label="Deal rank"
+            value={`${selectedReport.dealSimulation.predictedRank}/${getDealRankSize(
+              analysis
+            )}`}
+          />
+        )}
         <Stat
           label="Center cards played"
           value={selectedReport.summary.cardsPlayedToCenter}
@@ -132,6 +148,8 @@ export default function RoundAnalysisPanel({
           value={formatDuration(selectedReport.summary.longestMissMs)}
         />
       </div>
+
+      <PounceDeckSection report={selectedReport} />
 
       <div className={styles.focusBand}>
         <div className={styles.focusLabel}>Practice focus</div>
@@ -213,6 +231,42 @@ function Stat({ label, value }: { label: string; value: string | number }) {
     <div className={styles.stat}>
       <div className={styles.statValue}>{value}</div>
       <div className={styles.statLabel}>{label}</div>
+    </div>
+  );
+}
+
+function PounceDeckSection({ report }: { report: PlayerRoundAnalysis }) {
+  if (report.pounceDeck.length === 0) {
+    return null;
+  }
+
+  const playedCount = report.pounceDeck.filter(({ played }) => played).length;
+
+  return (
+    <div className={styles.pounceDeckSection}>
+      <div className={styles.pounceDeckHeader}>
+        <div>
+          <div className={styles.momentsHeader}>Pounce deck</div>
+          <div className={styles.pounceDeckMeta}>Top to bottom</div>
+        </div>
+        <div className={styles.pounceDeckMeta}>
+          {playedCount}/{report.pounceDeck.length} played
+        </div>
+      </div>
+      <ol className={styles.pounceDeckList}>
+        {report.pounceDeck.map(({ card, played }, index) => (
+          <li
+            className={[
+              styles.pounceDeckItem,
+              played ? styles.pounceDeckItemPlayed : "",
+            ].join(" ")}
+            key={`${card.player}:${card.suit}:${card.value}`}
+          >
+            <span className={styles.pounceDeckIndex}>{index + 1}</span>
+            <CardPill card={card} />
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }
@@ -606,7 +660,7 @@ function CardPill({
   highlightCard,
 }: {
   card?: CardState;
-  highlightCard: CardState;
+  highlightCard?: CardState;
 }) {
   if (!card) {
     return null;
@@ -618,7 +672,9 @@ function CardPill({
         [
           styles.cardPill,
           isRedSuit(card) ? styles.redCard : styles.blackCard,
-          isSameCard(card, highlightCard) ? styles.highlightCard : "",
+          highlightCard && isSameCard(card, highlightCard)
+            ? styles.highlightCard
+            : "",
         ].join(" ")
       }
     >
@@ -714,6 +770,16 @@ function formatDuration(durationMs: number): string {
 
 function formatRate(rate: number): string {
   return `${rate.toFixed(2)}/s`;
+}
+
+function formatSignedScore(score: number): string {
+  const rounded = Math.round(score * 10) / 10;
+  return `${rounded >= 0 ? "+" : ""}${rounded.toFixed(1)}`;
+}
+
+function getDealRankSize(analysis: RoundAnalysis): number {
+  return analysis.playerReports.filter((report) => report.dealSimulation)
+    .length;
 }
 
 function formatPercent(rate: number | null): string {

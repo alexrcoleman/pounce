@@ -118,6 +118,64 @@
   line-height: 1.25;
 }
 
+.pounceDeckSection {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 10px;
+  border: 1px solid #d8ded8;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.pounceDeckHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.pounceDeckHeader .momentsHeader {
+  margin-bottom: 0;
+}
+
+.pounceDeckMeta {
+  color: #7c705e;
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.2;
+}
+
+.pounceDeckList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(52px, 1fr));
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pounceDeckItem {
+  display: grid;
+  grid-template-columns: 15px minmax(0, 1fr);
+  gap: 4px;
+  align-items: center;
+  min-width: 0;
+  min-height: 24px;
+}
+
+.pounceDeckItemPlayed {
+  opacity: 0.34;
+  filter: grayscale(0.9);
+}
+
+.pounceDeckIndex {
+  color: #8a806f;
+  font-size: 10px;
+  font-weight: 800;
+  text-align: right;
+}
+
 .momentsHeader {
   margin-bottom: 8px;
   color: #6b5f4e;
