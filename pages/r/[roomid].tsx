@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import Board from "../../client/Board";
 import Head from "next/head";
 import Header from "../../client/Header";
+import type { SettingsOpenRequest } from "../../client/Header";
 import JoinForm from "../../client/JoinForm";
 import LoadingState from "../../client/LoadingState";
 import type { NextPage } from "next";
@@ -22,6 +23,8 @@ const RoomPage = observer(
         ? router.query.roomid
         : null;
     const [animations, setAnimations] = useState(true);
+    const [settingsRequest, setSettingsRequest] =
+      useState<SettingsOpenRequest | null>(null);
     const [scale, setScale] = useState(1);
     const { actions, isConnected, state, socket, error } = useGameSocket(
       roomId,
@@ -29,6 +32,12 @@ const RoomPage = observer(
     );
     const onLeaveRoom = useCallback(() => {
       router.push("/");
+    }, []);
+    const onOpenRoomSettings = useCallback(() => {
+      setSettingsRequest((current) => ({
+        id: (current?.id ?? 0) + 1,
+        page: "room",
+      }));
     }, []);
     useEffect(() => {
       if (!name && router.isReady) {
@@ -93,6 +102,7 @@ const RoomPage = observer(
               useAnimations={animations}
               setUseAnimations={setAnimations}
               onLeaveRoom={onLeaveRoom}
+              settingsRequest={settingsRequest}
               roomId={roomId}
               scale={scale}
               setScale={setScale}
@@ -101,6 +111,8 @@ const RoomPage = observer(
               <Board
                 onUpdateHand={actions.onUpdateHand}
                 executeMove={actions.executeMove}
+                onOpenRoomSettings={onOpenRoomSettings}
+                roomId={roomId}
                 zoom={scale}
               />
             </div>

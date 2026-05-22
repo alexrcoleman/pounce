@@ -36,12 +36,16 @@ import {
 import { getPlayerLocation } from "../shared/CardLocations";
 type Props = {
   executeMove: (move: Move) => void;
+  onOpenRoomSettings: () => void;
   onUpdateHand: (card: CardState) => void;
+  roomId?: string | null;
   zoom: number;
 };
 export default observer(function Board({
   executeMove,
+  onOpenRoomSettings,
   onUpdateHand,
+  roomId,
   zoom,
 }: Props): JSX.Element | null {
   const { state, socket } = useClientContext();
@@ -106,12 +110,11 @@ export default observer(function Board({
       <div className={styles.root} data-layout-mode={layout.mode} ref={ref}>
         <BoardLayoutProvider value={layout}>
           <div className={styles.rootInside}>
-            <PileSection />
-            <ScoresTableTabOverlay board={board} />
-            <MobileScoreboardButton
-              board={board}
-              enabled={useTouch || layout.mode === "compact"}
+            <PileSection
+              onOpenRoomSettings={onOpenRoomSettings}
+              roomId={roomId}
             />
+            <ScoresTableTabOverlay board={board} />
             <HandPlatesLayer />
             <ActivePlayerStackTargets
               executeMove={executeMove}
@@ -221,7 +224,13 @@ const PlayerZoomTargets = observer(function PlayerZoomTargets({
   );
 });
 
-const PileSection = observer(function PileSection() {
+const PileSection = observer(function PileSection({
+  onOpenRoomSettings,
+  roomId,
+}: {
+  onOpenRoomSettings: () => void;
+  roomId?: string | null;
+}) {
   const { state, socket } = useClientContext();
   const board = state.board!;
   const layout = useBoardLayout();
@@ -230,6 +239,22 @@ const PileSection = observer(function PileSection() {
   const scale = layout.getScale(fieldArea);
   const canManageRound = !board.isActive && state.getIsHost();
   const canDealHands = canManageRound && !board.isDealt && board.pouncer == null;
+  const canStartGame = canManageRound && board.isDealt && board.pouncer == null;
+  const showStartPanel = canDealHands || canStartGame;
+  const roomCode =
+    roomId != null && roomId.toLowerCase() !== "offline" ? roomId : "Offline";
+  const roomLabel = roomCode === "Offline" ? "Table" : "Room code";
+  const isOfflineRoom = roomCode === "Offline";
+  const [aiDifficulty, setAIDifficulty] = useState<"easy" | "medium" | "hard">(
+    "easy"
+  );
+  const selectAIDifficulty = (
+    difficulty: "easy" | "medium" | "hard",
+    speed: number
+  ) => {
+    setAIDifficulty(difficulty);
+    socket?.emit("set_ai_level", { speed });
+  };
 
   return (
     <div
@@ -241,22 +266,81 @@ const PileSection = observer(function PileSection() {
       }}
     >
       <div className={styles.pileSectionPattern} />
-      {canManageRound && (
-        <div className={styles.roundActions}>
-          {canDealHands && (
-            <Button
-              className={styles.dealButton}
-              onClick={() => socket?.emit("deal_hands")}
+      {showStartPanel && (
+        <div
+          className={
+            canStartGame
+              ? `${styles.startPanel} ${styles.startPanelReady}`
+              : styles.startPanel
+          }
+        >
+          <div className={styles.startPanelHeader}>
+            {canStartGame ? (
+              <>
+                <span>Ready</span>
+                <strong>Hands dealt</strong>
+              </>
+            ) : (
+              <>
+                <span>{roomLabel}</span>
+                <strong>{roomCode}</strong>
+              </>
+            )}
+          </div>
+          {canStartGame ? (
+            <div
+              className={`${styles.startActions} ${styles.startActionsSingle}`}
             >
-              Deal Hands
-            </Button>
+              <Button
+                className={styles.dealButton}
+                onClick={() => socket?.emit("start_game")}
+              >
+                Start game
+              </Button>
+            </div>
+          ) : (
+            <>
+              {isOfflineRoom ? (
+                <div className={styles.aiDifficultyControl}>
+                  <button
+                    aria-pressed={aiDifficulty === "easy"}
+                    onClick={() => selectAIDifficulty("easy", 3)}
+                    type="button"
+                  >
+                    Easy
+                  </button>
+                  <button
+                    aria-pressed={aiDifficulty === "medium"}
+                    onClick={() => selectAIDifficulty("medium", 4)}
+                    type="button"
+                  >
+                    Medium
+                  </button>
+                  <button
+                    aria-pressed={aiDifficulty === "hard"}
+                    onClick={() => selectAIDifficulty("hard", 5)}
+                    type="button"
+                  >
+                    Hard
+                  </button>
+                </div>
+              ) : null}
+              <div className={styles.startActions}>
+                <Button
+                  className={styles.roomSettingsButton}
+                  onClick={onOpenRoomSettings}
+                >
+                  Room settings
+                </Button>
+                <Button
+                  className={styles.dealButton}
+                  onClick={() => socket?.emit("deal_hands")}
+                >
+                  Deal
+                </Button>
+              </div>
+            </>
           )}
-          <Button
-            className={styles.startButton}
-            onClick={() => socket?.emit("start_game")}
-          >
-            Start Game
-          </Button>
         </div>
       )}
     </div>
@@ -293,83 +377,3 @@ function ScoresTableTabOverlay({ board }: { board: BoardState }) {
     </div>
   );
 }
-
-const MobileScoreboardButton = observer(function MobileScoreboardButton({
-  board,
-  enabled,
-}: {
-  board: BoardState;
-  enabled: boolean;
-}) {
-  const [isOpen, setOpen] = useState(false);
-  const canShow = enabled && board.pouncer == null;
-
-  useEffect(() => {
-    if (!canShow) {
-      setOpen(false);
-    }
-  }, [canShow]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [isOpen]);
-
-  if (!canShow) {
-    return null;
-  }
-
-  return (
-    <>
-      <button
-        aria-expanded={isOpen}
-        aria-haspopup="dialog"
-        className={styles.scoreboardButton}
-        onClick={() => setOpen(true)}
-        type="button"
-      >
-        Scores
-      </button>
-      {isOpen ? (
-        <div
-          className={styles.scoreboardModalOverlay}
-          onClick={() => setOpen(false)}
-        >
-          <div
-            aria-label="Scoreboard"
-            aria-modal="true"
-            className={styles.scoreboardDialog}
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-          >
-            <button
-              aria-label="Close scoreboard"
-              className={styles.scoreboardCloseButton}
-              onClick={() => setOpen(false)}
-              type="button"
-            >
-              X
-            </button>
-            <div className={styles.scoreboardTableWrapper}>
-              <ScoresTable board={board} />
-            </div>
-            <div className={styles.scoreboardActions}>
-              <Button type="primary" onClick={() => setOpen(false)}>
-                Done
-              </Button>
-            </div>
-          </div>
-        </div>
-      ) : null}
-    </>
-  );
-});

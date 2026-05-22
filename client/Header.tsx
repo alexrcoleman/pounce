@@ -3,29 +3,70 @@ import { type ReactNode, useEffect, useState } from "react";
 import { observer } from "mobx-react-lite";
 import { Button, Flex, Modal, Slider, Switch, Tooltip } from "antd";
 import { useClientContext } from "./ClientContext";
+import ScoresTable from "./ScoresTable";
+import isTouchDevice from "./isTouchDevice";
+import type { BoardState } from "../shared/GameUtils";
 
 type Props = {
   roomId?: string | null;
   onLeaveRoom: () => void;
+  settingsRequest?: SettingsOpenRequest | null;
   useAnimations: boolean;
   setUseAnimations: (use: boolean) => void;
   scale: number;
   setScale: (scale: number) => void;
 };
 
-type SettingsPage = "main" | "room" | "appearance";
+export type SettingsPage = "main" | "room" | "appearance";
+
+export type SettingsOpenRequest = {
+  id: number;
+  page: SettingsPage;
+};
 
 const FAIR_HAND_ROTATION_HELP =
   "When on, Pounce keeps one shuffled set of hands for a short series and rotates them each round, so everyone gets a turn with the same luck. Leave it off for a brand-new shuffle every round.";
 
 export default observer(function Header(props: Props) {
   const [isSettingsOpen, setSettingsOpen] = useState(false);
+  const [settingsPage, setSettingsPage] = useState<SettingsPage>("main");
+  const [showScoreButton, setShowScoreButton] = useState(false);
   const { state } = useClientContext();
+  const board = state.board;
   const isStarted = state.board?.isActive ?? false;
+  const isHost = state.getIsHost();
   const showRoomCode =
     !isStarted &&
+    !isHost &&
     props.roomId != null &&
     props.roomId.toLowerCase() !== "offline";
+  const openSettings = (page: SettingsPage) => {
+    setSettingsPage(page);
+    setSettingsOpen(true);
+  };
+  const closeSettings = () => {
+    setSettingsOpen(false);
+    setSettingsPage("main");
+  };
+
+  useEffect(() => {
+    const request = props.settingsRequest;
+    if (!request) {
+      return;
+    }
+    setSettingsPage(request.page);
+    setSettingsOpen(true);
+  }, [props.settingsRequest?.id]);
+  useEffect(() => {
+    const updateShowScoreButton = () => {
+      setShowScoreButton(
+        isTouchDevice() || window.matchMedia("(max-width: 720px)").matches
+      );
+    };
+    updateShowScoreButton();
+    window.addEventListener("resize", updateShowScoreButton);
+    return () => window.removeEventListener("resize", updateShowScoreButton);
+  }, []);
 
   return (
     <>
@@ -35,26 +76,108 @@ export default observer(function Header(props: Props) {
           <strong>{props.roomId}</strong>
         </div>
       ) : null}
+      <div className={styles.floatingControls}>
+        {showScoreButton && board != null && board.pouncer == null ? (
+          <HeaderScoreboardButton board={board} />
+        ) : null}
+        <button
+          className={styles.floatingButton}
+          onClick={() => openSettings("main")}
+        >
+          Settings
+        </button>
+      </div>
       <SettingsDialog
         isSettingsOpen={isSettingsOpen}
-        onClose={() => setSettingsOpen(false)}
+        onClose={closeSettings}
+        page={settingsPage}
+        setPage={setSettingsPage}
         {...props}
       />
-      <button
-        className={styles.floatingButton}
-        onClick={() => setSettingsOpen(true)}
-      >
-        Settings
-      </button>
     </>
   );
 });
+
+function HeaderScoreboardButton({
+  board,
+}: {
+  board: BoardState;
+}) {
+  const [isOpen, setOpen] = useState(false);
+
+  useEffect(() => {
+    if (board.pouncer != null) {
+      setOpen(false);
+    }
+  }, [board.pouncer]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [isOpen]);
+
+  return (
+    <>
+      <button
+        aria-expanded={isOpen}
+        aria-haspopup="dialog"
+        className={styles.floatingButton}
+        onClick={() => setOpen(true)}
+        type="button"
+      >
+        Scores
+      </button>
+      {isOpen ? (
+        <div
+          className={styles.scoreboardModalOverlay}
+          onClick={() => setOpen(false)}
+        >
+          <div
+            aria-label="Scoreboard"
+            aria-modal="true"
+            className={styles.scoreboardDialog}
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <button
+              aria-label="Close scoreboard"
+              className={styles.scoreboardCloseButton}
+              onClick={() => setOpen(false)}
+              type="button"
+            >
+              X
+            </button>
+            <div className={styles.scoreboardTableWrapper}>
+              <ScoresTable board={board} />
+            </div>
+            <div className={styles.scoreboardActions}>
+              <Button type="primary" onClick={() => setOpen(false)}>
+                Done
+              </Button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
 
 const SettingsDialog = observer(function SettingsDialog({
   ...props
 }: {
   isSettingsOpen: boolean;
   onClose: () => void;
+  page: SettingsPage;
+  setPage: (page: SettingsPage) => void;
 } & Props) {
   const { state, socket } = useClientContext();
   const isStarted = state.board?.isActive ?? false;
@@ -66,7 +189,7 @@ const SettingsDialog = observer(function SettingsDialog({
     state.board?.players.filter((p) => p.disconnected).length ?? 0;
   const buildDate = useLocalBuildDate(process.env.NEXT_PUBLIC_BUILD_DATE);
   const [isFairHandHelpOpen, setFairHandHelpOpen] = useState(false);
-  const [page, setPage] = useState<SettingsPage>("main");
+  const page = props.page;
   const canChangeAI = isHost && !isStarted;
   const roomLabel = props.roomId ?? "Unknown";
   const modalTitle =
@@ -82,7 +205,6 @@ const SettingsDialog = observer(function SettingsDialog({
   useEffect(() => {
     if (!props.isSettingsOpen) {
       setFairHandHelpOpen(false);
-      setPage("main");
     }
   }, [props.isSettingsOpen]);
 
@@ -94,7 +216,7 @@ const SettingsDialog = observer(function SettingsDialog({
             <button
               type="button"
               className={styles.backButton}
-              onClick={() => setPage("main")}
+              onClick={() => props.setPage("main")}
             >
               Back to settings
             </button>
@@ -129,7 +251,7 @@ const SettingsDialog = observer(function SettingsDialog({
           <button
             type="button"
             className={styles.settingsNavButton}
-            onClick={() => setPage("room")}
+            onClick={() => props.setPage("room")}
           >
             <span>
               <strong>Room</strong>
@@ -139,7 +261,7 @@ const SettingsDialog = observer(function SettingsDialog({
           <button
             type="button"
             className={styles.settingsNavButton}
-            onClick={() => setPage("appearance")}
+            onClick={() => props.setPage("appearance")}
           >
             <span>
               <strong>Appearance</strong>

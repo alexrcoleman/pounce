@@ -5,6 +5,7 @@ import Board from "../client/Board";
 import { ClientContext } from "../client/ClientContext";
 import Head from "next/head";
 import Header from "../client/Header";
+import type { SettingsOpenRequest } from "../client/Header";
 import LoadingState from "../client/LoadingState";
 import type { NextPage } from "next";
 import joinClasses from "../client/joinClasses";
@@ -19,6 +20,8 @@ const OfflinePage: NextPage<{
 }> = observer(({ name, setName }) => {
   const router = useRouter();
   const [animations, setAnimations] = useState(true);
+  const [settingsRequest, setSettingsRequest] =
+    useState<SettingsOpenRequest | null>(null);
   const [scale, setScale] = useState(1);
   const playerName = name || "Player";
   const { actions, isConnected, state, socket } = useLocalGame(playerName);
@@ -56,6 +59,12 @@ const OfflinePage: NextPage<{
   const onLeaveRoom = useCallback(() => {
     router.push("/");
   }, [router]);
+  const onOpenRoomSettings = useCallback(() => {
+    setSettingsRequest((current) => ({
+      id: (current?.id ?? 0) + 1,
+      page: "room",
+    }));
+  }, []);
 
   if (!isConnected) {
     return (
@@ -91,6 +100,7 @@ const OfflinePage: NextPage<{
             useAnimations={animations}
             setUseAnimations={setAnimations}
             onLeaveRoom={onLeaveRoom}
+            settingsRequest={settingsRequest}
             roomId="Offline"
             scale={scale}
             setScale={setScale}
@@ -99,6 +109,8 @@ const OfflinePage: NextPage<{
             <Board
               onUpdateHand={actions.onUpdateHand}
               executeMove={actions.executeMove}
+              onOpenRoomSettings={onOpenRoomSettings}
+              roomId="Offline"
               zoom={scale}
             />
           </div>
