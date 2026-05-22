@@ -80,7 +80,7 @@ const CardContentMemo = observer(function CardContent({
   }).get();
 
   const fullSizePlayerIndices =
-    layout.mode === "compact"
+    layout.mode !== "standard"
       ? layout.fullSizePlayerIndices
       : [state.getActivePlayerIndex()];
   let scaleDown =

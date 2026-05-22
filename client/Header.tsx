@@ -13,6 +13,8 @@ type Props = {
   settingsRequest?: SettingsOpenRequest | null;
   useAnimations: boolean;
   setUseAnimations: (use: boolean) => void;
+  leftHandedMode: boolean;
+  setLeftHandedMode: (use: boolean) => void;
   scale: number;
   setScale: (scale: number) => void;
 };
@@ -428,6 +430,15 @@ const SettingsDialog = observer(function SettingsDialog({
                 <Switch
                   checked={props.useAnimations}
                   onChange={(v) => props.setUseAnimations(v)}
+                />
+              }
+            />
+            <SettingRow
+              title="Left-handed mode"
+              control={
+                <Switch
+                  checked={props.leftHandedMode}
+                  onChange={(v) => props.setLeftHandedMode(v)}
                 />
               }
             />
