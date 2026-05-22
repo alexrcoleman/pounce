@@ -11,7 +11,7 @@ export type ServerRoomState = RoomState & {
   interval: NodeJS.Timer;
 };
 
-export const ROOM_DELETE_GRACE_PERIOD_MS = 30 * 1000;
+export const ROOM_DELETE_GRACE_PERIOD_MS = 10 * 60 * 1000;
 
 const rooms: Record<string, ServerRoomState> = {};
 const roomDeleteTimers: Record<string, ReturnType<typeof setTimeout>> = {};
