@@ -30,7 +30,7 @@
       rgba(9, 57, 36, 0.72),
       rgba(9, 57, 36, 0.28)
     ),
-    url("/felt-tile.png");
+    var(--pounce-felt-tile-image);
   background-size: auto, 160px 160px;
   text-align: center;
 }

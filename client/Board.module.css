@@ -1,6 +1,6 @@
 .root {
   background-color: #cd9b60;
-  background-image: url("/table-wood-tile.png");
+  background-image: var(--pounce-table-wood-tile-image);
   background-repeat: repeat;
   background-size: 512px 512px;
   width: 100%;
@@ -41,7 +41,7 @@
   align-items: center;
   justify-content: center;
   background-color: #0b6d2d;
-  background-image: url("/felt-tile.png");
+  background-image: var(--pounce-felt-tile-image);
   background-repeat: repeat;
   position: absolute;
   background-size: 256px 256px;

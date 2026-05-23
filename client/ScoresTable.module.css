@@ -1,6 +1,6 @@
 .root {
   background-color: rgba(255, 255, 255, 0.9);
-  background-image: url("/notebook.png");
+  background-image: var(--pounce-notebook-image);
   background-size: 150%;
   width: min(600px, 100%);
   height: 600px;

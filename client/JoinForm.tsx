@@ -3,6 +3,7 @@ import styles from "./JoinForm.module.css";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import usePwaInstall from "./usePwaInstall";
+import { FAVICON_SRC } from "../shared/gameAssets";
 type Props = {
   placeholderName: string;
   onSubmit: (room: string, name: string) => Promise<unknown> | void;
@@ -159,7 +160,7 @@ export default function JoinForm({
     <div className={styles.root}>
       <div className={styles.stage}>
         <header className={styles.brand} aria-label="Pounce Online">
-          <img className={styles.logo} src="/favicon.png" alt="" />
+          <img className={styles.logo} src={FAVICON_SRC} alt="" />
           <div>
             <h1 className={styles.title}>Pounce</h1>
             <div className={styles.subtitle}>Online</div>

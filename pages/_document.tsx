@@ -6,18 +6,22 @@ import Document, {
   NextScript,
   DocumentContext,
 } from "next/document";
-import { HEAD_PRELOAD_ASSETS } from "../shared/gameAssets";
+import {
+  APPLE_TOUCH_ICON_SRC,
+  FAVICON_SRC,
+  HEAD_PRELOAD_ASSETS,
+} from "../shared/gameAssets";
 
 export default function MyDocument() {
   return (
     <Html lang="en">
       <Head>
-        <link rel="icon" type="image/png" sizes="64x64" href="/favicon.png" />
+        <link rel="icon" type="image/png" sizes="64x64" href={FAVICON_SRC} />
         <link rel="manifest" href="/manifest.webmanifest" />
         <link
           rel="apple-touch-icon"
           sizes="180x180"
-          href="/apple-touch-icon.png"
+          href={APPLE_TOUCH_ICON_SRC}
         />
         {HEAD_PRELOAD_ASSETS.map((asset) => (
           <link
