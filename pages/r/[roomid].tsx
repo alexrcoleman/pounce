@@ -10,6 +10,7 @@ import type { NextPage } from "next";
 import joinClasses from "../../client/joinClasses";
 import styles from "../../client/Home.module.css";
 import useGameSocket from "../../client/useGameSocket";
+import useStoredBoolean from "../../client/useStoredBoolean";
 import { observer } from "mobx-react-lite";
 import { ClientContext } from "../../client/ClientContext";
 import { useRouter } from "next/router";
@@ -26,6 +27,10 @@ const RoomPage = observer(
     const [settingsRequest, setSettingsRequest] =
       useState<SettingsOpenRequest | null>(null);
     const [leftHandedMode, setLeftHandedMode] = useState(false);
+    const [easyReadCards, setEasyReadCards] = useStoredBoolean(
+      "pounce::easy-read-cards",
+      false
+    );
     const [scale, setScale] = useState(1);
     const { actions, isConnected, state, socket, error } = useGameSocket(
       roomId,
@@ -104,6 +109,8 @@ const RoomPage = observer(
               setUseAnimations={setAnimations}
               leftHandedMode={leftHandedMode}
               setLeftHandedMode={setLeftHandedMode}
+              easyReadCards={easyReadCards}
+              setEasyReadCards={setEasyReadCards}
               onLeaveRoom={onLeaveRoom}
               settingsRequest={settingsRequest}
               roomId={roomId}
@@ -115,6 +122,7 @@ const RoomPage = observer(
                 onUpdateHand={actions.onUpdateHand}
                 executeMove={actions.executeMove}
                 isLeftHandedLayout={leftHandedMode}
+                easyReadCards={easyReadCards}
                 onOpenRoomSettings={onOpenRoomSettings}
                 roomId={roomId}
                 zoom={scale}

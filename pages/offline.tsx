@@ -11,6 +11,7 @@ import type { NextPage } from "next";
 import joinClasses from "../client/joinClasses";
 import styles from "../client/Home.module.css";
 import useLocalGame from "../client/useLocalGame";
+import useStoredBoolean from "../client/useStoredBoolean";
 import { observer } from "mobx-react-lite";
 import { useRouter } from "next/router";
 
@@ -23,6 +24,10 @@ const OfflinePage: NextPage<{
   const [settingsRequest, setSettingsRequest] =
     useState<SettingsOpenRequest | null>(null);
   const [leftHandedMode, setLeftHandedMode] = useState(false);
+  const [easyReadCards, setEasyReadCards] = useStoredBoolean(
+    "pounce::easy-read-cards",
+    false
+  );
   const [scale, setScale] = useState(1);
   const playerName = name || "Player";
   const { actions, isConnected, state, socket } = useLocalGame(playerName);
@@ -102,6 +107,8 @@ const OfflinePage: NextPage<{
             setUseAnimations={setAnimations}
             leftHandedMode={leftHandedMode}
             setLeftHandedMode={setLeftHandedMode}
+            easyReadCards={easyReadCards}
+            setEasyReadCards={setEasyReadCards}
             onLeaveRoom={onLeaveRoom}
             settingsRequest={settingsRequest}
             roomId="Offline"
@@ -113,6 +120,7 @@ const OfflinePage: NextPage<{
               onUpdateHand={actions.onUpdateHand}
               executeMove={actions.executeMove}
               isLeftHandedLayout={leftHandedMode}
+              easyReadCards={easyReadCards}
               onOpenRoomSettings={onOpenRoomSettings}
               roomId="Offline"
               zoom={scale}

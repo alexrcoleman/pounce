@@ -14,7 +14,6 @@ const CardFace = React.memo(function CardFace({
   value: number;
   suit: string;
 }) {
-  const padding = 2;
   const valueText =
     value === 1
       ? "A"
@@ -47,7 +46,7 @@ const CardFace = React.memo(function CardFace({
           draggable={false}
         />
       ) : value === 1 ? (
-        <span style={{ fontSize: 30 }}>{icon}</span>
+        <span className={styles.acePip}>{icon}</span>
       ) : (
         <div
           className={styles.frontGrid}
@@ -95,27 +94,15 @@ const CardFace = React.memo(function CardFace({
           )}
         </div>
       )}
-      <div
-        style={{
-          fontSize: 10,
-          position: "absolute",
-          left: padding,
-          top: padding,
-        }}
-      >
-        <div style={{ marginBottom: -2 }}>{valueText}</div>
+      <span className={styles.centerSuit} aria-hidden="true">
+        {icon}
+      </span>
+      <div className={`${styles.corner} ${styles.cornerTopLeft}`}>
+        <div className={styles.cornerValue}>{valueText}</div>
         {icon}
       </div>
-      <div
-        style={{
-          fontSize: 10,
-          position: "absolute",
-          right: padding,
-          bottom: padding,
-          transform: "rotate(180deg)",
-        }}
-      >
-        <div style={{ marginBottom: -2 }}>{valueText}</div>
+      <div className={`${styles.corner} ${styles.cornerBottomRight}`}>
+        <div className={styles.cornerValue}>{valueText}</div>
         {icon}
       </div>
     </div>

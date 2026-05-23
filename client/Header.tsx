@@ -15,6 +15,8 @@ type Props = {
   setUseAnimations: (use: boolean) => void;
   leftHandedMode: boolean;
   setLeftHandedMode: (use: boolean) => void;
+  easyReadCards: boolean;
+  setEasyReadCards: (use: boolean) => void;
   scale: number;
   setScale: (scale: number) => void;
 };
@@ -430,6 +432,15 @@ const SettingsDialog = observer(function SettingsDialog({
                 <Switch
                   checked={props.useAnimations}
                   onChange={(v) => props.setUseAnimations(v)}
+                />
+              }
+            />
+            <SettingRow
+              title="Easy-read cards"
+              control={
+                <Switch
+                  checked={props.easyReadCards}
+                  onChange={(v) => props.setEasyReadCards(v)}
                 />
               }
             />

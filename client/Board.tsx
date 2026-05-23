@@ -39,11 +39,13 @@ type Props = {
   onOpenRoomSettings: () => void;
   onUpdateHand: (card: CardState) => void;
   isLeftHandedLayout: boolean;
+  easyReadCards: boolean;
   roomId?: string | null;
   zoom: number;
 };
 export default observer(function Board({
   executeMove,
+  easyReadCards,
   isLeftHandedLayout,
   onOpenRoomSettings,
   onUpdateHand,
@@ -111,7 +113,12 @@ export default observer(function Board({
         }}
       />
       <MobileDragPreviewLayer enabled={useTouch} />
-      <div className={styles.root} data-layout-mode={layout.mode} ref={ref}>
+      <div
+        className={styles.root}
+        data-card-readability={easyReadCards ? "easy" : "standard"}
+        data-layout-mode={layout.mode}
+        ref={ref}
+      >
         <BoardLayoutProvider value={layout}>
           <div className={styles.rootInside}>
             <PileSection
