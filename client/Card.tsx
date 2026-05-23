@@ -41,16 +41,12 @@ const CardContentMemo = observer(function CardContent({
 }: Props) {
   const { state, socket } = useClientContext();
   const layout = useBoardLayout();
-  const onUpdateHand = useCallback(
-    (card: CardState) => {
-      socket?.emit("update_hand", { location: card, item: card });
-    },
-    [socket]
-  );
-  const onHover = isHandTarget ? onUpdateHand : undefined;
   const updateCursorTarget = useCallback(() => {
-    onHover && onHover(card);
-  }, [card, onHover]);
+    if (!isHandTarget) {
+      return;
+    }
+    socket?.emit("update_hand", getCursorUpdate(card, location));
+  }, [card, isHandTarget, location, socket]);
   const handleClick = useCallback(() => {
     updateCursorTarget();
     onClick && onClick();
@@ -294,6 +290,13 @@ const colors: Record<string, string | undefined> = {
 };
 // ["red", "blue", "green", "orange", "yellow", "pink"];
 export default CardContentMemo;
+
+function getCursorUpdate(card: CardState, location: CardLocation) {
+  if (location.type === "solitaire") {
+    return { location: card };
+  }
+  return { location: card, item: card };
+}
 
 function getSource(
   card: CardState,

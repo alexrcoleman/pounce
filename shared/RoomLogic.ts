@@ -2,6 +2,7 @@ import {
   CardState,
   CursorState,
   BoardState,
+  PlayerState,
   dealGameHands,
   isGameOver,
   removePlayer,
@@ -102,7 +103,11 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
         };
       } else if (moveResult?.clearCursor) {
         hasHandUpdate = true;
-        room.hands[index].item = undefined;
+        if (move?.type === "c2c") {
+          resetRoomHandAfterCenterPlay(room, index, move);
+        } else {
+          room.hands[index].item = undefined;
+        }
       }
       const delay = move
         ? (Math.random() - 0.5) * 2 * cooldownDist.deviation +
@@ -381,7 +386,7 @@ export function updateRoomHand(
     location,
   }: {
     item?: CardState | null;
-    location?: CardState;
+    location?: CardState | null;
   }
 ): void {
   if (playerIndex < 0) {
@@ -395,6 +400,64 @@ export function updateRoomHand(
   if (item !== undefined) {
     hands[playerIndex].item = item;
   }
+}
+
+export function resetRoomHandAfterCenterPlay(
+  room: RoomState,
+  playerIndex: number,
+  move: Move
+): boolean {
+  if (playerIndex < 0 || move.type !== "c2c") {
+    return false;
+  }
+
+  const hand = (room.hands[playerIndex] = room.hands[playerIndex] ?? {});
+  hand.location = getPlayerHandCursorLocation(room.board, playerIndex, move);
+  hand.item = null;
+  return true;
+}
+
+function getPlayerHandCursorLocation(
+  board: BoardState,
+  playerIndex: number,
+  move: Extract<Move, { type: "c2c" }>
+): CardState | null {
+  const player = board.players[playerIndex];
+  if (!player) {
+    return null;
+  }
+
+  return (
+    getPreferredSourceCursorLocation(player, move.source) ??
+    peek(player.pounceDeck) ??
+    peek(player.flippedDeck) ??
+    peek(player.deck) ??
+    getFirstSolitaireTopCard(player) ??
+    null
+  );
+}
+
+function getPreferredSourceCursorLocation(
+  player: PlayerState,
+  source: Extract<Move, { type: "c2c" }>["source"]
+): CardState | null {
+  if (source.type === "pounce") {
+    return peek(player.pounceDeck) ?? null;
+  }
+  if (source.type === "deck") {
+    return peek(player.flippedDeck) ?? peek(player.deck) ?? null;
+  }
+  return peek(player.stacks[source.index]) ?? null;
+}
+
+function getFirstSolitaireTopCard(player: PlayerState): CardState | null {
+  for (const stack of player.stacks) {
+    const card = peek(stack);
+    if (card) {
+      return card;
+    }
+  }
+  return null;
 }
 
 export function recordRoundSnapshot(

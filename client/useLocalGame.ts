@@ -16,6 +16,7 @@ import {
   dealRoomHands,
   getRoomHands,
   recordRoundSnapshot,
+  resetRoomHandAfterCenterPlay,
   resetRoom,
   scheduleAIReactionBoard,
   setRoomFairHandRotation,
@@ -120,6 +121,11 @@ export default function useLocalGame(name: string | null) {
             return;
           }
           recordRoundSnapshot(room, "move", Date.now(), playerIndex, envelope.payload);
+          const didResetHand = resetRoomHandAfterCenterPlay(
+            room,
+            playerIndex,
+            envelope.payload
+          );
           markRoomUpdated();
           ack?.({
             actionId: envelope.actionId,
@@ -127,6 +133,9 @@ export default function useLocalGame(name: string | null) {
             revision: room.revision,
           });
           emitUpdate();
+          if (didResetHand) {
+            emitHands();
+          }
         } else if (event === "add_ai") {
           addPlayer(room.board, null);
           markRoomUpdated();
@@ -194,7 +203,7 @@ export default function useLocalGame(name: string | null) {
           updateRoomHand(
             room,
             playerIndex,
-            args[0] as { item?: CardState | null; location?: CardState }
+            args[0] as { item?: CardState | null; location?: CardState | null }
           );
           emitHands();
         }

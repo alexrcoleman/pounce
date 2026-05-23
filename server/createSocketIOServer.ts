@@ -15,6 +15,7 @@ import {
   dealRoomHands,
   recordRoundSnapshot,
   removeDisconnectedPlayers,
+  resetRoomHandAfterCenterPlay,
   resetRoom,
   setRoomFairHandRotation,
   setRoomAILevel,
@@ -175,9 +176,17 @@ export default function createSocketIOServer() {
         return;
       }
       recordRoundSnapshot(room, "move", Date.now(), pid, args.payload);
+      const didResetHand = resetRoomHandAfterCenterPlay(
+        room,
+        pid,
+        args.payload
+      );
       markRoomUpdated(user.currentRoom);
       ack?.({ actionId: args.actionId, ok: true, revision: room.revision });
       broadcastUpdate(user.currentRoom);
+      if (didResetHand) {
+        broadcastHands(user.currentRoom);
+      }
     });
     socket.on("add_ai", () => {
       if (user.currentRoom == null) {
