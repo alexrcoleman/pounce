@@ -243,7 +243,7 @@ const CardContentMemo = observer(function CardContent({
           "--x": geometry.x + "px",
           "--y": geometry.y + "px",
           "--s": geometry.screenScale,
-          opacity: isDragging ? 0.4 : 1,
+          opacity: isDragging ? 0.25 : 1,
         } as any
       }
       onMouseEnter={updateCursorTarget}
