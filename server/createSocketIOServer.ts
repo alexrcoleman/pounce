@@ -365,6 +365,9 @@ export default function createSocketIOServer() {
     socket.on("disconnect", () => {
       delete socketData[socket.id];
     });
+    socket.on("room_ping", (_args, ack) => {
+      ack?.({ serverTime: Date.now() });
+    });
     socket.on("update_hand", ({ item, location }) => {
       if (user.currentRoom == null) {
         return;

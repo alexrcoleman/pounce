@@ -37,13 +37,47 @@ export default function useGameSocket(
   useEffect(() => {
     let socket: ClientSocket;
     socket = createSocket();
+    let isClosed = false;
+    let hasPendingPing = false;
+    let pingTimeout: ReturnType<typeof setTimeout> | undefined;
+    const updatePingLatency = (latency: number | null) => {
+      if (!isClosed) {
+        runInAction(() => state.setPingLatency(latency));
+      }
+    };
+    const sendPing = () => {
+      if (hasPendingPing) {
+        return;
+      }
+      if (!socket.connected) {
+        updatePingLatency(null);
+        return;
+      }
+
+      hasPendingPing = true;
+      const startedAt = performance.now();
+      pingTimeout = setTimeout(() => {
+        hasPendingPing = false;
+        updatePingLatency(null);
+      }, 5000);
+      socket.emit("room_ping", { clientTime: Date.now() }, () => {
+        if (pingTimeout) {
+          clearTimeout(pingTimeout);
+          pingTimeout = undefined;
+        }
+        hasPendingPing = false;
+        updatePingLatency(performance.now() - startedAt);
+      });
+    };
     socket.on("connect_error", () => {
       setError("No connection to socket server");
+      updatePingLatency(null);
     });
     setSocket(socket);
     socket.on("connect", () => {
       console.log("Connected", socket.id);
       runInAction(() => state.onConnect(socket.id));
+      sendPing();
     });
 
     socket.on("alert", (message) => {
@@ -59,10 +93,16 @@ export default function useGameSocket(
     socket.on("disconnect", () => {
       runInAction(() => state.onDisconnect());
     });
+    const pingInterval = setInterval(sendPing, 3000);
     return () => {
+      isClosed = true;
       if (socket) {
         socket.close();
       }
+      if (pingTimeout) {
+        clearTimeout(pingTimeout);
+      }
+      clearInterval(pingInterval);
       Object.values(moveAckTimeouts.current).forEach(clearTimeout);
       moveAckTimeouts.current = {};
     };

@@ -103,6 +103,13 @@ export default function useLocalGame(name: string | null) {
           emitHands();
           return;
         }
+        if (event === "room_ping") {
+          const ack = args[1] as
+            | ((args: { serverTime: number }) => void)
+            | undefined;
+          ack?.({ serverTime: Date.now() });
+          return;
+        }
 
         const playerIndex = room.board.players.findIndex(
           (p) => p.socketId === LOCAL_SOCKET_ID

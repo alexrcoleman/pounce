@@ -32,6 +32,7 @@ export default class SocketState {
   serverRevision = 0;
   lastTime = 0;
   latency = 0;
+  pingLatency: number | null = null;
   socketId = "";
   hands: CursorState[] = [];
   pendingMoves: PendingMoveAction[] = [];
@@ -62,13 +63,19 @@ export default class SocketState {
   }
   onConnect(socketId: string) {
     this.socketId = socketId;
+    this.pingLatency = null;
     this.resetBoardState();
+  }
+  setPingLatency(latency: number | null) {
+    this.pingLatency =
+      typeof latency === "number" ? Math.max(0, Math.round(latency)) : null;
   }
   updateHands(hands: CursorState[]) {
     this.hands = applyDeepUpdate(this.hands, hands);
   }
   onDisconnect() {
     this.socketId = "";
+    this.pingLatency = null;
     this.resetBoardState();
   }
   getActivePlayerIndex() {

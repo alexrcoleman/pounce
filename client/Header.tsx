@@ -237,6 +237,8 @@ const SettingsDialog = observer(function SettingsDialog({
   const page = props.page;
   const canChangeAI = isHost && !isStarted;
   const roomLabel = props.roomId ?? "Unknown";
+  const isOfflineRoom = props.roomId?.toLowerCase() === "offline";
+  const isConnected = state.socketId !== "";
   const modalTitle =
     page === "main"
       ? "Settings"
@@ -330,6 +332,16 @@ const SettingsDialog = observer(function SettingsDialog({
         <div className={styles.settingsPage}>
           <SettingsSection title="Room">
             <SettingRow title="Room" value={roomLabel} />
+            <SettingRow
+              title="Ping"
+              value={
+                <PingIndicator
+                  isConnected={isConnected}
+                  isOffline={isOfflineRoom}
+                  latency={state.pingLatency}
+                />
+              }
+            />
             <SettingRow
               title={
                 <Flex align="center" gap={6}>
@@ -544,6 +556,94 @@ function SettingRow({
       {control ?? <div className={styles.settingValue}>{value}</div>}
     </div>
   );
+}
+
+type PingStatus =
+  | "local"
+  | "offline"
+  | "measuring"
+  | "good"
+  | "fair"
+  | "poor";
+
+function PingIndicator({
+  isConnected,
+  isOffline,
+  latency,
+}: {
+  isConnected: boolean;
+  isOffline: boolean;
+  latency: number | null;
+}) {
+  const status = getPingStatus(isConnected, isOffline, latency);
+  const label = getPingLabel(status, latency);
+  const className = `${styles.pingDot} ${getPingDotClass(status)}`;
+  const title =
+    status === "local"
+      ? "Offline game runs locally"
+      : status === "offline"
+      ? "Room connection is offline"
+      : status === "measuring"
+      ? "Measuring room ping"
+      : `Room ping: ${label}`;
+
+  return (
+    <span className={styles.pingIndicator} aria-label={title} title={title}>
+      <span className={className} aria-hidden="true" />
+      <span className={styles.pingText}>{label}</span>
+    </span>
+  );
+}
+
+function getPingStatus(
+  isConnected: boolean,
+  isOffline: boolean,
+  latency: number | null
+): PingStatus {
+  if (isOffline) {
+    return "local";
+  }
+  if (!isConnected) {
+    return "offline";
+  }
+  if (latency == null) {
+    return "measuring";
+  }
+  if (latency <= 120) {
+    return "good";
+  }
+  if (latency <= 250) {
+    return "fair";
+  }
+  return "poor";
+}
+
+function getPingLabel(status: PingStatus, latency: number | null) {
+  if (status === "local") {
+    return "Local";
+  }
+  if (status === "offline") {
+    return "Offline";
+  }
+  if (status === "measuring") {
+    return "Measuring";
+  }
+  return `${latency ?? 0} ms`;
+}
+
+function getPingDotClass(status: PingStatus) {
+  switch (status) {
+    case "good":
+      return styles.pingGood;
+    case "fair":
+      return styles.pingFair;
+    case "poor":
+      return styles.pingPoor;
+    case "local":
+      return styles.pingLocal;
+    default:
+      return styles.pingUnknown;
+  }
 }
 
 function useLocalBuildDate(buildDate: string | undefined) {

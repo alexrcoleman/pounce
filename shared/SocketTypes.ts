@@ -21,6 +21,10 @@ export type BoardUpdate = {
   roundAnalysis?: RoundAnalysis | null;
 };
 
+export type RoomPingAck = {
+  serverTime: number;
+};
+
 export type ServerToClientEvents = {
   alert: (args: { message: string }) => void;
   update_hands: (args: { hands: CursorState[] }) => void;
@@ -48,4 +52,8 @@ export type ClientToServerEvents = {
   set_ai_count: (args: { count: number }) => void;
   set_fair_hand_rotation: (args: { enabled: boolean }) => void;
   remove_disconnected_players: () => void;
+  room_ping: (
+    args: { clientTime: number },
+    ack?: (args: RoomPingAck) => void
+  ) => void;
 };

@@ -396,6 +396,53 @@
   white-space: nowrap;
 }
 
+.pingIndicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  min-width: 82px;
+}
+
+.pingDot {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.pingGood {
+  background: #1f8f50;
+  box-shadow: 0 0 0 3px rgba(31, 143, 80, 0.15);
+}
+
+.pingFair {
+  background: #c77910;
+  box-shadow: 0 0 0 3px rgba(199, 121, 16, 0.16);
+}
+
+.pingPoor {
+  background: #c73636;
+  box-shadow: 0 0 0 3px rgba(199, 54, 54, 0.15);
+}
+
+.pingLocal {
+  background: #3f75b5;
+  box-shadow: 0 0 0 3px rgba(63, 117, 181, 0.14);
+}
+
+.pingUnknown {
+  background: #8b8176;
+  box-shadow: 0 0 0 3px rgba(139, 129, 118, 0.15);
+}
+
+.pingText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .buttonGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
