@@ -17,6 +17,8 @@ background-repeat: repeat; */
   align-items: center;
   overflow: hidden;
   background-color: #fbf1df;
+  font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen,
+    Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
   width: 100%;
   height: 100%;
 }
@@ -92,9 +94,12 @@ background-repeat: repeat; */
 }
 
 :global([data-card-readability="easy"]) .corner {
-  font-size: 15px;
-  font-weight: 900;
-  line-height: 0.82;
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 :global([data-card-readability="easy"]) .cornerTopLeft {

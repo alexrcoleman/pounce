@@ -7,6 +7,7 @@
 
 # testing
 /coverage
+/storybook-screenshots
 /storybook-static
 
 # next.js
