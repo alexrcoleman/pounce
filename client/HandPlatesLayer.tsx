@@ -11,8 +11,9 @@ const HAND_PLATE_LEFT = -20;
 const HAND_PLATE_TOP_OFFSET = 36;
 const HAND_PLATE_WIDTH = 528;
 const HAND_PLATE_HEIGHT = 168;
+const ACTIVE_HAND_PLATE_HEIGHT = 184;
 const COMPACT_ACTIVE_HAND_PLATE_TOP_OFFSET = 24;
-const COMPACT_ACTIVE_HAND_PLATE_HEIGHT = 196;
+const COMPACT_ACTIVE_HAND_PLATE_HEIGHT = 200;
 
 export default observer(function HandPlatesLayer() {
   const { state } = useClientContext();
@@ -40,6 +41,8 @@ export default observer(function HandPlatesLayer() {
           : HAND_PLATE_TOP_OFFSET;
         const plateHeight = isTouchFullSizePlayer
           ? COMPACT_ACTIVE_HAND_PLATE_HEIGHT
+          : isActivePlayer
+          ? ACTIVE_HAND_PLATE_HEIGHT
           : HAND_PLATE_HEIGHT;
         const area = { type: "player", playerIndex } as const;
         const scale = layout.getScale(area);

@@ -9,13 +9,13 @@ export const FIELD_STACK_CARD_GAP = 0.2;
 
 const PLAYER_HAND_OFFSET_X = -8;
 const PLAYER_CARD_SPACING = 70;
-const PLAYER_POUNCE_COLUMN = -0.9;
+const PLAYER_POUNCE_COLUMN = -1.05;
 const PLAYER_FLIPPED_DECK_COLUMN = 4.35;
 const PLAYER_DECK_COLUMN = 5.45;
 const PLAYER_STACK_TOP = 42;
 const PLAYER_DECK_TOP = 62;
 const PLAYER_POUNCE_TOP = 92;
-export const PLAYER_STACK_CARD_GAP = 15;
+export const PLAYER_STACK_CARD_GAP = 20;
 
 export function getPlayerDeckLocation(
   playerIndex: number,
