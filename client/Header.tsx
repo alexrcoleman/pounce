@@ -35,10 +35,12 @@ export default observer(function Header(props: Props) {
   const [isSettingsOpen, setSettingsOpen] = useState(false);
   const [settingsPage, setSettingsPage] = useState<SettingsPage>("main");
   const [showScoreButton, setShowScoreButton] = useState(false);
-  const { state } = useClientContext();
+  const { state, socket } = useClientContext();
   const board = state.board;
   const isStarted = state.board?.isActive ?? false;
+  const isPaused = state.board?.isPaused ?? false;
   const isHost = state.getIsHost();
+  const canTogglePause = isStarted && isHost;
   const showRoomCode =
     !isStarted &&
     !isHost &&
@@ -80,13 +82,24 @@ export default observer(function Header(props: Props) {
           <strong>{props.roomId}</strong>
         </div>
       ) : null}
-      <div className={styles.floatingControls}>
+      <div
+        className={`${styles.floatingControls} ${
+          canTogglePause ? styles.floatingControlsWithPause : ""
+        }`}
+      >
         {showScoreButton && board != null && board.pouncer == null ? (
           <HeaderScoreboardButton board={board} />
+        ) : null}
+        {canTogglePause ? (
+          <HeaderPauseButton
+            isPaused={isPaused}
+            onToggle={() => socket?.emit("set_paused", { paused: !isPaused })}
+          />
         ) : null}
         <button
           className={styles.floatingButton}
           onClick={() => openSettings("main")}
+          type="button"
         >
           Settings
         </button>
@@ -101,6 +114,34 @@ export default observer(function Header(props: Props) {
     </>
   );
 });
+
+function HeaderPauseButton({
+  isPaused,
+  onToggle,
+}: {
+  isPaused: boolean;
+  onToggle: () => void;
+}) {
+  const label = isPaused ? "Resume game" : "Pause game";
+
+  return (
+    <Tooltip title={label}>
+      <button
+        aria-label={label}
+        aria-pressed={isPaused}
+        className={`${styles.floatingButton} ${styles.iconButton}`}
+        onClick={onToggle}
+        title={label}
+        type="button"
+      >
+        <span
+          aria-hidden="true"
+          className={isPaused ? styles.playIcon : styles.pauseIcon}
+        />
+      </button>
+    </Tooltip>
+  );
+}
 
 function HeaderScoreboardButton({
   board,

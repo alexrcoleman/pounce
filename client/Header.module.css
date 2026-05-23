@@ -17,6 +17,10 @@
     right: auto;
     left: min(calc(100vw - 166px), 220px);
   }
+
+  .floatingControlsWithPause {
+    left: min(calc(100vw - 210px), 220px);
+  }
 }
 
 .floatingButton {
@@ -38,6 +42,40 @@
 
 .floatingButton:active {
   transform: translateY(1px);
+}
+
+.iconButton {
+  min-width: 38px;
+  width: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.pauseIcon {
+  width: 14px;
+  height: 16px;
+  display: inline-flex;
+  justify-content: space-between;
+}
+
+.pauseIcon::before,
+.pauseIcon::after {
+  content: "";
+  width: 4px;
+  height: 16px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.playIcon {
+  width: 0;
+  height: 0;
+  margin-left: 2px;
+  border-top: 8px solid transparent;
+  border-bottom: 8px solid transparent;
+  border-left: 13px solid currentColor;
 }
 
 .scoreboardModalOverlay {
