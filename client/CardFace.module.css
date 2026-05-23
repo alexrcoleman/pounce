@@ -88,14 +88,21 @@ background-repeat: repeat; */
 }
 
 :global([data-card-readability="easy"]) .frontGrid,
-:global([data-card-readability="easy"]) .faceCardArt,
 :global([data-card-readability="easy"]) .acePip {
   display: none;
+}
+
+:global([data-card-readability="easy"]) .faceCardArt {
+  display: block;
+  width: 106%;
+  opacity: 0.22;
+  filter: saturate(0.95) contrast(0.95);
 }
 
 :global([data-card-readability="easy"]) .centerSuit {
   display: block;
   position: absolute;
+  z-index: 1;
   left: 50%;
   top: 50%;
   width: 100%;
@@ -110,6 +117,7 @@ background-repeat: repeat; */
   display: flex;
   align-items: center;
   gap: 1px;
+  z-index: 2;
   font-size: 18px;
   font-weight: 700;
   line-height: 1;

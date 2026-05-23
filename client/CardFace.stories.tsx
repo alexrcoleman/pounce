@@ -98,6 +98,20 @@ export const EasyReadSuits: Story = {
   ),
 };
 
+export const EasyReadFaceCards: Story = {
+  render: () => (
+    <CardGroup title="Easy-read face cards">
+      {[11, 12, 13].map((value) =>
+        suits.map((suit) => (
+          <CardFrame key={`${value}-${suit}`} readability="easy" scale={2.3}>
+            <CardFace suit={suit} value={value} />
+          </CardFrame>
+        ))
+      )}
+    </CardGroup>
+  ),
+};
+
 function CardGroup({ children, title }: { children: ReactNode; title: string }) {
   return (
     <section style={groupStyle}>
