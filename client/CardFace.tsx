@@ -78,13 +78,14 @@ const CardFace = React.memo(function CardFace({
                 }
                 return (
                   <div
-                    key={index}
+                    className={styles.pip}
+                    key={`${colIndex}-${index}`}
                     style={{
-                      gridColumn: colIndex + 1,
-                      gridRow: row + 1,
-                      marginLeft: colIndex === 1 ? -6 : undefined,
-                      transform:
-                        row > gridRowCount / 2 + 1 ? "scale(1, -1)" : "",
+                      left: `${pipColumnPositions[colIndex]}%`,
+                      top: `${((row + 0.5) / gridRowCount) * 100}%`,
+                      transform: `translate(-50%, -50%)${
+                        row > gridRowCount / 2 + 1 ? " scale(1, -1)" : ""
+                      }`,
                     }}
                   >
                     {icon}
@@ -156,3 +157,5 @@ const cardPatterns = [
   [],
   [],
 ];
+
+const pipColumnPositions = [24, 50, 76];

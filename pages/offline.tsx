@@ -26,7 +26,7 @@ const OfflinePage: NextPage<{
   const [leftHandedMode, setLeftHandedMode] = useState(false);
   const [easyReadCards, setEasyReadCards] = useStoredBoolean(
     "pounce::easy-read-cards",
-    false
+    true
   );
   const [scale, setScale] = useState(1);
   const playerName = name || "Player";
