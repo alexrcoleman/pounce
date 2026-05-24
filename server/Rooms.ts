@@ -1,10 +1,12 @@
 import { Server } from "socket.io";
 import { createRoomState, RoomState } from "../shared/RoomState";
 import {
+  completeRoundAnalysis,
   getRoomHands,
   scheduleAIReactionBoard,
   tickRoom,
 } from "../shared/RoomLogic";
+import type { RoundSnapshot } from "../shared/RoundAnalysis";
 
 export type ServerRoomState = RoomState & {
   io: Server;
@@ -15,6 +17,7 @@ export const ROOM_DELETE_GRACE_PERIOD_MS = 10 * 60 * 1000;
 
 const rooms: Record<string, ServerRoomState> = {};
 const roomDeleteTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+const ROUND_ANALYSIS_DEFER_MS = 50;
 
 export function createRoom(io: Server, roomId: string) {
   cancelRoomDelete(roomId);
@@ -32,13 +35,17 @@ export function createRoom(io: Server, roomId: string) {
   };
   room.interval = setInterval(() => {
     const currentRoom = rooms[roomId];
-    const { hasUpdate, hasHandUpdate } = tickRoom(currentRoom);
+    const { hasUpdate, hasHandUpdate, roundAnalysisSnapshots } =
+      tickRoom(currentRoom);
     if (hasUpdate) {
       markRoomUpdated(roomId);
       broadcastUpdate(roomId);
     }
     if (hasHandUpdate) {
       broadcastHands(roomId);
+    }
+    if (roundAnalysisSnapshots) {
+      scheduleRoundAnalysis(roomId, roundAnalysisSnapshots);
     }
   }, 1);
   rooms[roomId] = room;
@@ -106,4 +113,25 @@ export function deleteRoom(roomId: string) {
     clearInterval(room.interval);
     delete rooms[roomId];
   }
+}
+
+function scheduleRoundAnalysis(
+  roomId: string,
+  snapshots: RoundSnapshot[]
+): void {
+  setTimeout(() => {
+    const room = getRoom(roomId);
+    if (!room || room.board.isActive || room.board.pouncer == null) {
+      return;
+    }
+
+    try {
+      if (completeRoundAnalysis(room, snapshots)) {
+        markRoomUpdated(roomId);
+        broadcastUpdate(roomId);
+      }
+    } catch (error) {
+      console.warn("Unable to complete round analysis", error);
+    }
+  }, ROUND_ANALYSIS_DEFER_MS);
 }

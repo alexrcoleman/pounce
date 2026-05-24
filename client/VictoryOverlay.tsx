@@ -13,6 +13,7 @@ export default observer(function VictoryOverlay() {
   const board = state.board!;
   const isHost = state.getIsHost();
   const pouncer = board.pouncer != null ? board.players[board.pouncer] : null;
+  const isAnalysisLoading = pouncer != null && !state.roundAnalysis;
   const activePlayerIndex = state.getActivePlayerIndex();
   const [isAnalysisOpen, setAnalysisOpen] = useState(false);
 
@@ -64,10 +65,11 @@ export default observer(function VictoryOverlay() {
             </Button>
           ) : (
             <Button
-              disabled={!state.roundAnalysis}
+              disabled={isAnalysisLoading}
+              loading={isAnalysisLoading}
               onClick={() => setAnalysisOpen(true)}
             >
-              Game Analysis
+              {isAnalysisLoading ? "Analyzing" : "Game Analysis"}
             </Button>
           )}
           {!isAnalysisOpen && (
