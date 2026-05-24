@@ -1,5 +1,54 @@
 # Agent Notes
 
+## Main Integration Workflow
+
+Use a branch-based flow for all non-trivial changes. Treat `origin/main` as the source of truth and the integration target; treat local `main` as a convenience mirror only.
+
+- Do not commit directly to local `main`. Local `main` should stay clean and should only move by fast-forwarding to `origin/main`.
+- Start new worktrees from `origin/main`, not from whatever local `main` currently points at:
+
+```powershell
+git fetch origin
+git worktree add -b codex/<topic> <path> origin/main
+```
+
+- In an existing detached worktree, create a branch before committing:
+
+```powershell
+git fetch origin
+git switch -c codex/<topic> origin/main
+```
+
+- Keep feature branches current by rebasing or merging `origin/main` into the branch, then rerun the relevant checks before integration.
+- Prefer integrating by pushing the branch and merging it into `main` through the remote:
+
+```powershell
+git push -u origin codex/<topic>
+```
+
+- If intentionally integrating from the command line without a PR, update the branch against `origin/main`, run checks, then fast-forward the remote `main` directly from the branch. This avoids using local `main` as an intermediate merge target:
+
+```powershell
+git fetch origin
+git rebase origin/main
+npx.cmd tsc --noEmit
+git push origin HEAD:main
+```
+
+The push should reject if `origin/main` moved after the fetch; fetch, rebase, recheck, and retry rather than forcing it.
+
+### Local Main Mirror
+
+The checkout at `C:\Users\alexr\code\pounce` currently owns local `main`, so refresh local `main` from that checkout only:
+
+```powershell
+git -C C:\Users\alexr\code\pounce fetch origin
+git -C C:\Users\alexr\code\pounce switch main
+git -C C:\Users\alexr\code\pounce pull --ff-only
+```
+
+New worktrees should still start from `origin/main` after `git fetch origin`, so a stale local `main` does not block parallel work. If the local checkout is not being used for development, it is fine to leave it clean on `main`; it does not need to participate in merges.
+
 ## Dev Server / Build Setup
 
 - Use `npm run dev` for the full local app. It starts Next on port `3000` and the Socket.IO server on port `3001`.
