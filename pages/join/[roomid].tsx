@@ -1,24 +1,37 @@
 import { useEffect } from "react";
 import Head from "next/head";
-import type { NextPage } from "next";
+import type { GetServerSideProps, NextPage } from "next";
 import { useRouter } from "next/router";
 import { observer } from "mobx-react-lite";
 
 import JoinForm from "../../client/JoinForm";
 import LoadingState from "../../client/LoadingState";
+import SeoHead from "../../client/SeoHead";
+import {
+  getSeoOrigin,
+  normalizeRoomCode,
+  type SeoRequestProps,
+} from "../../shared/seo";
 
-type AppProps = {
+type AppProps = SeoRequestProps & {
+  initialRoomId: string;
   name?: string;
   setName?: (name: string) => void;
 };
 
 const JoinRoomPage: NextPage<AppProps> = observer(
-  ({ name, setName }: AppProps) => {
+  ({ initialRoomId, name, seoOrigin, setName }: AppProps) => {
     const router = useRouter();
-    const roomId =
+    const queryRoomId =
       router.isReady && typeof router.query.roomid === "string"
-        ? router.query.roomid.toUpperCase()
+        ? normalizeRoomCode(router.query.roomid)
         : "";
+    const roomId = queryRoomId || initialRoomId;
+    const title = roomId ? `Join Pounce room ${roomId}` : "Join Pounce";
+    const description = roomId
+      ? `You've been invited to room ${roomId} in Pounce Online. Enter your name and jump in.`
+      : "Join a Pounce Online room and play fast-paced cards with friends.";
+    const path = roomId ? `/join/${encodeURIComponent(roomId)}` : "/join";
 
     useEffect(() => {
       if (!router.isReady) {
@@ -31,8 +44,14 @@ const JoinRoomPage: NextPage<AppProps> = observer(
     if (!router.isReady || !roomId) {
       return (
         <>
+          <SeoHead
+            title={title}
+            description={description}
+            origin={seoOrigin}
+            path={path}
+            noIndex
+          />
           <Head>
-            <title>Join Pounce</title>
             <meta name="theme-color" content="#16593c" key="theme-color" />
           </Head>
           <LoadingState
@@ -45,8 +64,14 @@ const JoinRoomPage: NextPage<AppProps> = observer(
 
     return (
       <>
+        <SeoHead
+          title={title}
+          description={description}
+          origin={seoOrigin}
+          path={path}
+          noIndex
+        />
         <Head>
-          <title>{roomId ? `Join Pounce | ${roomId}` : "Join Pounce"}</title>
           <meta name="theme-color" content="#16593c" key="theme-color" />
         </Head>
         <JoinForm
@@ -61,5 +86,16 @@ const JoinRoomPage: NextPage<AppProps> = observer(
     );
   }
 );
+
+export const getServerSideProps: GetServerSideProps<AppProps> = async ({
+  params,
+  req,
+}) => ({
+  props: {
+    initialRoomId:
+      typeof params?.roomid === "string" ? normalizeRoomCode(params.roomid) : "",
+    seoOrigin: getSeoOrigin(req),
+  },
+});
 
 export default JoinRoomPage;
