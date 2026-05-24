@@ -17,6 +17,7 @@ import {
   dealRoomHands,
   getRoomHands,
   recordRoundSnapshot,
+  resetRoomHandAfterDeckAdvance,
   resetRoomHandAfterCenterPlay,
   resetRoom,
   scheduleAIReactionBoard,
@@ -129,11 +130,9 @@ export default function useLocalGame(name: string | null) {
             return;
           }
           recordRoundSnapshot(room, "move", Date.now(), playerIndex, envelope.payload);
-          const didResetHand = resetRoomHandAfterCenterPlay(
-            room,
-            playerIndex,
-            envelope.payload
-          );
+          const didResetHand =
+            resetRoomHandAfterCenterPlay(room, playerIndex, envelope.payload) ||
+            resetRoomHandAfterDeckAdvance(room, playerIndex, envelope.payload);
           markRoomUpdated();
           ack?.({
             actionId: envelope.actionId,

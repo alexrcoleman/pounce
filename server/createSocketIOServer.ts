@@ -16,6 +16,7 @@ import {
   dealRoomHands,
   recordRoundSnapshot,
   removeDisconnectedPlayers,
+  resetRoomHandAfterDeckAdvance,
   resetRoomHandAfterCenterPlay,
   resetRoom,
   setRoomFairHandRotation,
@@ -177,11 +178,9 @@ export default function createSocketIOServer() {
         return;
       }
       recordRoundSnapshot(room, "move", Date.now(), pid, args.payload);
-      const didResetHand = resetRoomHandAfterCenterPlay(
-        room,
-        pid,
-        args.payload
-      );
+      const didResetHand =
+        resetRoomHandAfterCenterPlay(room, pid, args.payload) ||
+        resetRoomHandAfterDeckAdvance(room, pid, args.payload);
       markRoomUpdated(user.currentRoom);
       ack?.({ actionId: args.actionId, ok: true, revision: room.revision });
       broadcastUpdate(user.currentRoom);

@@ -110,6 +110,12 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
         } else {
           room.hands[index].item = undefined;
         }
+      } else if (
+        moveResult?.boardChanged &&
+        move &&
+        resetRoomHandAfterDeckAdvance(room, index, move)
+      ) {
+        hasHandUpdate = true;
       }
       const delay = move
         ? (Math.random() - 0.5) * 2 * cooldownDist.deviation +
@@ -496,6 +502,24 @@ export function resetRoomHandAfterCenterPlay(
   return true;
 }
 
+export function resetRoomHandAfterDeckAdvance(
+  room: RoomState,
+  playerIndex: number,
+  move: Move
+): boolean {
+  if (
+    playerIndex < 0 ||
+    (move.type !== "cycle" && move.type !== "flip_deck")
+  ) {
+    return false;
+  }
+
+  const hand = (room.hands[playerIndex] = room.hands[playerIndex] ?? {});
+  hand.location = getPlayerDeckCursorLocation(room.board, playerIndex);
+  hand.item = null;
+  return true;
+}
+
 function getPlayerHandCursorLocation(
   board: BoardState,
   playerIndex: number,
@@ -527,6 +551,18 @@ function getPreferredSourceCursorLocation(
     return peek(player.flippedDeck) ?? peek(player.deck) ?? null;
   }
   return peek(player.stacks[source.index]) ?? null;
+}
+
+function getPlayerDeckCursorLocation(
+  board: BoardState,
+  playerIndex: number
+): CardState | null {
+  const player = board.players[playerIndex];
+  if (!player) {
+    return null;
+  }
+
+  return peek(player.flippedDeck) ?? peek(player.deck) ?? null;
 }
 
 function getFirstSolitaireTopCard(player: PlayerState): CardState | null {
