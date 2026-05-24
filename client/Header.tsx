@@ -246,12 +246,13 @@ const SettingsDialog = observer(function SettingsDialog({
   const isStarted = state.board?.isActive ?? false;
   const isPaused = state.board?.isPaused ?? false;
   const isHost = state.getIsHost();
-  const aiCount =
+  const serverAICount =
     state.board?.players.filter((p) => p.socketId == null).length ?? 0;
   const disconnectedCount =
     state.board?.players.filter((p) => p.disconnected).length ?? 0;
   const buildDate = useLocalBuildDate(process.env.NEXT_PUBLIC_BUILD_DATE);
   const [isFairHandHelpOpen, setFairHandHelpOpen] = useState(false);
+  const [localAICount, setLocalAICount] = useState(serverAICount);
   const currentAISpeed = state.roomSettings.aiSpeed ?? 3;
   const [aiDifficultyMode, setAIDifficultyMode] = useState<AIDifficultyMode>(
     () => getAIDifficultyMode(currentAISpeed)
@@ -273,7 +274,9 @@ const SettingsDialog = observer(function SettingsDialog({
       ? "Room"
       : "Appearance";
   const setAICount = (count: number) => {
-    socket?.emit("set_ai_count", { count: Math.max(0, Math.min(5, count)) });
+    const nextCount = normalizeAICount(count);
+    setLocalAICount(nextCount);
+    socket?.emit("set_ai_count", { count: nextCount });
   };
   const selectAIDifficulty = (mode: AIDifficultyMode) => {
     setAIDifficultyMode(mode);
@@ -470,22 +473,22 @@ const SettingsDialog = observer(function SettingsDialog({
                     <button
                       type="button"
                       className={styles.counterButton}
-                      disabled={!canChangeAI || aiCount <= 0}
+                      disabled={!canChangeAI || localAICount <= 0}
                       aria-label="Remove AI player"
-                      onClick={() => setAICount(aiCount - 1)}
+                      onClick={() => setAICount(localAICount - 1)}
                     >
                       -
                     </button>
                     <div className={styles.counterValue}>
-                      <strong>{aiCount}</strong>
+                      <strong>{localAICount}</strong>
                       <span>AI</span>
                     </div>
                     <button
                       type="button"
                       className={styles.counterButton}
-                      disabled={!canChangeAI || aiCount >= 5}
+                      disabled={!canChangeAI || localAICount >= 5}
                       aria-label="Add AI player"
-                      onClick={() => setAICount(aiCount + 1)}
+                      onClick={() => setAICount(localAICount + 1)}
                     >
                       +
                     </button>
@@ -778,6 +781,13 @@ function normalizeCustomAISpeed(speed: number): number {
     return 3;
   }
   return Math.max(CUSTOM_AI_MIN, Math.min(CUSTOM_AI_MAX, Math.round(speed)));
+}
+
+function normalizeAICount(count: number): number {
+  if (!Number.isFinite(count)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(5, Math.trunc(count)));
 }
 
 function getAIDifficultySummary(
