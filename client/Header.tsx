@@ -33,6 +33,19 @@ export type SettingsOpenRequest = {
 const FAIR_HAND_ROTATION_HELP =
   "When on, Pounce keeps one shuffled set of hands for a short series and rotates them each round, so everyone gets a turn with the same luck. Leave it off for a brand-new shuffle every round.";
 
+const AI_DIFFICULTY_PRESETS = [
+  { key: "easy", label: "Easy", speed: 3 },
+  { key: "medium", label: "Medium", speed: 4 },
+  { key: "hard", label: "Hard", speed: 5 },
+] as const;
+
+export type AIDifficultyMode =
+  | (typeof AI_DIFFICULTY_PRESETS)[number]["key"]
+  | "custom";
+
+const CUSTOM_AI_MIN = 1;
+const CUSTOM_AI_MAX = 10;
+
 export default observer(function Header(props: Props) {
   const [isSettingsOpen, setSettingsOpen] = useState(false);
   const [settingsPage, setSettingsPage] = useState<SettingsPage>("main");
@@ -107,13 +120,15 @@ export default observer(function Header(props: Props) {
           Settings
         </button>
       </div>
-      <SettingsDialog
-        isSettingsOpen={isSettingsOpen}
-        onClose={closeSettings}
-        page={settingsPage}
-        setPage={setSettingsPage}
-        {...props}
-      />
+      {isSettingsOpen ? (
+        <SettingsDialog
+          isSettingsOpen={isSettingsOpen}
+          onClose={closeSettings}
+          page={settingsPage}
+          setPage={setSettingsPage}
+          {...props}
+        />
+      ) : null}
     </>
   );
 });
@@ -237,6 +252,13 @@ const SettingsDialog = observer(function SettingsDialog({
     state.board?.players.filter((p) => p.disconnected).length ?? 0;
   const buildDate = useLocalBuildDate(process.env.NEXT_PUBLIC_BUILD_DATE);
   const [isFairHandHelpOpen, setFairHandHelpOpen] = useState(false);
+  const currentAISpeed = state.roomSettings.aiSpeed ?? 3;
+  const [aiDifficultyMode, setAIDifficultyMode] = useState<AIDifficultyMode>(
+    () => getAIDifficultyMode(currentAISpeed)
+  );
+  const [customAISpeed, setCustomAISpeed] = useState(() =>
+    normalizeCustomAISpeed(currentAISpeed)
+  );
   const page = props.page;
   const canChangeAI = isHost && !isStarted;
   const roomLabel = props.roomId ?? "Unknown";
@@ -252,6 +274,21 @@ const SettingsDialog = observer(function SettingsDialog({
       : "Appearance";
   const setAICount = (count: number) => {
     socket?.emit("set_ai_count", { count: Math.max(0, Math.min(5, count)) });
+  };
+  const selectAIDifficulty = (mode: AIDifficultyMode) => {
+    setAIDifficultyMode(mode);
+    const preset = AI_DIFFICULTY_PRESETS.find((item) => item.key === mode);
+    if (!preset) {
+      return;
+    }
+    setCustomAISpeed(preset.speed);
+    socket?.emit("set_ai_level", { speed: preset.speed });
+  };
+  const setCustomAIDifficulty = (speed: number) => {
+    const normalizedSpeed = normalizeCustomAISpeed(speed);
+    setAIDifficultyMode("custom");
+    setCustomAISpeed(normalizedSpeed);
+    socket?.emit("set_ai_level", { speed: normalizedSpeed });
   };
 
   useEffect(() => {
@@ -455,20 +492,11 @@ const SettingsDialog = observer(function SettingsDialog({
                   </div>
                 }
               />
-              <SettingRow
-                title="Level"
-                control={
-                  <Slider
-                    className={styles.inlineSlider}
-                    value={state.roomSettings.aiSpeed ?? 3}
-                    min={1}
-                    max={10}
-                    step={1}
-                    onChange={(v) =>
-                      socket?.emit("set_ai_level", { speed: v })
-                    }
-                  />
-                }
+              <AIDifficultyControl
+                customSpeed={customAISpeed}
+                mode={aiDifficultyMode}
+                onSelectMode={selectAIDifficulty}
+                onSetCustomSpeed={setCustomAIDifficulty}
               />
               <SettingRow
                 title="Simulation mode"
@@ -535,6 +563,88 @@ const SettingsDialog = observer(function SettingsDialog({
     </Modal>
   );
 });
+
+export function AIDifficultyControl({
+  customSpeed,
+  mode,
+  onSelectMode,
+  onSetCustomSpeed,
+}: {
+  customSpeed: number;
+  mode: AIDifficultyMode;
+  onSelectMode: (mode: AIDifficultyMode) => void;
+  onSetCustomSpeed: (speed: number) => void;
+}) {
+  return (
+    <div className={styles.aiDifficultyBlock}>
+      <div className={styles.sliderHeader}>
+        <span>Level</span>
+        <strong>{getAIDifficultySummary(mode, customSpeed)}</strong>
+      </div>
+      <div
+        className={styles.aiDifficultyControl}
+        role="group"
+        aria-label="AI difficulty"
+      >
+        {AI_DIFFICULTY_PRESETS.map((preset) => (
+          <button
+            key={preset.key}
+            type="button"
+            aria-pressed={mode === preset.key}
+            onClick={() => onSelectMode(preset.key)}
+          >
+            {preset.label}
+          </button>
+        ))}
+        <button
+          type="button"
+          aria-pressed={mode === "custom"}
+          onClick={() => onSelectMode("custom")}
+        >
+          Custom
+        </button>
+      </div>
+      {mode === "custom" ? (
+        <div className={styles.customAIDifficulty}>
+          <button
+            type="button"
+            className={styles.customAIButton}
+            disabled={customSpeed <= CUSTOM_AI_MIN}
+            aria-label="Decrease custom AI level"
+            onClick={() => onSetCustomSpeed(customSpeed - 1)}
+          >
+            -
+          </button>
+          <label className={styles.customAIInputLabel}>
+            <span>Speed</span>
+            <input
+              type="number"
+              min={CUSTOM_AI_MIN}
+              max={CUSTOM_AI_MAX}
+              step={1}
+              value={customSpeed}
+              onChange={(event) => {
+                const nextSpeed = event.currentTarget.valueAsNumber;
+                if (Number.isFinite(nextSpeed)) {
+                  onSetCustomSpeed(nextSpeed);
+                }
+              }}
+            />
+          </label>
+          <button
+            type="button"
+            className={styles.customAIButton}
+            disabled={customSpeed >= CUSTOM_AI_MAX}
+            aria-label="Increase custom AI level"
+            onClick={() => onSetCustomSpeed(customSpeed + 1)}
+          >
+            +
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function SettingsSection({
   title,
@@ -654,6 +764,32 @@ function getPingDotClass(status: PingStatus) {
     default:
       return styles.pingUnknown;
   }
+}
+
+function getAIDifficultyMode(speed: number): AIDifficultyMode {
+  return (
+    AI_DIFFICULTY_PRESETS.find((preset) => preset.speed === speed)?.key ??
+    "custom"
+  );
+}
+
+function normalizeCustomAISpeed(speed: number): number {
+  if (!Number.isFinite(speed)) {
+    return 3;
+  }
+  return Math.max(CUSTOM_AI_MIN, Math.min(CUSTOM_AI_MAX, Math.round(speed)));
+}
+
+function getAIDifficultySummary(
+  mode: AIDifficultyMode,
+  customSpeed: number
+): string {
+  if (mode === "custom") {
+    return `Custom (${customSpeed})`;
+  }
+  return (
+    AI_DIFFICULTY_PRESETS.find((preset) => preset.key === mode)?.label ?? ""
+  );
 }
 
 function useLocalBuildDate(buildDate: string | undefined) {

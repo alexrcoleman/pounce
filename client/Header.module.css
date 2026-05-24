@@ -374,6 +374,8 @@
 .settingRow + .settingRow,
 .settingRow + .shareRow,
 .shareRow + .settingRow,
+.settingRow + .aiDifficultyBlock,
+.aiDifficultyBlock + .settingRow,
 .settingsSectionBody > .sliderBlock {
   border-top: 1px solid rgba(43, 35, 29, 0.1);
 }
@@ -524,10 +526,6 @@
   font-weight: 900;
 }
 
-.inlineSlider {
-  width: min(190px, 42vw);
-}
-
 .sliderBlock {
   padding: 10px 14px 4px;
 }
@@ -545,6 +543,116 @@
 .sliderHeader > strong {
   color: #5b4e40;
   font-size: 13px;
+}
+
+.aiDifficultyBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 14px 12px;
+}
+
+.aiDifficultyControl {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  background: rgba(43, 35, 29, 0.12);
+  border: 1px solid rgba(43, 35, 29, 0.16);
+  border-radius: 8px;
+}
+
+.aiDifficultyControl button {
+  min-width: 0;
+  min-height: 40px;
+  padding: 0 7px;
+  color: #4b4035;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.15;
+  cursor: pointer;
+  background: #ffffff;
+  border: none;
+}
+
+.aiDifficultyControl button:hover,
+.aiDifficultyControl button:focus {
+  background: #fbfbf8;
+}
+
+.aiDifficultyControl button[aria-pressed="true"] {
+  color: #3c2307;
+  background: #fff0bd;
+  box-shadow: inset 0 0 0 1px rgba(216, 155, 66, 0.42);
+}
+
+.customAIDifficulty {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) 42px;
+  overflow: hidden;
+  border: 1px solid rgba(43, 35, 29, 0.18);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.customAIButton {
+  width: 42px;
+  min-height: 42px;
+  padding: 0;
+  color: #2e261e;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  background: #ffffff;
+  border: none;
+}
+
+.customAIButton:hover,
+.customAIButton:focus {
+  background: #fbfbf8;
+}
+
+.customAIButton:disabled {
+  color: rgba(46, 38, 30, 0.28);
+  cursor: default;
+  background: #f1f1ef;
+}
+
+.customAIInputLabel {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 5px 10px;
+  color: #6a5b4d;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  border-right: 1px solid rgba(43, 35, 29, 0.12);
+  border-left: 1px solid rgba(43, 35, 29, 0.12);
+}
+
+.customAIInputLabel input {
+  width: 62px;
+  height: 30px;
+  min-width: 0;
+  padding: 0 6px;
+  color: #2e261e;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 900;
+  text-align: center;
+  background: #ffffff;
+  border: 1px solid rgba(43, 35, 29, 0.18);
+  border-radius: 6px;
+}
+
+@media (max-width: 390px) {
+  .aiDifficultyControl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .infoButton {
