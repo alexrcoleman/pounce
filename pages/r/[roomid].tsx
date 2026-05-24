@@ -59,7 +59,10 @@ const RoomPage = observer(
       }
     }, [name, router]);
 
-    if (error) {
+    const board = state.board;
+    const hasBoard = board != null;
+
+    if (error && !hasBoard) {
       return (
         <LoadingState title={error} isError showSpinner={false}>
           <Flex align="center" gap="10px">
@@ -77,7 +80,7 @@ const RoomPage = observer(
         </LoadingState>
       );
     }
-    if (!isConnected) {
+    if (!isConnected && !hasBoard) {
       return (
         <LoadingState
           title="Connecting"
@@ -85,7 +88,6 @@ const RoomPage = observer(
         />
       );
     }
-    const board = state.board;
     if (board == null) {
       return (
         <LoadingState
@@ -106,7 +108,9 @@ const RoomPage = observer(
             !animations && styles.hideAnimations
           )}
         >
-          <ClientContext.Provider value={{ state, socket: socket }}>
+          <ClientContext.Provider
+            value={{ state, socket: isConnected ? socket : null }}
+          >
             <Header
               useAnimations={animations}
               setUseAnimations={setAnimations}

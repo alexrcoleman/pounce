@@ -227,7 +227,10 @@ export default function useLocalGame(name: string | null) {
       },
     };
 
-    runInAction(() => state.onConnect(LOCAL_SOCKET_ID));
+    runInAction(() => {
+      state.setPlayerSessionId(LOCAL_PLAYER_SESSION_ID);
+      state.onConnect(LOCAL_SOCKET_ID);
+    });
     setSocket(localSocket);
     setIsConnected(true);
     if (name) {

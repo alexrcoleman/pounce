@@ -33,7 +33,9 @@ export default class SocketState {
   lastTime = 0;
   latency = 0;
   pingLatency: number | null = null;
+  isConnected = false;
   socketId = "";
+  playerSessionId: string | null = null;
   hands: CursorState[] = [];
   pendingMoves: PendingMoveAction[] = [];
   roundAnalysis: RoundAnalysis | null = null;
@@ -62,9 +64,13 @@ export default class SocketState {
     this.recomputeBoard();
   }
   onConnect(socketId: string) {
+    this.isConnected = true;
     this.socketId = socketId;
     this.pingLatency = null;
-    this.resetBoardState();
+    this.recomputeBoard();
+  }
+  setPlayerSessionId(playerSessionId: string | null) {
+    this.playerSessionId = playerSessionId;
   }
   setPingLatency(latency: number | null) {
     this.pingLatency =
@@ -74,15 +80,27 @@ export default class SocketState {
     this.hands = applyDeepUpdate(this.hands, hands);
   }
   onDisconnect() {
-    this.socketId = "";
+    this.isConnected = false;
     this.pingLatency = null;
-    this.resetBoardState();
+    this.hands = [];
+    this.recomputeBoard();
   }
   getActivePlayerIndex() {
     if (!this.board) {
       return -1;
     }
-    return this.board.players.findIndex((p) => p.socketId === this.socketId);
+    const socketPlayerIndex = this.board.players.findIndex(
+      (p) => p.socketId === this.socketId
+    );
+    if (socketPlayerIndex >= 0) {
+      return socketPlayerIndex;
+    }
+    if (this.playerSessionId == null) {
+      return -1;
+    }
+    return this.board.players.findIndex(
+      (p) => p.playerSessionId === this.playerSessionId
+    );
   }
   getHostPlayerIndex() {
     if (!this.board) {

@@ -263,7 +263,7 @@ const SettingsDialog = observer(function SettingsDialog({
   const canChangeAI = isHost && !isStarted;
   const roomLabel = props.roomId ?? "Unknown";
   const isOfflineRoom = props.roomId?.toLowerCase() === "offline";
-  const isConnected = state.socketId !== "";
+  const isConnected = state.isConnected;
   const canShareRoom =
     props.roomId != null && props.roomId.toLowerCase() !== "offline";
   const modalTitle =
