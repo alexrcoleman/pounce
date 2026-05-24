@@ -4,9 +4,9 @@ export const SITE_NAME = "Pounce Online";
 export const DEFAULT_SEO_TITLE = "Pounce Online";
 export const DEFAULT_SEO_DESCRIPTION =
   "Play fast-paced Pounce online with friends or offline against AI.";
-export const DEFAULT_SHARE_IMAGE_PATH = "/og-image.png";
+export const DEFAULT_SHARE_IMAGE_PATH = "/og-image-v6.png";
 export const DEFAULT_SHARE_IMAGE_ALT =
-  "Pounce Online game invite with playing cards on a green felt table.";
+  "Pounce Online invite with a pounce pile and solitaire piles on a green felt table.";
 
 export type SeoRequestProps = {
   seoOrigin: string;
