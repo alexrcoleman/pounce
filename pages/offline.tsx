@@ -71,6 +71,9 @@ const OfflinePage: NextPage<{
       page: "room",
     }));
   }, []);
+  const onSettingsRequestHandled = useCallback(() => {
+    setSettingsRequest(null);
+  }, []);
 
   if (!isConnected) {
     return (
@@ -111,6 +114,7 @@ const OfflinePage: NextPage<{
             setEasyReadCards={setEasyReadCards}
             onLeaveRoom={onLeaveRoom}
             settingsRequest={settingsRequest}
+            onSettingsRequestHandled={onSettingsRequestHandled}
             roomId="Offline"
             scale={scale}
             setScale={setScale}

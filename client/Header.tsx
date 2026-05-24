@@ -12,6 +12,7 @@ type Props = {
   roomId?: string | null;
   onLeaveRoom: () => void;
   settingsRequest?: SettingsOpenRequest | null;
+  onSettingsRequestHandled?: () => void;
   useAnimations: boolean;
   setUseAnimations: (use: boolean) => void;
   leftHandedMode: boolean;
@@ -63,7 +64,8 @@ export default observer(function Header(props: Props) {
     }
     setSettingsPage(request.page);
     setSettingsOpen(true);
-  }, [props.settingsRequest?.id]);
+    props.onSettingsRequestHandled?.();
+  }, [props.settingsRequest, props.onSettingsRequestHandled]);
   useEffect(() => {
     const updateShowScoreButton = () => {
       setShowScoreButton(

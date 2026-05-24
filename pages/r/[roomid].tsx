@@ -45,6 +45,9 @@ const RoomPage = observer(
         page: "room",
       }));
     }, []);
+    const onSettingsRequestHandled = useCallback(() => {
+      setSettingsRequest(null);
+    }, []);
     useEffect(() => {
       if (!name && router.isReady) {
         const lsName = localStorage.getItem("pounce::name");
@@ -113,6 +116,7 @@ const RoomPage = observer(
               setEasyReadCards={setEasyReadCards}
               onLeaveRoom={onLeaveRoom}
               settingsRequest={settingsRequest}
+              onSettingsRequestHandled={onSettingsRequestHandled}
               roomId={roomId}
               scale={scale}
               setScale={setScale}
