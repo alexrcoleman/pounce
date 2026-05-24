@@ -5,7 +5,7 @@ import type { Meta, StoryObj } from "@storybook/react";
 import {
   AIDifficultyControl,
   type AIDifficultyMode,
-} from "./Header";
+} from "./SettingsDialog";
 import styles from "./Header.module.css";
 
 type AIDifficultyStoryArgs = {
