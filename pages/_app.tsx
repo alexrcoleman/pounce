@@ -5,12 +5,16 @@ import "../styles/globals.css";
 import { ASSET_CSS_VARIABLES } from "../shared/gameAssets";
 import type { AppProps } from "next/app";
 import Head from "next/head";
+import PageErrorBoundary from "../client/PageErrorBoundary";
 import PwaRegistration from "../client/PwaRegistration";
 import { useState } from "react";
+import { useRouter } from "next/router";
 import theme from "../client/theme";
 
 function MyApp({ Component, pageProps }: AppProps) {
   const [name, setName] = useState("");
+  const router = useRouter();
+
   return (
     <>
       <Head>
@@ -28,7 +32,9 @@ function MyApp({ Component, pageProps }: AppProps) {
       <style dangerouslySetInnerHTML={{ __html: ASSET_CSS_VARIABLES }} />
       <PwaRegistration />
       <ConfigProvider theme={theme}>
-        <Component {...pageProps} name={name} setName={setName} />
+        <PageErrorBoundary resetKey={router.asPath}>
+          <Component {...pageProps} name={name} setName={setName} />
+        </PageErrorBoundary>
       </ConfigProvider>
       <Toaster position="top-center" richColors visibleToasts={1} />
     </>
