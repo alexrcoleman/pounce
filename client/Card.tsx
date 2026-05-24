@@ -344,6 +344,8 @@ function getSource(
         type: "solitaire",
         pileIndex: location.pileIndex,
         slotIndex: location.cardIndex,
+        isTopCard:
+          location.cardIndex === player.stacks[location.pileIndex].length - 1,
       };
   }
 }

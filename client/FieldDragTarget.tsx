@@ -1,5 +1,9 @@
 import { observer } from "mobx-react-lite";
-import { CardDnDItem, FieldStackDnDItem } from "./CardDnDItem";
+import {
+  CardDnDItem,
+  FieldStackDnDItem,
+  isMultiCardSolitaireDrag,
+} from "./CardDnDItem";
 import { MutableRefObject, useRef } from "react";
 import type { XYCoord } from "react-dnd";
 
@@ -50,7 +54,9 @@ export default observer(function FieldDragTarget({
         isOver: !!monitor.isOver(),
         canDrop: !!monitor.canDrop(),
       }),
-      canDrop: (item) => !("card" in item) || item.card.value === 1,
+      canDrop: (item) =>
+        !("card" in item) ||
+        (!isMultiCardSolitaireDrag(item) && item.card.value === 1),
     }),
     [onDrop, onMoveFieldStack]
   );

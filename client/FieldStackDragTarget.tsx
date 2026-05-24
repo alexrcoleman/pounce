@@ -1,4 +1,4 @@
-import { CardDnDItem } from "./CardDnDItem";
+import { CardDnDItem, isMultiCardSolitaireDrag } from "./CardDnDItem";
 import { CardState } from "../shared/GameUtils";
 import { useDrop } from "react-dnd";
 import { useRef } from "react";
@@ -45,6 +45,7 @@ export default observer(function FieldStackDragTarget({
       }),
       canDrop: (item) =>
         card != null &&
+        !isMultiCardSolitaireDrag(item) &&
         item.card.value === card.value + 1 &&
         item.card.suit === card.suit,
       hover: () => {
