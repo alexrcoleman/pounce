@@ -138,7 +138,7 @@ export default function useGameSocket(
             reason: timeoutAck.reason,
           });
           runInAction(() => state.onMoveAck(timeoutAck));
-        }, 5000);
+        }, 10000);
         socket.emit("move", action, (ack) => {
           clearTimeout(moveAckTimeouts.current[action.actionId]);
           delete moveAckTimeouts.current[action.actionId];
