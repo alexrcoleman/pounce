@@ -13,10 +13,12 @@ import {
 import { Move, executeMove } from "../shared/MoveHandler";
 import { createRoomState, RoomState } from "../shared/RoomState";
 import {
+  completeRoundAnalysis,
   dealRemainingRoomPlayers,
   dealRoomHands,
   getRoomHands,
   recordRoundSnapshot,
+  resetRoomHandAfterDeckAdvance,
   resetRoomHandAfterCenterPlay,
   resetRoom,
   scheduleAIReactionBoard,
@@ -31,6 +33,7 @@ import deepClone from "../shared/deepClone";
 import { Actions } from "./useGameSocket";
 import { type ActionAck, type ActionEnvelope } from "../shared/SocketTypes";
 import { toastRejectedMove } from "./moveRejectionToast";
+import type { RoundSnapshot } from "../shared/RoundAnalysis";
 
 const LOCAL_SOCKET_ID = "local-player";
 const LOCAL_PLAYER_SESSION_ID = "local-player-session";
@@ -67,6 +70,27 @@ export default function useLocalGame(name: string | null) {
       runInAction(() => {
         state.updateHands(deepClone(getRoomHands(room)));
       });
+    };
+    const scheduleRoundAnalysis = (snapshots: RoundSnapshot[]) => {
+      window.setTimeout(() => {
+        if (
+          isClosed ||
+          roomRef.current !== room ||
+          room.board.isActive ||
+          room.board.pouncer == null
+        ) {
+          return;
+        }
+
+        try {
+          if (completeRoundAnalysis(room, snapshots)) {
+            markRoomUpdated();
+            emitUpdate();
+          }
+        } catch (error) {
+          console.warn("Unable to complete round analysis", error);
+        }
+      }, 0);
     };
 
     const localSocket: GameSocket = {
@@ -129,11 +153,9 @@ export default function useLocalGame(name: string | null) {
             return;
           }
           recordRoundSnapshot(room, "move", Date.now(), playerIndex, envelope.payload);
-          const didResetHand = resetRoomHandAfterCenterPlay(
-            room,
-            playerIndex,
-            envelope.payload
-          );
+          const didResetHand =
+            resetRoomHandAfterCenterPlay(room, playerIndex, envelope.payload) ||
+            resetRoomHandAfterDeckAdvance(room, playerIndex, envelope.payload);
           markRoomUpdated();
           ack?.({
             actionId: envelope.actionId,
@@ -241,13 +263,17 @@ export default function useLocalGame(name: string | null) {
       });
     }
     const interval = window.setInterval(() => {
-      const { hasUpdate, hasHandUpdate } = tickRoom(room);
+      const { hasUpdate, hasHandUpdate, roundAnalysisSnapshots } =
+        tickRoom(room);
       if (hasUpdate) {
         room.revision += 1;
         emitUpdate();
       }
       if (hasHandUpdate) {
         emitHands();
+      }
+      if (roundAnalysisSnapshots) {
+        scheduleRoundAnalysis(roundAnalysisSnapshots);
       }
     }, 16);
 

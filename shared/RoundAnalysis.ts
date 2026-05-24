@@ -31,7 +31,7 @@ export type RoundAnalysis = {
   roundEndedAt: number;
   durationMs: number;
   pouncerIndex: number | null;
-  moveLog: RoundAnalysisMoveEvent[];
+  moveLog?: RoundAnalysisMoveEvent[];
   playerReports: PlayerRoundAnalysis[];
 };
 
@@ -66,7 +66,7 @@ export type PlayerRoundAnalysis = {
     longestMissMs: number;
   };
   highlights: RoundAnalysisHighlight[];
-  moves: RoundAnalysisMoveEvent[];
+  moves?: RoundAnalysisMoveEvent[];
 };
 
 export type RoundAnalysisPounceDeckCard = {
@@ -240,7 +240,9 @@ export function analyzeRoundSnapshots(
     orderedSnapshots,
     playerCount
   );
-  const moveLog = collectMoveLog(orderedSnapshots, firstSnapshot.time);
+  // Full move logs are intentionally omitted for now; they bloated the
+  // round-analysis payload without adding much value in the UI.
+  // const moveLog = collectMoveLog(orderedSnapshots, firstSnapshot.time);
   const openWindows = Array.from({ length: playerCount }, () => new Map<
     string,
     OpenCenterPlayWindow
@@ -588,7 +590,6 @@ export function analyzeRoundSnapshots(
     roundEndedAt: finalSnapshot.time,
     durationMs: Math.max(0, finalSnapshot.time - firstSnapshot.time),
     pouncerIndex: pouncerIndex >= 0 ? pouncerIndex : null,
-    moveLog,
     playerReports: finalBoard.players.map((player, playerIndex) => {
       const highlights = highlightsByPlayer[playerIndex]
         .sort((a, b) => b.sortScore - a.sortScore)
@@ -669,7 +670,6 @@ export function analyzeRoundSnapshots(
           ),
         },
         highlights,
-        moves: moveLog.filter((move) => move.playerIndex === playerIndex),
       };
     }),
   };

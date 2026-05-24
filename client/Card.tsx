@@ -41,14 +41,17 @@ const CardContentMemo = observer(function CardContent({
 }: Props) {
   const { state, socket } = useClientContext();
   const layout = useBoardLayout();
-  const updateCursorTarget = useCallback(() => {
-    if (!isHandTarget) {
-      return;
-    }
-    socket?.emit("update_hand", getCursorUpdate(card, location));
-  }, [card, isHandTarget, location, socket]);
+  const updateCursorTarget = useCallback(
+    (isClick = false) => {
+      if (!isHandTarget) {
+        return;
+      }
+      socket?.emit("update_hand", getCursorUpdate(card, location, isClick));
+    },
+    [card, isHandTarget, location, socket]
+  );
   const handleClick = useCallback(() => {
-    updateCursorTarget();
+    updateCursorTarget(true);
     onClick && onClick();
   }, [onClick, updateCursorTarget]);
   const board = state.board!;
@@ -291,7 +294,14 @@ const colors: Record<string, string | undefined> = {
 // ["red", "blue", "green", "orange", "yellow", "pink"];
 export default CardContentMemo;
 
-function getCursorUpdate(card: CardState, location: CardLocation) {
+function getCursorUpdate(
+  card: CardState,
+  location: CardLocation,
+  isClick: boolean
+) {
+  if (isClick || location.type === "deck") {
+    return { location: card, item: null };
+  }
   if (location.type === "solitaire") {
     return { location: card };
   }
@@ -334,6 +344,8 @@ function getSource(
         type: "solitaire",
         pileIndex: location.pileIndex,
         slotIndex: location.cardIndex,
+        isTopCard:
+          location.cardIndex === player.stacks[location.pileIndex].length - 1,
       };
   }
 }

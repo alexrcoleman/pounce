@@ -37,7 +37,6 @@ export default function RoundAnalysisPanel({
     useState(defaultPlayerIndex);
   const [selectedHighlight, setSelectedHighlight] =
     useState<RoundAnalysisHighlight | null>(null);
-  const [isFullMoveLogOpen, setIsFullMoveLogOpen] = useState(false);
   const useDrawerPreview = useMediaQuery("(max-width: 640px)");
 
   useEffect(() => {
@@ -65,8 +64,6 @@ export default function RoundAnalysisPanel({
     analysis.playerReports.find(
       (report) => report.playerIndex === selectedPlayerIndex
     ) ?? analysis.playerReports[0];
-  const selectedMoves = collapseMoveEvents(selectedReport.moves ?? []);
-  const fullMoveLog = collapseMoveEvents(analysis.moveLog ?? []);
 
   return (
     <section className={styles.root} data-testid="round-analysis-panel">
@@ -214,10 +211,7 @@ export default function RoundAnalysisPanel({
           player.
         </p>
       )}
-      <AllMovesSection
-        moves={selectedMoves}
-        onOpenFullLog={() => setIsFullMoveLogOpen(true)}
-      />
+      {/* Full move logs are hidden while the server omits them from the payload. */}
       {useDrawerPreview ? (
         <Drawer
           className={styles.snapshotDrawer}
@@ -238,28 +232,6 @@ export default function RoundAnalysisPanel({
           width={760}
         >
           {selectedHighlight && <MomentSnapshot highlight={selectedHighlight} />}
-        </Modal>
-      )}
-      {useDrawerPreview ? (
-        <Drawer
-          className={styles.snapshotDrawer}
-          height="86dvh"
-          onClose={() => setIsFullMoveLogOpen(false)}
-          open={isFullMoveLogOpen}
-          placement="bottom"
-          title="Full game log"
-        >
-          <MoveLog moves={fullMoveLog} showPlayer />
-        </Drawer>
-      ) : (
-        <Modal
-          footer={null}
-          onCancel={() => setIsFullMoveLogOpen(false)}
-          open={isFullMoveLogOpen}
-          title="Full game log"
-          width={640}
-        >
-          <MoveLog moves={fullMoveLog} showPlayer />
         </Modal>
       )}
     </section>

@@ -22,12 +22,14 @@ import deepClone from "./deepClone";
 import { peek } from "./CardUtils";
 import {
   analyzeRoundSnapshots,
+  type RoundSnapshot,
   type RoundSnapshotReason,
 } from "./RoundAnalysis";
 
 export type RoomTickResult = {
   hasUpdate: boolean;
   hasHandUpdate: boolean;
+  roundAnalysisSnapshots?: RoundSnapshot[] | null;
 };
 
 export const DISCONNECTED_PLAYER_TIMEOUT_MS = 5 * 60 * 1000;
@@ -39,6 +41,7 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
   const aiCooldowns = room.aiCooldowns;
   let hasUpdate = false;
   let hasHandUpdate = false;
+  let roundAnalysisSnapshots: RoundSnapshot[] | null = null;
 
   if (board.isActive && !board.isPaused && board.ticksSinceMove >= 100) {
     rotateDecks(board);
@@ -48,10 +51,11 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
   if (!board.isActive || board.isPaused) {
     // no-op
   } else if (isGameOver(board)) {
-    finishRoundAnalysis(room, now);
+    roundAnalysisSnapshots = takeRoundAnalysisSnapshots(room, now);
     scoreBoard(board);
     hasUpdate = true;
     if (room.autoStart) {
+      roundAnalysisSnapshots = null;
       startRoomGame(room, now);
     }
   } else {
@@ -110,6 +114,12 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
         } else {
           room.hands[index].item = undefined;
         }
+      } else if (
+        moveResult?.boardChanged &&
+        move &&
+        resetRoomHandAfterDeckAdvance(room, index, move)
+      ) {
+        hasHandUpdate = true;
       }
       const delay = move
         ? (Math.random() - 0.5) * 2 * cooldownDist.deviation +
@@ -124,7 +134,7 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
     hasHandUpdate = true;
   }
 
-  return { hasUpdate, hasHandUpdate };
+  return { hasUpdate, hasHandUpdate, roundAnalysisSnapshots };
 }
 
 function getVisibleBoard(
@@ -496,6 +506,24 @@ export function resetRoomHandAfterCenterPlay(
   return true;
 }
 
+export function resetRoomHandAfterDeckAdvance(
+  room: RoomState,
+  playerIndex: number,
+  move: Move
+): boolean {
+  if (
+    playerIndex < 0 ||
+    (move.type !== "cycle" && move.type !== "flip_deck")
+  ) {
+    return false;
+  }
+
+  const hand = (room.hands[playerIndex] = room.hands[playerIndex] ?? {});
+  hand.location = getPlayerDeckCursorLocation(room.board, playerIndex);
+  hand.item = null;
+  return true;
+}
+
 function getPlayerHandCursorLocation(
   board: BoardState,
   playerIndex: number,
@@ -527,6 +555,18 @@ function getPreferredSourceCursorLocation(
     return peek(player.flippedDeck) ?? peek(player.deck) ?? null;
   }
   return peek(player.stacks[source.index]) ?? null;
+}
+
+function getPlayerDeckCursorLocation(
+  board: BoardState,
+  playerIndex: number
+): CardState | null {
+  const player = board.players[playerIndex];
+  if (!player) {
+    return null;
+  }
+
+  return peek(player.flippedDeck) ?? peek(player.deck) ?? null;
 }
 
 function getFirstSolitaireTopCard(player: PlayerState): CardState | null {
@@ -570,9 +610,12 @@ function startRoundAnalysis(room: RoomState, now: number): void {
   ];
 }
 
-function finishRoundAnalysis(room: RoomState, now: number): void {
+function takeRoundAnalysisSnapshots(
+  room: RoomState,
+  now: number
+): RoundSnapshot[] | null {
   if (room.roundSnapshots.length === 0) {
-    return;
+    return null;
   }
 
   const snapshots = room.roundSnapshots.concat({
@@ -580,6 +623,19 @@ function finishRoundAnalysis(room: RoomState, now: number): void {
     reason: "round_end",
     board: deepClone(room.board),
   });
-  room.lastRoundAnalysis = analyzeRoundSnapshots(snapshots);
   room.roundSnapshots = [];
+  return snapshots;
+}
+
+export function completeRoundAnalysis(
+  room: RoomState,
+  snapshots: RoundSnapshot[]
+): boolean {
+  const analysis = analyzeRoundSnapshots(snapshots);
+  if (!analysis) {
+    return false;
+  }
+
+  room.lastRoundAnalysis = analysis;
+  return true;
 }
