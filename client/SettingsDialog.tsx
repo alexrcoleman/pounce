@@ -4,6 +4,7 @@ import { observer } from "mobx-react-lite";
 import { Button, Flex, Modal, Slider, Switch, Tooltip } from "antd";
 import { useClientContext } from "./ClientContext";
 import RoomShare from "./RoomShare";
+import ChevronLeftIcon from "./icons/ChevronLeftIcon";
 
 export type SettingsPage = "main" | "room" | "appearance";
 
@@ -115,15 +116,29 @@ export default observer(function SettingsDialog({
               type="button"
               className={styles.backButton}
               onClick={() => props.setPage("main")}
+              aria-label="Back to settings"
             >
-              Back to settings
+              <ChevronLeftIcon
+                aria-hidden="true"
+                className={styles.backIcon}
+              />
+              <span>Settings</span>
             </button>
           ) : null}
           <span>{modalTitle}</span>
+          <button
+            aria-label="Close settings"
+            className={styles.settingsCloseButton}
+            onClick={props.onClose}
+            type="button"
+          >
+            &times;
+          </button>
         </div>
       }
       rootClassName={styles.settingsModal}
       width={440}
+      zIndex={1000000}
       centered
       open={props.isSettingsOpen}
       onCancel={props.onClose}
@@ -132,7 +147,7 @@ export default observer(function SettingsDialog({
       styles={{
         body: {
           overflowY: "auto",
-          maxHeight: "calc(100dvh - 126px)",
+          maxHeight: "calc(100dvh - 160px)",
         },
       }}
     >
