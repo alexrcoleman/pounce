@@ -12,6 +12,7 @@ import {
   scheduleRoomDelete,
 } from "../server/Rooms";
 import {
+  dealRemainingRoomPlayers,
   dealRoomHands,
   recordRoundSnapshot,
   removeDisconnectedPlayers,
@@ -299,6 +300,22 @@ export default function createSocketIOServer() {
       }
 
       if (dealRoomHands(room)) {
+        markRoomUpdated(user.currentRoom);
+        broadcastUpdate(user.currentRoom);
+        broadcastHands(user.currentRoom);
+      }
+    });
+    socket.on("deal_remaining_players", () => {
+      if (user.currentRoom == null) {
+        return;
+      }
+
+      const room = getRoom(user.currentRoom);
+      if (!isHost(room.board, socket.id)) {
+        return;
+      }
+
+      if (dealRemainingRoomPlayers(room)) {
         markRoomUpdated(user.currentRoom);
         broadcastUpdate(user.currentRoom);
         broadcastHands(user.currentRoom);

@@ -45,6 +45,7 @@ export type ClientToServerEvents = {
   move: (args: ActionEnvelope<Move>, ack?: (args: ActionAck) => void) => void;
   rotate_decks: () => void;
   deal_hands: () => void;
+  deal_remaining_players: () => void;
   start_game: () => void;
   set_paused: (args: { paused: boolean }) => void;
   add_ai: () => void;

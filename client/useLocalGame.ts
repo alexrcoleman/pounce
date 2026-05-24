@@ -13,6 +13,7 @@ import {
 import { Move, executeMove } from "../shared/MoveHandler";
 import { createRoomState, RoomState } from "../shared/RoomState";
 import {
+  dealRemainingRoomPlayers,
   dealRoomHands,
   getRoomHands,
   recordRoundSnapshot,
@@ -169,6 +170,12 @@ export default function useLocalGame(name: string | null) {
           emitHands();
         } else if (event === "deal_hands") {
           if (dealRoomHands(room)) {
+            markRoomUpdated();
+            emitUpdate();
+            emitHands();
+          }
+        } else if (event === "deal_remaining_players") {
+          if (dealRemainingRoomPlayers(room)) {
             markRoomUpdated();
             emitUpdate();
             emitHands();

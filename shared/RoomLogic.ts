@@ -3,9 +3,11 @@ import {
   CursorState,
   BoardState,
   PlayerState,
+  dealPlayerHand,
   dealGameHands,
   isGameOver,
   removePlayer,
+  resetCenterPiles,
   resetBoard,
   rotateDecks,
   scoreBoard,
@@ -239,6 +241,9 @@ export function scheduleAIReactionBoard(room: RoomState): void {
 
 export function startRoomGame(room: RoomState, now = Date.now()): void {
   removeDisconnectedPlayers(room);
+  if (!room.board.isDealt) {
+    clearPlayersWaitingForDeal(room);
+  }
   room.aiCooldowns = room.board.players.map(() => now + 2000 + Math.random());
   startGame(room);
   startRoundAnalysis(room, now);
@@ -248,6 +253,7 @@ export function startRoomGame(room: RoomState, now = Date.now()): void {
 
 export function dealRoomHands(room: RoomState): boolean {
   removeDisconnectedPlayers(room);
+  clearPlayersWaitingForDeal(room);
   const didDeal = dealGameHands(room);
   if (didDeal) {
     room.lastRoundAnalysis = null;
@@ -256,6 +262,34 @@ export function dealRoomHands(room: RoomState): boolean {
     resetAIVisibilityMemory(room);
   }
   return didDeal;
+}
+
+export function dealRemainingRoomPlayers(room: RoomState): boolean {
+  const { board } = room;
+  if (board.isActive || !board.isDealt || board.pouncer != null) {
+    return false;
+  }
+
+  const playerIndices = getPlayersWaitingForDeal(room).filter((index) =>
+    canDealWaitingPlayer(board.players[index])
+  );
+  if (playerIndices.length === 0) {
+    return false;
+  }
+
+  resetCenterPiles(board);
+  playerIndices.forEach((playerIndex) => {
+    const player = board.players[playerIndex];
+    player.isSpectating = false;
+    player.isWaitingForDeal = false;
+    dealPlayerHand(board, playerIndex);
+  });
+
+  room.queuedHands = [];
+  room.hands = [];
+  room.aiBoard = deepClone(room.board);
+  resetAIVisibilityMemory(room);
+  return true;
 }
 
 export function setRoomPaused(
@@ -326,6 +360,7 @@ function removeRoomPlayers(room: RoomState, playerIndices: number[]): boolean {
 
 export function resetRoom(room: RoomState): void {
   resetBoard(room.board);
+  clearPlayersWaitingForDeal(room);
   room.board.players.forEach((p) => {
     p.scores = [];
     p.totalPoints = 0;
@@ -364,6 +399,7 @@ export function setRoomAILevel(room: RoomState, speed: number): void {
     room.board.players.forEach((p) => {
       if (p.socketId != null) {
         p.isSpectating = true;
+        p.isWaitingForDeal = false;
       }
     });
   } else {
@@ -376,6 +412,49 @@ export function setRoomAILevel(room: RoomState, speed: number): void {
     room.settings.aiSpeed = normalizedSpeed;
     room.settings.simulationMode = false;
   }
+}
+
+function getPlayersWaitingForDeal(room: RoomState): number[] {
+  return room.board.players
+    .map((player, index) => ({ player, index }))
+    .filter(
+      ({ player }) =>
+        !player.disconnected && shouldClearWaitingForDeal(room, player)
+    )
+    .map(({ index }) => index);
+}
+
+function clearPlayersWaitingForDeal(room: RoomState): boolean {
+  let didClear = false;
+  room.board.players.forEach((player) => {
+    if (!shouldClearWaitingForDeal(room, player)) {
+      return;
+    }
+
+    player.isSpectating = false;
+    player.isWaitingForDeal = false;
+    didClear = true;
+  });
+  return didClear;
+}
+
+function shouldClearWaitingForDeal(
+  room: RoomState,
+  player: PlayerState
+): boolean {
+  return (
+    player.isWaitingForDeal === true ||
+    (player.isSpectating === true && !room.settings.simulationMode)
+  );
+}
+
+function canDealWaitingPlayer(player: PlayerState): boolean {
+  return (
+    player.deck.length >= 17 &&
+    player.flippedDeck.length === 0 &&
+    player.pounceDeck.length === 0 &&
+    player.stacks.every((stack) => stack.length === 0)
+  );
 }
 
 export function updateRoomHand(

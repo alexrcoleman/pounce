@@ -1,4 +1,4 @@
-import type { BoardState, CardState } from "../shared/GameUtils";
+import type { BoardState, CardState, PlayerState } from "../shared/GameUtils";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
@@ -253,15 +253,23 @@ const PileSection = observer(function PileSection({
   const canManageRound = !board.isActive && isHost;
   const canDealHands = canManageRound && !board.isDealt && board.pouncer == null;
   const canStartGame = canManageRound && board.isDealt && board.pouncer == null;
+  const isSimulationMode = state.roomSettings.simulationMode ?? false;
+  const waitingDealInCount = getWaitingForDealCount(board, isSimulationMode);
+  const canDealRemainingPlayers = canStartGame && waitingDealInCount > 0;
+  const activePlayerIndex = state.getActivePlayerIndex();
+  const activePlayerWaitingForDeal =
+    activePlayerIndex >= 0 &&
+    isPlayerWaitingForDeal(board.players[activePlayerIndex], isSimulationMode);
   const waitingForHostMessage =
     !isHost && !board.isActive && board.pouncer == null
       ? board.isDealt
-        ? "Waiting for host to start"
+        ? activePlayerWaitingForDeal
+          ? "Waiting to be dealt in"
+          : "Waiting for host to start"
         : "Waiting for host to deal"
       : null;
   const isWaitingForHost = waitingForHostMessage != null;
-  const showStartPanel =
-    canDealHands || canStartGame || isWaitingForHost;
+  const showStartPanel = canDealHands || canStartGame || isWaitingForHost;
   const startPanelClassName = isWaitingForHost
     ? `${styles.startPanel} ${styles.startPanelWaiting}`
     : canStartGame
@@ -309,8 +317,20 @@ const PileSection = observer(function PileSection({
           {!isWaitingForHost &&
             (canStartGame ? (
               <div
-                className={`${styles.startActions} ${styles.startActionsSingle}`}
+                className={`${styles.startActions} ${
+                  canDealRemainingPlayers
+                    ? styles.startActionsStacked
+                    : styles.startActionsSingle
+                }`}
               >
+                {canDealRemainingPlayers ? (
+                  <Button
+                    className={styles.roomSettingsButton}
+                    onClick={() => socket?.emit("deal_remaining_players")}
+                  >
+                    Deal in remaining players
+                  </Button>
+                ) : null}
                 <Button
                   className={styles.dealButton}
                   onClick={() => socket?.emit("start_game")}
@@ -367,6 +387,41 @@ const PileSection = observer(function PileSection({
     </div>
   );
 });
+
+function getWaitingForDealCount(
+  board: BoardState,
+  isSimulationMode: boolean
+): number {
+  return board.players.filter(
+    (player) =>
+      !player.disconnected &&
+      isPlayerWaitingForDeal(player, isSimulationMode) &&
+      isPlayerUndealt(player)
+  ).length;
+}
+
+function isPlayerWaitingForDeal(
+  player: PlayerState | undefined,
+  isSimulationMode: boolean
+): boolean {
+  if (!player) {
+    return false;
+  }
+
+  return (
+    player.isWaitingForDeal === true ||
+    (player.isSpectating === true && !isSimulationMode)
+  );
+}
+
+function isPlayerUndealt(player: PlayerState): boolean {
+  return (
+    player.deck.length >= 17 &&
+    player.flippedDeck.length === 0 &&
+    player.pounceDeck.length === 0 &&
+    player.stacks.every((stack) => stack.length === 0)
+  );
+}
 
 function ScoresTableTabOverlay({ board }: { board: BoardState }) {
   const [showScores, setShowScores] = useState(false);

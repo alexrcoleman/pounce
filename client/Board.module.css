@@ -141,6 +141,10 @@
   grid-template-columns: minmax(0, 1fr);
 }
 
+.startActionsStacked {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .aiDifficultyControl {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));

@@ -35,6 +35,13 @@ export default observer(function PlayerArea({ player, playerIndex }: Props) {
     [pounceLeft, pounceTop - 20],
     playerArea
   );
+  const statusTitle = player.disconnected
+    ? "Disconnected"
+    : player.isWaitingForDeal
+    ? "Waiting for deal"
+    : player.isSpectating
+    ? "Spectating"
+    : undefined;
   return (
     <>
       <div
@@ -54,13 +61,7 @@ export default observer(function PlayerArea({ player, playerIndex }: Props) {
               ? styles.disconnected
               : player.isSpectating && styles.spectating
           )}
-          title={
-            player.disconnected
-              ? "Disconnected"
-              : player.isSpectating
-              ? "Spectating"
-              : undefined
-          }
+          title={statusTitle}
         />
         <span>
           {player.name}

@@ -19,6 +19,7 @@ export type CardState = {
 };
 export type PlayerState = {
   isSpectating?: boolean;
+  isWaitingForDeal?: boolean;
   disconnected?: boolean;
   disconnectedAt?: number;
   playerSessionId: string | null;
@@ -211,6 +212,7 @@ export function addPlayer(
 
   if (board.isActive || board.isDealt) {
     player.isSpectating = true;
+    player.isWaitingForDeal = true;
   } else {
     board.piles.push([], [], [], []);
     board.pileLocs = generateLocations(board.players.length * 4);
@@ -293,14 +295,31 @@ function dealHands(board: BoardState) {
     if (player.isSpectating) {
       return;
     }
-    for (let i = 0; i < 4; i++) {
-      for (let j = 0; j < 3; j++) {
-        player.pounceDeck.push(player.deck.pop() as CardState);
-      }
-      player.stacks[i].push(player.deck.pop() as CardState);
-    }
-    player.pounceDeck.push(player.deck.pop() as CardState);
+    dealPlayerHand(board, index);
   });
+}
+
+export function dealPlayerHand(board: BoardState, playerIndex: number): boolean {
+  const player = board.players[playerIndex];
+  if (!player || player.deck.length < 17) {
+    return false;
+  }
+
+  for (let i = 0; i < 4; i++) {
+    for (let j = 0; j < 3; j++) {
+      player.pounceDeck.push(player.deck.pop() as CardState);
+    }
+    player.stacks[i].push(player.deck.pop() as CardState);
+  }
+  player.pounceDeck.push(player.deck.pop() as CardState);
+  return true;
+}
+
+export function resetCenterPiles(boardState: BoardState): void {
+  boardState.piles = Array(boardState.players.length * 4)
+    .fill(0)
+    .map(() => []);
+  boardState.pileLocs = generateLocations(boardState.players.length * 4);
 }
 
 export function resetBoard(boardState: BoardState, decks?: CardState[][]) {
@@ -320,13 +339,9 @@ export function resetBoard(boardState: BoardState, decks?: CardState[][]) {
       player.currentPoints = 0;
     }
     player.stacks = [[], [], [], []];
-    // player.isSpectating = false; @nocommit
   });
   boardState.isActive = false;
-  boardState.piles = Array(boardState.players.length * 4)
-    .fill(0)
-    .map(() => []);
-  boardState.pileLocs = generateLocations(boardState.players.length * 4);
+  resetCenterPiles(boardState);
 }
 
 export function rotateDecks(board: BoardState) {
