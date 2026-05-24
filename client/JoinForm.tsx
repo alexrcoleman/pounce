@@ -6,6 +6,7 @@ import usePwaInstall from "./usePwaInstall";
 import { FAVICON_SRC } from "../shared/gameAssets";
 type Props = {
   placeholderName: string;
+  inviteRoom?: string | null;
   onSubmit: (room: string, name: string) => Promise<unknown> | void;
   onPlayOffline?: (name: string) => Promise<unknown> | void;
 };
@@ -20,10 +21,12 @@ function randomCode() {
   return code;
 }
 export default function JoinForm({
+  inviteRoom,
   placeholderName,
   onSubmit,
   onPlayOffline,
 }: Props) {
+  const inviteRoomCode = normalizeRoomCode(inviteRoom ?? "");
   const [currentRoom, setCurrentRoom] = useState("");
   const [currentName, setCurrentName] = useState("");
   const [namePlaceholder, setNamePlaceholder] = useState("Your name");
@@ -45,14 +48,15 @@ export default function JoinForm({
 
   useEffect(() => {
     if (router.isReady) {
-      setCurrentRoom(router.query.roomid?.toString().toUpperCase() ?? "");
+      const queryRoom = router.query.roomid?.toString() ?? "";
+      setCurrentRoom(inviteRoomCode || normalizeRoomCode(queryRoom));
       const storedName = localStorage.getItem("pounce::name") ?? "";
       setCurrentName(
         getRememberedName(placeholderName) || getRememberedName(storedName)
       );
       setNamePlaceholder("Your name");
     }
-  }, [placeholderName, router.isReady, router.query.roomid]);
+  }, [inviteRoomCode, placeholderName, router.isReady, router.query.roomid]);
 
   const saveName = () => {
     const name = currentName.trim();
@@ -114,6 +118,7 @@ export default function JoinForm({
   };
 
   const isNavigating = pendingAction != null;
+  const isInviteMode = inviteRoomCode.length > 0;
   const canCreateRoom = currentName.trim().length > 0;
   const canJoinRoom = canCreateRoom && currentRoom.trim().length > 0;
   const showMobileOfflinePrompt =
@@ -188,65 +193,89 @@ export default function JoinForm({
               </label>
             </section>
 
-            <section className={styles.playSection}>
-              <div className={styles.sectionHeader}>Start playing</div>
-              <div className={styles.choiceGrid}>
+            {isInviteMode ? (
+              <section className={styles.inviteSection}>
+                <div className={styles.inviteHeader}>
+                  <div className={styles.sectionHeader}>Room invite</div>
+                  <div className={styles.inviteCode}>
+                    <span>Room</span>
+                    <strong>{inviteRoomCode}</strong>
+                  </div>
+                </div>
                 <Button
-                  className={styles.primaryChoice}
-                  htmlType="button"
-                  type="primary"
-                  size="large"
-                  loading={pendingAction === "create"}
-                  disabled={!canCreateRoom || isNavigating}
-                  onClick={createRoom}
-                >
-                  Create room
-                </Button>
-                <Button
-                  className={styles.offlineChoice}
-                  htmlType="button"
-                  size="large"
-                  loading={pendingAction === "offline"}
-                  disabled={!canCreateRoom || isNavigating}
-                  onClick={playOffline}
-                >
-                  Play offline
-                </Button>
-              </div>
-            </section>
-
-            <section className={styles.joinSection}>
-              <div className={styles.sectionHeader}>Have a code?</div>
-              <div className={styles.joinRow}>
-                <label className={styles.fieldLabel} htmlFor="room-code">
-                  Room code
-                  <Input
-                    id="room-code"
-                    className={styles.textInput}
-                    size="large"
-                    name="room"
-                    placeholder="ABCD"
-                    onChange={(e) => {
-                      setCurrentRoom(e.target.value.toUpperCase());
-                    }}
-                    value={currentRoom}
-                    disabled={isNavigating}
-                    autoComplete="off"
-                  />
-                </label>
-                <Button
-                  className={styles.joinAction}
+                  className={styles.inviteAction}
                   htmlType="submit"
+                  type="primary"
                   size="large"
                   loading={pendingAction === "join"}
                   disabled={!canJoinRoom || isNavigating}
                 >
                   Join room
                 </Button>
-              </div>
-            </section>
+              </section>
+            ) : (
+              <>
+                <section className={styles.playSection}>
+                  <div className={styles.sectionHeader}>Start playing</div>
+                  <div className={styles.choiceGrid}>
+                    <Button
+                      className={styles.primaryChoice}
+                      htmlType="button"
+                      type="primary"
+                      size="large"
+                      loading={pendingAction === "create"}
+                      disabled={!canCreateRoom || isNavigating}
+                      onClick={createRoom}
+                    >
+                      Create room
+                    </Button>
+                    <Button
+                      className={styles.offlineChoice}
+                      htmlType="button"
+                      size="large"
+                      loading={pendingAction === "offline"}
+                      disabled={!canCreateRoom || isNavigating}
+                      onClick={playOffline}
+                    >
+                      Play offline
+                    </Button>
+                  </div>
+                </section>
 
-            {offlineSetupState ? (
+                <section className={styles.joinSection}>
+                  <div className={styles.sectionHeader}>Have a code?</div>
+                  <div className={styles.joinRow}>
+                    <label className={styles.fieldLabel} htmlFor="room-code">
+                      Room code
+                      <Input
+                        id="room-code"
+                        className={styles.textInput}
+                        size="large"
+                        name="room"
+                        placeholder="ABCD"
+                        onChange={(e) => {
+                          setCurrentRoom(normalizeRoomCode(e.target.value));
+                        }}
+                        value={currentRoom}
+                        disabled={isNavigating}
+                        autoComplete="off"
+                      />
+                    </label>
+                    <Button
+                      className={styles.joinAction}
+                      htmlType="submit"
+                      size="large"
+                      loading={pendingAction === "join"}
+                      disabled={!canJoinRoom || isNavigating}
+                    >
+                      Join room
+                    </Button>
+                  </div>
+                </section>
+              </>
+            )}
+
+            {!isInviteMode && offlineSetupState ? (
               <section className={styles.utilitySection}>
                 {offlineSetupState === "install" ? (
                   <p className={styles.offlinePrompt}>
@@ -381,4 +410,8 @@ function getRememberedName(name: string) {
   return trimmedName && trimmedName.toLowerCase() !== "player"
     ? trimmedName
     : "";
+}
+
+function normalizeRoomCode(room: string) {
+  return room.trim().toUpperCase();
 }

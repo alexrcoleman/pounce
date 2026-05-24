@@ -21,6 +21,7 @@ import HandPlatesLayer from "./HandPlatesLayer";
 import FieldStackDragTargets from "./FieldStackDragTargets";
 import ActivePlayerStackTargets from "./ActivePlayerStackTargets";
 import MobileDragPreviewLayer from "./MobileDragPreviewLayer";
+import RoomShare from "./RoomShare";
 import { useClientContext } from "./ClientContext";
 import { Button } from "antd";
 import {
@@ -344,6 +345,7 @@ const PileSection = observer(function PileSection({
                     </button>
                   </div>
                 ) : null}
+                {!isOfflineRoom ? <RoomShare roomId={roomCode} /> : null}
                 <div className={styles.startActions}>
                   <Button
                     className={styles.roomSettingsButton}

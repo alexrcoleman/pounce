@@ -372,6 +372,8 @@
 }
 
 .settingRow + .settingRow,
+.settingRow + .shareRow,
+.shareRow + .settingRow,
 .settingsSectionBody > .sliderBlock {
   border-top: 1px solid rgba(43, 35, 29, 0.1);
 }

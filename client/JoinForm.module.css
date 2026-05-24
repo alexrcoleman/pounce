@@ -75,6 +75,7 @@
 .playerSection,
 .playSection,
 .joinSection,
+.inviteSection,
 .utilitySection {
   display: flex;
   flex-direction: column;
@@ -88,6 +89,7 @@
 }
 
 .joinSection,
+.inviteSection,
 .utilitySection {
   border-top: 1px solid rgba(86, 59, 34, 0.16);
 }
@@ -140,7 +142,42 @@
   gap: 10px;
 }
 
+.inviteHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.inviteCode {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  color: #2e2419;
+  background: #fff9eb;
+  border: 1px solid rgba(86, 59, 34, 0.18);
+  border-radius: 6px;
+}
+
+.inviteCode > span {
+  color: #6a5b4d;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.inviteCode > strong {
+  overflow-wrap: anywhere;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+}
+
 .primaryChoice,
+.inviteAction,
 .offlineChoice,
 .joinAction,
 .utilityButton {
@@ -152,6 +189,7 @@
 }
 
 .primaryChoice,
+.inviteAction,
 .offlineChoice {
   height: 62px;
   font-size: 16px;
@@ -164,9 +202,17 @@
 }
 
 .primaryChoice:global(.ant-btn-primary):not(:disabled):hover,
-.primaryChoice:global(.ant-btn-primary):not(:disabled):focus {
+.primaryChoice:global(.ant-btn-primary):not(:disabled):focus,
+.inviteAction:global(.ant-btn-primary):not(:disabled):hover,
+.inviteAction:global(.ant-btn-primary):not(:disabled):focus {
   background: #0f7c38;
   border-color: #0f7c38;
+  color: white;
+}
+
+.inviteAction:global(.ant-btn-primary):not(:disabled) {
+  background: #0b6d2d;
+  border-color: #0b6d2d;
   color: white;
 }
 
@@ -288,6 +334,11 @@
   .choiceGrid {
     grid-template-columns: 1fr;
   }
+
+  .inviteHeader {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 
 @media (max-height: 680px) {
@@ -312,6 +363,7 @@
   .playerSection,
   .playSection,
   .joinSection,
+  .inviteSection,
   .utilitySection {
     gap: 10px;
     padding: 14px 16px;

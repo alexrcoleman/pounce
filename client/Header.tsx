@@ -4,6 +4,7 @@ import { observer } from "mobx-react-lite";
 import { Button, Flex, Modal, Slider, Switch, Tooltip } from "antd";
 import { useClientContext } from "./ClientContext";
 import ScoresTable from "./ScoresTable";
+import RoomShare from "./RoomShare";
 import isTouchDevice from "./isTouchDevice";
 import type { BoardState } from "../shared/GameUtils";
 
@@ -239,6 +240,8 @@ const SettingsDialog = observer(function SettingsDialog({
   const roomLabel = props.roomId ?? "Unknown";
   const isOfflineRoom = props.roomId?.toLowerCase() === "offline";
   const isConnected = state.socketId !== "";
+  const canShareRoom =
+    props.roomId != null && props.roomId.toLowerCase() !== "offline";
   const modalTitle =
     page === "main"
       ? "Settings"
@@ -332,6 +335,11 @@ const SettingsDialog = observer(function SettingsDialog({
         <div className={styles.settingsPage}>
           <SettingsSection title="Room">
             <SettingRow title="Room" value={roomLabel} />
+            {canShareRoom ? (
+              <div className={styles.shareRow}>
+                <RoomShare roomId={props.roomId!} variant="settings" />
+              </div>
+            ) : null}
             <SettingRow
               title="Ping"
               value={
