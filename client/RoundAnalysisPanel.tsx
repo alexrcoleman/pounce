@@ -26,8 +26,8 @@ const STAT_TOOLTIPS = {
     "The player's predicted rank for this deal, sorted by simulated score among analyzed players.",
   pointDifferential:
     "The sum of this player's score minus each other active player's score, compared with the simulated prediction. Higher is better.",
-  productiveSolitaireRate:
-    "Productive solitaire moves played divided by every detected solitaire opportunity for this player.",
+  solitaireRate:
+    "Solitaire moves played divided by every detected useful solitaire opportunity for this player.",
   pounceHelpersMissed:
     "Missed solitaire moves that would have helped move, expose, or connect the pounce card.",
 };
@@ -212,8 +212,8 @@ export default function RoundAnalysisPanel({
           value={selectedReport.summary.missedPounceHelpers}
         />
         <Stat
-          label="Productive solitaire rate"
-          tooltip={STAT_TOOLTIPS.productiveSolitaireRate}
+          label="Solitaire rate"
+          tooltip={STAT_TOOLTIPS.solitaireRate}
           value={
             <RateValue
               ratio={formatRatio(
