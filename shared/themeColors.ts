@@ -1,4 +1,4 @@
-export const FELT_GREEN_THEME_COLOR = "#16593c";
+export const FELT_GREEN_THEME_COLOR = "#0a4624";
 export const TABLE_TAN_THEME_COLOR = "#cd9b60";
 
 const FELT_GREEN_PATHNAMES = new Set(["/", "/join", "/join/[roomid]"]);
