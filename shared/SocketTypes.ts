@@ -32,7 +32,9 @@ export type RoomPingAck = {
 
 export type ServerNotice = {
   type: "server_draining";
+  stage: "scheduled" | "restarting";
   message: string;
+  description: string;
   retryAfterMs: number;
   drainingUntil: number;
 };
@@ -42,7 +44,9 @@ export type JoinRoomAck =
   | {
       ok: false;
       code: "server_draining";
+      stage: "scheduled" | "restarting";
       message: string;
+      description: string;
       retryAfterMs: number;
       drainingUntil: number;
     };

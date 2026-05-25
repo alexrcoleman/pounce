@@ -64,11 +64,11 @@ export default function useGameSocket(
     discardPendingMoveActions(actionIds);
   };
   const showServerNotice = (notice: ServerNotice) => {
-    toast.warning(notice.message, {
-      description: `New online games resume in about ${formatNoticeDuration(
-        notice.retryAfterMs
-      )}.`,
-      duration: 10000,
+    const showToast =
+      notice.stage === "restarting" ? toast.error : toast.warning;
+    showToast(notice.message, {
+      description: notice.description,
+      duration: notice.stage === "restarting" ? Infinity : 15000,
       id: SERVER_NOTICE_TOAST_ID,
     });
   };
@@ -269,7 +269,9 @@ export default function useGameSocket(
         setError(ack.message);
         showServerNotice({
           type: "server_draining",
+          stage: ack.stage,
           message: ack.message,
+          description: ack.description,
           retryAfterMs: ack.retryAfterMs,
           drainingUntil: ack.drainingUntil,
         });
@@ -387,17 +389,4 @@ function getOrCreatePlayerSessionId() {
     `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   sessionStorage.setItem(PLAYER_SESSION_STORAGE_KEY, nextId);
   return nextId;
-}
-
-function formatNoticeDuration(durationMs: number) {
-  const totalSeconds = Math.max(1, Math.ceil(durationMs / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  if (minutes > 0 && seconds > 0) {
-    return `${minutes}m ${seconds}s`;
-  }
-  if (minutes > 0) {
-    return `${minutes}m`;
-  }
-  return `${seconds}s`;
 }

@@ -59,6 +59,7 @@ const DRAIN_SECRET_ENV_VAR = "GAME_SERVER_DRAIN_SECRET";
 const DRAIN_WINDOW_ENV_VAR = "GAME_SERVER_DRAIN_WINDOW_MS";
 
 let drainingUntil = 0;
+let drainRestartNoticeTimer: ReturnType<typeof setTimeout> | undefined;
 
 export default function createSocketIOServer() {
   let io: Server<ClientToServerEvents, ServerToClientEvents>;
@@ -161,22 +162,13 @@ export default function createSocketIOServer() {
           ? args.playerSessionId
           : socket.id;
       const roomId = "pounce:" + args.roomId;
-      if (!getRoom(roomId) && isDraining()) {
-        const notice = createDrainNotice();
-        socket.emit("server_notice", notice);
-        ack?.({
-          ok: false,
-          code: "server_draining",
-          message: notice.message,
-          retryAfterMs: notice.retryAfterMs,
-          drainingUntil: notice.drainingUntil,
-        });
-        return;
-      }
       if (user.currentRoom != null) {
         await socket.leave(user.currentRoom);
       }
       await socket.join(roomId);
+      if (isDraining()) {
+        socket.emit("server_notice", createDrainScheduledNotice());
+      }
       ack?.({ ok: true });
     });
     socket.on("move", (args, ack) => {
@@ -495,7 +487,9 @@ function handleDrainRequest(
   respondJson(res, 200, {
     ok: true,
     type: notice.type,
+    stage: notice.stage,
     message: notice.message,
+    description: notice.description,
     retryAfterMs: notice.retryAfterMs,
     drainingUntil: notice.drainingUntil,
   });
@@ -506,8 +500,9 @@ function startDrain(
 ): ServerNotice {
   const now = Date.now();
   drainingUntil = Math.max(drainingUntil, now + getDrainWindowMs());
-  const notice = createDrainNotice(now);
+  const notice = createDrainScheduledNotice(now);
   io.emit("server_notice", notice);
+  scheduleDrainRestartNotice(io);
   console.log(
     "Game server drain started until " +
       new Date(notice.drainingUntil).toISOString()
@@ -519,17 +514,45 @@ function isDraining(now = Date.now()) {
   return drainingUntil > now;
 }
 
-function createDrainNotice(now = Date.now()): ServerNotice {
+function createDrainScheduledNotice(now = Date.now()): ServerNotice {
   const retryAfterMs = Math.max(0, drainingUntil - now);
   return {
     type: "server_draining",
-    message:
-      "Game server update starting soon. New online games are paused for about " +
-      formatDrainDuration(retryAfterMs) +
-      ".",
+    stage: "scheduled",
+    message: `Server restart in ${formatDrainCountdown(
+      retryAfterMs
+    )} for update.`,
+    description:
+      "Online games can continue for now, but they will disconnect and cannot be rejoined after the restart.",
     retryAfterMs,
     drainingUntil,
   };
+}
+
+function createDrainRestartingNotice(): ServerNotice {
+  return {
+    type: "server_draining",
+    stage: "restarting",
+    message: "Server restarting for update now.",
+    description:
+      "Online games may disconnect now and cannot be rejoined after this restart.",
+    retryAfterMs: 0,
+    drainingUntil,
+  };
+}
+
+function scheduleDrainRestartNotice(
+  io: Server<ClientToServerEvents, ServerToClientEvents>
+) {
+  if (drainRestartNoticeTimer) {
+    clearTimeout(drainRestartNoticeTimer);
+  }
+
+  const delay = Math.max(0, drainingUntil - Date.now());
+  drainRestartNoticeTimer = setTimeout(() => {
+    drainRestartNoticeTimer = undefined;
+    io.emit("server_notice", createDrainRestartingNotice());
+  }, delay);
 }
 
 function getDrainWindowMs() {
@@ -539,24 +562,11 @@ function getDrainWindowMs() {
     : DEFAULT_DRAIN_WINDOW_MS;
 }
 
-function formatDrainDuration(durationMs: number) {
+function formatDrainCountdown(durationMs: number) {
   const totalSeconds = Math.max(1, Math.ceil(durationMs / 1000));
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
-  if (minutes > 0 && seconds > 0) {
-    return `${minutes} ${pluralize("minute", minutes)} ${seconds} ${pluralize(
-      "second",
-      seconds
-    )}`;
-  }
-  if (minutes > 0) {
-    return `${minutes} ${pluralize("minute", minutes)}`;
-  }
-  return `${seconds} ${pluralize("second", seconds)}`;
-}
-
-function pluralize(word: string, count: number) {
-  return count === 1 ? word : word + "s";
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 function getDrainRequestSecret(req: IncomingMessage): string | null {
