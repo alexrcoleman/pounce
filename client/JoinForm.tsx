@@ -243,7 +243,9 @@ export default function JoinForm({
                 </section>
 
                 <section className={styles.joinSection}>
-                  <div className={styles.sectionHeader}>Have a code?</div>
+                  <div className={styles.sectionHeader}>
+                    Or join an existing room
+                  </div>
                   <div className={styles.joinRow}>
                     <label className={styles.fieldLabel} htmlFor="room-code">
                       Room code
