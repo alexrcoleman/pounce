@@ -75,11 +75,6 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       hasUpdate = true;
       const hand = (room.hands[index] = room.hands[index] ?? {});
       rememberAIActiveCenterPile(room, index, now);
-      if (pauseObsoleteAICenterDrag(room, index)) {
-        hasHandUpdate = true;
-        aiCooldowns[index] = now + getAIRetargetDelay(room);
-        return false;
-      }
       const visibleBoard = getVisibleBoard(room, index, now);
       const move = getBasicAIMove(visibleBoard, index, hand);
 
@@ -253,32 +248,6 @@ function rememberAIActiveCenterPile(
   }
 
   rememberAICenterPileTop(room, playerIndex, pileIndex, now);
-}
-
-function pauseObsoleteAICenterDrag(
-  room: RoomState,
-  playerIndex: number
-): boolean {
-  const hand = room.hands[playerIndex];
-  if (!hand?.item || !hand.location || !isCardCursorLocation(hand.location)) {
-    return false;
-  }
-
-  const pileIndex = getCenterPileIndexContainingCard(room.board, hand.location);
-  if (pileIndex < 0) {
-    return false;
-  }
-
-  const targetTopCard = peek(room.board.piles[pileIndex]);
-  if (
-    !targetTopCard ||
-    targetTopCard.suit !== hand.item.suit ||
-    targetTopCard.value < hand.item.value
-  ) {
-    return false;
-  }
-
-  return true;
 }
 
 function pauseObsoleteAICenterMove(
