@@ -138,7 +138,6 @@ export default observer(function SettingsDialog({
       }
       rootClassName={styles.settingsModal}
       width={440}
-      zIndex={1000000}
       centered
       open={props.isSettingsOpen}
       onCancel={props.onClose}
