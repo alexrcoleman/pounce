@@ -8,6 +8,8 @@ import styles from "./VictoryOverlay.module.css";
 import RoundAnalysisPanel from "./RoundAnalysisPanel";
 import { useEffect, useState } from "react";
 
+const CONFETTI_DURATION_MS = 10_000;
+
 export default observer(function VictoryOverlay() {
   const { state, socket } = useClientContext();
   const board = state.board!;
@@ -16,9 +18,22 @@ export default observer(function VictoryOverlay() {
   const isAnalysisLoading = pouncer != null && !state.roundAnalysis;
   const activePlayerIndex = state.getActivePlayerIndex();
   const [isAnalysisOpen, setAnalysisOpen] = useState(false);
+  const [isConfettiActive, setConfettiActive] = useState(false);
 
   useEffect(() => {
     setAnalysisOpen(false);
+
+    if (board.pouncer == null) {
+      setConfettiActive(false);
+      return;
+    }
+
+    setConfettiActive(true);
+    const timeoutId = window.setTimeout(() => {
+      setConfettiActive(false);
+    }, CONFETTI_DURATION_MS);
+
+    return () => window.clearTimeout(timeoutId);
   }, [board.pouncer]);
 
   return pouncer != null ? (
@@ -95,7 +110,7 @@ export default observer(function VictoryOverlay() {
             ))}
         </Flex>
       </div>
-      <Confetti />
+      {isConfettiActive && <Confetti />}
     </div>
   ) : null;
 });
