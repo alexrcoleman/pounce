@@ -220,7 +220,11 @@
   background: #ffffff;
 }
 
-@media (max-width: 720px), (max-height: 700px) {
+.settingsModalTopAligned :global(.ant-modal-wrap) {
+  align-items: flex-start;
+}
+
+@media (max-height: 430px) {
   .settingsModal :global(.ant-modal-wrap) {
     align-items: flex-start;
   }

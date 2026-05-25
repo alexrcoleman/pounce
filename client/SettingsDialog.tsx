@@ -106,6 +106,10 @@ export default observer(function SettingsDialog({
       setFairHandHelpOpen(false);
     }
   }, [props.isSettingsOpen]);
+  const rootClassName =
+    page === "room"
+      ? `${styles.settingsModal} ${styles.settingsModalTopAligned}`
+      : styles.settingsModal;
 
   return (
     <Modal
@@ -136,7 +140,7 @@ export default observer(function SettingsDialog({
           </button>
         </div>
       }
-      rootClassName={styles.settingsModal}
+      rootClassName={rootClassName}
       width={440}
       zIndex={1000000}
       open={props.isSettingsOpen}
