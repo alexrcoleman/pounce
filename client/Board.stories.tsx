@@ -189,9 +189,29 @@ function createStoryRoundAnalysis(
 ): RoundAnalysis {
   const roundEndedAt = Date.now();
   const durationMs = 74_000;
+  const scores = board.players.map(
+    (player) => player.scores[player.scores.length - 1] ?? 0
+  );
+  const predictedScores = scores.map(
+    (score, playerIndex) => score + (playerIndex === 0 ? -2.6 : 1.2)
+  );
+  const scoreTotal = scores.reduce((sum, score) => sum + score, 0);
+  const predictedScoreTotal = predictedScores.reduce(
+    (sum, score) => sum + score,
+    0
+  );
+  const predictedRanks = predictedScores.map((score, playerIndex) => {
+    return (
+      predictedScores.filter(
+        (otherScore, otherPlayerIndex) =>
+          otherScore > score ||
+          (otherScore === score && otherPlayerIndex < playerIndex)
+      ).length + 1
+    );
+  });
 
   return {
-    version: 3,
+    version: 4,
     roundStartedAt: roundEndedAt - durationMs,
     roundEndedAt,
     durationMs,
@@ -203,17 +223,38 @@ function createStoryRoundAnalysis(
       const solitairePlaysMade = Math.max(3, 7 - playerIndex);
       const contestedCenterOpportunities = 4 + playerIndex;
       const contestedCenterWins = Math.max(1, 3 - playerIndex);
+      const score = scores[playerIndex];
+      const predictedScore = predictedScores[playerIndex];
 
       return {
         playerIndex,
         playerName: player.name,
         playerColor: player.color,
-        score: player.scores[player.scores.length - 1] ?? 0,
+        score,
+        pointDifferential: getStoryPointDifferential(
+          score,
+          scoreTotal,
+          board.players.length
+        ),
         pounceCardsLeft: player.pounceDeck.length,
         pounceDeck: player.pounceDeck.map((card) => ({
           card,
           played: false,
         })),
+        dealSimulation: {
+          playerIndex,
+          predictedScore,
+          predictedScoreConfidenceInterval95: 2.4 + playerIndex * 0.3,
+          predictedPointDifferential: getStoryPointDifferential(
+            predictedScore,
+            predictedScoreTotal,
+            board.players.length
+          ),
+          predictedRank: predictedRanks[playerIndex],
+          simulationCount: 16,
+          pounceOutRate: playerIndex === 0 ? 0.5 : 0.2,
+          averagePounceCardsLeft: player.pounceDeck.length + playerIndex * 0.5,
+        },
         summary: {
           missedCenterPlays: playerIndex === 0 ? 1 : 3 + playerIndex,
           missedPounceHelpers: playerIndex === 0 ? 0 : 1,
@@ -242,6 +283,17 @@ function createStoryRoundAnalysis(
       };
     }),
   };
+}
+
+function getStoryPointDifferential(
+  score: number,
+  totalScore: number,
+  playerCount: number
+): number {
+  if (playerCount <= 1) {
+    return 0;
+  }
+  return score * playerCount - totalScore;
 }
 
 function tuneActivePlayerFullPile(player: {
