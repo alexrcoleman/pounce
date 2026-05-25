@@ -36,72 +36,85 @@ export default observer(function VictoryOverlay() {
     return () => window.clearTimeout(timeoutId);
   }, [board.pouncer]);
 
+  useEffect(() => {
+    if (!isAnalysisOpen) {
+      return;
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setAnalysisOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [isAnalysisOpen]);
+
   return pouncer != null ? (
     <div className={styles.overlay}>
-      <div
-        className={
-          isAnalysisOpen
-            ? `${styles.dialog} ${styles.analysisDialog}`
-            : styles.dialog
-        }
-      >
-        {isAnalysisOpen ? (
-          <>
-            <div className={styles.title}>Game Analysis</div>
+      <div className={styles.dialog}>
+        <div className={styles.title}>
+          <span>
+            <i>Pounce!</i> by <b>{pouncer.name}</b>
+          </span>
+        </div>
+        <ScoresTable board={board} />
+        <Flex justify="end" align="center" className={styles.actions}>
+          <Button
+            aria-expanded={isAnalysisOpen}
+            aria-haspopup="dialog"
+            disabled={isAnalysisLoading}
+            loading={isAnalysisLoading}
+            onClick={() => setAnalysisOpen(true)}
+          >
+            {isAnalysisLoading ? "Analyzing" : "Game Analysis"}
+          </Button>
+          <Link legacyBehavior href="/" passHref>
+            <Button>Leave Room</Button>
+          </Link>
+          {isHost ? (
+            <Button type="primary" onClick={() => socket?.emit("deal_hands")}>
+              Deal hands
+            </Button>
+          ) : (
+            "Waiting for host to deal..."
+          )}
+        </Flex>
+      </div>
+      {isAnalysisOpen ? (
+        <div
+          className={styles.analysisOverlay}
+          onClick={() => setAnalysisOpen(false)}
+        >
+          <div
+            aria-labelledby="round-analysis-title"
+            aria-modal="true"
+            className={styles.analysisDialog}
+            onClick={(event) => event.stopPropagation()}
+            role="dialog"
+          >
+            <div className={styles.analysisTitle} id="round-analysis-title">
+              Game Analysis
+            </div>
             <div className={styles.analysisBody}>
               <RoundAnalysisPanel
                 activePlayerIndex={activePlayerIndex}
                 analysis={state.roundAnalysis}
               />
             </div>
-          </>
-        ) : (
-          <>
-            <div className={styles.title}>
-              <span>
-                <i>Pounce!</i> by <b>{pouncer.name}</b>
-              </span>
-            </div>
-            <ScoresTable board={board} />
-          </>
-        )}
-        <Flex
-          justify="end"
-          align="center"
-          className={
-            isAnalysisOpen
-              ? `${styles.actions} ${styles.analysisActions}`
-              : styles.actions
-          }
-        >
-          {isAnalysisOpen ? (
-            <Button onClick={() => setAnalysisOpen(false)}>
-              Back to Scoreboard
-            </Button>
-          ) : (
-            <Button
-              disabled={isAnalysisLoading}
-              loading={isAnalysisLoading}
-              onClick={() => setAnalysisOpen(true)}
+            <Flex
+              justify="end"
+              align="center"
+              className={`${styles.actions} ${styles.analysisActions}`}
             >
-              {isAnalysisLoading ? "Analyzing" : "Game Analysis"}
-            </Button>
-          )}
-          {!isAnalysisOpen && (
-            <Link legacyBehavior href="/" passHref>
-              <Button>Leave Room</Button>
-            </Link>
-          )}
-          {!isAnalysisOpen &&
-            (isHost ? (
-              <Button type="primary" onClick={() => socket?.emit("deal_hands")}>
-                Deal hands
+              <Button onClick={() => setAnalysisOpen(false)}>
+                Back to Scoreboard
               </Button>
-            ) : (
-              "Waiting for host to deal..."
-            ))}
-        </Flex>
-      </div>
+            </Flex>
+          </div>
+        </div>
+      ) : null}
       {isConfettiActive && <Confetti />}
     </div>
   ) : null;
