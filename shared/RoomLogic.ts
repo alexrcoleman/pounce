@@ -35,7 +35,7 @@ export type RoomTickResult = {
 export const DISCONNECTED_PLAYER_TIMEOUT_MS = 5 * 60 * 1000;
 const AI_PILE_KNOWLEDGE_MIN_DURATION_MS = 3000;
 const AI_PILE_KNOWLEDGE_REACTION_MULTIPLIER = 2;
-const AI_OBSOLETE_DRAG_ABORT_DELAY_MS = 180;
+const AI_OBSOLETE_TARGET_RECONSIDER_DELAY_MS = 180;
 
 export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
   const { board } = room;
@@ -71,9 +71,9 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       hasUpdate = true;
       const hand = (room.hands[index] = room.hands[index] ?? {});
       rememberAIActiveCenterPile(room, index, now);
-      if (cancelObsoleteAICenterDrag(room, index)) {
+      if (pauseObsoleteAICenterDrag(room, index)) {
         hasHandUpdate = true;
-        aiCooldowns[index] = now + getAIDragAbortDelay(room);
+        aiCooldowns[index] = now + getAIRetargetDelay(room);
         return false;
       }
       const visibleBoard = getVisibleBoard(room, index, now);
@@ -82,9 +82,9 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       if (move) {
         rememberAIMoveFocus(room, index, move, now);
       }
-      if (move && cancelObsoleteAICenterMove(room, index, move)) {
+      if (move && pauseObsoleteAICenterMove(room, index, move)) {
         hasHandUpdate = true;
-        aiCooldowns[index] = now + getAIDragAbortDelay(room);
+        aiCooldowns[index] = now + getAIRetargetDelay(room);
         return false;
       }
       const moveResult = move ? executeMove(board, index, move, hand) : null;
@@ -123,7 +123,12 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       } else if (moveResult?.clearCursor) {
         hasHandUpdate = true;
         if (move?.type === "c2c") {
-          resetRoomHandAfterCenterPlay(room, index, move);
+          resetRoomHandAfterCenterPlay(
+            room,
+            index,
+            move,
+            moveResult.clearCursorLocation
+          );
         } else {
           room.hands[index].item = undefined;
         }
@@ -234,7 +239,7 @@ function rememberAIActiveCenterPile(
   rememberAICenterPileTop(room, playerIndex, pileIndex, now);
 }
 
-function cancelObsoleteAICenterDrag(
+function pauseObsoleteAICenterDrag(
   room: RoomState,
   playerIndex: number
 ): boolean {
@@ -257,11 +262,10 @@ function cancelObsoleteAICenterDrag(
     return false;
   }
 
-  hand.item = null;
   return true;
 }
 
-function cancelObsoleteAICenterMove(
+function pauseObsoleteAICenterMove(
   room: RoomState,
   playerIndex: number,
   move: Move
@@ -282,9 +286,6 @@ function cancelObsoleteAICenterMove(
     return false;
   }
 
-  if (hand?.item) {
-    hand.item = null;
-  }
   return true;
 }
 
@@ -379,8 +380,8 @@ function getAIPileKnowledgeDuration(room: RoomState): number {
   );
 }
 
-function getAIDragAbortDelay(room: RoomState): number {
-  return AI_OBSOLETE_DRAG_ABORT_DELAY_MS / room.timescale;
+function getAIRetargetDelay(room: RoomState): number {
+  return AI_OBSOLETE_TARGET_RECONSIDER_DELAY_MS / room.timescale;
 }
 
 function getAIPileKnowledge(
@@ -693,14 +694,16 @@ export function updateRoomHand(
 export function resetRoomHandAfterCenterPlay(
   room: RoomState,
   playerIndex: number,
-  move: Move
+  move: Move,
+  location?: CardState | null
 ): boolean {
   if (playerIndex < 0 || move.type !== "c2c") {
     return false;
   }
 
   const hand = (room.hands[playerIndex] = room.hands[playerIndex] ?? {});
-  hand.location = getPlayerHandCursorLocation(room.board, playerIndex, move);
+  hand.location =
+    location ?? getPlayerHandCursorLocation(room.board, playerIndex, move);
   hand.item = null;
   return true;
 }

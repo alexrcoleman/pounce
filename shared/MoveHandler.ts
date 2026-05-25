@@ -38,6 +38,7 @@ type MoveResult = {
   cursorMove?: CardState;
   cursorMoveItem?: CardState;
   clearCursor?: boolean;
+  clearCursorLocation?: CardState | null;
   boardChanged?: boolean;
 };
 type AICursorData = CursorState | undefined;
@@ -224,6 +225,11 @@ function cardToCenter(
     } else {
       return { cursorMove: topCard };
     }
+  } else if (aiCursor) {
+    const pileCard = peek(pile);
+    if (pileCard && !cardEquals(aiCursor.location, pileCard)) {
+      return { cursorMove: pileCard, cursorMoveItem: topCard };
+    }
   }
   if (!pile || !canPlayOnCenterPile(pile, topCard)) {
     throw new Error("Cannot play given card on pile");
@@ -232,9 +238,13 @@ function cardToCenter(
     throw new Error("No pile to play on");
   }
 
+  const wasEmptyPile = pile.length === 0;
   sourceStack.pop();
   pile.push(topCard);
-  return { clearCursor: true };
+  return {
+    clearCursor: true,
+    clearCursorLocation: wasEmptyPile ? topCard : null,
+  };
 }
 
 function cardToSolitaire(
