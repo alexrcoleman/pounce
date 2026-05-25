@@ -9,6 +9,7 @@ import {
   FIELD_STACK_CARD_GAP,
 } from "../shared/CardLocations";
 import { CARD_BASE_SCALE } from "./cardLayout";
+import styles from "./Board.module.css";
 
 type Props = {
   card: CardState | null;
@@ -67,12 +68,12 @@ export default observer(function FieldStackDragTarget({
   const targetHeight = cardHeight + stackGap + 2 * buffer;
   return (
     <div
+      className={styles.centerDragTarget}
+      data-can-drop={canDrop ? "true" : "false"}
+      data-is-over={isOver && canDrop ? "true" : "false"}
       style={{
         height: targetHeight,
         width: targetWidth,
-        backgroundColor: isOver && canDrop ? "rgba(255,255,0,.5)" : "",
-        outline: canDrop || stackHeight === 0 ? "1px solid yellow" : "",
-        borderRadius: 4,
         position: "absolute",
         transformOrigin: `${buffer + cardWidth / 2}px ${
           buffer + stackGap + cardHeight / 2

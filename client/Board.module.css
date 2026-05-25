@@ -70,6 +70,28 @@
     inset 0 0 18px rgba(0, 0, 0, 0.3);
 }
 
+.centerDragTarget {
+  border-radius: 4px;
+  background-color: transparent;
+  outline: 1px solid transparent;
+  transition:
+    background-color 0.1s ease-in-out,
+    outline-color 0.1s ease-in-out;
+}
+
+.centerDragTarget[data-is-over="true"] {
+  background-color: rgba(255, 255, 0, 0.5);
+}
+
+.rootInside:has(
+    [data-center-drag-area="true"]:hover,
+    .centerDragTarget:hover,
+    .centerDragTarget[data-is-over="true"]
+  )
+  .centerDragTarget[data-can-drop="true"] {
+  outline-color: yellow;
+}
+
 .startPanel {
   position: relative;
   z-index: 1;

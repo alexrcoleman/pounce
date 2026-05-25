@@ -307,6 +307,7 @@ const PileSection = observer(function PileSection({
   return (
     <div
       className={styles.pileSection}
+      data-center-drag-area="true"
       style={{
         width: FIELD_SIZE,
         height: FIELD_SIZE,

@@ -10,6 +10,7 @@ import type { XYCoord } from "react-dnd";
 import { useDrop } from "react-dnd";
 import { FIELD_SIZE } from "./BoardLayout";
 import { FIELD_PILE_AREA_SIZE } from "../shared/CardLocations";
+import styles from "./Board.module.css";
 
 type Props = {
   onDrop: (item: CardDnDItem, position: [number, number]) => void;
@@ -65,12 +66,12 @@ export default observer(function FieldDragTarget({
   }
   return (
     <div
+      className={styles.centerDragTarget}
+      data-can-drop={canDrop ? "true" : "false"}
+      data-is-over={isOver && canDrop ? "true" : "false"}
       style={{
         height: FIELD_SIZE,
         width: FIELD_SIZE,
-        backgroundColor: isOver && canDrop ? "rgba(255,255,0,.5)" : "",
-        outline: canDrop ? "1px solid yellow" : "",
-        borderRadius: 4,
       }}
       ref={(item) => {
         drop(item);
