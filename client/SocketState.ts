@@ -86,21 +86,7 @@ export default class SocketState {
     this.recomputeBoard();
   }
   getActivePlayerIndex() {
-    if (!this.board) {
-      return -1;
-    }
-    const socketPlayerIndex = this.board.players.findIndex(
-      (p) => p.socketId === this.socketId
-    );
-    if (socketPlayerIndex >= 0) {
-      return socketPlayerIndex;
-    }
-    if (this.playerSessionId == null) {
-      return -1;
-    }
-    return this.board.players.findIndex(
-      (p) => p.playerSessionId === this.playerSessionId
-    );
+    return this.getActivePlayerIndexForBoard(this.board);
   }
   getHostPlayerIndex() {
     if (!this.board) {
@@ -170,9 +156,7 @@ export default class SocketState {
       return;
     }
     const nextBoard = deepClone(this.serverBoard);
-    const playerIndex = nextBoard.players.findIndex(
-      (p) => p.socketId === this.socketId
-    );
+    const playerIndex = this.getActivePlayerIndexForBoard(nextBoard);
     if (playerIndex >= 0) {
       this.pendingMoves.forEach((action) => {
         executeMove(nextBoard, playerIndex, action.move);
@@ -180,6 +164,23 @@ export default class SocketState {
     }
     const currentBoard = this.board === this.serverBoard ? null : this.board;
     this.board = applyDeepUpdate(currentBoard, nextBoard);
+  }
+  private getActivePlayerIndexForBoard(board: BoardState | null) {
+    if (!board) {
+      return -1;
+    }
+    const socketPlayerIndex = board.players.findIndex(
+      (p) => p.socketId === this.socketId
+    );
+    if (socketPlayerIndex >= 0) {
+      return socketPlayerIndex;
+    }
+    if (this.playerSessionId == null) {
+      return -1;
+    }
+    return board.players.findIndex(
+      (p) => p.playerSessionId === this.playerSessionId
+    );
   }
 }
 
