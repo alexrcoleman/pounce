@@ -166,6 +166,7 @@ export default observer(function Board({
               canInteract={canInteractWithCards}
               executeMove={executeMove}
             />
+            <RoundStartOverlay isRoundActive={board.isActive} />
             {board.players.map((p, i) => (
               <PlayerArea player={p} playerIndex={i} key={p.socketId ?? i} />
             ))}
@@ -179,6 +180,73 @@ export default observer(function Board({
     </DndProvider>
   );
 });
+
+const ROUND_START_NOTICE_DURATION_MS = 4_000;
+
+function RoundStartOverlay({
+  isRoundActive,
+}: {
+  isRoundActive: boolean;
+}): JSX.Element | null {
+  const layout = useBoardLayout();
+  const wasRoundActiveRef = useRef(isRoundActive);
+  const [noticeKey, setNoticeKey] = useState(0);
+  const [isNoticeVisible, setNoticeVisible] = useState(false);
+  const fieldArea = { type: "field" } as const;
+  const [left, top] = layout.mapPoint(
+    [FIELD_LEFT + FIELD_SIZE / 2, FIELD_TOP + FIELD_SIZE / 2],
+    fieldArea
+  );
+  const scale = layout.getScale(fieldArea);
+
+  useEffect(() => {
+    const wasRoundActive = wasRoundActiveRef.current;
+    wasRoundActiveRef.current = isRoundActive;
+
+    if (!isRoundActive) {
+      setNoticeVisible(false);
+      return;
+    }
+
+    if (!wasRoundActive) {
+      setNoticeKey((current) => current + 1);
+      setNoticeVisible(true);
+    }
+  }, [isRoundActive]);
+
+  useEffect(() => {
+    if (!isNoticeVisible) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setNoticeVisible(false);
+    }, ROUND_START_NOTICE_DURATION_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isNoticeVisible, noticeKey]);
+
+  if (!isNoticeVisible) {
+    return null;
+  }
+
+  return (
+    <div
+      aria-hidden="true"
+      className={styles.roundStartOverlay}
+      key={noticeKey}
+      style={
+        {
+          "--round-start-scale": scale,
+          left,
+          top,
+        } as CSSProperties
+      }
+    >
+      <span className={styles.roundStartText}>Go!</span>
+    </div>
+  );
+}
 
 const PLAYER_ZOOM_HIT_LEFT = -24;
 const PLAYER_ZOOM_HIT_TOP = 0;

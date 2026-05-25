@@ -283,6 +283,42 @@
   backdrop-filter: blur(1px);
 }
 
+.roundStartOverlay {
+  position: absolute;
+  z-index: 40000;
+  pointer-events: none;
+  user-select: none;
+  transform: translate(-50%, -50%);
+  animation: roundStartOverlayFade 4s linear forwards;
+}
+
+.roundStartText {
+  display: block;
+  color: #ffffff;
+  font-size: 110px;
+  font-weight: 900;
+  line-height: 0.9;
+  letter-spacing: 0;
+  text-transform: uppercase;
+  text-shadow:
+    0 3px 0 rgba(57, 31, 9, 0.78),
+    0 8px 22px rgba(0, 0, 0, 0.34),
+    0 0 28px rgba(255, 236, 141, 0.58);
+  transform: scale(var(--round-start-scale));
+  transform-origin: center;
+}
+
+@keyframes roundStartOverlayFade {
+  0%,
+  75% {
+    opacity: 1;
+  }
+
+  100% {
+    opacity: 0;
+  }
+}
+
 .playerZoomTarget {
   position: absolute;
   left: 0;
