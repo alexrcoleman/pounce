@@ -94,19 +94,11 @@ export default observer(function VictoryOverlay() {
           )}
           {!isAnalysisOpen &&
             (isHost ? (
-              <>
-                <Button onClick={() => socket?.emit("deal_hands")}>
-                  Deal Hands
-                </Button>
-                <Button
-                  type="primary"
-                  onClick={() => socket?.emit("start_game")}
-                >
-                  Start Next Round
-                </Button>
-              </>
+              <Button type="primary" onClick={() => socket?.emit("deal_hands")}>
+                Deal hands
+              </Button>
             ) : (
-              "Waiting for host to start..."
+              "Waiting for host to deal..."
             ))}
         </Flex>
       </div>
