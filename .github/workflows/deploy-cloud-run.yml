@@ -9,7 +9,7 @@ on:
 
 concurrency:
   group: cloud-run-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 env:
   PROJECT_ID: pounce-409615
