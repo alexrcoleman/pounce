@@ -13,6 +13,7 @@ import queenBlack from "../public/card-faces/queen-black.webp";
 import queenRed from "../public/card-faces/queen-red.webp";
 import tableWoodTile from "../public/table-wood-tile.png";
 import type { StaticImageData } from "next/image";
+import { TABLE_TAN_THEME_COLOR } from "./themeColors";
 
 export type FaceCardColor = "red" | "black";
 export type FaceCardRank = "jack" | "queen" | "king";
@@ -142,8 +143,8 @@ export const WEB_APP_MANIFEST = {
   start_url: "/",
   scope: "/",
   display: "standalone",
-  background_color: "#cd9b60",
-  theme_color: "#cd9b60",
+  background_color: TABLE_TAN_THEME_COLOR,
+  theme_color: TABLE_TAN_THEME_COLOR,
   icons: [
     {
       src: PWA_ICON_192_SRC,

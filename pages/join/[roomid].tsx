@@ -1,5 +1,4 @@
 import { useEffect } from "react";
-import Head from "next/head";
 import type { GetServerSideProps, NextPage } from "next";
 import { useRouter } from "next/router";
 import { observer } from "mobx-react-lite";
@@ -51,9 +50,6 @@ const JoinRoomPage: NextPage<AppProps> = observer(
             path={path}
             noIndex
           />
-          <Head>
-            <meta name="theme-color" content="#16593c" key="theme-color" />
-          </Head>
           <LoadingState
             title="Opening invite"
             detail="Getting the room ready."
@@ -71,9 +67,6 @@ const JoinRoomPage: NextPage<AppProps> = observer(
           path={path}
           noIndex
         />
-        <Head>
-          <meta name="theme-color" content="#16593c" key="theme-color" />
-        </Head>
         <JoinForm
           inviteRoom={roomId}
           placeholderName={name ?? ""}

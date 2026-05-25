@@ -19,7 +19,7 @@ body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Oxygen,
     Ubuntu, Cantarell, Fira Sans, Droid Sans, Helvetica Neue, sans-serif;
-  background-color: #cd9b60;
+  background-color: var(--pounce-page-background, #cd9b60);
   overflow: hidden;
   overscroll-behavior: none;
   touch-action: manipulation;

@@ -2,7 +2,6 @@ import { useRouter } from "next/router";
 import JoinForm from "../client/JoinForm";
 import { observer } from "mobx-react-lite";
 import type { GetServerSideProps, NextPage } from "next";
-import Head from "next/head";
 import { useEffect } from "react";
 import SeoHead from "../client/SeoHead";
 import {
@@ -38,9 +37,6 @@ const Home: NextPage<AppProps> = observer(
           origin={seoOrigin}
           path="/"
         />
-        <Head>
-          <meta name="theme-color" content="#16593c" key="theme-color" />
-        </Head>
         <JoinForm
           placeholderName={name ?? ""}
           onSubmit={(room, name) => {
