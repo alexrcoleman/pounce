@@ -15,9 +15,13 @@ import {
   scheduleRoomDelete,
 } from "../server/Rooms";
 import {
+  clearRoomHand,
   dealRemainingRoomPlayers,
   dealRoomHands,
+  getRoomHandUpdateVersion,
+  PLAYER_CENTER_CURSOR_RESET_DELAY_MS,
   recordRoundSnapshot,
+  releaseRoomHandAfterCenterPlay,
   removeDisconnectedPlayers,
   resetRoomHandAfterDeckAdvance,
   resetRoomHandAfterCenterPlay,
@@ -30,7 +34,7 @@ import {
 } from "../shared/RoomLogic";
 
 import { Server } from "socket.io";
-import { executeMove } from "../shared/MoveHandler";
+import { executeMove, type Move } from "../shared/MoveHandler";
 import {
   ClientToServerEvents,
   ServerToClientEvents,
@@ -191,14 +195,30 @@ export default function createSocketIOServer() {
         return;
       }
       recordRoundSnapshot(room, "move", Date.now(), pid, args.payload);
+      const didReleaseHand = releaseRoomHandAfterCenterPlay(
+        room,
+        pid,
+        args.payload,
+        result.clearCursorLocation
+      );
       const didResetHand =
-        resetRoomHandAfterCenterPlay(room, pid, args.payload) ||
-        resetRoomHandAfterDeckAdvance(room, pid, args.payload);
+        didReleaseHand || resetRoomHandAfterDeckAdvance(room, pid, args.payload);
+      const handUpdateVersion = didReleaseHand
+        ? getRoomHandUpdateVersion(room, pid)
+        : null;
       markRoomUpdated(user.currentRoom);
       ack?.({ actionId: args.actionId, ok: true, revision: room.revision });
       broadcastUpdate(user.currentRoom);
       if (didResetHand) {
         broadcastHands(user.currentRoom);
+      }
+      if (handUpdateVersion != null) {
+        schedulePlayerCenterCursorReset(
+          user.currentRoom,
+          pid,
+          args.payload,
+          handUpdateVersion
+        );
       }
     });
     socket.on("add_ai", () => {
@@ -431,8 +451,29 @@ function markPlayerDisconnected(roomId: string, socketId: string): boolean {
 
   player.disconnected = true;
   player.disconnectedAt = Date.now();
-  room.hands[playerIndex] = {};
+  clearRoomHand(room, playerIndex);
   return true;
+}
+
+function schedulePlayerCenterCursorReset(
+  roomId: string,
+  playerIndex: number,
+  move: Move,
+  handUpdateVersion: number
+): void {
+  setTimeout(() => {
+    const room = getRoom(roomId);
+    if (
+      !room ||
+      getRoomHandUpdateVersion(room, playerIndex) !== handUpdateVersion
+    ) {
+      return;
+    }
+
+    if (resetRoomHandAfterCenterPlay(room, playerIndex, move)) {
+      broadcastHands(roomId);
+    }
+  }, PLAYER_CENTER_CURSOR_RESET_DELAY_MS);
 }
 
 function isHost(

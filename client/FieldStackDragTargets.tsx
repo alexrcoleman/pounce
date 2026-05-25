@@ -1,7 +1,7 @@
 import { observer } from "mobx-react-lite";
 import SocketState from "./SocketState";
 import { useCallback, useMemo } from "react";
-import { CardState } from "../shared/GameUtils";
+import { CardState, CursorLocation } from "../shared/GameUtils";
 import FieldStackDragTarget from "./FieldStackDragTarget";
 import { Move } from "../shared/MoveHandler";
 import { CardDnDItem } from "./CardDnDItem";
@@ -19,7 +19,7 @@ export default observer(function FieldStackDragTargets({
   executeMove: (move: Move) => void;
   state: SocketState;
   grabbedItem: CardState | null;
-  onUpdateDragHover: (item: CardState) => void;
+  onUpdateDragHover: (location: CursorLocation) => void;
 }) {
   const executeMoveCardToCenter = useCallback(
     (item: CardDnDItem, targetPile: number, position?: [number, number]) => {
@@ -87,6 +87,7 @@ export default observer(function FieldStackDragTargets({
       }}
     >
       <FieldDragTarget
+        onUpdateDragTarget={onUpdateDragHover}
         onDrop={(item, position) =>
           executeMoveCardToCenter(item, firstOpenStack, position)
         }

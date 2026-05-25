@@ -1,9 +1,20 @@
 import { observer } from "mobx-react-lite";
 import CursorHand from "./CursorHand";
 import { getCardKey, stableObject } from "./CardsLayer";
-import { CardState } from "../shared/GameUtils";
+import {
+  CardState,
+  CursorLocation,
+  isCardCursorLocation,
+} from "../shared/GameUtils";
 import { useClientContext } from "./ClientContext";
-import { useBoardLayout } from "./BoardLayout";
+import { FIELD_LEFT, FIELD_TOP, useBoardLayout } from "./BoardLayout";
+import { CARD_BASE_SCALE, getCardScaleMultiplier } from "./cardLayout";
+import {
+  CARD_HEIGHT,
+  CARD_WIDTH,
+  FIELD_PILE_AREA_SIZE,
+  getPlayerStackLocation,
+} from "../shared/CardLocations";
 import {
   type CardLocation,
   type CardScreenGeometry,
@@ -13,6 +24,10 @@ import {
 } from "./cardGeometry";
 
 type CardWithLocation = { card: CardState; location: CardLocation };
+type CursorGeometry = Pick<
+  CardScreenGeometry,
+  "centerX" | "centerY" | "layoutScale"
+>;
 export default observer(function HandsLayer() {
   const { state } = useClientContext();
   const layout = useBoardLayout();
@@ -99,22 +114,77 @@ export default observer(function HandsLayer() {
       })
     );
   });
+  const getCursorGeometry = (
+    location: CursorLocation
+  ): CursorGeometry | null => {
+    if (isCardCursorLocation(location)) {
+      return cardLocs.get(getCardKey(location)) ?? null;
+    }
+
+    if (location.type === "field_slot") {
+      const fieldArea = { type: "field" } as const;
+      const layoutScale = layout.getScale(fieldArea);
+      const [x, y] = layout.mapPoint(
+        [
+          FIELD_LEFT + location.position[0] * FIELD_PILE_AREA_SIZE,
+          FIELD_TOP + location.position[1] * FIELD_PILE_AREA_SIZE,
+        ],
+        fieldArea
+      );
+      return {
+        centerX: x + (CARD_WIDTH * CARD_BASE_SCALE * layoutScale) / 2,
+        centerY: y + (CARD_HEIGHT * CARD_BASE_SCALE * layoutScale) / 2,
+        layoutScale,
+      };
+    }
+
+    if (!board.players[location.player]) {
+      return null;
+    }
+
+    const playerArea = {
+      type: "player",
+      playerIndex: location.player,
+    } as const;
+    const layoutScale = layout.getScale(playerArea);
+    const cardScale = getCardScaleMultiplier({
+      area: playerArea,
+      cardPlayer: location.player,
+      fullSizePlayerIndices,
+      isScaleDown: !fullSizePlayerIndices.includes(location.player),
+      mode: layout.mode,
+    });
+    const [x, y] = layout.mapPoint(
+      getPlayerStackLocation(
+        location.player,
+        location.pileIndex,
+        0,
+        activePlayerIndex
+      ),
+      playerArea
+    );
+    return {
+      centerX: x + (CARD_WIDTH * cardScale * layoutScale) / 2,
+      centerY: y + (CARD_HEIGHT * cardScale * layoutScale) / 2,
+      layoutScale,
+    };
+  };
   return (
     <>
       {hands.map((hand, index) => {
         if (!hand.location || index === activePlayerIndex) {
           return null;
         }
-        const cardLoc = cardLocs.get(getCardKey(hand.location));
-        if (!cardLoc) {
+        const cursorGeometry = getCursorGeometry(hand.location);
+        if (!cursorGeometry) {
           return null;
         }
         return (
           <CursorHand
             card={hand.item}
-            x={cardLoc.centerX}
-            y={cardLoc.centerY}
-            scale={cardLoc.layoutScale}
+            x={cursorGeometry.centerX}
+            y={cursorGeometry.centerY}
+            scale={cursorGeometry.layoutScale}
             color={state.board!.players[index].color}
             key={index}
           />

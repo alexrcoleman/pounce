@@ -1,4 +1,9 @@
-import type { BoardState, CardState, PlayerState } from "../shared/GameUtils";
+import type {
+  BoardState,
+  CardState,
+  CursorLocation,
+  PlayerState,
+} from "../shared/GameUtils";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
@@ -38,7 +43,7 @@ import { getPlayerLocation } from "../shared/CardLocations";
 type Props = {
   executeMove: (move: Move) => void;
   onOpenRoomSettings: () => void;
-  onUpdateHand: (card: CardState) => void;
+  onUpdateHand: (location: CursorLocation) => void;
   isLeftHandedLayout: boolean;
   easyReadCards: boolean;
   roomId?: string | null;

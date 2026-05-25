@@ -1,5 +1,5 @@
 import { CardDnDItem } from "./CardDnDItem";
-import { CardState } from "../shared/GameUtils";
+import { CardState, CursorLocation } from "../shared/GameUtils";
 import { useDrop } from "react-dnd";
 import { computed, toJS } from "mobx";
 import { observer } from "mobx-react-lite";
@@ -18,7 +18,8 @@ type Props = {
   top: number;
   scale?: number;
   cardScale?: number;
-  onUpdateDragTarget: (card: CardState) => void;
+  cursorLocation: CursorLocation;
+  onUpdateDragTarget: (location: CursorLocation) => void;
 };
 
 const buffer = 4;
@@ -57,6 +58,7 @@ export default observer(function StackDragTarget({
   top,
   scale = 1,
   cardScale = 1.1,
+  cursorLocation,
   onUpdateDragTarget,
 }: Props) {
   const card = toJS(peek(stack));
@@ -78,10 +80,12 @@ export default observer(function StackDragTarget({
         canDrop: !!monitor.canDrop(),
       }),
       canDrop: (item) => canDropOnSolitaireStack(item, stack, hasEmptyStack),
-      hover: () => card && onUpdateDragTarget(card),
+      hover: () => onUpdateDragTarget(card ?? cursorLocation),
     }),
     [
       onDrop,
+      onUpdateDragTarget,
+      JSON.stringify(cursorLocation),
       stack,
       JSON.stringify(card),
       JSON.stringify(highestCard),

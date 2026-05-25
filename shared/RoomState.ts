@@ -24,6 +24,7 @@ export type RoomState = {
   timescale: number;
   aiCooldowns: number[];
   hands: CursorState[];
+  handUpdateVersions: number[];
   /**
    * What the AI currently sees the board as, which gives it reaction delay.
    */
@@ -48,6 +49,7 @@ export function createRoomState(playerCount: number): RoomState {
     aiSpeed: 3,
     aiCooldowns: [],
     hands: [],
+    handUpdateVersions: [],
     aiBoard: JSON.parse(JSON.stringify(board)),
     aiPileKnowledge: board.players.map(() =>
       Array(board.piles.length).fill(null)

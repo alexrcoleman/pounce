@@ -7,8 +7,13 @@ const VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] as const;
 export type Suits = (typeof SUITS)[number];
 export type Values = (typeof VALUES)[number];
 
+export type CursorLocation =
+  | CardState
+  | { type: "solitaire_slot"; player: number; pileIndex: number }
+  | { type: "field_slot"; position: [number, number] };
+
 export type CursorState = {
-  location?: CardState | null;
+  location?: CursorLocation | null;
   item?: CardState | null;
 };
 
@@ -17,6 +22,37 @@ export type CardState = {
   value: Values;
   player: number;
 };
+
+export function isCardCursorLocation(
+  location: CursorLocation | null | undefined
+): location is CardState {
+  return location != null && !("type" in location);
+}
+
+export function cursorLocationsEqual(
+  a: CursorLocation | null | undefined,
+  b: CursorLocation | null | undefined
+): boolean {
+  if (a == null || b == null) {
+    return a == null && b == null;
+  }
+  if (isCardCursorLocation(a) || isCardCursorLocation(b)) {
+    return (
+      isCardCursorLocation(a) &&
+      isCardCursorLocation(b) &&
+      a.player === b.player &&
+      a.suit === b.suit &&
+      a.value === b.value
+    );
+  }
+  if (a.type === "solitaire_slot" && b.type === "solitaire_slot") {
+    return a.player === b.player && a.pileIndex === b.pileIndex;
+  }
+  if (a.type === "field_slot" && b.type === "field_slot") {
+    return a.position[0] === b.position[0] && a.position[1] === b.position[1];
+  }
+  return false;
+}
 export type PlayerState = {
   isSpectating?: boolean;
   isWaitingForDeal?: boolean;

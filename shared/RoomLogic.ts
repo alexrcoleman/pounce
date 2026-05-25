@@ -1,10 +1,13 @@
 import {
   CardState,
+  CursorLocation,
   CursorState,
   BoardState,
   PlayerState,
+  cursorLocationsEqual,
   dealPlayerHand,
   dealGameHands,
+  isCardCursorLocation,
   isGameOver,
   removePlayer,
   resetCenterPiles,
@@ -36,6 +39,7 @@ export const DISCONNECTED_PLAYER_TIMEOUT_MS = 5 * 60 * 1000;
 const AI_PILE_KNOWLEDGE_MIN_DURATION_MS = 3000;
 const AI_PILE_KNOWLEDGE_REACTION_MULTIPLIER = 2;
 const AI_OBSOLETE_TARGET_RECONSIDER_DELAY_MS = 180;
+export const PLAYER_CENTER_CURSOR_RESET_DELAY_MS = 1000;
 
 export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
   const { board } = room;
@@ -100,11 +104,13 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       };
       if (moveResult?.cursorMove) {
         const hand = room.hands[index];
-        const currentPos = hand.location
+        const currentPos =
+          hand.location && isCardCursorLocation(hand.location)
           ? getApproximateCardLocation(board, hand.location)
           : null;
         hand.location = moveResult.cursorMove;
         hand.item = moveResult.cursorMoveItem ?? hand.item;
+        markRoomHandUpdated(room, index);
         hasHandUpdate = true;
 
         let cost = 1500;
@@ -130,7 +136,10 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
             moveResult.clearCursorLocation
           );
         } else {
-          room.hands[index].item = undefined;
+          if (room.hands[index].item !== undefined) {
+            room.hands[index].item = undefined;
+            markRoomHandUpdated(room, index);
+          }
         }
       } else if (
         moveResult?.boardChanged &&
@@ -227,7 +236,7 @@ function rememberAIActiveCenterPile(
   now: number
 ): void {
   const hand = room.hands[playerIndex];
-  if (!hand?.item || !hand.location) {
+  if (!hand?.item || !hand.location || !isCardCursorLocation(hand.location)) {
     return;
   }
 
@@ -244,7 +253,7 @@ function pauseObsoleteAICenterDrag(
   playerIndex: number
 ): boolean {
   const hand = room.hands[playerIndex];
-  if (!hand?.item || !hand.location) {
+  if (!hand?.item || !hand.location || !isCardCursorLocation(hand.location)) {
     return false;
   }
 
@@ -456,6 +465,7 @@ export function startRoomGame(room: RoomState, now = Date.now()): void {
   }
   room.aiCooldowns = room.board.players.map(() => now + 2000 + Math.random());
   startGame(room);
+  room.handUpdateVersions = [];
   startRoundAnalysis(room, now);
   room.aiBoard = deepClone(room.board);
   resetAIVisibilityMemory(room);
@@ -466,6 +476,7 @@ export function dealRoomHands(room: RoomState): boolean {
   clearPlayersWaitingForDeal(room);
   const didDeal = dealGameHands(room);
   if (didDeal) {
+    room.handUpdateVersions = [];
     room.lastRoundAnalysis = null;
     room.roundSnapshots = [];
     room.aiBoard = deepClone(room.board);
@@ -497,6 +508,7 @@ export function dealRemainingRoomPlayers(room: RoomState): boolean {
 
   room.queuedHands = [];
   room.hands = [];
+  room.handUpdateVersions = [];
   room.aiBoard = deepClone(room.board);
   resetAIVisibilityMemory(room);
   return true;
@@ -521,6 +533,7 @@ export function setRoomPaused(
 
   room.board.isPaused = isPaused;
   room.hands = [];
+  room.handUpdateVersions = [];
   if (!isPaused) {
     room.aiCooldowns = room.board.players.map(() => now + 750 + Math.random());
     room.aiBoard = deepClone(room.board);
@@ -559,6 +572,7 @@ function removeRoomPlayers(room: RoomState, playerIndices: number[]): boolean {
   const sorted = playerIndices.slice().sort((a, b) => b - a);
   sorted.forEach((index) => {
     room.hands.splice(index, 1);
+    room.handUpdateVersions.splice(index, 1);
     room.aiCooldowns.splice(index, 1);
   });
   removePlayer(room.board, ...playerIndices);
@@ -577,6 +591,7 @@ export function resetRoom(room: RoomState): void {
   });
   room.queuedHands = [];
   room.hands = [];
+  room.handUpdateVersions = [];
   room.roundSnapshots = [];
   room.lastRoundAnalysis = null;
   room.aiBoard = deepClone(room.board);
@@ -667,6 +682,25 @@ function canDealWaitingPlayer(player: PlayerState): boolean {
   );
 }
 
+export function getRoomHandUpdateVersion(
+  room: RoomState,
+  playerIndex: number
+): number {
+  return room.handUpdateVersions[playerIndex] ?? 0;
+}
+
+export function clearRoomHand(room: RoomState, playerIndex: number): boolean {
+  if (playerIndex < 0) {
+    return false;
+  }
+  const hadHand = room.hands[playerIndex] != null;
+  room.hands[playerIndex] = {};
+  if (hadHand) {
+    markRoomHandUpdated(room, playerIndex);
+  }
+  return hadHand;
+}
+
 export function updateRoomHand(
   room: RoomState,
   playerIndex: number,
@@ -675,20 +709,47 @@ export function updateRoomHand(
     location,
   }: {
     item?: CardState | null;
-    location?: CardState | null;
+    location?: CursorLocation | null;
   }
-): void {
+): boolean {
   if (playerIndex < 0) {
-    return;
+    return false;
   }
   const hands = room.hands;
   hands[playerIndex] = hands[playerIndex] ?? {};
+  let didChange = false;
   if (location !== undefined) {
-    hands[playerIndex].location = location;
+    didChange = setRoomHandLocation(hands[playerIndex], location) || didChange;
   }
   if (item !== undefined) {
-    hands[playerIndex].item = item;
+    didChange = setRoomHandItem(hands[playerIndex], item) || didChange;
   }
+  if (didChange) {
+    markRoomHandUpdated(room, playerIndex);
+  }
+  return didChange;
+}
+
+export function releaseRoomHandAfterCenterPlay(
+  room: RoomState,
+  playerIndex: number,
+  move: Move,
+  location?: CursorLocation | null
+): boolean {
+  if (playerIndex < 0 || move.type !== "c2c") {
+    return false;
+  }
+
+  const hand = (room.hands[playerIndex] = room.hands[playerIndex] ?? {});
+  let didChange = false;
+  if (location != null) {
+    didChange = setRoomHandLocation(hand, location) || didChange;
+  }
+  didChange = setRoomHandItem(hand, null) || didChange;
+  if (didChange) {
+    markRoomHandUpdated(room, playerIndex);
+  }
+  return true;
 }
 
 export function resetRoomHandAfterCenterPlay(
@@ -702,9 +763,14 @@ export function resetRoomHandAfterCenterPlay(
   }
 
   const hand = (room.hands[playerIndex] = room.hands[playerIndex] ?? {});
-  hand.location =
-    location ?? getPlayerHandCursorLocation(room.board, playerIndex, move);
-  hand.item = null;
+  let didChange = setRoomHandLocation(
+    hand,
+    location ?? getPlayerHandCursorLocation(room.board, playerIndex, move)
+  );
+  didChange = setRoomHandItem(hand, null) || didChange;
+  if (didChange) {
+    markRoomHandUpdated(room, playerIndex);
+  }
   return true;
 }
 
@@ -721,9 +787,45 @@ export function resetRoomHandAfterDeckAdvance(
   }
 
   const hand = (room.hands[playerIndex] = room.hands[playerIndex] ?? {});
-  hand.location = getPlayerDeckCursorLocation(room.board, playerIndex);
-  hand.item = null;
+  let didChange = setRoomHandLocation(
+    hand,
+    getPlayerDeckCursorLocation(room.board, playerIndex)
+  );
+  didChange = setRoomHandItem(hand, null) || didChange;
+  if (didChange) {
+    markRoomHandUpdated(room, playerIndex);
+  }
   return true;
+}
+
+function setRoomHandLocation(
+  hand: CursorState,
+  location: CursorLocation | null
+): boolean {
+  if (cursorLocationsEqual(hand.location, location)) {
+    return false;
+  }
+  hand.location = location;
+  return true;
+}
+
+function setRoomHandItem(
+  hand: CursorState,
+  item: CardState | null | undefined
+): boolean {
+  if (cardEquals(hand.item, item)) {
+    return false;
+  }
+  hand.item = item;
+  return true;
+}
+
+function markRoomHandUpdated(room: RoomState, playerIndex: number): void {
+  if (playerIndex < 0) {
+    return;
+  }
+  room.handUpdateVersions[playerIndex] =
+    (room.handUpdateVersions[playerIndex] ?? 0) + 1;
 }
 
 function getPlayerHandCursorLocation(

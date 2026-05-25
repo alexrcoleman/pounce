@@ -6,6 +6,7 @@ import { useLocalObservable } from "mobx-react-lite";
 import { runInAction } from "mobx";
 import {
   CardState,
+  CursorLocation,
   addPlayer,
   removePlayer,
   rotateDecks,
@@ -20,8 +21,11 @@ import {
   completeRoundAnalysis,
   dealRemainingRoomPlayers,
   dealRoomHands,
+  getRoomHandUpdateVersion,
   getRoomHands,
+  PLAYER_CENTER_CURSOR_RESET_DELAY_MS,
   recordRoundSnapshot,
+  releaseRoomHandAfterCenterPlay,
   resetRoomHandAfterDeckAdvance,
   resetRoomHandAfterCenterPlay,
   resetRoom,
@@ -54,6 +58,7 @@ export default function useLocalGame(name: string | null) {
     roomRef.current = room;
     let isClosed = false;
     let hasJoined = false;
+    const centerCursorResetTimeouts = new Set<number>();
 
     const emitUpdate = () => {
       runInAction(() => {
@@ -74,6 +79,27 @@ export default function useLocalGame(name: string | null) {
       runInAction(() => {
         state.updateHands(deepClone(getRoomHands(room)));
       });
+    };
+    const schedulePlayerCenterCursorReset = (
+      playerIndex: number,
+      move: Move,
+      handUpdateVersion: number
+    ) => {
+      const timeout = window.setTimeout(() => {
+        centerCursorResetTimeouts.delete(timeout);
+        if (
+          isClosed ||
+          roomRef.current !== room ||
+          getRoomHandUpdateVersion(room, playerIndex) !== handUpdateVersion
+        ) {
+          return;
+        }
+
+        if (resetRoomHandAfterCenterPlay(room, playerIndex, move)) {
+          emitHands();
+        }
+      }, PLAYER_CENTER_CURSOR_RESET_DELAY_MS);
+      centerCursorResetTimeouts.add(timeout);
     };
     const scheduleRoundAnalysis = (snapshots: RoundSnapshot[]) => {
       window.setTimeout(() => {
@@ -156,10 +182,25 @@ export default function useLocalGame(name: string | null) {
             });
             return;
           }
-          recordRoundSnapshot(room, "move", Date.now(), playerIndex, envelope.payload);
+          recordRoundSnapshot(
+            room,
+            "move",
+            Date.now(),
+            playerIndex,
+            envelope.payload
+          );
+          const didReleaseHand = releaseRoomHandAfterCenterPlay(
+            room,
+            playerIndex,
+            envelope.payload,
+            result.clearCursorLocation
+          );
           const didResetHand =
-            resetRoomHandAfterCenterPlay(room, playerIndex, envelope.payload) ||
+            didReleaseHand ||
             resetRoomHandAfterDeckAdvance(room, playerIndex, envelope.payload);
+          const handUpdateVersion = didReleaseHand
+            ? getRoomHandUpdateVersion(room, playerIndex)
+            : null;
           markRoomUpdated();
           ack?.({
             actionId: envelope.actionId,
@@ -169,6 +210,13 @@ export default function useLocalGame(name: string | null) {
           emitUpdate();
           if (didResetHand) {
             emitHands();
+          }
+          if (handUpdateVersion != null) {
+            schedulePlayerCenterCursorReset(
+              playerIndex,
+              envelope.payload,
+              handUpdateVersion
+            );
           }
         } else if (event === "add_ai") {
           addPlayer(room.board, null);
@@ -243,7 +291,10 @@ export default function useLocalGame(name: string | null) {
           updateRoomHand(
             room,
             playerIndex,
-            args[0] as { item?: CardState | null; location?: CardState | null }
+            args[0] as {
+              item?: CardState | null;
+              location?: CursorLocation | null;
+            }
           );
           emitHands();
         }
@@ -284,6 +335,10 @@ export default function useLocalGame(name: string | null) {
     return () => {
       isClosed = true;
       window.clearInterval(interval);
+      centerCursorResetTimeouts.forEach((timeout) =>
+        window.clearTimeout(timeout)
+      );
+      centerCursorResetTimeouts.clear();
       runInAction(() => state.onDisconnect());
       roomRef.current = null;
     };
@@ -333,8 +388,8 @@ export default function useLocalGame(name: string | null) {
       onStart: () => socket?.emit("start_game"),
       onRestart: () => socket?.emit("restart_game"),
       onRotate: () => socket?.emit("rotate_decks"),
-      onUpdateHand: (card: CardState) => {
-        socket?.emit("update_hand", { location: card ?? null });
+      onUpdateHand: (location: CursorLocation) => {
+        socket?.emit("update_hand", { location: location ?? null });
       },
       onUpdateGrabbedItem: (card: CardState | null) => {
         socket?.emit("update_hand", { item: card ?? null });

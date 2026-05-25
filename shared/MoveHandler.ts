@@ -4,6 +4,7 @@ import {
   CursorState,
   PlayerState,
   fixBoardPiles,
+  isCardCursorLocation,
   isGameOver,
 } from "./GameUtils";
 import {
@@ -42,6 +43,13 @@ type MoveResult = {
   boardChanged?: boolean;
 };
 type AICursorData = CursorState | undefined;
+
+function cursorLocationEqualsCard(
+  location: CursorState["location"],
+  card: CardState | null | undefined
+): boolean {
+  return isCardCursorLocation(location) && cardEquals(location, card);
+}
 
 export function isBoardAcceptingMoves(board: BoardState): boolean {
   return board.isActive && !board.isPaused && !isGameOver(board);
@@ -100,7 +108,7 @@ export function executeMove(
       // Technically human players can release anywhere to reset the card back
       // But this helps represent the "mental" reset of missing a drop, and makes
       // the move failure more visible
-      if (cardEquals(aiCursor.location, aiCursor.item)) {
+      if (cursorLocationEqualsCard(aiCursor.location, aiCursor.item)) {
         return { clearCursor: true };
       }
       return { cursorMove: aiCursor.item };
@@ -216,7 +224,7 @@ function cardToCenter(
     pile = boardState.piles[dest];
   }
   if (aiCursor && !cardEquals(aiCursor.item, topCard)) {
-    if (cardEquals(aiCursor.location, topCard)) {
+    if (cursorLocationEqualsCard(aiCursor.location, topCard)) {
       // Already on the right card, now drag it
       const pileCard = peek(pile);
       if (pileCard) {
@@ -227,7 +235,7 @@ function cardToCenter(
     }
   } else if (aiCursor) {
     const pileCard = peek(pile);
-    if (pileCard && !cardEquals(aiCursor.location, pileCard)) {
+    if (pileCard && !cursorLocationEqualsCard(aiCursor.location, pileCard)) {
       return { cursorMove: pileCard, cursorMoveItem: topCard };
     }
   }
@@ -262,7 +270,7 @@ function cardToSolitaire(
   if (topCard == null) {
     throw new Error("No card to play from that pile");
   }
-  if (aiCursor && !cardEquals(aiCursor.location, topCard)) {
+  if (aiCursor && !cursorLocationEqualsCard(aiCursor.location, topCard)) {
     return { cursorMove: topCard };
   }
   if (
@@ -302,7 +310,7 @@ function solitaireToSolitaire(
     throw new Error("Tried to move too many cards from solitaire stack");
   }
 
-  if (aiCursor && !cardEquals(aiCursor.location, topCard)) {
+  if (aiCursor && !cursorLocationEqualsCard(aiCursor.location, topCard)) {
     return { cursorMove: topCard };
   }
   if (!canMoveToSolitairePile(topCard, dest)) {
@@ -325,14 +333,17 @@ function cycleDeck(
     throw new Error("No deck cards to cycle");
   }
   if (player.deck.length === 0) {
-    if (aiCursor && !cardEquals(aiCursor.location, peek(player.flippedDeck))) {
+    if (
+      aiCursor &&
+      !cursorLocationEqualsCard(aiCursor.location, peek(player.flippedDeck))
+    ) {
       return { cursorMove: peek(player.flippedDeck) };
     }
     player.deck = player.flippedDeck.reverse();
     player.flippedDeck = [];
   } else {
     const triple = player.deck.slice(-3).reverse();
-    if (aiCursor && !cardEquals(aiCursor.location, peek(triple))) {
+    if (aiCursor && !cursorLocationEqualsCard(aiCursor.location, peek(triple))) {
       return { cursorMove: peek(triple) };
     }
     player.deck.pop();

@@ -1,5 +1,5 @@
 import { CardDnDItem, isMultiCardSolitaireDrag } from "./CardDnDItem";
-import { CardState } from "../shared/GameUtils";
+import { CardState, CursorLocation } from "../shared/GameUtils";
 import { useDrop } from "react-dnd";
 import { useRef } from "react";
 import { observer } from "mobx-react-lite";
@@ -19,7 +19,7 @@ type Props = {
   top: number;
   scale?: number;
   rotate: number;
-  onUpdateDragTarget: (card: CardState) => void;
+  onUpdateDragTarget: (location: CursorLocation) => void;
 };
 
 const buffer = 20;

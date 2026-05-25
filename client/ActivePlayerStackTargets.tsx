@@ -5,7 +5,7 @@ import {
   PLAYER_STACK_CARD_GAP,
   getPlayerStackLocation,
 } from "../shared/CardLocations";
-import { CardState } from "../shared/GameUtils";
+import { CursorLocation } from "../shared/GameUtils";
 import { Move } from "../shared/MoveHandler";
 import { CardDnDItem } from "./CardDnDItem";
 import StackDragTarget, {
@@ -20,7 +20,7 @@ export default observer(function ActivePlayerStackTargets({
   onUpdateDragHover,
   executeMove,
 }: {
-  onUpdateDragHover: (item: CardState) => void;
+  onUpdateDragHover: (location: CursorLocation) => void;
   executeMove: (move: Move) => void;
 }) {
   const { state } = useClientContext();
@@ -97,6 +97,11 @@ export default observer(function ActivePlayerStackTargets({
             scale={scale}
             cardScale={cardScale}
             stack={stack}
+            cursorLocation={{
+              type: "solitaire_slot",
+              player: activePlayerIndex,
+              pileIndex: index,
+            }}
             onDrop={(item: CardDnDItem, clientOffset) => {
               const dest = resolveDropStackIndex(item, index, clientOffset);
               if (item.source.type === "solitaire") {

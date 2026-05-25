@@ -4,6 +4,7 @@ import type {
   CursorState,
   PlayerState,
 } from "./GameUtils";
+import { isCardCursorLocation } from "./GameUtils";
 import {
   canMoveToSolitairePile,
   canPlayOnCenterPile,
@@ -41,7 +42,8 @@ class AIStrategy {
       .map((pile, index) => [pile, index] as const)
       .sort((a, b) => {
         // Get a rough idea of the closest target before we grab something, but update once we have grabbed something
-        const c = cursor.location
+        const c =
+          cursor.location && isCardCursorLocation(cursor.location)
           ? getApproximateCardLocation(boardState, cursor.location)
           : getPlayerLocation(boardState.players.indexOf(player));
         const p1 = getBoardPileLocation(boardState, a[1]);

@@ -1,4 +1,4 @@
-import { CardState } from "../shared/GameUtils";
+import { CardState, CursorLocation } from "../shared/GameUtils";
 import { Socket, io } from "socket.io-client";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -289,8 +289,8 @@ export default function useGameSocket(
         onStart: () => emitIfConnected("start_game"),
         onRestart: () => emitIfConnected("restart_game"),
         onRotate: () => emitIfConnected("rotate_decks"),
-        onUpdateHand: (card: CardState) => {
-          emitIfConnected("update_hand", { location: card ?? null });
+        onUpdateHand: (location: CursorLocation) => {
+          emitIfConnected("update_hand", { location: location ?? null });
         },
         onUpdateGrabbedItem: (card: CardState | null) => {
           emitIfConnected("update_hand", { item: card ?? null });
@@ -318,7 +318,7 @@ export type Actions = {
   onStart: () => void;
   onRestart: () => void;
   onRotate: () => void;
-  onUpdateHand: (card: CardState) => void;
+  onUpdateHand: (location: CursorLocation) => void;
   onUpdateGrabbedItem: (card: CardState | null) => void;
   setAILevel: (level: number) => void;
   onRemoveDisconnectedPlayers: () => void;

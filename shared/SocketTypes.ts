@@ -1,4 +1,9 @@
-import { BoardState, CardState, CursorState } from "./GameUtils";
+import {
+  BoardState,
+  CardState,
+  CursorLocation,
+  CursorState,
+} from "./GameUtils";
 import { Move } from "./MoveHandler";
 import type { RoomSettings } from "./RoomState";
 import type { RoundAnalysis } from "./RoundAnalysis";
@@ -40,7 +45,7 @@ export type ClientToServerEvents = {
   restart_game: () => void;
   update_hand: (args: {
     item?: CardState | null;
-    location?: CardState | null;
+    location?: CursorLocation | null;
   }) => void;
   move: (args: ActionEnvelope<Move>, ack?: (args: ActionAck) => void) => void;
   rotate_decks: () => void;

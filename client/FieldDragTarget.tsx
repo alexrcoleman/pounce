@@ -10,6 +10,7 @@ import type { XYCoord } from "react-dnd";
 import { useDrop } from "react-dnd";
 import { FIELD_SIZE } from "./BoardLayout";
 import { FIELD_PILE_AREA_SIZE } from "../shared/CardLocations";
+import type { CursorLocation } from "../shared/GameUtils";
 import styles from "./Board.module.css";
 
 type Props = {
@@ -18,12 +19,15 @@ type Props = {
     item: FieldStackDnDItem,
     position: [number, number]
   ) => void;
+  onUpdateDragTarget: (location: CursorLocation) => void;
 };
 export default observer(function FieldDragTarget({
   onDrop,
   onMoveFieldStack,
+  onUpdateDragTarget,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const lastUpdateRef = useRef(0);
   const [{ isOver, canDrop }, drop] = useDrop(
     () => ({
       accept: ["card", "field_stack"],
@@ -58,8 +62,34 @@ export default observer(function FieldDragTarget({
       canDrop: (item) =>
         !("card" in item) ||
         (!isMultiCardSolitaireDrag(item) && item.card.value === 1),
+      hover: (item: CardDnDItem | FieldStackDnDItem, monitor) => {
+        if (
+          !("card" in item) ||
+          isMultiCardSolitaireDrag(item) ||
+          item.card.value !== 1 ||
+          Date.now() < lastUpdateRef.current + 250
+        ) {
+          return;
+        }
+
+        const loc = monitor.getClientOffset();
+        if (!ref.current || !loc) {
+          return;
+        }
+
+        lastUpdateRef.current = Date.now();
+        onUpdateDragTarget({
+          type: "field_slot",
+          position: getCardDropPosition(
+            ref.current,
+            item,
+            monitor.getDifferenceFromInitialOffset(),
+            monitor.getSourceClientOffset() ?? loc
+          ),
+        });
+      },
     }),
-    [onDrop, onMoveFieldStack]
+    [onDrop, onMoveFieldStack, onUpdateDragTarget]
   );
   if (!canDrop) {
     return null;
