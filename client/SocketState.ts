@@ -39,14 +39,20 @@ export default class SocketState {
   hands: CursorState[] = [];
   pendingMoves: PendingMoveAction[] = [];
   roundAnalysis: RoundAnalysis | null = null;
+  private isAwaitingRoomSync = false;
   private nextActionNumber = 0;
   constructor() {
     makeAutoObservable(this);
   }
   onUpdate(data: BoardUpdate) {
     if (data.revision < this.serverRevision) {
-      return;
+      if (!this.isAwaitingRoomSync) {
+        return;
+      }
+
+      this.resetBoardState();
     }
+    this.isAwaitingRoomSync = false;
     this.serverBoard = applyDeepUpdate(this.serverBoard, data.board);
     this.roomSettings = applyDeepUpdate(this.roomSettings, data.settings);
     this.serverRevision = data.revision;
@@ -71,6 +77,9 @@ export default class SocketState {
   }
   setPlayerSessionId(playerSessionId: string | null) {
     this.playerSessionId = playerSessionId;
+  }
+  beginRoomSync() {
+    this.isAwaitingRoomSync = true;
   }
   setPingLatency(latency: number | null) {
     this.pingLatency =
@@ -137,6 +146,17 @@ export default class SocketState {
     }
     this.recomputeBoard();
   }
+  discardPendingMoveActions(actionIds: readonly string[]) {
+    if (actionIds.length === 0) {
+      return;
+    }
+
+    const discardedIds = new Set(actionIds);
+    this.pendingMoves = this.pendingMoves.filter(
+      (action) => !discardedIds.has(action.actionId)
+    );
+    this.recomputeBoard();
+  }
   private resetBoardState() {
     this.board = null;
     this.serverBoard = null;
@@ -145,6 +165,7 @@ export default class SocketState {
     this.pendingMoves = [];
     this.hands = [];
     this.roundAnalysis = null;
+    this.isAwaitingRoomSync = false;
   }
   private recomputeBoard() {
     if (!this.serverBoard) {

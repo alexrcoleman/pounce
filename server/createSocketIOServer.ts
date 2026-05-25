@@ -1,5 +1,8 @@
 import {
   addPlayer,
+  type BoardState,
+  isGameOver,
+  type PlayerState,
   removePlayer,
   rotateDecks,
 } from "../shared/GameUtils";
@@ -167,13 +170,23 @@ export default function createSocketIOServer() {
       }
       const room = getRoom(user.currentRoom);
       const board = room.board;
+      const blockedReason = getBlockedMoveReason(board, board.players[pid]);
+      if (blockedReason) {
+        ack?.({
+          actionId: args.actionId,
+          ok: false,
+          revision: room.revision,
+          reason: blockedReason,
+        });
+        return;
+      }
       const result = executeMove(board, pid, args.payload);
       if (result == null) {
         ack?.({
           actionId: args.actionId,
           ok: false,
           revision: room.revision,
-          reason: "Move rejected",
+          reason: "That move is no longer available.",
         });
         return;
       }
@@ -435,6 +448,28 @@ function isHost(
     (p) => !p.disconnected && p.socketId != null
   );
   return hostIndex === playerIndex;
+}
+
+function getBlockedMoveReason(
+  board: BoardState,
+  player: PlayerState | undefined
+): string | null {
+  if (!board.isActive) {
+    return board.pouncer != null
+      ? "The round is already over."
+      : "The game is not accepting moves right now.";
+  }
+  if (board.isPaused) {
+    return "The game is paused.";
+  }
+  if (isGameOver(board)) {
+    return "The round is already over.";
+  }
+  if (player?.isSpectating) {
+    return "Spectating players cannot move.";
+  }
+
+  return null;
 }
 
 function normalizeAICount(count: unknown): number | null {

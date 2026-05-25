@@ -42,6 +42,25 @@ export default function useGameSocket(
     Object.values(moveAckTimeouts.current).forEach(clearTimeout);
     moveAckTimeouts.current = {};
   };
+  const discardPendingMoveActions = (actionIds: string[]) => {
+    if (actionIds.length === 0) {
+      return;
+    }
+
+    runInAction(() => state.discardPendingMoveActions(actionIds));
+  };
+  const clearInFlightMoveActions = () => {
+    const actionIds = Object.keys(moveAckTimeouts.current);
+    clearMoveAckTimeouts();
+    discardPendingMoveActions(actionIds);
+  };
+  const dropQueuedMoveActions = () => {
+    const actionIds = queuedMoveActions.current.map(
+      (action) => action.actionId
+    );
+    queuedMoveActions.current = [];
+    discardPendingMoveActions(actionIds);
+  };
   const sendMoveAction = (
     activeSocket: GameSocket,
     action: ActionEnvelope<Move>
@@ -84,6 +103,17 @@ export default function useGameSocket(
     ) {
       return;
     }
+    const playerIndex = state.getActivePlayerIndex();
+    const player = state.board?.players[playerIndex];
+    if (
+      !state.board ||
+      playerIndex < 0 ||
+      player?.isSpectating === true ||
+      !isBoardAcceptingMoves(state.board)
+    ) {
+      dropQueuedMoveActions();
+      return;
+    }
 
     const actions = queuedMoveActions.current.splice(0);
     actions.forEach((action) => sendMoveAction(activeSocket, action));
@@ -106,7 +136,7 @@ export default function useGameSocket(
       }
 
       hasReconnectToastRef.current = true;
-      toast.loading("Reconnecting…", {
+      toast.loading("Connection lost. Reconnecting...", {
         duration: Infinity,
         id: RECONNECT_TOAST_ID,
       });
@@ -185,6 +215,7 @@ export default function useGameSocket(
 
     socket.on("disconnect", () => {
       pendingJoinRoomRef.current = lastJoinedRoomRef.current;
+      clearInFlightMoveActions();
       runInAction(() => state.onDisconnect());
       showReconnectToast();
     });
@@ -214,6 +245,7 @@ export default function useGameSocket(
         lastJoinedRoomRef.current = joinedRoomKey;
       }
       pendingJoinRoomRef.current = joinedRoomKey;
+      runInAction(() => state.beginRoomSync());
       socket.emit("join_room", { roomId, name, playerSessionId });
       return;
     }

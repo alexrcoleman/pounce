@@ -242,8 +242,18 @@ function getCenterSourceName(
 }
 
 function genericRejectedMove(description?: string): RejectionCopy {
+  const normalizedDescription = description?.trim();
+  if (
+    !normalizedDescription ||
+    /^move rejected\.?$/i.test(normalizedDescription)
+  ) {
+    return {
+      message: "Move rejected.",
+    };
+  }
+
   return {
-    message: description ? `Move rejected: ${description}` : "Move rejected.",
+    message: `Move rejected: ${normalizedDescription}`,
   };
 }
 
