@@ -10,7 +10,11 @@ import {
   removePlayer,
   rotateDecks,
 } from "../shared/GameUtils";
-import { Move, executeMove } from "../shared/MoveHandler";
+import {
+  Move,
+  executeMove,
+  isBoardAcceptingMoves,
+} from "../shared/MoveHandler";
 import { createRoomState, RoomState } from "../shared/RoomState";
 import {
   completeRoundAnalysis,
@@ -298,7 +302,15 @@ export default function useLocalGame(name: string | null) {
   const actions = useMemo<Actions>(
     () => ({
       executeMove: (move: Move) => {
-        if (!socket) {
+        const playerIndex = state.getActivePlayerIndex();
+        const player = state.board?.players[playerIndex];
+        if (
+          !socket ||
+          !state.board ||
+          playerIndex < 0 ||
+          player?.isSpectating === true ||
+          !isBoardAcceptingMoves(state.board)
+        ) {
           return;
         }
         const action = state.createOptimisticMove(move);

@@ -42,6 +42,10 @@ type MoveResult = {
 };
 type AICursorData = CursorState | undefined;
 
+export function isBoardAcceptingMoves(board: BoardState): boolean {
+  return board.isActive && !board.isPaused && !isGameOver(board);
+}
+
 function getSourceCard(
   boardState: BoardState,
   player: PlayerState,

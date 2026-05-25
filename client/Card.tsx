@@ -23,6 +23,7 @@ import {
 
 type Props = {
   card: CardState;
+  canInteract?: boolean;
   onClick?: () => void;
   location: CardLocation;
   isHandTarget?: boolean;
@@ -34,6 +35,7 @@ type Props = {
  */
 const CardContentMemo = observer(function CardContent({
   card,
+  canInteract = true,
   location,
   isHandTarget,
   onClick,
@@ -43,17 +45,20 @@ const CardContentMemo = observer(function CardContent({
   const layout = useBoardLayout();
   const updateCursorTarget = useCallback(
     (isClick = false) => {
-      if (!isHandTarget) {
+      if (!canInteract || !isHandTarget) {
         return;
       }
       socket?.emit("update_hand", getCursorUpdate(card, location, isClick));
     },
-    [card, isHandTarget, location, socket]
+    [canInteract, card, isHandTarget, location, socket]
   );
   const handleClick = useCallback(() => {
+    if (!canInteract) {
+      return;
+    }
     updateCursorTarget(true);
     onClick && onClick();
-  }, [onClick, updateCursorTarget]);
+  }, [canInteract, onClick, updateCursorTarget]);
   const board = state.board!;
   const player = board.players[card.player];
 
@@ -189,7 +194,10 @@ const CardContentMemo = observer(function CardContent({
               }
               return dragItem.index === item.index;
             },
-            canDrag: () => source.type === "field_stack" && source.isTopCard,
+            canDrag: () =>
+              canInteract &&
+              source.type === "field_stack" &&
+              source.isTopCard,
           }
         : {
             type: "card",
@@ -216,10 +224,10 @@ const CardContentMemo = observer(function CardContent({
                 dragItem.source.slotIndex < item.source.slotIndex
               );
             },
-            canDrag: () => source.type !== "other",
+            canDrag: () => canInteract && source.type !== "other",
             // options: { dropEffect: "move" },
           },
-    [source, item]
+    [canInteract, source, item]
   );
   // So moving cards are "lifted" while moving
   useEffect(() => {
@@ -230,11 +238,12 @@ const CardContentMemo = observer(function CardContent({
     return () => clearTimeout(t);
   }, [positionX, positionY, zIndex]);
 
+  const canClick = canInteract && onClick != null;
   return (
     <div
       className={joinClasses(
         styles.root,
-        onClick != null && styles.clickable,
+        canClick && styles.clickable,
         canDrag && styles.draggable
       )}
       style={
@@ -261,7 +270,7 @@ const CardContentMemo = observer(function CardContent({
         }
       }}
       title={`${zIndex + 1} card(s)`}
-      onClick={onClick ? handleClick : undefined}
+      onClick={canClick ? handleClick : undefined}
       ref={drag}
     >
       <div className={styles.rotator}>

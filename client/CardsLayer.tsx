@@ -7,8 +7,10 @@ import { CardState } from "../shared/GameUtils";
 import { useClientContext } from "./ClientContext";
 
 export default observer(function CardsLayer({
+  canInteract,
   executeMove,
 }: {
+  canInteract: boolean;
   executeMove: (move: Move) => void;
 }) {
   const { state } = useClientContext();
@@ -46,6 +48,7 @@ export default observer(function CardsLayer({
           <Card
             card={card}
             key={getCardKey(card)}
+            canInteract={canInteract}
             location={stableObject({
               type: "field_stack",
               stackIndex: pileIndex,
@@ -53,7 +56,7 @@ export default observer(function CardsLayer({
               cardIndex: index,
             })}
             postGameStage={postGameStage}
-            isHandTarget={true}
+            isHandTarget={canInteract}
           />
         );
       })
@@ -68,9 +71,14 @@ export default observer(function CardsLayer({
               <Card
                 card={card}
                 key={getCardKey(card)}
-                onClick={isActivePlayer && isTopCard ? cycleDeck : undefined}
+                canInteract={canInteract}
+                onClick={
+                  canInteract && isActivePlayer && isTopCard
+                    ? cycleDeck
+                    : undefined
+                }
                 location={stableObject({ type: "deck", cardIndex: index })}
-                isHandTarget={isTopCard && isActivePlayer}
+                isHandTarget={canInteract && isTopCard && isActivePlayer}
                 postGameStage={postGameStage}
               />
             );
@@ -81,12 +89,17 @@ export default observer(function CardsLayer({
               <Card
                 card={card}
                 key={getCardKey(card)}
+                canInteract={canInteract}
                 location={stableObject({
                   type: "flippedDeck",
                   cardIndex: index,
                 })}
-                onClick={isActivePlayer && isTopCard ? flipDeck : undefined}
-                isHandTarget={isTopCard && isActivePlayer}
+                onClick={
+                  canInteract && isActivePlayer && isTopCard
+                    ? flipDeck
+                    : undefined
+                }
+                isHandTarget={canInteract && isTopCard && isActivePlayer}
                 postGameStage={postGameStage}
               />
             );
@@ -97,12 +110,13 @@ export default observer(function CardsLayer({
               <Card
                 card={card}
                 key={getCardKey(card)}
+                canInteract={canInteract}
                 location={stableObject({
                   type: "pounce",
                   playerIndex,
                   cardIndex: index,
                 })}
-                isHandTarget={isTopCard && isActivePlayer}
+                isHandTarget={canInteract && isTopCard && isActivePlayer}
                 postGameStage={postGameStage}
               />
             );
@@ -113,12 +127,13 @@ export default observer(function CardsLayer({
                 <Card
                   card={card}
                   key={getCardKey(card)}
+                  canInteract={canInteract}
                   location={stableObject({
                     type: "solitaire",
                     pileIndex: stackIndex,
                     cardIndex: index,
                   })}
-                  isHandTarget={isActivePlayer}
+                  isHandTarget={canInteract && isActivePlayer}
                   postGameStage={postGameStage}
                 />
               );

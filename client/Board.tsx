@@ -5,7 +5,7 @@ import type { CSSProperties } from "react";
 import { DndProvider } from "react-dnd";
 import DragReporter from "./DragReporter";
 import { HTML5Backend } from "react-dnd-html5-backend";
-import type { Move } from "../shared/MoveHandler";
+import { isBoardAcceptingMoves, type Move } from "../shared/MoveHandler";
 import PlayerArea from "./PlayerArea";
 import PauseOverlay from "./PauseOverlay";
 import ScoresTable from "./ScoresTable";
@@ -56,6 +56,12 @@ export default observer(function Board({
   const { state, socket } = useClientContext();
   const board = state.board!;
   const activePlayerIndex = state.getActivePlayerIndex();
+  const activePlayer =
+    activePlayerIndex >= 0 ? board.players[activePlayerIndex] : undefined;
+  const canInteractWithCards =
+    activePlayer != null &&
+    activePlayer.isSpectating !== true &&
+    isBoardAcceptingMoves(board);
   const [focusedPlayerIndex, setFocusedPlayerIndex] = useState<number | null>(
     null
   );
@@ -97,6 +103,12 @@ export default observer(function Board({
   const onUpdateDragHover = onUpdateHand;
 
   const [grabbedItem, setGrabbedItem] = useState<CardState | null>(null);
+  useEffect(() => {
+    if (!canInteractWithCards && grabbedItem != null) {
+      socket?.emit("update_hand", { item: null });
+      setGrabbedItem(null);
+    }
+  }, [canInteractWithCards, grabbedItem, socket]);
   if (useTouch == null) {
     // Loading touch type still. Ideally we'd render still here, but
     // DnDProvider seems to struggle with backend changing
@@ -109,8 +121,9 @@ export default observer(function Board({
     >
       <DragReporter
         onUpdateGrabbedItem={(item) => {
-          socket?.emit("update_hand", { item });
-          setGrabbedItem(item);
+          const nextItem = canInteractWithCards ? item : null;
+          socket?.emit("update_hand", { item: nextItem });
+          setGrabbedItem(nextItem);
         }}
       />
       <MobileDragPreviewLayer enabled={useTouch} />
@@ -128,17 +141,24 @@ export default observer(function Board({
             />
             <ScoresTableTabOverlay board={board} />
             <HandPlatesLayer />
-            <ActivePlayerStackTargets
+            {canInteractWithCards ? (
+              <>
+                <ActivePlayerStackTargets
+                  executeMove={executeMove}
+                  onUpdateDragHover={onUpdateDragHover}
+                />
+                <FieldStackDragTargets
+                  state={state}
+                  grabbedItem={grabbedItem}
+                  onUpdateDragHover={onUpdateDragHover}
+                  executeMove={executeMove}
+                />
+              </>
+            ) : null}
+            <CardsLayer
+              canInteract={canInteractWithCards}
               executeMove={executeMove}
-              onUpdateDragHover={onUpdateDragHover}
             />
-            <FieldStackDragTargets
-              state={state}
-              grabbedItem={grabbedItem}
-              onUpdateDragHover={onUpdateDragHover}
-              executeMove={executeMove}
-            />
-            <CardsLayer executeMove={executeMove} />
             {board.players.map((p, i) => (
               <PlayerArea player={p} playerIndex={i} key={p.socketId ?? i} />
             ))}

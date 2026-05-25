@@ -2,7 +2,7 @@ import { CardState } from "../shared/GameUtils";
 import { Socket, io } from "socket.io-client";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-import type { Move } from "../shared/MoveHandler";
+import { isBoardAcceptingMoves, type Move } from "../shared/MoveHandler";
 import { GameSocket } from "./GameConnection";
 import {
   type ActionAck,
@@ -233,6 +233,16 @@ export default function useGameSocket(
 
       return {
         executeMove: (move: Move) => {
+          const playerIndex = state.getActivePlayerIndex();
+          const player = state.board?.players[playerIndex];
+          if (
+            !state.board ||
+            playerIndex < 0 ||
+            player?.isSpectating === true ||
+            !isBoardAcceptingMoves(state.board)
+          ) {
+            return;
+          }
           const action = state.createOptimisticMove(move);
           if (!socket || !state.isConnected || pendingJoinRoomRef.current) {
             queuedMoveActions.current.push(action);
