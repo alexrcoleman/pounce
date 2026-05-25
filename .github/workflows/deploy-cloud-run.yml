@@ -16,6 +16,7 @@ env:
   SERVICE: pounce
   REGION: us-east4
   NODE_VERSION: 18.x
+  DRAIN_WAIT_SECONDS: 300
 
 jobs:
   deploy:
@@ -44,9 +45,11 @@ jobs:
 
       - name: Check deploy configuration
         env:
+          GAME_SERVER_DRAIN_SECRET: ${{ secrets.GAME_SERVER_DRAIN_SECRET }}
           GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
           GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
         run: |
+          test -n "$GAME_SERVER_DRAIN_SECRET" || { echo "::error::Set repository secret GAME_SERVER_DRAIN_SECRET."; exit 1; }
           test -n "$GCP_WORKLOAD_IDENTITY_PROVIDER" || { echo "::error::Set repository secret GCP_WORKLOAD_IDENTITY_PROVIDER."; exit 1; }
           test -n "$GCP_SERVICE_ACCOUNT" || { echo "::error::Set repository secret GCP_SERVICE_ACCOUNT."; exit 1; }
 
@@ -57,6 +60,45 @@ jobs:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
 
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Begin game server drain
+        env:
+          GAME_SERVER_DRAIN_SECRET: ${{ secrets.GAME_SERVER_DRAIN_SECRET }}
+        run: |
+          set -euo pipefail
+
+          service_url="$(gcloud run services describe "$SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format='value(status.url)' 2>/dev/null || true)"
+
+          if [ -z "$service_url" ]; then
+            echo "::warning::Cloud Run service URL was not found; skipping drain for this deploy."
+            exit 0
+          fi
+
+          response_file="$(mktemp)"
+          status="$(curl -sS -o "$response_file" -w "%{http_code}" \
+            -X POST "$service_url/api/admin/drain" \
+            -H "Authorization: Bearer $GAME_SERVER_DRAIN_SECRET" || true)"
+
+          if [ "$status" = "404" ]; then
+            echo "::warning::Drain endpoint is not live yet; proceeding with bootstrap deploy."
+            exit 0
+          fi
+
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            cat "$response_file"
+            echo "::error::Game server drain request failed with HTTP $status."
+            exit 1
+          fi
+
+          cat "$response_file"
+          echo "Waiting $DRAIN_WAIT_SECONDS seconds before deploying..."
+          sleep "$DRAIN_WAIT_SECONDS"
+
       - name: Deploy to Cloud Run
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v3
@@ -65,6 +107,10 @@ jobs:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
           source: .
+          env_vars: |
+            GAME_SERVER_DRAIN_SECRET=${{ secrets.GAME_SERVER_DRAIN_SECRET }}
+            GAME_SERVER_DRAIN_WINDOW_MS=300000
+          env_vars_update_strategy: merge
 
       - name: Show deployed URL
         run: echo "${{ steps.deploy.outputs.url }}"

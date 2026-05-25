@@ -9,6 +9,7 @@ import {
   type ActionEnvelope,
   ServerToClientEvents,
   ClientToServerEvents,
+  type ServerNotice,
 } from "../shared/SocketTypes";
 
 import { useLocalObservable } from "mobx-react-lite";
@@ -21,6 +22,7 @@ export type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 const PLAYER_SESSION_STORAGE_KEY = "pounce::playerSessionId";
 const DEFAULT_SOCKET_PORT = "3001";
 const RECONNECT_TOAST_ID = "room-reconnect";
+const SERVER_NOTICE_TOAST_ID = "server-notice";
 
 export default function useGameSocket(
   roomId: string | null,
@@ -60,6 +62,15 @@ export default function useGameSocket(
     );
     queuedMoveActions.current = [];
     discardPendingMoveActions(actionIds);
+  };
+  const showServerNotice = (notice: ServerNotice) => {
+    toast.warning(notice.message, {
+      description: `New online games resume in about ${formatNoticeDuration(
+        notice.retryAfterMs
+      )}.`,
+      duration: 10000,
+      id: SERVER_NOTICE_TOAST_ID,
+    });
   };
   const sendMoveAction = (
     activeSocket: GameSocket,
@@ -203,6 +214,7 @@ export default function useGameSocket(
     socket.on("alert", (message) => {
       alert(message);
     });
+    socket.on("server_notice", showServerNotice);
     socket.on("update_hands", ({ hands }) => {
       runInAction(() => state.updateHands(hands));
     });
@@ -239,6 +251,7 @@ export default function useGameSocket(
     if (socket && isConnected && roomId && name && playerSessionId) {
       const joinedRoomKey = `${roomId}:${playerSessionId}`;
       if (lastJoinedRoomRef.current !== joinedRoomKey) {
+        setError(null);
         runInAction(() => state.clearBoard());
         clearMoveAckTimeouts();
         queuedMoveActions.current = [];
@@ -246,7 +259,22 @@ export default function useGameSocket(
       }
       pendingJoinRoomRef.current = joinedRoomKey;
       runInAction(() => state.beginRoomSync());
-      socket.emit("join_room", { roomId, name, playerSessionId });
+      socket.emit("join_room", { roomId, name, playerSessionId }, (ack) => {
+        if (ack.ok) {
+          return;
+        }
+
+        pendingJoinRoomRef.current = null;
+        dropQueuedMoveActions();
+        setError(ack.message);
+        showServerNotice({
+          type: "server_draining",
+          message: ack.message,
+          retryAfterMs: ack.retryAfterMs,
+          drainingUntil: ack.drainingUntil,
+        });
+        runInAction(() => state.clearBoard());
+      });
       return;
     }
   }, [socket, roomId, name, playerSessionId, isConnected]);
@@ -350,4 +378,17 @@ function getOrCreatePlayerSessionId() {
     `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
   sessionStorage.setItem(PLAYER_SESSION_STORAGE_KEY, nextId);
   return nextId;
+}
+
+function formatNoticeDuration(durationMs: number) {
+  const totalSeconds = Math.max(1, Math.ceil(durationMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes > 0 && seconds > 0) {
+    return `${minutes}m ${seconds}s`;
+  }
+  if (minutes > 0) {
+    return `${minutes}m`;
+  }
+  return `${seconds}s`;
 }

@@ -30,17 +30,38 @@ export type RoomPingAck = {
   serverTime: number;
 };
 
+export type ServerNotice = {
+  type: "server_draining";
+  message: string;
+  retryAfterMs: number;
+  drainingUntil: number;
+};
+
+export type JoinRoomAck =
+  | { ok: true }
+  | {
+      ok: false;
+      code: "server_draining";
+      message: string;
+      retryAfterMs: number;
+      drainingUntil: number;
+    };
+
 export type ServerToClientEvents = {
   alert: (args: { message: string }) => void;
+  server_notice: (args: ServerNotice) => void;
   update_hands: (args: { hands: CursorState[] }) => void;
   update: (args: BoardUpdate) => void;
 };
 export type ClientToServerEvents = {
-  join_room: (args: {
-    roomId: string | null;
-    name: string;
-    playerSessionId: string;
-  }) => void;
+  join_room: (
+    args: {
+      roomId: string | null;
+      name: string;
+      playerSessionId: string;
+    },
+    ack?: (args: JoinRoomAck) => void
+  ) => void;
   set_ai_level: (args: { speed: number }) => void;
   restart_game: () => void;
   update_hand: (args: {

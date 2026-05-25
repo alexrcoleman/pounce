@@ -33,11 +33,14 @@ import {
   updateRoomHand,
 } from "../shared/RoomLogic";
 
+import { createServer, IncomingMessage, ServerResponse } from "http";
+import { timingSafeEqual } from "crypto";
 import { Server } from "socket.io";
 import { executeMove, type Move } from "../shared/MoveHandler";
 import {
   ClientToServerEvents,
   ServerToClientEvents,
+  type ServerNotice,
 } from "../shared/SocketTypes";
 
 const socketData: Record<
@@ -50,9 +53,21 @@ const socketData: Record<
 > = {};
 
 const DEFAULT_SOCKET_PORT = 3001;
+const DEFAULT_DRAIN_WINDOW_MS = 5 * 60 * 1000;
+const DRAIN_ENDPOINT_PATH = "/api/admin/drain";
+const DRAIN_SECRET_ENV_VAR = "GAME_SERVER_DRAIN_SECRET";
+const DRAIN_WINDOW_ENV_VAR = "GAME_SERVER_DRAIN_WINDOW_MS";
+
+let drainingUntil = 0;
 
 export default function createSocketIOServer() {
-  const io = new Server<ClientToServerEvents, ServerToClientEvents>({
+  let io: Server<ClientToServerEvents, ServerToClientEvents>;
+  const httpServer = createServer((req, res) => {
+    if (isDrainEndpointRequest(req)) {
+      handleDrainRequest(req, res, () => startDrain(io));
+    }
+  });
+  io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
     cors: {
       origin: process.env.WEB_APP_ORIGIN
         ? process.env.WEB_APP_ORIGIN.split(",").map((origin) => origin.trim())
@@ -61,7 +76,7 @@ export default function createSocketIOServer() {
     },
   });
   const port = Number(process.env.PORT ?? DEFAULT_SOCKET_PORT);
-  io.listen(Number.isFinite(port) ? port : DEFAULT_SOCKET_PORT);
+  httpServer.listen(Number.isFinite(port) ? port : DEFAULT_SOCKET_PORT);
   io.of("/").adapter.on("create-room", (id) => {
     if (id.startsWith("pounce:")) {
       console.log("Set up new board for room: " + id);
@@ -129,7 +144,7 @@ export default function createSocketIOServer() {
   io.on("connection", (socket) => {
     socketData[socket.id] = {};
     const user = socketData[socket.id];
-    socket.on("join_room", async (args) => {
+    socket.on("join_room", async (args, ack) => {
       console.log("join_room " + socket.id, args);
       if (args.roomId == null) {
         if (user.currentRoom != null) {
@@ -137,6 +152,7 @@ export default function createSocketIOServer() {
           await socket.leave(user.currentRoom);
         }
         user.currentRoom = undefined;
+        ack?.({ ok: true });
         return;
       }
       user.name = String(args.name);
@@ -145,10 +161,23 @@ export default function createSocketIOServer() {
           ? args.playerSessionId
           : socket.id;
       const roomId = "pounce:" + args.roomId;
+      if (!getRoom(roomId) && isDraining()) {
+        const notice = createDrainNotice();
+        socket.emit("server_notice", notice);
+        ack?.({
+          ok: false,
+          code: "server_draining",
+          message: notice.message,
+          retryAfterMs: notice.retryAfterMs,
+          drainingUntil: notice.drainingUntil,
+        });
+        return;
+      }
       if (user.currentRoom != null) {
         await socket.leave(user.currentRoom);
       }
       await socket.join(roomId);
+      ack?.({ ok: true });
     });
     socket.on("move", (args, ack) => {
       if (user.currentRoom == null) {
@@ -429,6 +458,140 @@ export default function createSocketIOServer() {
       broadcastHands(user.currentRoom);
     });
   });
+}
+
+function isDrainEndpointRequest(req: IncomingMessage): boolean {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  return url.pathname === DRAIN_ENDPOINT_PATH;
+}
+
+function handleDrainRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  startDrain: () => ServerNotice
+) {
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    respondJson(res, 405, { ok: false, error: "Method not allowed" });
+    return;
+  }
+
+  const expectedSecret = process.env[DRAIN_SECRET_ENV_VAR];
+  if (!expectedSecret) {
+    respondJson(res, 503, {
+      ok: false,
+      error: `${DRAIN_SECRET_ENV_VAR} is not configured`,
+    });
+    return;
+  }
+
+  const providedSecret = getDrainRequestSecret(req);
+  if (!providedSecret || !secretsEqual(providedSecret, expectedSecret)) {
+    respondJson(res, 401, { ok: false, error: "Unauthorized" });
+    return;
+  }
+
+  const notice = startDrain();
+  respondJson(res, 200, {
+    ok: true,
+    type: notice.type,
+    message: notice.message,
+    retryAfterMs: notice.retryAfterMs,
+    drainingUntil: notice.drainingUntil,
+  });
+}
+
+function startDrain(
+  io: Server<ClientToServerEvents, ServerToClientEvents>
+): ServerNotice {
+  const now = Date.now();
+  drainingUntil = Math.max(drainingUntil, now + getDrainWindowMs());
+  const notice = createDrainNotice(now);
+  io.emit("server_notice", notice);
+  console.log(
+    "Game server drain started until " +
+      new Date(notice.drainingUntil).toISOString()
+  );
+  return notice;
+}
+
+function isDraining(now = Date.now()) {
+  return drainingUntil > now;
+}
+
+function createDrainNotice(now = Date.now()): ServerNotice {
+  const retryAfterMs = Math.max(0, drainingUntil - now);
+  return {
+    type: "server_draining",
+    message:
+      "Game server update starting soon. New online games are paused for about " +
+      formatDrainDuration(retryAfterMs) +
+      ".",
+    retryAfterMs,
+    drainingUntil,
+  };
+}
+
+function getDrainWindowMs() {
+  const configured = Number(process.env[DRAIN_WINDOW_ENV_VAR]);
+  return Number.isFinite(configured) && configured > 0
+    ? configured
+    : DEFAULT_DRAIN_WINDOW_MS;
+}
+
+function formatDrainDuration(durationMs: number) {
+  const totalSeconds = Math.max(1, Math.ceil(durationMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  if (minutes > 0 && seconds > 0) {
+    return `${minutes} ${pluralize("minute", minutes)} ${seconds} ${pluralize(
+      "second",
+      seconds
+    )}`;
+  }
+  if (minutes > 0) {
+    return `${minutes} ${pluralize("minute", minutes)}`;
+  }
+  return `${seconds} ${pluralize("second", seconds)}`;
+}
+
+function pluralize(word: string, count: number) {
+  return count === 1 ? word : word + "s";
+}
+
+function getDrainRequestSecret(req: IncomingMessage): string | null {
+  const authorization = getFirstHeader(req.headers.authorization);
+  const bearerPrefix = "Bearer ";
+  if (authorization?.startsWith(bearerPrefix)) {
+    return authorization.slice(bearerPrefix.length).trim();
+  }
+
+  return getFirstHeader(req.headers["x-pounce-drain-secret"])?.trim() ?? null;
+}
+
+function getFirstHeader(
+  header: string | string[] | undefined
+): string | undefined {
+  return Array.isArray(header) ? header[0] : header;
+}
+
+function secretsEqual(left: string, right: string) {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+  return (
+    leftBuffer.length === rightBuffer.length &&
+    timingSafeEqual(leftBuffer, rightBuffer)
+  );
+}
+
+function respondJson(
+  res: ServerResponse,
+  statusCode: number,
+  body: Record<string, unknown>
+) {
+  res.statusCode = statusCode;
+  res.setHeader("content-type", "application/json; charset=utf-8");
+  res.end(JSON.stringify(body));
 }
 
 function markPlayerDisconnected(roomId: string, socketId: string): boolean {
