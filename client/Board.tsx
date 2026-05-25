@@ -134,7 +134,7 @@ export default observer(function Board({
       key={String(useTouch)}
     >
       <DragReporter onUpdateGrabbedItem={handleUpdateGrabbedItem} />
-      <MobileDragPreviewLayer enabled={useTouch} />
+      <MobileDragPreviewLayer enabled />
       <div
         className={styles.root}
         data-card-readability={easyReadCards ? "easy" : "standard"}

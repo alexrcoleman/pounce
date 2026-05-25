@@ -28,6 +28,8 @@ export default function DragReporter({ onUpdateGrabbedItem }: Props) {
         onUpdateGrabbedItem(null, null);
       } else if ("card" in item) {
         onUpdateGrabbedItem(item.card, getDraggedCards(item, state.board));
+      } else {
+        onUpdateGrabbedItem(null, null);
       }
     });
     return () => unsub();

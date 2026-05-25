@@ -14,6 +14,7 @@ import {
   CARD_HEIGHT,
   CARD_WIDTH,
   FIELD_PILE_AREA_SIZE,
+  PLAYER_STACK_CARD_GAP,
   getPlayerStackLocation,
 } from "../shared/CardLocations";
 import {
@@ -29,6 +30,10 @@ type CursorGeometry = Pick<
   CardScreenGeometry,
   "centerX" | "centerY" | "layoutScale"
 >;
+type CardCursorTarget = {
+  geometry: CardScreenGeometry;
+  location: CardLocation;
+};
 export default observer(function HandsLayer() {
   const { state } = useClientContext();
   const layout = useBoardLayout();
@@ -96,30 +101,42 @@ export default observer(function HandsLayer() {
     }),
   ];
 
-  const cardLocs = new Map<string, CardScreenGeometry>();
+  const cardLocs = new Map<string, CardCursorTarget>();
   cardsWithLocation.forEach((cardWithLoc) => {
     const card = cardWithLoc.card;
     const location = cardWithLoc.location;
     const isScaleDown =
       location.type !== "field_stack" &&
       !fullSizePlayerIndices.includes(card.player);
-    cardLocs.set(
-      getCardKey(card),
-      getCardScreenGeometry({
+    cardLocs.set(getCardKey(card), {
+      geometry: getCardScreenGeometry({
         card,
         isScaleDown,
         layout,
         location,
         position: getPosition(card, state, location),
         rotationDegrees: getCardRotationDegrees(board, card, location),
-      })
-    );
+      }),
+      location,
+    });
   });
   const getCursorGeometry = (
     location: CursorLocation
   ): CursorGeometry | null => {
     if (isCardCursorLocation(location)) {
-      return cardLocs.get(getCardKey(location)) ?? null;
+      const target = cardLocs.get(getCardKey(location));
+      if (!target) {
+        return null;
+      }
+      if (target.location.type !== "solitaire") {
+        return target.geometry;
+      }
+      return {
+        ...target.geometry,
+        centerY:
+          target.geometry.centerY +
+          PLAYER_STACK_CARD_GAP * target.geometry.layoutScale,
+      };
     }
 
     if (location.type === "field_slot") {

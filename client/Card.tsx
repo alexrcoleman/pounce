@@ -7,6 +7,7 @@ import { SourceType } from "./CardDnDItem";
 import joinClasses from "./joinClasses";
 import styles from "./Card.module.css";
 import { useDrag } from "react-dnd";
+import { getEmptyImage } from "react-dnd-html5-backend";
 import { observer } from "mobx-react-lite";
 import SocketState from "./SocketState";
 import { getPlayerLocation } from "../shared/CardLocations";
@@ -178,7 +179,7 @@ const CardContentMemo = observer(function CardContent({
           },
     [source, JSON.stringify(toJS(card)), board.pileLocs, geometry.x, geometry.y]
   );
-  const [{ isDragging, isDraggingOther, canDrag }, drag] = useDrag(
+  const [{ isDragging, isDraggingOther, canDrag }, drag, preview] = useDrag(
     () =>
       source.type === "field_stack"
         ? {
@@ -232,6 +233,9 @@ const CardContentMemo = observer(function CardContent({
           },
     [canInteract, source, item]
   );
+  useEffect(() => {
+    preview(getEmptyImage(), { captureDraggingState: true });
+  }, [preview]);
   // So moving cards are "lifted" while moving
   useEffect(() => {
     setIsAnimating(true);
