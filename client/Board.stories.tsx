@@ -5,8 +5,10 @@ import Board from "./Board";
 import { ClientContext } from "./ClientContext";
 import SocketState from "./SocketState";
 import type { CardState, Suits, Values } from "../shared/GameUtils";
+import { scoreBoard } from "../shared/GameUtils";
 import { createRoomState } from "../shared/RoomState";
 import { dealRoomHands, startRoomGame } from "../shared/RoomLogic";
+import type { RoundAnalysis } from "../shared/RoundAnalysis";
 
 type BoardStoryArgs = {
   easyReadCards: boolean;
@@ -63,17 +65,26 @@ export const FullSolitairePile: Story = {
   render: (args) => <BoardStoryFrame {...args} fullSolitairePile />,
 };
 
+export const PostRoundAnalysis: Story = {
+  args: {
+    height: 760,
+    width: 1120,
+  },
+  render: (args) => <BoardStoryFrame {...args} postRound />,
+};
+
 function BoardStoryFrame({
   easyReadCards,
   fullSolitairePile = false,
   height,
+  postRound = false,
   playerCount,
   width,
   zoom,
-}: BoardStoryArgs & { fullSolitairePile?: boolean }) {
+}: BoardStoryArgs & { fullSolitairePile?: boolean; postRound?: boolean }) {
   const state = useMemo(
-    () => createBoardStoryState(playerCount, { fullSolitairePile }),
-    [fullSolitairePile, playerCount]
+    () => createBoardStoryState(playerCount, { fullSolitairePile, postRound }),
+    [fullSolitairePile, playerCount, postRound]
   );
 
   return (
@@ -104,7 +115,10 @@ function BoardStoryFrame({
 
 function createBoardStoryState(
   playerCount: number,
-  { fullSolitairePile = false }: { fullSolitairePile?: boolean } = {}
+  {
+    fullSolitairePile = false,
+    postRound = false,
+  }: { fullSolitairePile?: boolean; postRound?: boolean } = {}
 ) {
   const state = new SocketState();
   const room = createRoomState(playerCount);
@@ -147,16 +161,87 @@ function createBoardStoryState(
     [0.3, 0.5, 0.16],
   ];
   room.board.pileLocs = pileLocs.slice(0, room.board.piles.length);
+  if (postRound) {
+    finishStoryRound(room.board);
+  }
 
   state.onConnect(activeSocketId);
   state.onUpdate({
     board: room.board,
     revision: 1,
-    roundAnalysis: null,
+    roundAnalysis: postRound ? createStoryRoundAnalysis(room.board) : null,
     settings: room.settings,
     time: Date.now(),
   });
   return state;
+}
+
+function finishStoryRound(board: ReturnType<typeof createRoomState>["board"]) {
+  board.players.forEach((player, index) => {
+    player.currentPoints = index === 0 ? 18 : index === 1 ? 7 : -3 - index;
+  });
+  board.players[0].pounceDeck = [];
+  scoreBoard(board);
+}
+
+function createStoryRoundAnalysis(
+  board: ReturnType<typeof createRoomState>["board"]
+): RoundAnalysis {
+  const roundEndedAt = Date.now();
+  const durationMs = 74_000;
+
+  return {
+    version: 3,
+    roundStartedAt: roundEndedAt - durationMs,
+    roundEndedAt,
+    durationMs,
+    pouncerIndex: board.pouncer ?? null,
+    playerReports: board.players.map((player, playerIndex) => {
+      const centerPlayOpportunities = 12 + playerIndex;
+      const centerPlaysMade = Math.max(4, 9 - playerIndex);
+      const solitairePlayOpportunities = 10 + playerIndex;
+      const solitairePlaysMade = Math.max(3, 7 - playerIndex);
+      const contestedCenterOpportunities = 4 + playerIndex;
+      const contestedCenterWins = Math.max(1, 3 - playerIndex);
+
+      return {
+        playerIndex,
+        playerName: player.name,
+        playerColor: player.color,
+        score: player.scores[player.scores.length - 1] ?? 0,
+        pounceCardsLeft: player.pounceDeck.length,
+        pounceDeck: player.pounceDeck.map((card) => ({
+          card,
+          played: false,
+        })),
+        summary: {
+          missedCenterPlays: playerIndex === 0 ? 1 : 3 + playerIndex,
+          missedPounceHelpers: playerIndex === 0 ? 0 : 1,
+          cycledPastPlayableCards: playerIndex,
+          beatenToCenter: playerIndex === 0 ? 0 : 1,
+          solitaireMoves: solitairePlaysMade,
+          cardsPlayedToCenter: centerPlaysMade,
+          deckCycles: 5 + playerIndex,
+          deckCyclesPerSecond: (5 + playerIndex) / (durationMs / 1000),
+          centerPlaysMade,
+          centerPlayOpportunities,
+          centerPlayRate: centerPlaysMade / centerPlayOpportunities,
+          solitairePlaysMade,
+          solitairePlayOpportunities,
+          solitairePlayRate:
+            solitairePlaysMade / solitairePlayOpportunities,
+          contestedCenterWins,
+          contestedCenterOpportunities,
+          contestedCenterWinRate:
+            contestedCenterWins / contestedCenterOpportunities,
+          delayedPlays: playerIndex === 0 ? 1 : 2,
+          totalMissedMs: playerIndex === 0 ? 1200 : 3600,
+          longestMissMs: playerIndex === 0 ? 1200 : 2400,
+        },
+        highlights: [],
+      };
+    }),
+  };
 }
 
 function tuneActivePlayerFullPile(player: {
