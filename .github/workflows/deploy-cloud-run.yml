@@ -17,6 +17,8 @@ env:
   REGION: us-east4
   NODE_VERSION: 18.x
   DRAIN_WAIT_SECONDS: 300
+  DRAIN_MAX_ATTEMPTS: 6
+  DRAIN_RETRY_SECONDS: 10
 
 jobs:
   deploy:
@@ -80,24 +82,64 @@ jobs:
           fi
 
           response_file="$(mktemp)"
-          status="$(curl -sS -o "$response_file" -w "%{http_code}" \
-            -X POST "$service_url/api/admin/drain" \
-            -H "Authorization: Bearer $GAME_SERVER_DRAIN_SECRET" || true)"
+          error_file="$(mktemp)"
+          attempt=1
 
-          if [ "$status" = "404" ]; then
-            echo "::warning::Drain endpoint is not live yet; proceeding with bootstrap deploy."
-            exit 0
-          fi
+          while [ "$attempt" -le "$DRAIN_MAX_ATTEMPTS" ]; do
+            : > "$response_file"
+            : > "$error_file"
+            status="000"
 
-          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            if status="$(curl -sS --connect-timeout 10 --max-time 30 \
+              -o "$response_file" \
+              -w "%{http_code}" \
+              -X POST "$service_url/api/admin/drain" \
+              -H "Authorization: Bearer $GAME_SERVER_DRAIN_SECRET" \
+              2> "$error_file")"; then
+              true
+            else
+              status="000"
+            fi
+
+            if [ "$status" -ge 200 ] && [ "$status" -lt 300 ]; then
+              cat "$response_file"
+              echo "Waiting $DRAIN_WAIT_SECONDS seconds before deploying..."
+              sleep "$DRAIN_WAIT_SECONDS"
+              exit 0
+            fi
+
+            if [ "$status" = "404" ]; then
+              echo "::warning::Drain endpoint is not live yet; proceeding with bootstrap deploy."
+              exit 0
+            fi
+
+            if [ "$status" = "401" ] || [ "$status" = "403" ]; then
+              cat "$response_file"
+              echo "::error::Game server drain request was unauthorized with HTTP $status."
+              exit 1
+            fi
+
+            if [ "$status" = "000" ] ||
+              [ "$status" = "408" ] ||
+              [ "$status" = "429" ] ||
+              { [ "$status" -ge 500 ] && [ "$status" -lt 600 ]; }; then
+              if [ "$attempt" -eq "$DRAIN_MAX_ATTEMPTS" ]; then
+                cat "$response_file"
+                cat "$error_file"
+                echo "::warning::Game server drain stayed unavailable after $DRAIN_MAX_ATTEMPTS attempts; proceeding with deploy."
+                exit 0
+              fi
+
+              echo "Drain attempt $attempt/$DRAIN_MAX_ATTEMPTS failed with HTTP $status; retrying in $DRAIN_RETRY_SECONDS seconds..."
+              sleep "$DRAIN_RETRY_SECONDS"
+              attempt=$((attempt + 1))
+              continue
+            fi
+
             cat "$response_file"
             echo "::error::Game server drain request failed with HTTP $status."
             exit 1
-          fi
-
-          cat "$response_file"
-          echo "Waiting $DRAIN_WAIT_SECONDS seconds before deploying..."
-          sleep "$DRAIN_WAIT_SECONDS"
+          done
 
       - name: Deploy to Cloud Run
         id: deploy
