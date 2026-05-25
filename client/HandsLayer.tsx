@@ -4,6 +4,7 @@ import { getCardKey, stableObject } from "./CardsLayer";
 import {
   CardState,
   CursorLocation,
+  getCursorItemCards,
   isCardCursorLocation,
 } from "../shared/GameUtils";
 import { useClientContext } from "./ClientContext";
@@ -181,7 +182,7 @@ export default observer(function HandsLayer() {
         }
         return (
           <CursorHand
-            card={hand.item}
+            cards={getCursorItemCards(hand)}
             x={cursorGeometry.centerX}
             y={cursorGeometry.centerY}
             scale={cursorGeometry.layoutScale}

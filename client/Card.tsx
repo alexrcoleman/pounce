@@ -1,4 +1,4 @@
-import type { CardState } from "../shared/GameUtils";
+import type { CardState, CursorState } from "../shared/GameUtils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import CardFace from "./CardFace";
@@ -20,6 +20,8 @@ import {
   getCardScreenGeometry,
   getPosition,
 } from "./cardGeometry";
+import { cardEquals } from "../shared/CardUtils";
+import { getCursorItemCards } from "../shared/GameUtils";
 
 type Props = {
   card: CardState;
@@ -60,6 +62,7 @@ const CardContentMemo = observer(function CardContent({
     onClick && onClick();
   }, [canInteract, onClick, updateCursorTarget]);
   const board = state.board!;
+  const activePlayerIndex = state.getActivePlayerIndex();
   const player = board.players[card.player];
 
   const pile =
@@ -86,7 +89,7 @@ const CardContentMemo = observer(function CardContent({
   const fullSizePlayerIndices =
     layout.mode !== "standard"
       ? layout.fullSizePlayerIndices
-      : [state.getActivePlayerIndex()];
+      : [activePlayerIndex];
   let scaleDown =
     location.type !== "field_stack" &&
     !fullSizePlayerIndices.includes(card.player);
@@ -103,7 +106,7 @@ const CardContentMemo = observer(function CardContent({
   if (postGameStage) {
     const [px, py] = getPlayerLocation(
       card.player,
-      state.getActivePlayerIndex()
+      activePlayerIndex
     );
     if (
       (postGameStage === 1 || postGameStage === 2) &&
@@ -239,6 +242,11 @@ const CardContentMemo = observer(function CardContent({
   }, [positionX, positionY, zIndex]);
 
   const canClick = canInteract && onClick != null;
+  const isRemoteCursorDragged = isCardInRemoteCursorDrag(
+    card,
+    state.hands,
+    activePlayerIndex
+  );
   return (
     <div
       className={joinClasses(
@@ -255,7 +263,7 @@ const CardContentMemo = observer(function CardContent({
           "--x": geometry.x + "px",
           "--y": geometry.y + "px",
           "--s": geometry.screenScale,
-          opacity: isDragging ? 0.25 : 1,
+          opacity: isDragging || isRemoteCursorDragged ? 0.25 : 1,
         } as any
       }
       onMouseEnter={updateCursorTarget}
@@ -315,6 +323,18 @@ function getCursorUpdate(
     return { location: card };
   }
   return { location: card, item: card };
+}
+
+function isCardInRemoteCursorDrag(
+  card: CardState,
+  hands: CursorState[],
+  activePlayerIndex: number
+): boolean {
+  return hands.some(
+    (hand, index) =>
+      index !== activePlayerIndex &&
+      getCursorItemCards(hand).some((cursorCard) => cardEquals(cursorCard, card))
+  );
 }
 
 function getSource(

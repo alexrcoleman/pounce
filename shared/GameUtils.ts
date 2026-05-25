@@ -15,6 +15,7 @@ export type CursorLocation =
 export type CursorState = {
   location?: CursorLocation | null;
   item?: CardState | null;
+  items?: CardState[] | null;
 };
 
 export type CardState = {
@@ -52,6 +53,13 @@ export function cursorLocationsEqual(
     return a.position[0] === b.position[0] && a.position[1] === b.position[1];
   }
   return false;
+}
+
+export function getCursorItemCards(cursor: CursorState): CardState[] {
+  if (cursor.items && cursor.items.length > 0) {
+    return cursor.items;
+  }
+  return cursor.item ? [cursor.item] : [];
 }
 export type PlayerState = {
   isSpectating?: boolean;

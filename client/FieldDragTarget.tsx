@@ -13,6 +13,9 @@ import { FIELD_PILE_AREA_SIZE } from "../shared/CardLocations";
 import type { CursorLocation } from "../shared/GameUtils";
 import styles from "./Board.module.css";
 
+const FIELD_CURSOR_UPDATE_INTERVAL_MS = 500;
+const FIELD_CURSOR_POSITION_STEP = 0.05;
+
 type Props = {
   onDrop: (item: CardDnDItem, position: [number, number]) => void;
   onMoveFieldStack: (
@@ -27,7 +30,7 @@ export default observer(function FieldDragTarget({
   onUpdateDragTarget,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
-  const lastUpdateRef = useRef(0);
+  const lastUpdateRef = useRef({ key: "", time: 0 });
   const [{ isOver, canDrop }, drop] = useDrop(
     () => ({
       accept: ["card", "field_stack"],
@@ -66,8 +69,7 @@ export default observer(function FieldDragTarget({
         if (
           !("card" in item) ||
           isMultiCardSolitaireDrag(item) ||
-          item.card.value !== 1 ||
-          Date.now() < lastUpdateRef.current + 250
+          item.card.value !== 1
         ) {
           return;
         }
@@ -77,15 +79,27 @@ export default observer(function FieldDragTarget({
           return;
         }
 
-        lastUpdateRef.current = Date.now();
-        onUpdateDragTarget({
-          type: "field_slot",
-          position: getCardDropPosition(
+        const position = quantizeFieldCursorPosition(
+          getCardDropPosition(
             ref.current,
             item,
             monitor.getDifferenceFromInitialOffset(),
             monitor.getSourceClientOffset() ?? loc
-          ),
+          )
+        );
+        const key = position.join(":");
+        const now = Date.now();
+        if (
+          key === lastUpdateRef.current.key ||
+          now < lastUpdateRef.current.time + FIELD_CURSOR_UPDATE_INTERVAL_MS
+        ) {
+          return;
+        }
+
+        lastUpdateRef.current = { key, time: now };
+        onUpdateDragTarget({
+          type: "field_slot",
+          position,
         });
       },
     }),
@@ -169,4 +183,22 @@ function getDraggedAnchorPosition(
 
 function getFieldScale(element: HTMLDivElement) {
   return element.getBoundingClientRect().width / FIELD_SIZE;
+}
+
+function quantizeFieldCursorPosition(
+  position: [number, number]
+): [number, number] {
+  return [
+    quantizeFieldCursorCoordinate(position[0]),
+    quantizeFieldCursorCoordinate(position[1]),
+  ];
+}
+
+function quantizeFieldCursorCoordinate(value: number): number {
+  return Number(
+    (
+      Math.round(value / FIELD_CURSOR_POSITION_STEP) *
+      FIELD_CURSOR_POSITION_STEP
+    ).toFixed(2)
+  );
 }

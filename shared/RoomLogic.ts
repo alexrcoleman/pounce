@@ -110,6 +110,9 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
           : null;
         hand.location = moveResult.cursorMove;
         hand.item = moveResult.cursorMoveItem ?? hand.item;
+        hand.items = moveResult.cursorMoveItem
+          ? [moveResult.cursorMoveItem]
+          : undefined;
         markRoomHandUpdated(room, index);
         hasHandUpdate = true;
 
@@ -136,8 +139,12 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
             moveResult.clearCursorLocation
           );
         } else {
-          if (room.hands[index].item !== undefined) {
+          if (
+            room.hands[index].item !== undefined ||
+            room.hands[index].items !== undefined
+          ) {
             room.hands[index].item = undefined;
+            room.hands[index].items = undefined;
             markRoomHandUpdated(room, index);
           }
         }
@@ -706,9 +713,11 @@ export function updateRoomHand(
   playerIndex: number,
   {
     item,
+    items,
     location,
   }: {
     item?: CardState | null;
+    items?: CardState[] | null;
     location?: CursorLocation | null;
   }
 ): boolean {
@@ -723,6 +732,14 @@ export function updateRoomHand(
   }
   if (item !== undefined) {
     didChange = setRoomHandItem(hands[playerIndex], item) || didChange;
+    if (items === undefined) {
+      didChange =
+        setRoomHandItems(hands[playerIndex], item ? [item] : null) ||
+        didChange;
+    }
+  }
+  if (items !== undefined) {
+    didChange = setRoomHandItems(hands[playerIndex], items) || didChange;
   }
   if (didChange) {
     markRoomHandUpdated(room, playerIndex);
@@ -746,6 +763,7 @@ export function releaseRoomHandAfterCenterPlay(
     didChange = setRoomHandLocation(hand, location) || didChange;
   }
   didChange = setRoomHandItem(hand, null) || didChange;
+  didChange = setRoomHandItems(hand, null) || didChange;
   if (didChange) {
     markRoomHandUpdated(room, playerIndex);
   }
@@ -768,6 +786,7 @@ export function resetRoomHandAfterCenterPlay(
     location ?? getPlayerHandCursorLocation(room.board, playerIndex, move)
   );
   didChange = setRoomHandItem(hand, null) || didChange;
+  didChange = setRoomHandItems(hand, null) || didChange;
   if (didChange) {
     markRoomHandUpdated(room, playerIndex);
   }
@@ -792,6 +811,7 @@ export function resetRoomHandAfterDeckAdvance(
     getPlayerDeckCursorLocation(room.board, playerIndex)
   );
   didChange = setRoomHandItem(hand, null) || didChange;
+  didChange = setRoomHandItems(hand, null) || didChange;
   if (didChange) {
     markRoomHandUpdated(room, playerIndex);
   }
@@ -818,6 +838,30 @@ function setRoomHandItem(
   }
   hand.item = item;
   return true;
+}
+
+function setRoomHandItems(
+  hand: CursorState,
+  items: CardState[] | null | undefined
+): boolean {
+  if (cursorItemCardsEqual(hand.items, items)) {
+    return false;
+  }
+  hand.items = items;
+  return true;
+}
+
+function cursorItemCardsEqual(
+  a: CardState[] | null | undefined,
+  b: CardState[] | null | undefined
+): boolean {
+  if (a == null || b == null) {
+    return a == null && b == null;
+  }
+  if (a.length !== b.length) {
+    return false;
+  }
+  return a.every((card, index) => cardEquals(card, b[index]));
 }
 
 function markRoomHandUpdated(room: RoomState, playerIndex: number): void {

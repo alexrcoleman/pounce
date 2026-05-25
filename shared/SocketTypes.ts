@@ -66,6 +66,7 @@ export type ClientToServerEvents = {
   restart_game: () => void;
   update_hand: (args: {
     item?: CardState | null;
+    items?: CardState[] | null;
     location?: CursorLocation | null;
   }) => void;
   move: (args: ActionEnvelope<Move>, ack?: (args: ActionAck) => void) => void;

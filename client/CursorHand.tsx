@@ -1,30 +1,33 @@
 import CardFace from "./CardFace";
+import { CARD_HEIGHT } from "../shared/CardLocations";
 import { CardState } from "../shared/GameUtils";
 import styles from "./CursorHand.module.css";
 import { observer } from "mobx-react-lite";
 import { useEffect, useRef, useState } from "react";
+import type { CSSProperties } from "react";
 
 type Props = {
   x: number;
   y: number;
   color: string;
-  card: CardState | null | undefined;
+  cards: CardState[];
   scale?: number;
 };
 
 const ITEM_APPEAR_DELAY_MS = 160;
 const ITEM_APPEAR_MOVE_THRESHOLD_PX = 8;
+const STACK_CARD_GAP = 18;
 
 export default observer(function CursorHand({
   x,
   y,
   color,
-  card,
+  cards,
   scale = 1,
 }: Props) {
-  const [visibleCard, setVisibleCard] = useState(card);
+  const [visibleCards, setVisibleCards] = useState(cards);
   const previousRef = useRef({
-    cardKey: getCursorCardKey(card),
+    cardKey: getCursorCardsKey(cards),
     x,
     y,
   });
@@ -33,24 +36,24 @@ export default observer(function CursorHand({
   useEffect(() => {
     const updateVersion = ++updateVersionRef.current;
     const previous = previousRef.current;
-    const cardKey = getCursorCardKey(card);
+    const cardKey = getCursorCardsKey(cards);
     const movedDistance = Math.hypot(x - previous.x, y - previous.y);
     let timeout: ReturnType<typeof setTimeout> | undefined;
 
-    if (!card) {
-      setVisibleCard(null);
+    if (cards.length === 0) {
+      setVisibleCards([]);
     } else if (
       previous.cardKey == null &&
       movedDistance >= ITEM_APPEAR_MOVE_THRESHOLD_PX
     ) {
-      setVisibleCard(null);
+      setVisibleCards([]);
       timeout = setTimeout(() => {
         if (updateVersionRef.current === updateVersion) {
-          setVisibleCard(card);
+          setVisibleCards(cards);
         }
       }, ITEM_APPEAR_DELAY_MS);
     } else {
-      setVisibleCard(card);
+      setVisibleCards(cards);
     }
 
     previousRef.current = { cardKey, x, y };
@@ -59,7 +62,7 @@ export default observer(function CursorHand({
         clearTimeout(timeout);
       }
     };
-  }, [card, x, y]);
+  }, [cards, x, y]);
 
   return (
     <div
@@ -70,14 +73,39 @@ export default observer(function CursorHand({
       }}
     >
       <div className={styles.cursor}>➤</div>
-      {visibleCard && (
-        <div className={styles.card}>
-          <CardFace value={visibleCard.value} suit={visibleCard.suit} />
+      {visibleCards.length > 0 && (
+        <div
+          className={styles.cardStack}
+          style={
+            {
+              "--cursor-stack-height": `${
+                CARD_HEIGHT + (visibleCards.length - 1) * STACK_CARD_GAP
+              }px`,
+            } as CSSProperties
+          }
+        >
+          {visibleCards.map((visibleCard, index) => (
+            <div
+              className={styles.card}
+              key={getCursorCardKey(visibleCard)}
+              style={
+                {
+                  "--cursor-card-top": `${index * STACK_CARD_GAP}px`,
+                } as CSSProperties
+              }
+            >
+              <CardFace value={visibleCard.value} suit={visibleCard.suit} />
+            </div>
+          ))}
         </div>
       )}
     </div>
   );
 });
+
+function getCursorCardsKey(cards: CardState[]) {
+  return cards.length > 0 ? cards.map(getCursorCardKey).join("|") : null;
+}
 
 function getCursorCardKey(card: CardState | null | undefined) {
   return card ? `${card.player}:${card.value}_${card.suit}` : null;

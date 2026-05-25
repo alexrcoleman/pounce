@@ -293,6 +293,7 @@ export default function useLocalGame(name: string | null) {
             playerIndex,
             args[0] as {
               item?: CardState | null;
+              items?: CardState[] | null;
               location?: CursorLocation | null;
             }
           );
@@ -391,8 +392,14 @@ export default function useLocalGame(name: string | null) {
       onUpdateHand: (location: CursorLocation) => {
         socket?.emit("update_hand", { location: location ?? null });
       },
-      onUpdateGrabbedItem: (card: CardState | null) => {
-        socket?.emit("update_hand", { item: card ?? null });
+      onUpdateGrabbedItem: (
+        card: CardState | null,
+        cards: CardState[] | null = card ? [card] : null
+      ) => {
+        socket?.emit("update_hand", {
+          item: card ?? null,
+          items: cards ?? null,
+        });
       },
       setAILevel: (level: number) => {
         socket?.emit("set_ai_level", { speed: level });

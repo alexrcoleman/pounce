@@ -114,6 +114,15 @@ export default observer(function Board({
       setGrabbedItem(null);
     }
   }, [canInteractWithCards, grabbedItem, socket]);
+  const handleUpdateGrabbedItem = useCallback(
+    (item: CardState | null, items: CardState[] | null) => {
+      const nextItem = canInteractWithCards ? item : null;
+      const nextItems = canInteractWithCards ? items : null;
+      socket?.emit("update_hand", { item: nextItem, items: nextItems });
+      setGrabbedItem(nextItem);
+    },
+    [canInteractWithCards, socket]
+  );
   if (useTouch == null) {
     // Loading touch type still. Ideally we'd render still here, but
     // DnDProvider seems to struggle with backend changing
@@ -124,13 +133,7 @@ export default observer(function Board({
       backend={useTouch ? TouchBackend : HTML5Backend}
       key={String(useTouch)}
     >
-      <DragReporter
-        onUpdateGrabbedItem={(item) => {
-          const nextItem = canInteractWithCards ? item : null;
-          socket?.emit("update_hand", { item: nextItem });
-          setGrabbedItem(nextItem);
-        }}
-      />
+      <DragReporter onUpdateGrabbedItem={handleUpdateGrabbedItem} />
       <MobileDragPreviewLayer enabled={useTouch} />
       <div
         className={styles.root}

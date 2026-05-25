@@ -320,8 +320,14 @@ export default function useGameSocket(
         onUpdateHand: (location: CursorLocation) => {
           emitIfConnected("update_hand", { location: location ?? null });
         },
-        onUpdateGrabbedItem: (card: CardState | null) => {
-          emitIfConnected("update_hand", { item: card ?? null });
+        onUpdateGrabbedItem: (
+          card: CardState | null,
+          cards: CardState[] | null = card ? [card] : null
+        ) => {
+          emitIfConnected("update_hand", {
+            item: card ?? null,
+            items: cards ?? null,
+          });
         },
         setAILevel: (level: number) => {
           emitIfConnected("set_ai_level", { speed: level });
@@ -347,7 +353,10 @@ export type Actions = {
   onRestart: () => void;
   onRotate: () => void;
   onUpdateHand: (location: CursorLocation) => void;
-  onUpdateGrabbedItem: (card: CardState | null) => void;
+  onUpdateGrabbedItem: (
+    card: CardState | null,
+    cards?: CardState[] | null
+  ) => void;
   setAILevel: (level: number) => void;
   onRemoveDisconnectedPlayers: () => void;
 };

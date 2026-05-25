@@ -446,7 +446,7 @@ export default function createSocketIOServer() {
     socket.on("room_ping", (_args, ack) => {
       ack?.({ serverTime: Date.now() });
     });
-    socket.on("update_hand", ({ item, location }) => {
+    socket.on("update_hand", ({ item, items, location }) => {
       if (user.currentRoom == null) {
         return;
       }
@@ -454,7 +454,7 @@ export default function createSocketIOServer() {
       const player = room.board.players.findIndex(
         (p) => p.socketId === socket.id
       );
-      updateRoomHand(room, player, { item, location });
+      updateRoomHand(room, player, { item, items, location });
       broadcastHands(user.currentRoom);
     });
   });
