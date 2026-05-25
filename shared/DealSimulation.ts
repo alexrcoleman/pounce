@@ -6,6 +6,8 @@ import deepClone from "./deepClone";
 export type DealSimulationPlayerResult = {
   playerIndex: number;
   predictedScore: number;
+  predictedScoreConfidenceInterval95: number;
+  predictedPointDifferential: number;
   predictedRank: number;
   simulationCount: number;
   pounceOutRate: number;
@@ -51,6 +53,7 @@ export function simulateDealQuality(
     number,
     {
       score: number;
+      scoreSquared: number;
       pouncedOut: number;
       pounceCardsLeft: number;
     }
@@ -58,6 +61,7 @@ export function simulateDealQuality(
   activePlayerIndices.forEach((playerIndex) => {
     totals.set(playerIndex, {
       score: 0,
+      scoreSquared: 0,
       pouncedOut: 0,
       pounceCardsLeft: 0,
     });
@@ -77,6 +81,7 @@ export function simulateDealQuality(
         return;
       }
       total.score += result.score;
+      total.scoreSquared += result.score * result.score;
       total.pouncedOut += result.pouncedOut ? 1 : 0;
       total.pounceCardsLeft += result.pounceCardsLeft;
     });
@@ -84,14 +89,31 @@ export function simulateDealQuality(
 
   const unranked = activePlayerIndices.map((playerIndex) => {
     const total = totals.get(playerIndex)!;
+    const predictedScore = total.score / maxTrials;
     return {
       playerIndex,
-      predictedScore: total.score / maxTrials,
+      predictedScore,
+      predictedScoreConfidenceInterval95: getMeanConfidenceInterval95(
+        getSampleVariance(total.score, total.scoreSquared, maxTrials),
+        maxTrials
+      ),
+      predictedPointDifferential: 0,
       predictedRank: 1,
       simulationCount: maxTrials,
       pounceOutRate: total.pouncedOut / maxTrials,
       averagePounceCardsLeft: total.pounceCardsLeft / maxTrials,
     };
+  });
+  const predictedScoreTotal = unranked.reduce(
+    (sum, result) => sum + result.predictedScore,
+    0
+  );
+  unranked.forEach((result) => {
+    result.predictedPointDifferential = getPointDifferentialFromScore(
+      result.predictedScore,
+      predictedScoreTotal,
+      activePlayerIndices.length
+    );
   });
   const ranked = unranked
     .slice()
@@ -104,6 +126,63 @@ export function simulateDealQuality(
   });
 
   return unranked;
+}
+
+function getPointDifferentialFromScore(
+  score: number,
+  totalScore: number,
+  playerCount: number
+): number {
+  if (playerCount <= 1) {
+    return 0;
+  }
+  return score * playerCount - totalScore;
+}
+
+function getSampleVariance(
+  sum: number,
+  sumSquares: number,
+  sampleSize: number
+): number {
+  if (sampleSize <= 1) {
+    return 0;
+  }
+  return Math.max(0, (sumSquares - (sum * sum) / sampleSize) / (sampleSize - 1));
+}
+
+function getMeanConfidenceInterval95(
+  sampleVariance: number,
+  sampleSize: number
+): number {
+  if (sampleSize <= 1) {
+    return 0;
+  }
+  return (
+    getT95CriticalValue(sampleSize) * Math.sqrt(sampleVariance / sampleSize)
+  );
+}
+
+function getT95CriticalValue(sampleSize: number): number {
+  const degreesOfFreedom = sampleSize - 1;
+  const exactValues = [
+    12.706, 4.303, 3.182, 2.776, 2.571, 2.447, 2.365, 2.306, 2.262,
+    2.228, 2.201, 2.179, 2.16, 2.145, 2.131, 2.12, 2.11, 2.101, 2.093,
+    2.086, 2.08, 2.074, 2.069, 2.064, 2.06, 2.056, 2.052, 2.048,
+    2.045, 2.042,
+  ];
+  if (degreesOfFreedom <= exactValues.length) {
+    return exactValues[Math.max(0, degreesOfFreedom - 1)];
+  }
+  if (degreesOfFreedom <= 40) {
+    return 2.021;
+  }
+  if (degreesOfFreedom <= 60) {
+    return 2;
+  }
+  if (degreesOfFreedom <= 120) {
+    return 1.98;
+  }
+  return 1.96;
 }
 
 function runDealSimulationTrial(

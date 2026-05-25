@@ -26,7 +26,7 @@ export type RoundSnapshot = {
 };
 
 export type RoundAnalysis = {
-  version: 3;
+  version: 4;
   roundStartedAt: number;
   roundEndedAt: number;
   durationMs: number;
@@ -40,6 +40,7 @@ export type PlayerRoundAnalysis = {
   playerName: string;
   playerColor: string;
   score: number;
+  pointDifferential: number;
   pounceCardsLeft: number;
   pounceDeck: RoundAnalysisPounceDeckCard[];
   dealSimulation?: DealSimulationPlayerResult;
@@ -582,10 +583,14 @@ export function analyzeRoundSnapshots(
   const pouncerIndex = finalBoard.players.findIndex(
     (player) => !player.isSpectating && player.pounceDeck.length === 0
   );
+  const activePlayerIndices = finalBoard.players
+    .map((player, playerIndex) => ({ player, playerIndex }))
+    .filter(({ player }) => !player.isSpectating)
+    .map(({ playerIndex }) => playerIndex);
   const dealSimulationByPlayer = getDealSimulationByPlayer(firstSnapshot.board);
 
   return {
-    version: 3,
+    version: 4,
     roundStartedAt: firstSnapshot.time,
     roundEndedAt: finalSnapshot.time,
     durationMs: Math.max(0, finalSnapshot.time - firstSnapshot.time),
@@ -617,6 +622,11 @@ export function analyzeRoundSnapshots(
         playerName: player.name,
         playerColor: player.color,
         score: player.currentPoints,
+        pointDifferential: getPointDifferential(
+          finalBoard,
+          activePlayerIndices,
+          playerIndex
+        ),
         pounceCardsLeft: player.pounceDeck.length,
         pounceDeck: getPounceDeckReport(
           firstSnapshot.board,
@@ -673,6 +683,29 @@ export function analyzeRoundSnapshots(
       };
     }),
   };
+}
+
+function getPointDifferential(
+  board: BoardState,
+  activePlayerIndices: number[],
+  playerIndex: number
+): number {
+  if (
+    activePlayerIndices.length <= 1 ||
+    !activePlayerIndices.includes(playerIndex)
+  ) {
+    return 0;
+  }
+
+  const playerScore = board.players[playerIndex]?.currentPoints ?? 0;
+  return activePlayerIndices.reduce((sum, otherPlayerIndex) => {
+    if (otherPlayerIndex === playerIndex) {
+      return sum;
+    }
+    return (
+      sum + playerScore - (board.players[otherPlayerIndex]?.currentPoints ?? 0)
+    );
+  }, 0);
 }
 
 function getDealSimulationByPlayer(

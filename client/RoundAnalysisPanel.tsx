@@ -7,12 +7,29 @@ import type {
   RoundAnalysisMoveEvent,
 } from "../shared/RoundAnalysis";
 import type { CardState } from "../shared/GameUtils";
-import { Drawer, Modal } from "antd";
+import { Drawer, Modal, Tooltip } from "antd";
 import styles from "./RoundAnalysisPanel.module.css";
 
 type Props = {
   analysis: RoundAnalysis | null;
   activePlayerIndex: number;
+};
+
+const STAT_TOOLTIPS = {
+  centerPlayRate:
+    "Center plays made divided by every detected center-play opportunity for this player.",
+  contestedCenterWinRate:
+    "How often this player won a shared center-card race before another player played the same card.",
+  dealPerformance:
+    "Compares the actual score with the simulated score prediction for this deal. The prediction includes a 95% confidence interval from the simulated sample size.",
+  dealRank:
+    "The player's predicted rank for this deal, sorted by simulated score among analyzed players.",
+  pointDifferential:
+    "The sum of this player's score minus each other active player's score, compared with the simulated prediction. Higher is better.",
+  productiveSolitaireRate:
+    "Productive solitaire moves played divided by every detected solitaire opportunity for this player.",
+  pounceHelpersMissed:
+    "Missed solitaire moves that would have helped move, expose, or connect the pounce card.",
 };
 
 export default function RoundAnalysisPanel({
@@ -98,17 +115,41 @@ export default function RoundAnalysisPanel({
         {selectedReport.dealSimulation && (
           <Stat
             label="Deal performance"
+            tooltip={STAT_TOOLTIPS.dealPerformance}
             value={
               <ScoreComparison
                 actualScore={selectedReport.score}
+                confidenceInterval95={
+                  selectedReport.dealSimulation
+                    .predictedScoreConfidenceInterval95
+                }
                 predictedScore={selectedReport.dealSimulation.predictedScore}
+                sampleSize={selectedReport.dealSimulation.simulationCount}
               />
             }
           />
         )}
+        {selectedReport.dealSimulation &&
+          typeof selectedReport.dealSimulation.predictedPointDifferential ===
+            "number" && (
+            <Stat
+              label="Point differential"
+              tooltip={STAT_TOOLTIPS.pointDifferential}
+              value={
+                <ScoreComparison
+                  actualScore={selectedReport.pointDifferential}
+                  predictedScore={
+                    selectedReport.dealSimulation.predictedPointDifferential
+                  }
+                  valueFormatter={formatSignedScore}
+                />
+              }
+            />
+          )}
         {selectedReport.dealSimulation && (
           <Stat
             label="Deal rank"
+            tooltip={STAT_TOOLTIPS.dealRank}
             value={`${selectedReport.dealSimulation.predictedRank}/${getDealRankSize(
               analysis
             )}`}
@@ -139,6 +180,7 @@ export default function RoundAnalysisPanel({
         />
         <Stat
           label="Center play rate"
+          tooltip={STAT_TOOLTIPS.centerPlayRate}
           value={
             <RateValue
               ratio={formatRatio(
@@ -151,6 +193,7 @@ export default function RoundAnalysisPanel({
         />
         <Stat
           label="Contested center win rate"
+          tooltip={STAT_TOOLTIPS.contestedCenterWinRate}
           value={
             <RateValue
               ratio={formatRatio(
@@ -165,10 +208,12 @@ export default function RoundAnalysisPanel({
         />
         <Stat
           label="Pounce-helper plays missed"
+          tooltip={STAT_TOOLTIPS.pounceHelpersMissed}
           value={selectedReport.summary.missedPounceHelpers}
         />
         <Stat
           label="Productive solitaire rate"
+          tooltip={STAT_TOOLTIPS.productiveSolitaireRate}
           value={
             <RateValue
               ratio={formatRatio(
@@ -238,23 +283,55 @@ export default function RoundAnalysisPanel({
   );
 }
 
-function Stat({ label, value }: { label: string; value: ReactNode }) {
+function Stat({
+  label,
+  tooltip,
+  value,
+}: {
+  label: string;
+  tooltip?: string;
+  value: ReactNode;
+}) {
   return (
     <div className={styles.stat}>
       <div className={styles.statValue}>{value}</div>
-      <div className={styles.statLabel}>{label}</div>
+      <div className={styles.statLabel}>
+        <span>{label}</span>
+        {tooltip ? (
+          <Tooltip title={tooltip}>
+            <button
+              aria-label={`${label} info`}
+              className={styles.statInfoButton}
+              type="button"
+            >
+              i
+            </button>
+          </Tooltip>
+        ) : null}
+      </div>
     </div>
   );
 }
 
 function ScoreComparison({
   actualScore,
+  confidenceInterval95,
   predictedScore,
+  sampleSize,
+  valueFormatter = formatScore,
 }: {
   actualScore: number;
+  confidenceInterval95?: number;
   predictedScore: number;
+  sampleSize?: number;
+  valueFormatter?: (score: number) => string;
 }) {
   const delta = actualScore - predictedScore;
+  const confidenceIntervalText =
+    typeof confidenceInterval95 === "number" &&
+    Number.isFinite(confidenceInterval95)
+      ? formatScore(confidenceInterval95)
+      : null;
 
   return (
     <div className={styles.scoreComparison}>
@@ -262,10 +339,16 @@ function ScoreComparison({
         {formatPerformanceDelta(delta)}
       </div>
       <div className={styles.scoreComparisonMeta}>
-        Predicted {formatScore(predictedScore)}
+        Predicted {valueFormatter(predictedScore)}
+        {confidenceIntervalText ? ` +/- ${confidenceIntervalText}` : ""}
       </div>
+      {confidenceIntervalText && sampleSize ? (
+        <div className={styles.scoreComparisonMeta}>
+          95% CI, n={sampleSize}
+        </div>
+      ) : null}
       <div className={styles.scoreComparisonMeta}>
-        Actual {formatScore(actualScore)}
+        Actual {valueFormatter(actualScore)}
       </div>
     </div>
   );
@@ -819,6 +902,14 @@ function formatRate(rate: number): string {
 
 function formatScore(score: number): string {
   const rounded = Math.round(score * 10) / 10;
+  return rounded.toFixed(1);
+}
+
+function formatSignedScore(score: number): string {
+  const rounded = Math.round(score * 10) / 10;
+  if (rounded > 0) {
+    return `+${rounded.toFixed(1)}`;
+  }
   return rounded.toFixed(1);
 }
 
