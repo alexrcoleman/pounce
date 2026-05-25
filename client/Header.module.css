@@ -186,12 +186,15 @@
 
 .settingsModal :global(.ant-modal) {
   top: 0;
+  max-height: calc(100vh - 84px);
+  max-height: calc(100dvh - 84px);
   max-width: calc(100vw - 24px);
   margin: 0 auto;
   padding-bottom: 0;
 }
 
 .settingsModal :global(.ant-modal-wrap) {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -200,6 +203,9 @@
 }
 
 .settingsModal :global(.ant-modal-content) {
+  max-height: inherit;
+  display: flex;
+  flex-direction: column;
   overflow: hidden;
   padding: 0;
   border: 1px solid rgba(43, 35, 29, 0.16);
@@ -216,18 +222,11 @@
 }
 
 .settingsModal :global(.ant-modal-body) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
   padding: 12px;
   background: #ffffff;
-}
-
-.settingsModalTopAligned :global(.ant-modal-wrap) {
-  align-items: flex-start;
-}
-
-@media (max-height: 430px) {
-  .settingsModal :global(.ant-modal-wrap) {
-    align-items: flex-start;
-  }
 }
 
 .settingsTitle {

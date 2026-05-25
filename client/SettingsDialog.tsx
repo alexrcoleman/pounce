@@ -106,10 +106,6 @@ export default observer(function SettingsDialog({
       setFairHandHelpOpen(false);
     }
   }, [props.isSettingsOpen]);
-  const rootClassName =
-    page === "room"
-      ? `${styles.settingsModal} ${styles.settingsModalTopAligned}`
-      : styles.settingsModal;
 
   return (
     <Modal
@@ -140,19 +136,14 @@ export default observer(function SettingsDialog({
           </button>
         </div>
       }
-      rootClassName={rootClassName}
+      rootClassName={styles.settingsModal}
       width={440}
       zIndex={1000000}
+      centered
       open={props.isSettingsOpen}
       onCancel={props.onClose}
       closable={false}
       footer={null}
-      styles={{
-        body: {
-          overflowY: "auto",
-          maxHeight: "calc(100dvh - 160px)",
-        },
-      }}
     >
       {page === "main" ? (
         <div className={styles.settingsPage}>
