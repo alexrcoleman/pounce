@@ -4,8 +4,8 @@
 
 .floatingControls {
   position: absolute;
-  top: 0;
-  right: 20px;
+  top: env(safe-area-inset-top, 0px);
+  right: max(20px, env(safe-area-inset-right, 0px));
   z-index: 900;
   display: flex;
   align-items: flex-start;
@@ -85,7 +85,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 12px;
+  padding:
+    max(12px, env(safe-area-inset-top, 0px))
+    max(12px, env(safe-area-inset-right, 0px))
+    max(12px, env(safe-area-inset-bottom, 0px))
+    max(12px, env(safe-area-inset-left, 0px));
   background-color: rgba(0, 0, 0, 0.5);
 }
 
@@ -151,8 +155,8 @@
 
 .roomCodeBadge {
   position: absolute;
-  top: 0;
-  left: 20px;
+  top: env(safe-area-inset-top, 0px);
+  left: max(20px, env(safe-area-inset-left, 0px));
   z-index: 10;
   display: flex;
   align-items: center;

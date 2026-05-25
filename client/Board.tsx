@@ -136,10 +136,9 @@ export default observer(function Board({
         className={styles.root}
         data-card-readability={easyReadCards ? "easy" : "standard"}
         data-layout-mode={layout.mode}
-        ref={ref}
       >
         <BoardLayoutProvider value={layout}>
-          <div className={styles.rootInside}>
+          <div className={styles.rootInside} ref={ref}>
             <PileSection
               onOpenRoomSettings={onOpenRoomSettings}
               roomId={roomId}
