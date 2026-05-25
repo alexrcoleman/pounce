@@ -14,12 +14,12 @@ import {
   startGame,
 } from "./GameUtils";
 
-import { RoomState } from "./RoomState";
+import type { AIPileKnowledge, RoomState } from "./RoomState";
 import { executeMove, getDistance, type Move } from "./MoveHandler";
 import { getApproximateCardLocation } from "./CardLocations";
 import { getBasicAIMove } from "./ComputerV1";
 import deepClone from "./deepClone";
-import { peek } from "./CardUtils";
+import { cardEquals, peek } from "./CardUtils";
 import {
   analyzeRoundSnapshots,
   type RoundSnapshot,
@@ -33,8 +33,9 @@ export type RoomTickResult = {
 };
 
 export const DISCONNECTED_PLAYER_TIMEOUT_MS = 5 * 60 * 1000;
-const AI_WATCHED_PILE_MIN_DURATION_MS = 3000;
-const AI_WATCHED_PILE_REACTION_MULTIPLIER = 2;
+const AI_PILE_KNOWLEDGE_MIN_DURATION_MS = 3000;
+const AI_PILE_KNOWLEDGE_REACTION_MULTIPLIER = 2;
+const AI_OBSOLETE_DRAG_ABORT_DELAY_MS = 180;
 
 export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
   const { board } = room;
@@ -69,15 +70,27 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       }
       hasUpdate = true;
       const hand = (room.hands[index] = room.hands[index] ?? {});
+      rememberAIActiveCenterPile(room, index, now);
+      if (cancelObsoleteAICenterDrag(room, index)) {
+        hasHandUpdate = true;
+        aiCooldowns[index] = now + getAIDragAbortDelay(room);
+        return false;
+      }
       const visibleBoard = getVisibleBoard(room, index, now);
       const move = getBasicAIMove(visibleBoard, index, hand);
 
       if (move) {
         rememberAIMoveFocus(room, index, move, now);
       }
+      if (move && cancelObsoleteAICenterMove(room, index, move)) {
+        hasHandUpdate = true;
+        aiCooldowns[index] = now + getAIDragAbortDelay(room);
+        return false;
+      }
       const moveResult = move ? executeMove(board, index, move, hand) : null;
       // AI cursor movement is an intention, not a completed board move.
       if (move && moveResult?.boardChanged) {
+        rememberAIMoveFocus(room, index, move, now);
         recordRoundSnapshot(room, "move", now, index, move);
       }
 
@@ -146,7 +159,7 @@ function getVisibleBoard(
   const realBoard = room.board;
   const player = realBoard.players[playerIndex];
   visibleBoard.players[playerIndex] = player;
-  const watchedPileExpiresAt = getAIWatchedPileExpirations(room, playerIndex);
+  const pileKnowledge = getAIPileKnowledge(room, playerIndex);
 
   const pounceCard = peek(player.pounceDeck);
   const nonEmptyPileCount = realBoard.piles.filter((p) => p.length > 1).length;
@@ -159,13 +172,18 @@ function getVisibleBoard(
       topCard.value < pounceCard.value &&
       topCard.value >= pounceCard.value - 3;
     if (
-      (watchedPileExpiresAt[i] ?? 0) > now ||
       peek(p)?.player === playerIndex ||
       p.length <= 1 ||
       nonEmptyPileCount < 4 ||
       canPounceCardPlay
     ) {
       visibleBoard.piles[i] = p;
+    } else {
+      visibleBoard.piles[i] = applyAIPileKnowledge(
+        visibleBoard.piles[i],
+        pileKnowledge[i],
+        now
+      );
     }
   });
 
@@ -195,11 +213,153 @@ function rememberAIMoveFocus(
     return;
   }
 
-  const watchedPileExpiresAt = getAIWatchedPileExpirations(room, playerIndex);
-  watchedPileExpiresAt[pileIndex] = Math.max(
-    watchedPileExpiresAt[pileIndex] ?? 0,
-    now + getAIPileWatchDuration(room)
+  rememberAICenterPileTop(room, playerIndex, pileIndex, now);
+}
+
+function rememberAIActiveCenterPile(
+  room: RoomState,
+  playerIndex: number,
+  now: number
+): void {
+  const hand = room.hands[playerIndex];
+  if (!hand?.item || !hand.location) {
+    return;
+  }
+
+  const pileIndex = getCenterPileIndexContainingCard(room.board, hand.location);
+  if (pileIndex < 0) {
+    return;
+  }
+
+  rememberAICenterPileTop(room, playerIndex, pileIndex, now);
+}
+
+function cancelObsoleteAICenterDrag(
+  room: RoomState,
+  playerIndex: number
+): boolean {
+  const hand = room.hands[playerIndex];
+  if (!hand?.item || !hand.location) {
+    return false;
+  }
+
+  const pileIndex = getCenterPileIndexContainingCard(room.board, hand.location);
+  if (pileIndex < 0) {
+    return false;
+  }
+
+  const targetTopCard = peek(room.board.piles[pileIndex]);
+  if (
+    !targetTopCard ||
+    targetTopCard.suit !== hand.item.suit ||
+    targetTopCard.value < hand.item.value
+  ) {
+    return false;
+  }
+
+  hand.item = null;
+  return true;
+}
+
+function cancelObsoleteAICenterMove(
+  room: RoomState,
+  playerIndex: number,
+  move: Move
+): boolean {
+  if (move.type !== "c2c") {
+    return false;
+  }
+
+  const sourceCard = getAICenterMoveSourceCard(room.board, playerIndex, move);
+  const hand = room.hands[playerIndex];
+  if (hand?.item && !cardEquals(hand.item, sourceCard)) {
+    return false;
+  }
+  if (
+    !sourceCard ||
+    !hasCenterPileReachedCard(room.board, move.dest, sourceCard)
+  ) {
+    return false;
+  }
+
+  if (hand?.item) {
+    hand.item = null;
+  }
+  return true;
+}
+
+function getAICenterMoveSourceCard(
+  board: BoardState,
+  playerIndex: number,
+  move: Extract<Move, { type: "c2c" }>
+): CardState | undefined {
+  const player = board.players[playerIndex];
+  if (move.source.type === "pounce") {
+    return peek(player.pounceDeck);
+  }
+  if (move.source.type === "deck") {
+    return peek(player.flippedDeck);
+  }
+  return peek(player.stacks[move.source.index]);
+}
+
+function hasCenterPileReachedCard(
+  board: BoardState,
+  pileIndex: number,
+  card: CardState
+): boolean {
+  const topCard = peek(board.piles[pileIndex]);
+  return (
+    topCard != null &&
+    topCard.suit === card.suit &&
+    topCard.value >= card.value
   );
+}
+
+function getCenterPileIndexContainingCard(
+  board: BoardState,
+  card: CardState
+): number {
+  return board.piles.findIndex((pile) =>
+    pile.some((pileCard) => cardEquals(pileCard, card))
+  );
+}
+
+function rememberAICenterPileTop(
+  room: RoomState,
+  playerIndex: number,
+  pileIndex: number,
+  now: number
+): void {
+  const topCard = peek(room.board.piles[pileIndex]);
+  if (!topCard) {
+    return;
+  }
+
+  const pileKnowledge = getAIPileKnowledge(room, playerIndex);
+  const existing = pileKnowledge[pileIndex];
+  const minTopCard = getHigherCenterPileCard(existing?.minTopCard, topCard);
+  pileKnowledge[pileIndex] = {
+    minTopCard: { ...minTopCard },
+    expiresAt: Math.max(
+      existing?.expiresAt ?? 0,
+      now + getAIPileKnowledgeDuration(room)
+    ),
+  };
+}
+
+function getHigherCenterPileCard(
+  first: CardState | undefined,
+  second: CardState
+): CardState {
+  if (
+    first &&
+    first.suit === second.suit &&
+    first.value > second.value
+  ) {
+    return first;
+  }
+  return second;
 }
 
 function getAIMoveFocusedCenterPile(move: Move): number | null {
@@ -212,33 +372,72 @@ function getAIMoveFocusedCenterPile(move: Move): number | null {
   return null;
 }
 
-function getAIPileWatchDuration(room: RoomState): number {
+function getAIPileKnowledgeDuration(room: RoomState): number {
   return Math.max(
-    getReactionDelay(room) * AI_WATCHED_PILE_REACTION_MULTIPLIER,
-    AI_WATCHED_PILE_MIN_DURATION_MS / room.timescale
+    getReactionDelay(room) * AI_PILE_KNOWLEDGE_REACTION_MULTIPLIER,
+    AI_PILE_KNOWLEDGE_MIN_DURATION_MS / room.timescale
   );
 }
 
-function getAIWatchedPileExpirations(
+function getAIDragAbortDelay(room: RoomState): number {
+  return AI_OBSOLETE_DRAG_ABORT_DELAY_MS / room.timescale;
+}
+
+function getAIPileKnowledge(
   room: RoomState,
   playerIndex: number
-): number[] {
-  const allWatches =
-    room.aiWatchedPileExpiresAt ?? (room.aiWatchedPileExpiresAt = []);
-  allWatches.length = room.board.players.length;
-  for (let index = 0; index < allWatches.length; index++) {
-    allWatches[index] = allWatches[index] ?? [];
-    allWatches[index].length = room.board.piles.length;
-    for (let pileIndex = 0; pileIndex < allWatches[index].length; pileIndex++) {
-      allWatches[index][pileIndex] = allWatches[index][pileIndex] ?? 0;
+): (AIPileKnowledge | null)[] {
+  const allKnowledge = room.aiPileKnowledge ?? (room.aiPileKnowledge = []);
+  allKnowledge.length = room.board.players.length;
+  for (let index = 0; index < allKnowledge.length; index++) {
+    allKnowledge[index] = allKnowledge[index] ?? [];
+    allKnowledge[index].length = room.board.piles.length;
+    for (
+      let pileIndex = 0;
+      pileIndex < allKnowledge[index].length;
+      pileIndex++
+    ) {
+      allKnowledge[index][pileIndex] = allKnowledge[index][pileIndex] ?? null;
     }
   }
-  return allWatches[playerIndex] ?? [];
+  return allKnowledge[playerIndex] ?? [];
+}
+
+function applyAIPileKnowledge(
+  visiblePile: CardState[],
+  knowledge: AIPileKnowledge | null,
+  now: number
+): CardState[] {
+  if (!knowledge || knowledge.expiresAt <= now) {
+    return visiblePile;
+  }
+
+  const visibleTopCard = peek(visiblePile);
+  if (isCenterPileAtLeast(visibleTopCard, knowledge.minTopCard)) {
+    return visiblePile;
+  }
+
+  return visiblePile.concat(getUnknownHigherCenterCard(knowledge.minTopCard));
+}
+
+function isCenterPileAtLeast(
+  topCard: CardState | undefined,
+  minTopCard: CardState
+): boolean {
+  return (
+    topCard != null &&
+    topCard.suit === minTopCard.suit &&
+    topCard.value >= minTopCard.value
+  );
+}
+
+function getUnknownHigherCenterCard(minTopCard: CardState): CardState {
+  return { ...minTopCard, value: 13 };
 }
 
 function resetAIVisibilityMemory(room: RoomState): void {
-  room.aiWatchedPileExpiresAt = room.board.players.map(() =>
-    Array(room.board.piles.length).fill(0)
+  room.aiPileKnowledge = room.board.players.map(() =>
+    Array(room.board.piles.length).fill(null)
   );
 }
 

@@ -6,6 +6,11 @@ import {
 } from "./GameUtils";
 import type { RoundAnalysis, RoundSnapshot } from "./RoundAnalysis";
 
+export type AIPileKnowledge = {
+  minTopCard: CardState;
+  expiresAt: number;
+};
+
 export type RoomSettings = {
   fairHandRotation: boolean;
   aiSpeed: number;
@@ -24,10 +29,10 @@ export type RoomState = {
    */
   aiBoard: BoardState;
   /**
-   * Per-AI center piles that should bypass the delayed board briefly because
-   * the AI is acting on, or just acted on, that pile.
+   * Per-AI lower bounds for center piles the AI has recently targeted.
+   * This blocks stale delayed-board retries without making the pile fully live.
    */
-  aiWatchedPileExpiresAt: number[][];
+  aiPileKnowledge: (AIPileKnowledge | null)[][];
   queuedHands: CardState[][][];
   autoStart: boolean;
   settings: RoomSettings;
@@ -44,8 +49,8 @@ export function createRoomState(playerCount: number): RoomState {
     aiCooldowns: [],
     hands: [],
     aiBoard: JSON.parse(JSON.stringify(board)),
-    aiWatchedPileExpiresAt: board.players.map(() =>
-      Array(board.piles.length).fill(0)
+    aiPileKnowledge: board.players.map(() =>
+      Array(board.piles.length).fill(null)
     ),
     queuedHands: [],
     autoStart: false,
