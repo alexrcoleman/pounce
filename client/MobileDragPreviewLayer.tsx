@@ -10,11 +10,15 @@ import { CARD_BASE_SCALE } from "./cardLayout";
 import styles from "./MobileDragPreviewLayer.module.css";
 
 type Props = {
+  easyReadCards: boolean;
   enabled: boolean;
 };
 const STACK_CARD_GAP = 18;
 
-export default function MobileDragPreviewLayer({ enabled }: Props) {
+export default function MobileDragPreviewLayer({
+  easyReadCards,
+  enabled,
+}: Props) {
   const { state } = useClientContext();
   const { item, itemType, isDragging, currentOffset } = useDragLayer(
     (monitor) => ({
@@ -41,7 +45,10 @@ export default function MobileDragPreviewLayer({ enabled }: Props) {
   const stackHeight = CARD_HEIGHT + (cards.length - 1) * STACK_CARD_GAP;
 
   return (
-    <div className={styles.layer}>
+    <div
+      className={styles.layer}
+      data-card-readability={easyReadCards ? "easy" : "standard"}
+    >
       <div
         className={styles.cardStack}
         style={{
@@ -51,7 +58,7 @@ export default function MobileDragPreviewLayer({ enabled }: Props) {
           transform: `translate(${
             currentOffset.x - (CARD_WIDTH * CARD_BASE_SCALE) / 2
           }px, ${
-            currentOffset.y - (stackHeight * CARD_BASE_SCALE) / 2
+            currentOffset.y - (CARD_HEIGHT * CARD_BASE_SCALE) / 2
           }px) scale(${CARD_BASE_SCALE})`,
         } as CSSProperties}
       >
@@ -62,6 +69,7 @@ export default function MobileDragPreviewLayer({ enabled }: Props) {
             style={
               {
                 "--card-top": `${index * STACK_CARD_GAP}px`,
+                "--card-z-index": `${index}`,
               } as CSSProperties
             }
           >

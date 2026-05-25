@@ -17,6 +17,7 @@
   position: absolute;
   top: var(--card-top);
   left: 0;
+  z-index: var(--card-z-index);
   width: var(--card-width);
   height: var(--card-height);
   border-radius: 3px;
