@@ -2,7 +2,7 @@ import styles from "./Header.module.css";
 import SettingOutlined from "@ant-design/icons/SettingOutlined";
 import { useEffect, useState } from "react";
 import { observer } from "mobx-react-lite";
-import { Button, Tooltip } from "antd";
+import { Button, Modal, Tooltip } from "antd";
 import { useClientContext } from "./ClientContext";
 import ScoresTable from "./ScoresTable";
 import isTouchDevice from "./isTouchDevice";
@@ -170,20 +170,6 @@ function HeaderScoreboardButton({ board }: { board: BoardState }) {
     }
   }, [board.pouncer]);
 
-  useEffect(() => {
-    if (!isOpen) {
-      return;
-    }
-
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-      }
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [isOpen]);
-
   return (
     <>
       <button
@@ -197,37 +183,27 @@ function HeaderScoreboardButton({ board }: { board: BoardState }) {
         <span aria-hidden="true" className={styles.scoresIcon} />
         <span className={styles.buttonLabel}>Scores</span>
       </button>
-      {isOpen ? (
-        <div
-          className={styles.scoreboardModalOverlay}
-          onClick={() => setOpen(false)}
-        >
-          <div
-            aria-label="Scoreboard"
-            aria-modal="true"
-            className={styles.scoreboardDialog}
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-          >
-            <button
-              aria-label="Close scoreboard"
-              className={styles.scoreboardCloseButton}
-              onClick={() => setOpen(false)}
-              type="button"
-            >
-              X
-            </button>
-            <div className={styles.scoreboardTableWrapper}>
-              <ScoresTable board={board} />
-            </div>
-            <div className={styles.scoreboardActions}>
-              <Button type="primary" onClick={() => setOpen(false)}>
-                Done
-              </Button>
-            </div>
+      <Modal
+        centered
+        closeIcon={<span className={styles.scoreboardCloseIcon}>X</span>}
+        footer={
+          <div className={styles.scoreboardActions}>
+            <Button type="primary" onClick={() => setOpen(false)}>
+              Done
+            </Button>
           </div>
+        }
+        maskClosable
+        onCancel={() => setOpen(false)}
+        open={isOpen}
+        rootClassName={styles.scoreboardModal}
+        title="Scores"
+        width={640}
+      >
+        <div className={styles.scoreboardTableWrapper}>
+          <ScoresTable board={board} />
         </div>
-      ) : null}
+      </Modal>
     </>
   );
 }

@@ -149,72 +149,111 @@
   }
 }
 
-.scoreboardModalOverlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000000;
+.scoreboardModal :global(.ant-modal) {
+  top: 0;
+  max-height: calc(
+    100vh - (var(--pounce-dialog-viewport-gutter-block) * 2)
+  );
+  max-height: calc(
+    100dvh - (var(--pounce-dialog-viewport-gutter-block) * 2)
+  );
+  max-width: calc(
+    100vw - (var(--pounce-dialog-viewport-gutter-inline) * 2)
+  );
+  margin: 0 auto;
+  padding-bottom: 0;
+}
+
+.scoreboardModal :global(.ant-modal-wrap) {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
+  overflow-y: auto;
   padding:
-    max(
-      var(--pounce-dialog-viewport-gutter-block),
-      env(safe-area-inset-top, 0px)
-    )
-    max(
-      var(--pounce-dialog-viewport-gutter-inline),
-      env(safe-area-inset-right, 0px)
-    )
-    max(
-      var(--pounce-dialog-viewport-gutter-block),
-      env(safe-area-inset-bottom, 0px)
-    )
-    max(
-      var(--pounce-dialog-viewport-gutter-inline),
-      env(safe-area-inset-left, 0px)
-    );
-  background-color: rgba(0, 0, 0, 0.5);
+    var(--pounce-dialog-viewport-gutter-block)
+    var(--pounce-dialog-viewport-gutter-inline);
 }
 
-.scoreboardDialog {
-  position: relative;
-  width: min(640px, 100%);
-  max-height: calc(100dvh - 24px);
+.scoreboardModal :global(.ant-modal-content) {
+  max-height: inherit;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  padding: 12px;
+  padding: 0;
   background-color: white;
   border: 2px solid #ddd;
   border-radius: 4px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.28);
 }
 
-.scoreboardCloseButton {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 1;
+.scoreboardModal :global(.ant-modal-header) {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 14px 54px 12px;
+  background: #ffffff;
+  border-bottom: 1px solid #ddd;
+}
+
+.scoreboardModal :global(.ant-modal-title) {
+  color: #2e261e;
+  font-size: clamp(20px, 5vw, 25px);
+  font-weight: 800;
+  text-align: center;
+}
+
+.scoreboardModal :global(.ant-modal-close) {
+  top: 9px;
+  right: 12px;
   width: 34px;
   height: 34px;
-  padding: 0;
-  color: #4a4035;
-  font-size: 14px;
-  font-weight: 900;
-  cursor: pointer;
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid rgba(0, 0, 0, 0.14);
   border-radius: 50%;
 }
 
-.scoreboardCloseButton:hover,
-.scoreboardCloseButton:focus {
+.scoreboardModal :global(.ant-modal-close:hover),
+.scoreboardModal :global(.ant-modal-close:focus) {
   background: white;
 }
 
-.scoreboardTableWrapper {
+.scoreboardModal :global(.ant-modal-close-x) {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scoreboardCloseIcon {
+  color: #4a4035;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.scoreboardModal :global(.ant-modal-body) {
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
+  display: flex;
+  justify-content: center;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.scoreboardModal :global(.ant-modal-footer) {
+  flex: 0 0 auto;
+  margin: 0;
+  padding: 12px;
+  border-top: 1px solid #ddd;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 -8px 18px rgba(0, 0, 0, 0.08);
+}
+
+.scoreboardTableWrapper {
+  width: 100%;
+  min-height: 0;
   display: flex;
   justify-content: center;
 }
@@ -222,11 +261,6 @@
 .scoreboardActions {
   display: flex;
   justify-content: flex-end;
-  margin: 12px -12px -12px;
-  padding: 12px;
-  border-top: 1px solid #ddd;
-  background: rgba(255, 255, 255, 0.96);
-  box-shadow: 0 -8px 18px rgba(0, 0, 0, 0.08);
 }
 
 .scoreboardActions :global(.ant-btn) {
