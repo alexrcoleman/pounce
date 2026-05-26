@@ -6,7 +6,14 @@ import { Button, Flex } from "antd";
 import Link from "next/link";
 import styles from "./VictoryOverlay.module.css";
 import RoundAnalysisPanel from "./RoundAnalysisPanel";
-import { useEffect, useState } from "react";
+import { type ReactNode, type ReactPortal, useEffect, useState } from "react";
+
+const { createPortal } = require("react-dom") as {
+  createPortal: (
+    children: ReactNode,
+    container: Element | DocumentFragment
+  ) => ReactPortal;
+};
 
 const CONFETTI_DURATION_MS = 10_000;
 
@@ -51,7 +58,11 @@ export default observer(function VictoryOverlay() {
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [isAnalysisOpen]);
 
-  return pouncer != null ? (
+  if (pouncer == null) {
+    return null;
+  }
+
+  const overlay = (
     <div className={styles.overlay}>
       <div className={styles.dialog}>
         <div className={styles.title}>
@@ -94,8 +105,18 @@ export default observer(function VictoryOverlay() {
             onClick={(event) => event.stopPropagation()}
             role="dialog"
           >
-            <div className={styles.analysisTitle} id="round-analysis-title">
-              Game Analysis
+            <div className={styles.analysisHeader}>
+              <div className={styles.analysisTitle} id="round-analysis-title">
+                Game Analysis
+              </div>
+              <button
+                aria-label="Close game analysis"
+                className={styles.analysisCloseButton}
+                onClick={() => setAnalysisOpen(false)}
+                type="button"
+              >
+                X
+              </button>
             </div>
             <div className={styles.analysisBody}>
               <RoundAnalysisPanel
@@ -117,5 +138,9 @@ export default observer(function VictoryOverlay() {
       ) : null}
       {isConfettiActive && <Confetti />}
     </div>
-  ) : null;
+  );
+
+  return typeof document === "undefined"
+    ? overlay
+    : createPortal(overlay, document.body);
 });

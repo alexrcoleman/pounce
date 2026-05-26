@@ -86,10 +86,22 @@
   align-items: center;
   justify-content: center;
   padding:
-    max(12px, env(safe-area-inset-top, 0px))
-    max(12px, env(safe-area-inset-right, 0px))
-    max(12px, env(safe-area-inset-bottom, 0px))
-    max(12px, env(safe-area-inset-left, 0px));
+    max(
+      var(--pounce-dialog-viewport-gutter-block),
+      env(safe-area-inset-top, 0px)
+    )
+    max(
+      var(--pounce-dialog-viewport-gutter-inline),
+      env(safe-area-inset-right, 0px)
+    )
+    max(
+      var(--pounce-dialog-viewport-gutter-block),
+      env(safe-area-inset-bottom, 0px)
+    )
+    max(
+      var(--pounce-dialog-viewport-gutter-inline),
+      env(safe-area-inset-left, 0px)
+    );
   background-color: rgba(0, 0, 0, 0.5);
 }
 
@@ -190,8 +202,12 @@
 
 .settingsModal :global(.ant-modal) {
   top: 0;
-  max-height: calc(100vh - 84px);
-  max-height: calc(100dvh - 84px);
+  max-height: calc(
+    100vh - (var(--pounce-dialog-viewport-gutter-block) * 2)
+  );
+  max-height: calc(
+    100dvh - (var(--pounce-dialog-viewport-gutter-block) * 2)
+  );
   max-width: calc(100vw - 24px);
   margin: 0 auto;
   padding-bottom: 0;
@@ -203,7 +219,9 @@
   align-items: center;
   justify-content: center;
   overflow-y: auto;
-  padding: 42px 12px;
+  padding:
+    var(--pounce-dialog-viewport-gutter-block)
+    var(--pounce-dialog-viewport-gutter-inline);
 }
 
 .settingsModal :global(.ant-modal-content) {

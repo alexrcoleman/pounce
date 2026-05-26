@@ -96,18 +96,43 @@ function BoardStoryFrame({
           maxHeight: "100vh",
           maxWidth: "100vw",
           overflow: "hidden",
+          position: "relative",
           width,
         }}
       >
-        <Board
-          easyReadCards={easyReadCards}
-          executeMove={() => undefined}
-          isLeftHandedLayout={false}
-          onOpenRoomSettings={() => undefined}
-          onUpdateHand={() => undefined}
-          roomId="storybook"
-          zoom={zoom}
-        />
+        {postRound ? (
+          <div
+            data-testid="story-header-row"
+            style={{
+              background: "rgb(220, 220, 220)",
+              border: "1px solid rgba(0, 0, 0, 0.25)",
+              borderTop: "none",
+              borderRadius: "0 0 4px 4px",
+              fontSize: 15,
+              fontWeight: 600,
+              height: 38,
+              lineHeight: "38px",
+              padding: "0 10px",
+              position: "absolute",
+              right: 20,
+              top: 0,
+              zIndex: 900,
+            }}
+          >
+            Header row
+          </div>
+        ) : null}
+        <div style={{ height: "100%", isolation: "isolate" }}>
+          <Board
+            easyReadCards={easyReadCards}
+            executeMove={() => undefined}
+            isLeftHandedLayout={false}
+            onOpenRoomSettings={() => undefined}
+            onUpdateHand={() => undefined}
+            roomId="storybook"
+            zoom={zoom}
+          />
+        </div>
       </div>
     </ClientContext.Provider>
   );
