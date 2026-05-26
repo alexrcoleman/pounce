@@ -38,6 +38,11 @@ import { timingSafeEqual } from "crypto";
 import { Server } from "socket.io";
 import { executeMove, type Move } from "../shared/MoveHandler";
 import {
+  getServerDrainDescription,
+  getServerDrainStage,
+  getServerDrainTitle,
+} from "../shared/ServerDrainNotice";
+import {
   ClientToServerEvents,
   ServerToClientEvents,
   type ServerNotice,
@@ -59,6 +64,7 @@ const DRAIN_SECRET_ENV_VAR = "GAME_SERVER_DRAIN_SECRET";
 const DRAIN_WINDOW_ENV_VAR = "GAME_SERVER_DRAIN_WINDOW_MS";
 
 let drainingUntil = 0;
+let drainStarted = false;
 let drainRestartNoticeTimer: ReturnType<typeof setTimeout> | undefined;
 
 export default function createSocketIOServer() {
@@ -166,8 +172,8 @@ export default function createSocketIOServer() {
         await socket.leave(user.currentRoom);
       }
       await socket.join(roomId);
-      if (isDraining()) {
-        socket.emit("server_notice", createDrainScheduledNotice());
+      if (isDrainActive()) {
+        socket.emit("server_notice", createDrainNotice());
       }
       ack?.({ ok: true });
     });
@@ -499,8 +505,9 @@ function startDrain(
   io: Server<ClientToServerEvents, ServerToClientEvents>
 ): ServerNotice {
   const now = Date.now();
+  drainStarted = true;
   drainingUntil = Math.max(drainingUntil, now + getDrainWindowMs());
-  const notice = createDrainScheduledNotice(now);
+  const notice = createDrainNotice(now);
   io.emit("server_notice", notice);
   scheduleDrainRestartNotice(io);
   console.log(
@@ -510,32 +517,31 @@ function startDrain(
   return notice;
 }
 
-function isDraining(now = Date.now()) {
-  return drainingUntil > now;
+function isDrainActive() {
+  return drainStarted;
 }
 
-function createDrainScheduledNotice(now = Date.now()): ServerNotice {
+function createDrainNotice(now = Date.now()): ServerNotice {
   const retryAfterMs = Math.max(0, drainingUntil - now);
+  const stage = getServerDrainStage(drainingUntil, now);
   return {
     type: "server_draining",
-    stage: "scheduled",
-    message: `Server restart in ${formatDrainCountdown(
-      retryAfterMs
-    )} for update.`,
-    description:
-      "Online games can continue for now, but they will disconnect and cannot be rejoined after the restart.",
+    stage,
+    message: getServerDrainTitle(drainingUntil, now),
+    description: getServerDrainDescription(stage),
     retryAfterMs,
     drainingUntil,
   };
 }
 
 function createDrainRestartingNotice(): ServerNotice {
+  const now = Date.now();
+  const stage = getServerDrainStage(drainingUntil, now);
   return {
     type: "server_draining",
-    stage: "restarting",
-    message: "Server restarting for update now.",
-    description:
-      "Online games may disconnect now and cannot be rejoined after this restart.",
+    stage,
+    message: getServerDrainTitle(drainingUntil, now),
+    description: getServerDrainDescription(stage),
     retryAfterMs: 0,
     drainingUntil,
   };
@@ -560,13 +566,6 @@ function getDrainWindowMs() {
   return Number.isFinite(configured) && configured > 0
     ? configured
     : DEFAULT_DRAIN_WINDOW_MS;
-}
-
-function formatDrainCountdown(durationMs: number) {
-  const totalSeconds = Math.max(1, Math.ceil(durationMs / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
 function getDrainRequestSecret(req: IncomingMessage): string | null {
