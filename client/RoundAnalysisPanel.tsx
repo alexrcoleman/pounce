@@ -329,7 +329,7 @@ function ScoreComparison({
       </div>
       <div className={styles.scoreComparisonMeta}>
         Predicted {valueFormatter(predictedScore)}
-        {confidenceIntervalText ? ` +/- ${confidenceIntervalText}` : ""}
+        {confidenceIntervalText ? ` ± ${confidenceIntervalText}` : ""}
       </div>
       <div className={styles.scoreComparisonMeta}>
         {formatPerformanceDelta(delta)}
