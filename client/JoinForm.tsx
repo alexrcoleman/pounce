@@ -46,6 +46,7 @@ export default function JoinForm({
     isOfflineReady,
     isPreparing,
     isSupported,
+    isUpdatingOfflineCache,
     message,
   } = usePwaInstall();
   const router = useRouter();
@@ -158,6 +159,8 @@ export default function JoinForm({
     ? null
     : !isInstalledApp
     ? "install"
+    : isUpdatingOfflineCache
+    ? "updating"
     : isOfflineSetupAvailable
     ? "download"
     : "ready";
@@ -335,6 +338,14 @@ export default function JoinForm({
                     </button>
                     .
                   </p>
+                ) : offlineSetupState === "updating" ? (
+                  <p className={styles.offlinePrompt} role="status">
+                    <span
+                      className={styles.inlineSpinner}
+                      aria-hidden="true"
+                    />
+                    Updating offline cache...
+                  </p>
                 ) : offlineSetupState === "download" ? (
                   <p className={styles.offlinePrompt}>
                     Want to play offline?{" "}
@@ -346,8 +357,10 @@ export default function JoinForm({
                       }
                       onClick={downloadForOffline}
                     >
-                      {isPreparing || isCheckingOfflineReady
+                      {isPreparing
                         ? "preparing offline play"
+                        : isCheckingOfflineReady
+                        ? "checking offline files"
                         : "download for offline play"}
                     </button>
                     .

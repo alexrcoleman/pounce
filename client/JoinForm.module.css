@@ -285,6 +285,18 @@
   text-align: center;
 }
 
+.inlineSpinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  margin-right: 7px;
+  border: 2px solid rgba(11, 109, 45, 0.24);
+  border-top-color: #0b6d2d;
+  border-radius: 999px;
+  vertical-align: -2px;
+  animation: offlineSpin 0.8s linear infinite;
+}
+
 .inlineAction {
   appearance: none;
   padding: 0;
@@ -325,6 +337,12 @@
   color: #0b6d2d;
   font-size: 14px;
   line-height: 1;
+}
+
+@keyframes offlineSpin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .installSteps {

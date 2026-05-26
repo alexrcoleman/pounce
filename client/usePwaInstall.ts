@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import { cacheOfflineAssets, isOfflineCacheReady } from "./offlineCache";
 
+const OFFLINE_DOWNLOAD_INTENT_KEY = "pounce::offline-download-intent";
+
 type BeforeInstallPromptEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
@@ -12,6 +14,7 @@ export default function usePwaInstall() {
     useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalling, setIsInstalling] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
+  const [isUpdatingOfflineCache, setIsUpdatingOfflineCache] = useState(false);
   const [isCheckingOfflineReady, setIsCheckingOfflineReady] = useState(true);
   const [isOfflineReady, setIsOfflineReady] = useState(false);
   const [isSupported, setIsSupported] = useState(false);
@@ -27,25 +30,77 @@ export default function usePwaInstall() {
 
   useEffect(() => {
     let isMounted = true;
+    let isRefreshingOfflineCache = false;
     const isPwaSupported = "serviceWorker" in navigator && "caches" in window;
     setIsSupported(isPwaSupported);
     setInstallContext(getInstallContext());
-    if (isPwaSupported) {
-      isOfflineCacheReady()
-        .then((isReady) => {
-          if (isMounted) {
-            setIsOfflineReady(isReady);
-          }
-        })
-        .finally(() => {
-          if (isMounted) {
-            setIsCheckingOfflineReady(false);
-          }
-        });
-    } else {
+
+    const refreshOfflineCache = async () => {
+      if (
+        !isPwaSupported ||
+        !isMounted ||
+        isRefreshingOfflineCache ||
+        !getOfflineDownloadIntent() ||
+        navigator.onLine === false
+      ) {
+        return;
+      }
+
+      isRefreshingOfflineCache = true;
+      setIsUpdatingOfflineCache(true);
+      setMessage("Updating offline cache.");
+      try {
+        const isReady = await prepareOfflineCache();
+        if (!isMounted) {
+          return;
+        }
+
+        setIsOfflineReady(isReady);
+        setMessage(
+          isReady
+            ? "Offline files are up to date."
+            : "Some offline files could not be updated. Try again online."
+        );
+      } catch (error) {
+        console.warn("Unable to refresh offline cache", error);
+        if (isMounted) {
+          setMessage("Offline cache update did not finish. Try again online.");
+        }
+      } finally {
+        isRefreshingOfflineCache = false;
+        if (isMounted) {
+          setIsUpdatingOfflineCache(false);
+        }
+      }
+    };
+
+    const checkOfflineReadiness = async (refreshIfNeeded: boolean) => {
+      const isReady = await isOfflineCacheReady();
+      if (!isMounted) {
+        return;
+      }
+
+      setIsOfflineReady(isReady);
+      if (!isReady && refreshIfNeeded) {
+        await refreshOfflineCache();
+      }
+    };
+
+    if (!isPwaSupported) {
       setIsCheckingOfflineReady(false);
+    } else {
+      checkOfflineReadiness(true).finally(() => {
+        if (isMounted) {
+          setIsCheckingOfflineReady(false);
+        }
+      });
     }
 
+    const onOnline = () => {
+      checkOfflineReadiness(true).catch((error) => {
+        console.warn("Unable to refresh offline cache after reconnect", error);
+      });
+    };
     const onBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
       setInstallPrompt(event as BeforeInstallPromptEvent);
@@ -55,10 +110,12 @@ export default function usePwaInstall() {
       setInstallPrompt(null);
       setMessage("Pounce was added to your home screen.");
     };
+    window.addEventListener("online", onOnline);
     window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
     window.addEventListener("appinstalled", onAppInstalled);
     return () => {
       isMounted = false;
+      window.removeEventListener("online", onOnline);
       window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
       window.removeEventListener("appinstalled", onAppInstalled);
     };
@@ -115,10 +172,9 @@ export default function usePwaInstall() {
         return;
       }
 
+      setOfflineDownloadIntent();
       setMessage("Offline files are being saved.");
-      await waitForServiceWorkerReady();
-      await cacheOfflineAssets();
-      const isReady = await isOfflineCacheReady();
+      const isReady = await prepareOfflineCache();
       setIsOfflineReady(isReady);
       if (!isReady) {
         setMessage("Some offline files could not be saved. Try again online.");
@@ -148,6 +204,7 @@ export default function usePwaInstall() {
     isOfflineReady,
     isPreparing,
     isSupported,
+    isUpdatingOfflineCache,
     message,
   };
 }
@@ -202,6 +259,28 @@ async function waitForServiceWorkerReady() {
     await withTimeout(navigator.serviceWorker.ready, 5000);
   } catch (error) {
     console.warn("Service worker was not ready before offline caching", error);
+  }
+}
+
+async function prepareOfflineCache() {
+  await waitForServiceWorkerReady();
+  await cacheOfflineAssets();
+  return isOfflineCacheReady();
+}
+
+function getOfflineDownloadIntent() {
+  try {
+    return localStorage.getItem(OFFLINE_DOWNLOAD_INTENT_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function setOfflineDownloadIntent() {
+  try {
+    localStorage.setItem(OFFLINE_DOWNLOAD_INTENT_KEY, "true");
+  } catch {
+    // Ignore storage failures; the offline cache can still be prepared.
   }
 }
 
