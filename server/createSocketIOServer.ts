@@ -30,6 +30,7 @@ import {
   setRoomFairHandRotation,
   setRoomAILevel,
   setRoomPaused,
+  setPlayerReadyForRound,
   startRoomGame,
   updateRoomHand,
 } from "../shared/RoomLogic";
@@ -349,6 +350,31 @@ export default function createSocketIOServer() {
       startRoomGame(room);
       markRoomUpdated(user.currentRoom);
       broadcastUpdate(user.currentRoom);
+      broadcastHands(user.currentRoom);
+    });
+    socket.on("set_round_ready", (args) => {
+      if (user.currentRoom == null) {
+        return;
+      }
+
+      const room = getRoom(user.currentRoom);
+      const playerIndex = room.board.players.findIndex(
+        (p) => p.socketId === socket.id
+      );
+      const { didChange, didStart } = setPlayerReadyForRound(
+        room,
+        playerIndex,
+        args.ready
+      );
+      if (!didChange) {
+        return;
+      }
+
+      markRoomUpdated(user.currentRoom);
+      broadcastUpdate(user.currentRoom);
+      if (didStart) {
+        broadcastHands(user.currentRoom);
+      }
     });
     socket.on("deal_hands", () => {
       if (user.currentRoom == null) {
@@ -629,6 +655,7 @@ function markPlayerDisconnected(roomId: string, socketId: string): boolean {
 
   player.disconnected = true;
   player.disconnectedAt = Date.now();
+  player.isReadyForRound = false;
   clearRoomHand(room, playerIndex);
   return true;
 }

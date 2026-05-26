@@ -17,7 +17,11 @@ export default function InfoTooltipIcon({
   ...buttonProps
 }: Props) {
   return (
-    <Tooltip open={tooltipOpen} title={children}>
+    <Tooltip
+      open={tooltipOpen}
+      title={children}
+      trigger={["hover", "focus", "click"]}
+    >
       <button
         {...buttonProps}
         aria-label={ariaLabel}

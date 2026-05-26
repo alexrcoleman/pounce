@@ -17,6 +17,7 @@ type BoardStoryArgs = {
   width: number;
   zoom: number;
 };
+type ReadyStoryRole = "host" | "player";
 
 const meta = {
   title: "Board/Layout",
@@ -57,6 +58,22 @@ export const MainPlayerSpacing: Story = {
   render: (args) => <BoardStoryFrame {...args} />,
 };
 
+export const ReadyForRoundHost: Story = {
+  args: {
+    height: 760,
+    width: 1120,
+  },
+  render: (args) => <BoardStoryFrame {...args} readyRole="host" />,
+};
+
+export const ReadyForRoundPlayer: Story = {
+  args: {
+    height: 760,
+    width: 1120,
+  },
+  render: (args) => <BoardStoryFrame {...args} readyRole="player" />,
+};
+
 export const FullSolitairePile: Story = {
   args: {
     height: 720,
@@ -79,12 +96,22 @@ function BoardStoryFrame({
   height,
   postRound = false,
   playerCount,
+  readyRole,
   width,
   zoom,
-}: BoardStoryArgs & { fullSolitairePile?: boolean; postRound?: boolean }) {
+}: BoardStoryArgs & {
+  fullSolitairePile?: boolean;
+  postRound?: boolean;
+  readyRole?: ReadyStoryRole;
+}) {
   const state = useMemo(
-    () => createBoardStoryState(playerCount, { fullSolitairePile, postRound }),
-    [fullSolitairePile, playerCount, postRound]
+    () =>
+      createBoardStoryState(playerCount, {
+        fullSolitairePile,
+        postRound,
+        readyRole,
+      }),
+    [fullSolitairePile, playerCount, postRound, readyRole]
   );
 
   return (
@@ -143,21 +170,39 @@ function createBoardStoryState(
   {
     fullSolitairePile = false,
     postRound = false,
-  }: { fullSolitairePile?: boolean; postRound?: boolean } = {}
+    readyRole,
+  }: {
+    fullSolitairePile?: boolean;
+    postRound?: boolean;
+    readyRole?: ReadyStoryRole;
+  } = {}
 ) {
   const state = new SocketState();
   const room = createRoomState(playerCount);
-  const activeSocketId = "storybook-player-0";
+  const activePlayerIndex =
+    readyRole === "player" ? Math.min(2, playerCount - 1) : 0;
+  const activeSocketId = `storybook-player-${activePlayerIndex}`;
+  const humanPlayerCount = readyRole ? playerCount : 1;
   room.board.players.forEach((player, index) => {
-    player.name = index === 0 ? "You" : `Player ${index + 1}`;
-    player.socketId = index === 0 ? activeSocketId : null;
+    player.name =
+      index === activePlayerIndex
+        ? "You"
+        : readyRole === "player" && index === 0
+        ? "Host"
+        : `Player ${index + 1}`;
+    player.socketId =
+      index < humanPlayerCount ? `storybook-player-${index}` : null;
   });
 
   dealRoomHands(room);
-  startRoomGame(room);
-  tuneActivePlayerHand(room.board.players[0]);
-  if (fullSolitairePile) {
-    tuneActivePlayerFullPile(room.board.players[0]);
+  if (readyRole) {
+    tuneStoryRoundReady(room.board, readyRole, activePlayerIndex);
+  } else {
+    startRoomGame(room);
+    tuneActivePlayerHand(room.board.players[0]);
+    if (fullSolitairePile) {
+      tuneActivePlayerFullPile(room.board.players[0]);
+    }
   }
   const pileLocs: [number, number, number][] = [
     [0.12, 0.12, 0.02],
@@ -199,6 +244,21 @@ function createBoardStoryState(
     time: Date.now(),
   });
   return state;
+}
+
+function tuneStoryRoundReady(
+  board: ReturnType<typeof createRoomState>["board"],
+  readyRole: ReadyStoryRole,
+  activePlayerIndex: number
+) {
+  const readyPattern =
+    readyRole === "host"
+      ? [true, true, false, true, false, false]
+      : [true, false, false, true, false, false];
+  board.players.forEach((player, index) => {
+    player.isReadyForRound = readyPattern[index] ?? false;
+  });
+  board.players[activePlayerIndex].isReadyForRound = readyRole === "host";
 }
 
 function finishStoryRound(board: ReturnType<typeof createRoomState>["board"]) {

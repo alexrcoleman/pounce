@@ -81,6 +81,7 @@ export type ClientToServerEvents = {
   deal_hands: () => void;
   deal_remaining_players: () => void;
   start_game: () => void;
+  set_round_ready: (args: { ready: boolean }) => void;
   set_paused: (args: { paused: boolean }) => void;
   add_ai: () => void;
   remove_ai: () => void;

@@ -33,6 +33,7 @@ import {
   setRoomFairHandRotation,
   setRoomAILevel,
   setRoomPaused,
+  setPlayerReadyForRound,
   startRoomGame,
   tickRoom,
   updateRoomHand,
@@ -250,6 +251,20 @@ export default function useLocalGame(name: string | null) {
           markRoomUpdated();
           emitUpdate();
           emitHands();
+        } else if (event === "set_round_ready") {
+          const readyArgs = args[0] as { ready: boolean };
+          const { didChange, didStart } = setPlayerReadyForRound(
+            room,
+            playerIndex,
+            readyArgs.ready
+          );
+          if (didChange) {
+            markRoomUpdated();
+            emitUpdate();
+            if (didStart) {
+              emitHands();
+            }
+          }
         } else if (event === "deal_hands") {
           if (dealRoomHands(room)) {
             markRoomUpdated();

@@ -459,6 +459,7 @@ export function startRoomGame(room: RoomState, now = Date.now()): void {
   }
   room.aiCooldowns = room.board.players.map(() => now + 2000 + Math.random());
   startGame(room);
+  clearPlayersReadyForRound(room.board);
   room.handUpdateVersions = [];
   startRoundAnalysis(room, now);
   room.aiBoard = deepClone(room.board);
@@ -500,6 +501,7 @@ export function dealRemainingRoomPlayers(room: RoomState): boolean {
     dealPlayerHand(board, playerIndex);
   });
 
+  clearPlayersReadyForRound(board);
   room.queuedHands = [];
   room.hands = [];
   room.handUpdateVersions = [];
@@ -631,6 +633,85 @@ export function setRoomAILevel(room: RoomState, speed: number): void {
     room.settings.aiSpeed = normalizedSpeed;
     room.settings.simulationMode = false;
   }
+  clearPlayersReadyForRound(room.board);
+}
+
+export type RoundReadyUpdate = {
+  didChange: boolean;
+  didStart: boolean;
+};
+
+export function setPlayerReadyForRound(
+  room: RoomState,
+  playerIndex: number,
+  ready: unknown,
+  now = Date.now()
+): RoundReadyUpdate {
+  const player = room.board.players[playerIndex];
+  if (!player || !canPlayerReadyForRound(room.board, playerIndex)) {
+    return { didChange: false, didStart: false };
+  }
+
+  const isReadyForRound = ready === true;
+  if (player.isReadyForRound === isReadyForRound) {
+    return { didChange: false, didStart: false };
+  }
+
+  player.isReadyForRound = isReadyForRound;
+  const didStart = maybeStartReadyRound(room, now);
+  return { didChange: true, didStart };
+}
+
+function maybeStartReadyRound(room: RoomState, now: number): boolean {
+  const readyPlayers = getRoundReadyPlayers(room.board);
+  if (
+    readyPlayers.length === 0 ||
+    readyPlayers.some((player) => player.isReadyForRound !== true)
+  ) {
+    return false;
+  }
+
+  startRoomGame(room, now);
+  return true;
+}
+
+function getRoundReadyPlayers(board: BoardState): PlayerState[] {
+  if (!isRoundReadyAvailable(board)) {
+    return [];
+  }
+
+  return board.players.filter(
+    (player) =>
+      !player.disconnected &&
+      player.socketId != null &&
+      player.isSpectating !== true &&
+      player.isWaitingForDeal !== true
+  );
+}
+
+function canPlayerReadyForRound(
+  board: BoardState,
+  playerIndex: number
+): boolean {
+  const player = board.players[playerIndex];
+  return (
+    player != null &&
+    isRoundReadyAvailable(board) &&
+    !player.disconnected &&
+    player.socketId != null &&
+    player.isSpectating !== true &&
+    player.isWaitingForDeal !== true
+  );
+}
+
+function isRoundReadyAvailable(board: BoardState): boolean {
+  return board.isDealt && !board.isActive && board.pouncer == null;
+}
+
+function clearPlayersReadyForRound(board: BoardState): void {
+  board.players.forEach((player) => {
+    player.isReadyForRound = false;
+  });
 }
 
 function getPlayersWaitingForDeal(room: RoomState): number[] {

@@ -64,6 +64,7 @@ export function getCursorItemCards(cursor: CursorState): CardState[] {
 export type PlayerState = {
   isSpectating?: boolean;
   isWaitingForDeal?: boolean;
+  isReadyForRound?: boolean;
   disconnected?: boolean;
   disconnectedAt?: number;
   playerSessionId: string | null;
@@ -194,6 +195,7 @@ function createPlayer(
     name,
     socketId: socketId,
     playerSessionId,
+    isReadyForRound: false,
     color,
     stacks: [[], [], [], []],
     pounceDeck: [],
@@ -377,6 +379,7 @@ export function resetBoard(boardState: BoardState, decks?: CardState[][]) {
       createShuffledDeck(index);
     player.flippedDeck = [];
     player.pounceDeck = [];
+    player.isReadyForRound = false;
     if (boardState.isActive) {
       player.totalPoints += player.currentPoints;
       player.scores.push(player.currentPoints);
@@ -406,6 +409,7 @@ export function scoreBoard(board: BoardState) {
   board.isPaused = false;
   board.pouncer = pouncer;
   board.players.forEach((player) => {
+    player.isReadyForRound = false;
     if (!player.isSpectating) {
       player.totalPoints += player.currentPoints;
       player.scores.push(player.currentPoints);
