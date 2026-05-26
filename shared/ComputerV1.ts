@@ -8,6 +8,7 @@ import { isCardCursorLocation } from "./GameUtils";
 import {
   canMoveToSolitairePile,
   canPlayOnCenterPile,
+  cardEquals,
   couldMatch,
   peek,
 } from "./CardUtils";
@@ -29,6 +30,15 @@ type StrategySettings = {
   disableCycling?: boolean;
   solitaireHelpThreshold?: number;
 };
+
+type CardToCenterMove = Extract<Move, { type: "c2c" }>;
+type CardToCenterSource = CardToCenterMove["source"];
+type CardToSolitaireSource = Extract<Move, { type: "c2s" }>["source"];
+
+type HeldCardSource =
+  | { type: "pounce" }
+  | { type: "deck" }
+  | { type: "solitaire"; cardIndex: number; stackIndex: number };
 
 class AIStrategy {
   private sortedPiles: (readonly [CardState[], number])[] = [];
@@ -362,6 +372,199 @@ class AIStrategy {
       -1
     );
   }
+}
+
+export function getCurrentAIDragMove(
+  boardState: BoardState,
+  playerIndex: number,
+  cursor: CursorState
+): Move | undefined {
+  const player = boardState.players[playerIndex];
+  const card = cursor.item;
+  const location = cursor.location;
+  if (!player || !card || !location || card.player !== playerIndex) {
+    return;
+  }
+
+  const source = getHeldCardSource(player, card);
+  if (!source) {
+    return;
+  }
+
+  return (
+    getCurrentDragCenterMove(boardState, player, card, source, location) ??
+    getCurrentDragSolitaireMove(player, playerIndex, card, source, location)
+  );
+}
+
+function getHeldCardSource(
+  player: PlayerState,
+  card: CardState
+): HeldCardSource | undefined {
+  if (cardEquals(peek(player.pounceDeck), card)) {
+    return { type: "pounce" };
+  }
+  if (cardEquals(peek(player.flippedDeck), card)) {
+    return { type: "deck" };
+  }
+
+  for (let stackIndex = 0; stackIndex < player.stacks.length; stackIndex++) {
+    const cardIndex = player.stacks[stackIndex].findIndex((stackCard) =>
+      cardEquals(stackCard, card)
+    );
+    if (cardIndex >= 0) {
+      return { type: "solitaire", cardIndex, stackIndex };
+    }
+  }
+}
+
+function getCurrentDragCenterMove(
+  boardState: BoardState,
+  player: PlayerState,
+  card: CardState,
+  source: HeldCardSource,
+  location: CursorState["location"]
+): Move | undefined {
+  const centerSource = getCardToCenterSource(player, card, source);
+  if (!centerSource || !location) {
+    return;
+  }
+
+  if (!isCardCursorLocation(location)) {
+    if (location.type !== "field_slot" || card.value !== 1) {
+      return;
+    }
+
+    const openPileIndex = boardState.piles.findIndex((pile) => pile.length === 0);
+    if (openPileIndex < 0) {
+      return;
+    }
+
+    return {
+      type: "c2c",
+      source: centerSource,
+      dest: openPileIndex,
+      position: location.position,
+    };
+  }
+
+  const dest = boardState.piles.findIndex((pile) =>
+    cardEquals(peek(pile), location)
+  );
+  if (dest < 0 || !canPlayOnCenterPile(boardState.piles[dest], card)) {
+    return;
+  }
+
+  return { type: "c2c", source: centerSource, dest };
+}
+
+function getCardToCenterSource(
+  player: PlayerState,
+  card: CardState,
+  source: HeldCardSource
+): CardToCenterSource | undefined {
+  if (source.type === "pounce") {
+    return { type: "pounce" };
+  }
+  if (source.type === "deck") {
+    return { type: "deck" };
+  }
+  if (cardEquals(peek(player.stacks[source.stackIndex]), card)) {
+    return { type: "solitaire", index: source.stackIndex };
+  }
+}
+
+function getCurrentDragSolitaireMove(
+  player: PlayerState,
+  playerIndex: number,
+  card: CardState,
+  source: HeldCardSource,
+  location: CursorState["location"]
+): Move | undefined {
+  const dest = getSolitaireTargetIndex(player, playerIndex, location);
+  if (dest < 0) {
+    return;
+  }
+
+  if (source.type === "solitaire") {
+    if (
+      source.stackIndex === dest ||
+      !canMoveToSolitairePile(card, player.stacks[dest])
+    ) {
+      return;
+    }
+
+    return {
+      type: "s2s",
+      source: source.stackIndex,
+      dest,
+      count: player.stacks[source.stackIndex].length - source.cardIndex,
+    };
+  }
+
+  if (!canMoveCardToSolitaireStack(player, card, dest)) {
+    return;
+  }
+
+  return {
+    type: "c2s",
+    source: getCardToSolitaireSource(source),
+    dest,
+  };
+}
+
+function getSolitaireTargetIndex(
+  player: PlayerState,
+  playerIndex: number,
+  location: CursorState["location"]
+): number {
+  if (!location) {
+    return -1;
+  }
+  if (!isCardCursorLocation(location)) {
+    if (
+      location.type === "solitaire_slot" &&
+      location.player === playerIndex &&
+      location.pileIndex >= 0 &&
+      location.pileIndex < player.stacks.length
+    ) {
+      return location.pileIndex;
+    }
+    return -1;
+  }
+
+  if (location.player !== playerIndex) {
+    return -1;
+  }
+
+  return player.stacks.findIndex((stack) =>
+    stack.some((stackCard) => cardEquals(stackCard, location))
+  );
+}
+
+function canMoveCardToSolitaireStack(
+  player: PlayerState,
+  card: CardState,
+  dest: number
+): boolean {
+  const stack = player.stacks[dest];
+  if (canMoveToSolitairePile(card, stack)) {
+    return true;
+  }
+
+  const bottomCard = stack[0];
+  return (
+    bottomCard != null &&
+    player.stacks.some((candidate) => candidate.length === 0) &&
+    card.value === bottomCard.value + 1 &&
+    couldMatch(card, bottomCard)
+  );
+}
+
+function getCardToSolitaireSource(
+  source: Extract<HeldCardSource, { type: "pounce" | "deck" }>
+): CardToSolitaireSource {
+  return source.type;
 }
 
 function canPlayOnSoon(

@@ -68,9 +68,10 @@ function getSourceCard(
   ) {
     return null;
   }
-  // Same
   if (move.type === "s2s") {
-    return null;
+    return player.stacks[move.source][
+      player.stacks[move.source].length - move.count
+    ];
   }
   if (move.type === "c2s") {
     return move.source === "pounce"
@@ -270,7 +271,17 @@ function cardToSolitaire(
   if (topCard == null) {
     throw new Error("No card to play from that pile");
   }
-  if (aiCursor && !cursorLocationEqualsCard(aiCursor.location, topCard)) {
+  if (
+    aiCursor &&
+    !cursorLocationEqualsCard(aiCursor.location, topCard) &&
+    !isHoldingCardOverSolitairePile(
+      aiCursor,
+      boardState,
+      playerIndex,
+      solitairePile,
+      topCard
+    )
+  ) {
     return { cursorMove: topCard };
   }
   if (
@@ -310,7 +321,17 @@ function solitaireToSolitaire(
     throw new Error("Tried to move too many cards from solitaire stack");
   }
 
-  if (aiCursor && !cursorLocationEqualsCard(aiCursor.location, topCard)) {
+  if (
+    aiCursor &&
+    !cursorLocationEqualsCard(aiCursor.location, topCard) &&
+    !isHoldingCardOverSolitairePile(
+      aiCursor,
+      boardState,
+      playerIndex,
+      toPile,
+      topCard
+    )
+  ) {
     return { cursorMove: topCard };
   }
   if (!canMoveToSolitairePile(topCard, dest)) {
@@ -352,6 +373,33 @@ function cycleDeck(
     player.flippedDeck.push(...triple);
   }
   return {};
+}
+
+function isHoldingCardOverSolitairePile(
+  aiCursor: AICursorData,
+  boardState: BoardState,
+  playerIndex: number,
+  pileIndex: number,
+  card: CardState
+): boolean {
+  if (!aiCursor?.item || !cardEquals(aiCursor.item, card)) {
+    return false;
+  }
+
+  const location = aiCursor.location;
+  if (!location) {
+    return false;
+  }
+  if (!isCardCursorLocation(location)) {
+    return (
+      location.type === "solitaire_slot" &&
+      location.player === playerIndex &&
+      location.pileIndex === pileIndex
+    );
+  }
+
+  const stack = boardState.players[playerIndex].stacks[pileIndex];
+  return stack.some((stackCard) => cardEquals(stackCard, location));
 }
 
 export function getDistance(

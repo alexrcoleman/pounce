@@ -20,7 +20,7 @@ import {
 import type { AIPileKnowledge, RoomState } from "./RoomState";
 import { executeMove, getDistance, type Move } from "./MoveHandler";
 import { getApproximateCardLocation } from "./CardLocations";
-import { getBasicAIMove } from "./ComputerV1";
+import { getBasicAIMove, getCurrentAIDragMove } from "./ComputerV1";
 import deepClone from "./deepClone";
 import { cardEquals, peek } from "./CardUtils";
 import {
@@ -83,8 +83,9 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       hasUpdate = true;
       const hand = (room.hands[index] = room.hands[index] ?? {});
       rememberAIActiveCenterPile(room, index, now);
+      const currentDragMove = getCurrentAIDragMove(board, index, hand);
       const visibleBoard = getVisibleBoard(room, index, now);
-      const move = getBasicAIMove(visibleBoard, index, hand);
+      const move = currentDragMove ?? getBasicAIMove(visibleBoard, index, hand);
 
       if (move) {
         rememberAIMoveFocus(room, index, move, now);
