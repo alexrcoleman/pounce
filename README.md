@@ -35,6 +35,34 @@ The Google Cloud setup needs the IAM, IAM Credentials, Security Token Service, C
 
 Before each automated deploy, the workflow posts to `/api/admin/drain` on the currently deployed service and waits 5 minutes. During that window, the game server broadcasts an update toast to connected players and rejects new online rooms while still allowing players to rejoin existing rooms.
 
+### Artifact image cleanup
+
+Cloud Run source deploys push images to the Artifact Registry repository `cloud-run-source-deploy`. The deploy workflow applies `deploy/artifact-registry-cleanup-policy.json` on every run so old images do not accumulate indefinitely.
+
+The policy deletes untagged `pounce` images older than 3 days, while keeping the 10 newest `pounce` image versions. The current deployment image is tagged as `latest`, so the delete policy targets the old images left behind after `latest` moves. Artifact Registry cleanup policies do not detect whether a Cloud Run revision still references an image digest; the 10-version keep rule is the rollback cushion for recent untagged revisions.
+
+To apply or update the policy manually:
+
+```powershell
+gcloud artifacts repositories set-cleanup-policies cloud-run-source-deploy `
+  --project pounce-409615 `
+  --location us-east4 `
+  --policy deploy/artifact-registry-cleanup-policy.json `
+  --no-dry-run
+```
+
+To test changes before enabling deletion, use `--dry-run` instead of `--no-dry-run`. Artifact Registry cleanup policies run in the background and can take about a day to take effect.
+
+The deploy service account needs permission to update cleanup policies on the repository. The simplest setup is Artifact Registry Administrator on the `cloud-run-source-deploy` repository, or a custom role that includes `artifactregistry.repositories.update`.
+
+```powershell
+gcloud artifacts repositories add-iam-policy-binding cloud-run-source-deploy `
+  --project pounce-409615 `
+  --location us-east4 `
+  --member serviceAccount:github-actions-deploy@pounce-409615.iam.gserviceaccount.com `
+  --role roles/artifactregistry.admin
+```
+
 ## Planned todos:
 
 ### Infra

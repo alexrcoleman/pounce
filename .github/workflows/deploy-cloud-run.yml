@@ -15,6 +15,7 @@ env:
   PROJECT_ID: pounce-409615
   SERVICE: pounce
   REGION: us-east4
+  ARTIFACT_REPOSITORY: cloud-run-source-deploy
   NODE_VERSION: 18.x
   DRAIN_WAIT_SECONDS: 300
   DRAIN_MAX_ATTEMPTS: 6
@@ -64,6 +65,15 @@ jobs:
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
+
+      - name: Apply Artifact Registry cleanup policy
+        run: |
+          gcloud artifacts repositories set-cleanup-policies "$ARTIFACT_REPOSITORY" \
+            --project "$PROJECT_ID" \
+            --location "$REGION" \
+            --policy deploy/artifact-registry-cleanup-policy.json \
+            --no-dry-run \
+            --quiet
 
       - name: Begin game server drain
         env:

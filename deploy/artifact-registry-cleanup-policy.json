@@ -1,0 +1,19 @@
+[
+  {
+    "name": "delete-pounce-untagged-older-than-3d",
+    "action": { "type": "Delete" },
+    "condition": {
+      "tagState": "untagged",
+      "packageNamePrefixes": ["pounce"],
+      "olderThan": "3d"
+    }
+  },
+  {
+    "name": "keep-pounce-latest-10",
+    "action": { "type": "Keep" },
+    "mostRecentVersions": {
+      "packageNamePrefixes": ["pounce"],
+      "keepCount": 10
+    }
+  }
+]
