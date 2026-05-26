@@ -1,9 +1,10 @@
 import type { IncomingMessage } from "http";
 
 export const SITE_NAME = "Pounce Online";
-export const DEFAULT_SEO_TITLE = "Pounce Online";
+export const DEFAULT_SEO_TITLE =
+  "Pounce Online | Play Pounce (aka Nerts) with Friends or Bots";
 export const DEFAULT_SEO_DESCRIPTION =
-  "Play fast-paced Pounce online with friends or offline against AI.";
+  "Play free, fast-paced Pounce online with friends or offline against bots. Pounce is a multiplayer solitaire card game also known as Nerts or Nertz.";
 export const DEFAULT_SHARE_IMAGE_PATH = "/og-image-v6.png";
 export const DEFAULT_SHARE_IMAGE_ALT =
   "Pounce Online invite with a pounce pile and solitaire piles on a green felt table.";
