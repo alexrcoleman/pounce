@@ -136,7 +136,6 @@ export default function RoundAnalysisPanel({
                 isActivePlayer={
                   selectedReport.playerIndex === activePlayerIndex
                 }
-                playerName={selectedReport.playerName}
                 predictedScore={selectedReport.dealSimulation.predictedScore}
               />
             }
@@ -158,7 +157,6 @@ export default function RoundAnalysisPanel({
                   isActivePlayer={
                     selectedReport.playerIndex === activePlayerIndex
                   }
-                  playerName={selectedReport.playerName}
                   predictedScore={
                     selectedReport.dealSimulation.predictedPointDifferential
                   }
@@ -201,7 +199,7 @@ export default function RoundAnalysisPanel({
           }
         />
         <Stat
-          label="Contested center win rate"
+          label="Contested win rate"
           tooltip={STAT_TOOLTIPS.contestedCenterWinRate}
           value={
             <RateValue
@@ -216,7 +214,7 @@ export default function RoundAnalysisPanel({
           }
         />
         <Stat
-          label="Pounce-helper plays missed"
+          label="Helper players missed"
           tooltip={STAT_TOOLTIPS.pounceHelpersMissed}
           value={selectedReport.summary.missedPounceHelpers}
         />
@@ -326,14 +324,12 @@ function ScoreComparison({
   actualScore,
   confidenceInterval95,
   isActivePlayer = false,
-  playerName,
   predictedScore,
   valueFormatter = formatScore,
 }: {
   actualScore: number;
   confidenceInterval95?: number;
   isActivePlayer?: boolean;
-  playerName: string;
   predictedScore: number;
   valueFormatter?: (score: number) => string;
 }) {
@@ -360,7 +356,6 @@ function ScoreComparison({
         actualScore={actualScore}
         confidenceInterval95={confidenceInterval95}
         isActivePlayer={isActivePlayer}
-        playerName={playerName}
         predictedScore={predictedScore}
         valueFormatter={valueFormatter}
       />
@@ -379,14 +374,12 @@ function ConfidenceRangeBar({
   actualScore,
   confidenceInterval95,
   isActivePlayer,
-  playerName,
   predictedScore,
   valueFormatter,
 }: {
   actualScore: number;
   confidenceInterval95?: number;
   isActivePlayer: boolean;
-  playerName: string;
   predictedScore: number;
   valueFormatter: (score: number) => string;
 }) {
@@ -412,7 +405,7 @@ function ConfidenceRangeBar({
   const zeroPercent = getRangePercent(0, range);
   const actualPercent = getRangePercent(actualScore, range);
   const confidenceBand = getConfidenceBand(actualScore, lower95, upper95);
-  const actualLabel = `${isActivePlayer ? "You" : playerName} ${valueFormatter(
+  const actualLabel = `${isActivePlayer ? "You" : "Actual"} ${valueFormatter(
     actualScore
   )}`;
   const barStyle = {
