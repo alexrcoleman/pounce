@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 import type {
   PlayerRoundAnalysis,
@@ -32,6 +38,9 @@ const STAT_TOOLTIPS = {
   pounceHelpersMissed:
     "Missed solitaire moves that would have helped move, expose, or connect the pounce card.",
 };
+
+const CONFIDENCE_INTERVAL_95_STANDARD_DEVIATIONS = 1.96;
+const DEFAULT_CONFIDENCE_RANGE_STANDARD_DEVIATIONS = 3;
 
 export default function RoundAnalysisPanel({
   analysis,
@@ -124,6 +133,9 @@ export default function RoundAnalysisPanel({
                   selectedReport.dealSimulation
                     .predictedScoreConfidenceInterval95
                 }
+                isActivePlayer={
+                  selectedReport.playerIndex === activePlayerIndex
+                }
                 predictedScore={selectedReport.dealSimulation.predictedScore}
               />
             }
@@ -141,6 +153,9 @@ export default function RoundAnalysisPanel({
                   confidenceInterval95={
                     selectedReport.dealSimulation
                       .predictedPointDifferentialConfidenceInterval95
+                  }
+                  isActivePlayer={
+                    selectedReport.playerIndex === activePlayerIndex
                   }
                   predictedScore={
                     selectedReport.dealSimulation.predictedPointDifferential
@@ -308,11 +323,13 @@ function Stat({
 function ScoreComparison({
   actualScore,
   confidenceInterval95,
+  isActivePlayer = false,
   predictedScore,
   valueFormatter = formatScore,
 }: {
   actualScore: number;
   confidenceInterval95?: number;
+  isActivePlayer?: boolean;
   predictedScore: number;
   valueFormatter?: (score: number) => string;
 }) {
@@ -334,6 +351,149 @@ function ScoreComparison({
       </div>
       <div className={styles.scoreComparisonMeta}>
         {formatPerformanceDelta(delta)}
+      </div>
+      <ConfidenceRangeBar
+        actualScore={actualScore}
+        confidenceInterval95={confidenceInterval95}
+        isActivePlayer={isActivePlayer}
+        predictedScore={predictedScore}
+        valueFormatter={valueFormatter}
+      />
+    </div>
+  );
+}
+
+type ScoreRange = {
+  min: number;
+  max: number;
+};
+
+type ConfidenceBand = "below" | "expected" | "above";
+
+function ConfidenceRangeBar({
+  actualScore,
+  confidenceInterval95,
+  isActivePlayer,
+  predictedScore,
+  valueFormatter,
+}: {
+  actualScore: number;
+  confidenceInterval95?: number;
+  isActivePlayer: boolean;
+  predictedScore: number;
+  valueFormatter: (score: number) => string;
+}) {
+  if (
+    typeof confidenceInterval95 !== "number" ||
+    !Number.isFinite(confidenceInterval95) ||
+    confidenceInterval95 <= 0 ||
+    !Number.isFinite(actualScore) ||
+    !Number.isFinite(predictedScore)
+  ) {
+    return null;
+  }
+
+  const lower95 = predictedScore - confidenceInterval95;
+  const upper95 = predictedScore + confidenceInterval95;
+  const standardDeviation =
+    confidenceInterval95 / CONFIDENCE_INTERVAL_95_STANDARD_DEVIATIONS;
+  const lowerOneStandardDeviation = predictedScore - standardDeviation;
+  const lowerTwoStandardDeviations = predictedScore - standardDeviation * 2;
+  const lowerThreeStandardDeviations = predictedScore - standardDeviation * 3;
+  const upperOneStandardDeviation = predictedScore + standardDeviation;
+  const upperTwoStandardDeviations = predictedScore + standardDeviation * 2;
+  const upperThreeStandardDeviations = predictedScore + standardDeviation * 3;
+  const range = getConfidenceRange({
+    actualScore,
+    predictedScore,
+    standardDeviation,
+  });
+  const zeroPercent = getRangePercent(0, range);
+  const actualPercent = getRangePercent(actualScore, range);
+  const confidenceBand = getConfidenceBand(actualScore, lower95, upper95);
+  const actualLabel = `${isActivePlayer ? "You" : "Actual"} ${valueFormatter(
+    actualScore
+  )}`;
+  const barStyle = {
+    "--ci-negative-three": `${getRangePercent(
+      lowerThreeStandardDeviations,
+      range
+    )}%`,
+    "--ci-negative-two": `${getRangePercent(
+      lowerTwoStandardDeviations,
+      range
+    )}%`,
+    "--ci-negative-one": `${getRangePercent(
+      lowerOneStandardDeviation,
+      range
+    )}%`,
+    "--ci-positive-one": `${getRangePercent(
+      upperOneStandardDeviation,
+      range
+    )}%`,
+    "--ci-positive-two": `${getRangePercent(
+      upperTwoStandardDeviations,
+      range
+    )}%`,
+    "--ci-positive-three": `${getRangePercent(
+      upperThreeStandardDeviations,
+      range
+    )}%`,
+    "--ci-zero": `${zeroPercent}%`,
+    "--ci-predicted": `${getRangePercent(predictedScore, range)}%`,
+    "--ci-actual": `${actualPercent}%`,
+  } as CSSProperties;
+
+  return (
+    <div
+      aria-label={`${actualLabel}. Predicted ${valueFormatter(
+        predictedScore
+      )} plus or minus ${formatScore(confidenceInterval95)}.`}
+      className={styles.ciBar}
+    >
+      <div className={styles.ciBarPlot}>
+        <div className={styles.ciBarTrackRow}>
+          <span className={styles.ciBarScaleSide} aria-hidden="true">
+            {formatScoreTick(range.min)}
+          </span>
+          <div className={styles.ciBarTrackWrap} style={barStyle}>
+            <span className={styles.ciBarScaleZero} aria-hidden="true">
+              0
+            </span>
+            <div className={styles.ciBarTrack} aria-hidden="true">
+              <span className={styles.ciBarZeroMark} />
+              <span className={styles.ciBarPredictionMark} />
+              <span
+                className={[
+                  styles.ciBarActualMark,
+                  getConfidenceMarkClass(confidenceBand),
+                  isActivePlayer ? styles.ciBarActualMarkYou : "",
+                ].join(" ")}
+              />
+            </div>
+            <div className={styles.ciBarMarkerLayer} aria-hidden="true">
+              <span
+                className={[
+                  styles.ciBarActualConnector,
+                  getConfidenceMarkClass(confidenceBand),
+                ].join(" ")}
+              />
+              <span
+                className={[
+                  styles.ciBarActualLabel,
+                  getConfidenceLabelClass(confidenceBand),
+                  isActivePlayer ? styles.ciBarActualLabelYou : "",
+                  getMarkerAlignmentClass(actualPercent),
+                ].join(" ")}
+              >
+                {actualLabel}
+              </span>
+            </div>
+          </div>
+          <span className={styles.ciBarScaleSide} aria-hidden="true">
+            {formatScoreTick(range.max)}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -930,6 +1090,17 @@ function formatSignedScore(score: number): string {
   return rounded.toFixed(1);
 }
 
+function formatScoreTick(score: number): string {
+  const rounded = Math.round(score * 10) / 10;
+  const text = Number.isInteger(rounded)
+    ? String(rounded)
+    : rounded.toFixed(1);
+  if (rounded > 0) {
+    return `+${text}`;
+  }
+  return text;
+}
+
 function formatPerformanceDelta(delta: number): string {
   const rounded = Math.round(delta * 10) / 10;
   if (Math.abs(rounded) < 0.05) {
@@ -941,6 +1112,93 @@ function formatPerformanceDelta(delta: number): string {
   }
 
   return `Below prediction by ${Math.abs(rounded).toFixed(1)}`;
+}
+
+function getRangePercent(value: number, range: ScoreRange): number {
+  return clamp(((value - range.min) / (range.max - range.min)) * 100, 0, 100);
+}
+
+function getConfidenceRange({
+  actualScore,
+  predictedScore,
+  standardDeviation,
+}: {
+  actualScore: number;
+  predictedScore: number;
+  standardDeviation: number;
+}): ScoreRange {
+  const defaultRangeRadius =
+    standardDeviation * DEFAULT_CONFIDENCE_RANGE_STANDARD_DEVIATIONS;
+  const minValue = Math.min(predictedScore - defaultRangeRadius, actualScore, 0);
+  const maxValue = Math.max(predictedScore + defaultRangeRadius, actualScore, 0);
+  const span = Math.max(1, maxValue - minValue);
+  const padding = Math.max(1, span * 0.06, standardDeviation * 0.35);
+  const paddedMin = minValue - padding;
+  const paddedMax = maxValue + padding;
+  const step = getScaleStep(paddedMax - paddedMin);
+
+  return {
+    min: Math.floor(paddedMin / step) * step,
+    max: Math.ceil(paddedMax / step) * step,
+  };
+}
+
+function getScaleStep(span: number): number {
+  if (span <= 12) {
+    return 1;
+  }
+  if (span <= 30) {
+    return 5;
+  }
+  return 10;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function getConfidenceBand(
+  actualScore: number,
+  lower95: number,
+  upper95: number
+): ConfidenceBand {
+  if (actualScore < lower95) {
+    return "below";
+  }
+  if (actualScore > upper95) {
+    return "above";
+  }
+  return "expected";
+}
+
+function getConfidenceLabelClass(band: ConfidenceBand): string {
+  if (band === "below") {
+    return styles.ciBarActualLabelBelow;
+  }
+  if (band === "above") {
+    return styles.ciBarActualLabelAbove;
+  }
+  return styles.ciBarActualLabelExpected;
+}
+
+function getConfidenceMarkClass(band: ConfidenceBand): string {
+  if (band === "below") {
+    return styles.ciBarActualMarkBelow;
+  }
+  if (band === "above") {
+    return styles.ciBarActualMarkAbove;
+  }
+  return styles.ciBarActualMarkExpected;
+}
+
+function getMarkerAlignmentClass(percent: number): string {
+  if (percent < 12) {
+    return styles.ciBarActualLabelStart;
+  }
+  if (percent > 88) {
+    return styles.ciBarActualLabelEnd;
+  }
+  return "";
 }
 
 function getDealRankSize(analysis: RoundAnalysis): number {

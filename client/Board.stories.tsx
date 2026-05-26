@@ -217,9 +217,15 @@ function createStoryRoundAnalysis(
   const scores = board.players.map(
     (player) => player.scores[player.scores.length - 1] ?? 0
   );
-  const predictedScores = scores.map(
-    (score, playerIndex) => score + (playerIndex === 0 ? -2.6 : 1.2)
-  );
+  const predictedScores = scores.map((score, playerIndex) => {
+    if (playerIndex === 0) {
+      return score - 4.4;
+    }
+    if (playerIndex === 1) {
+      return score + 3.6;
+    }
+    return score + 0.8 + playerIndex * 0.3;
+  });
   const scoreTotal = scores.reduce((sum, score) => sum + score, 0);
   const predictedScoreTotal = predictedScores.reduce(
     (sum, score) => sum + score,
