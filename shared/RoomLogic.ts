@@ -49,6 +49,7 @@ export const STUCK_BOARD_ROTATION_TICKS = 100;
 const AI_PILE_KNOWLEDGE_MIN_DURATION_MS = 3000;
 const AI_PILE_KNOWLEDGE_REACTION_MULTIPLIER = 2;
 const AI_OBSOLETE_TARGET_RECONSIDER_DELAY_MS = 180;
+const MIN_ROUND_READY_PLAYERS = 2;
 export const PLAYER_CENTER_CURSOR_RESET_DELAY_MS = 1000;
 
 export type SetRoomPlayerStuckResult = {
@@ -767,7 +768,7 @@ export function setPlayerReadyForRound(
 function maybeStartReadyRound(room: RoomState, now: number): boolean {
   const readyPlayers = getRoundReadyPlayers(room.board);
   if (
-    readyPlayers.length === 0 ||
+    readyPlayers.length < MIN_ROUND_READY_PLAYERS ||
     readyPlayers.some((player) => player.isReadyForRound !== true)
   ) {
     return false;
@@ -796,9 +797,11 @@ function canPlayerReadyForRound(
   playerIndex: number
 ): boolean {
   const player = board.players[playerIndex];
+  const readyPlayers = getRoundReadyPlayers(board);
   return (
     player != null &&
-    isRoundReadyAvailable(board) &&
+    readyPlayers.length >= MIN_ROUND_READY_PLAYERS &&
+    readyPlayers.includes(player) &&
     !player.disconnected &&
     player.socketId != null &&
     player.isSpectating !== true &&

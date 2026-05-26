@@ -361,6 +361,19 @@
   overflow-y: auto;
 }
 
+.roundReadyTooltip {
+  display: grid;
+  gap: 8px;
+  max-width: 240px;
+}
+
+.roundReadyTooltipText {
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
 .roundReadyPlayer {
   min-width: 0;
   display: grid;
@@ -407,14 +420,6 @@
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
-}
-
-.roundReadySelf {
-  flex: 0 0 auto;
-  color: #6a5b4d;
-  font-size: 10px;
-  font-weight: 900;
-  text-transform: uppercase;
 }
 
 .scores {

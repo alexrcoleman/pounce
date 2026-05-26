@@ -434,7 +434,6 @@ const PileSection = observer(function PileSection({
             <RoundReadyControl
               activePlayerIndex={activePlayerIndex}
               board={board}
-              isHost={false}
               onToggleReady={(ready) =>
                 socket?.emit("set_round_ready", { ready })
               }
@@ -444,7 +443,6 @@ const PileSection = observer(function PileSection({
               <RoundReadyControl
                 activePlayerIndex={activePlayerIndex}
                 board={board}
-                isHost
                 onToggleReady={(ready) =>
                   socket?.emit("set_round_ready", { ready })
                 }
@@ -527,67 +525,48 @@ const PileSection = observer(function PileSection({
 function RoundReadyControl({
   activePlayerIndex,
   board,
-  isHost,
   onToggleReady,
 }: {
   activePlayerIndex: number;
   board: BoardState;
-  isHost: boolean;
   onToggleReady: (ready: boolean) => void;
 }): JSX.Element | null {
   const readyPlayers = getRoundReadyPlayerEntries(board);
   const activeEntry = readyPlayers.find(
     (entry) => entry.playerIndex === activePlayerIndex
   );
-  if (readyPlayers.length === 0 || (!activeEntry && !isHost)) {
+  if (readyPlayers.length === 0 || !activeEntry) {
     return null;
   }
 
   const activePlayerReady = activeEntry?.player.isReadyForRound === true;
-  const otherPlayers = readyPlayers.filter(
-    (entry) => entry.playerIndex !== activePlayerIndex
-  );
-  const readyOtherCount = otherPlayers.filter(
+  const readyPlayerCount = readyPlayers.filter(
     (entry) => entry.player.isReadyForRound === true
-  ).length;
-  const otherPlayerLabel = otherPlayers.length === 1 ? "player" : "players";
+  );
+  const playerLabel = readyPlayers.length === 1 ? "player" : "players";
 
   return (
     <div className={styles.roundReadyControl}>
-      {activeEntry ? (
-        <Button
-          aria-pressed={activePlayerReady}
-          className={styles.readyButton}
-          data-ready={activePlayerReady ? "true" : "false"}
-          onClick={() => onToggleReady(!activePlayerReady)}
+      <div className={styles.roundReadySummary}>
+        <span>
+          {readyPlayerCount.length}/{readyPlayers.length} {playerLabel} ready
+        </span>
+        <InfoTooltipIcon
+          aria-label="Player readiness details"
+          className={styles.roundReadyInfo}
         >
-          <span
-            aria-hidden="true"
-            className={styles.readyButtonIndicator}
-          />
-          Ready for round
-        </Button>
-      ) : null}
-      {isHost ? (
-        <>
-          <div className={styles.roundReadySummary}>
-            <span>
-              {readyOtherCount}/{otherPlayers.length} other {otherPlayerLabel}{" "}
-              ready
-            </span>
-            <InfoTooltipIcon
-              aria-label="Player readiness details"
-              className={styles.roundReadyInfo}
-            >
-              <RoundReadyTooltip players={readyPlayers} />
-            </InfoTooltipIcon>
-          </div>
-        </>
-      ) : activeEntry ? (
-        <div className={styles.roundReadySummary}>
-          {activePlayerReady ? "Marked ready" : "Not ready yet"}
-        </div>
-      ) : null}
+          <RoundReadyTooltip players={readyPlayers} />
+        </InfoTooltipIcon>
+      </div>
+      <Button
+        aria-pressed={activePlayerReady}
+        className={styles.readyButton}
+        data-ready={activePlayerReady ? "true" : "false"}
+        onClick={() => onToggleReady(!activePlayerReady)}
+      >
+        <span aria-hidden="true" className={styles.readyButtonIndicator} />
+        Ready for round
+      </Button>
     </div>
   );
 }
@@ -598,19 +577,24 @@ function RoundReadyTooltip({
   players: RoundReadyPlayerEntry[];
 }): JSX.Element {
   return (
-    <ul className={styles.roundReadyList} aria-label="Round readiness">
-      {players.map(({ player, playerIndex }) => (
-        <li className={styles.roundReadyPlayer} key={playerIndex}>
-          <span
-            aria-checked={player.isReadyForRound === true}
-            className={styles.roundReadyCheckbox}
-            data-ready={player.isReadyForRound === true ? "true" : "false"}
-            role="checkbox"
-          />
-          <span className={styles.roundReadyName}>{player.name}</span>
-        </li>
-      ))}
-    </ul>
+    <div className={styles.roundReadyTooltip}>
+      <div className={styles.roundReadyTooltipText}>
+        Once all players mark ready, the round will automatically start.
+      </div>
+      <ul className={styles.roundReadyList} aria-label="Round readiness">
+        {players.map(({ player, playerIndex }) => (
+          <li className={styles.roundReadyPlayer} key={playerIndex}>
+            <span
+              aria-checked={player.isReadyForRound === true}
+              className={styles.roundReadyCheckbox}
+              data-ready={player.isReadyForRound === true ? "true" : "false"}
+              role="checkbox"
+            />
+            <span className={styles.roundReadyName}>{player.name}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
@@ -624,7 +608,7 @@ function getRoundReadyPlayerEntries(board: BoardState): RoundReadyPlayerEntry[] 
     return [];
   }
 
-  return board.players
+  const players = board.players
     .map((player, playerIndex) => ({ player, playerIndex }))
     .filter(
       ({ player }) =>
@@ -633,6 +617,7 @@ function getRoundReadyPlayerEntries(board: BoardState): RoundReadyPlayerEntry[] 
         player.isSpectating !== true &&
         player.isWaitingForDeal !== true
     );
+  return players.length >= 2 ? players : [];
 }
 
 function isRoundReadyAvailable(board: BoardState): boolean {
