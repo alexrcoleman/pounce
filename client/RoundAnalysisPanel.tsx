@@ -136,6 +136,7 @@ export default function RoundAnalysisPanel({
                 isActivePlayer={
                   selectedReport.playerIndex === activePlayerIndex
                 }
+                playerName={selectedReport.playerName}
                 predictedScore={selectedReport.dealSimulation.predictedScore}
               />
             }
@@ -157,6 +158,7 @@ export default function RoundAnalysisPanel({
                   isActivePlayer={
                     selectedReport.playerIndex === activePlayerIndex
                   }
+                  playerName={selectedReport.playerName}
                   predictedScore={
                     selectedReport.dealSimulation.predictedPointDifferential
                   }
@@ -301,7 +303,6 @@ function Stat({
 }) {
   return (
     <div className={styles.stat}>
-      <div className={styles.statValue}>{value}</div>
       <div className={styles.statLabel}>
         <span>{label}</span>
         {tooltip ? (
@@ -316,6 +317,7 @@ function Stat({
           </Tooltip>
         ) : null}
       </div>
+      <div className={styles.statValue}>{value}</div>
     </div>
   );
 }
@@ -324,12 +326,14 @@ function ScoreComparison({
   actualScore,
   confidenceInterval95,
   isActivePlayer = false,
+  playerName,
   predictedScore,
   valueFormatter = formatScore,
 }: {
   actualScore: number;
   confidenceInterval95?: number;
   isActivePlayer?: boolean;
+  playerName: string;
   predictedScore: number;
   valueFormatter?: (score: number) => string;
 }) {
@@ -356,6 +360,7 @@ function ScoreComparison({
         actualScore={actualScore}
         confidenceInterval95={confidenceInterval95}
         isActivePlayer={isActivePlayer}
+        playerName={playerName}
         predictedScore={predictedScore}
         valueFormatter={valueFormatter}
       />
@@ -374,12 +379,14 @@ function ConfidenceRangeBar({
   actualScore,
   confidenceInterval95,
   isActivePlayer,
+  playerName,
   predictedScore,
   valueFormatter,
 }: {
   actualScore: number;
   confidenceInterval95?: number;
   isActivePlayer: boolean;
+  playerName: string;
   predictedScore: number;
   valueFormatter: (score: number) => string;
 }) {
@@ -397,12 +404,6 @@ function ConfidenceRangeBar({
   const upper95 = predictedScore + confidenceInterval95;
   const standardDeviation =
     confidenceInterval95 / CONFIDENCE_INTERVAL_95_STANDARD_DEVIATIONS;
-  const lowerOneStandardDeviation = predictedScore - standardDeviation;
-  const lowerTwoStandardDeviations = predictedScore - standardDeviation * 2;
-  const lowerThreeStandardDeviations = predictedScore - standardDeviation * 3;
-  const upperOneStandardDeviation = predictedScore + standardDeviation;
-  const upperTwoStandardDeviations = predictedScore + standardDeviation * 2;
-  const upperThreeStandardDeviations = predictedScore + standardDeviation * 3;
   const range = getConfidenceRange({
     actualScore,
     predictedScore,
@@ -411,34 +412,12 @@ function ConfidenceRangeBar({
   const zeroPercent = getRangePercent(0, range);
   const actualPercent = getRangePercent(actualScore, range);
   const confidenceBand = getConfidenceBand(actualScore, lower95, upper95);
-  const actualLabel = `${isActivePlayer ? "You" : "Actual"} ${valueFormatter(
+  const actualLabel = `${isActivePlayer ? "You" : playerName} ${valueFormatter(
     actualScore
   )}`;
   const barStyle = {
-    "--ci-negative-three": `${getRangePercent(
-      lowerThreeStandardDeviations,
-      range
-    )}%`,
-    "--ci-negative-two": `${getRangePercent(
-      lowerTwoStandardDeviations,
-      range
-    )}%`,
-    "--ci-negative-one": `${getRangePercent(
-      lowerOneStandardDeviation,
-      range
-    )}%`,
-    "--ci-positive-one": `${getRangePercent(
-      upperOneStandardDeviation,
-      range
-    )}%`,
-    "--ci-positive-two": `${getRangePercent(
-      upperTwoStandardDeviations,
-      range
-    )}%`,
-    "--ci-positive-three": `${getRangePercent(
-      upperThreeStandardDeviations,
-      range
-    )}%`,
+    "--ci-lower": `${getRangePercent(lower95, range)}%`,
+    "--ci-upper": `${getRangePercent(upper95, range)}%`,
     "--ci-zero": `${zeroPercent}%`,
     "--ci-predicted": `${getRangePercent(predictedScore, range)}%`,
     "--ci-actual": `${actualPercent}%`,
@@ -466,18 +445,12 @@ function ConfidenceRangeBar({
               <span
                 className={[
                   styles.ciBarActualMark,
-                  getConfidenceMarkClass(confidenceBand),
                   isActivePlayer ? styles.ciBarActualMarkYou : "",
                 ].join(" ")}
               />
             </div>
             <div className={styles.ciBarMarkerLayer} aria-hidden="true">
-              <span
-                className={[
-                  styles.ciBarActualConnector,
-                  getConfidenceMarkClass(confidenceBand),
-                ].join(" ")}
-              />
+              <span className={styles.ciBarActualConnector} />
               <span
                 className={[
                   styles.ciBarActualLabel,
@@ -1179,16 +1152,6 @@ function getConfidenceLabelClass(band: ConfidenceBand): string {
     return styles.ciBarActualLabelAbove;
   }
   return styles.ciBarActualLabelExpected;
-}
-
-function getConfidenceMarkClass(band: ConfidenceBand): string {
-  if (band === "below") {
-    return styles.ciBarActualMarkBelow;
-  }
-  if (band === "above") {
-    return styles.ciBarActualMarkAbove;
-  }
-  return styles.ciBarActualMarkExpected;
 }
 
 function getMarkerAlignmentClass(percent: number): string {

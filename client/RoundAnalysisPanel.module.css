@@ -130,9 +130,9 @@
 
 .ciBarScaleSide,
 .ciBarScaleZero {
-  color: #6b5f4e;
-  font-size: 10px;
-  font-weight: 800;
+  color: #8a806f;
+  font-size: 9px;
+  font-weight: 600;
   line-height: 1;
   white-space: nowrap;
 }
@@ -215,19 +215,15 @@
   overflow: hidden;
   border: 1px solid rgba(36, 32, 24, 0.2);
   border-radius: 999px;
-  background-color: #e8edf0;
-  background-image:
+  background:
     linear-gradient(
       to right,
-      rgba(183, 52, 45, 1) 0%,
-      rgba(183, 52, 45, 1) var(--ci-negative-three),
-      rgba(183, 52, 45, 0.67) var(--ci-negative-two),
-      rgba(183, 52, 45, 0.33) var(--ci-negative-one),
-      rgba(183, 52, 45, 0) var(--ci-predicted),
-      rgba(23, 104, 59, 0.33) var(--ci-positive-one),
-      rgba(23, 104, 59, 0.67) var(--ci-positive-two),
-      rgba(23, 104, 59, 1) var(--ci-positive-three),
-      rgba(23, 104, 59, 1) 100%
+      #bd453f 0%,
+      #bd453f var(--ci-lower),
+      #f0c84f var(--ci-lower),
+      #f0c84f var(--ci-upper),
+      #2d8050 var(--ci-upper),
+      #2d8050 100%
     );
   box-shadow: inset 0 1px 2px rgba(36, 32, 24, 0.18);
 }
@@ -265,21 +261,8 @@
   left: var(--ci-actual);
   width: 2px;
   border-radius: 999px;
-  background: #3c2d0e;
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.72);
+  background: #111111;
   transform: translateX(-50%);
-}
-
-.ciBarActualMarkExpected {
-  background: #8d6b15;
-}
-
-.ciBarActualMarkAbove {
-  background: #155b39;
-}
-
-.ciBarActualMarkBelow {
-  background: #812b28;
 }
 
 .ciBarActualMarkYou {
@@ -292,20 +275,8 @@
   width: 1px;
   height: 10px;
   border-radius: 999px;
-  background: #3c2d0e;
+  background: #111111;
   transform: translateX(-50%);
-}
-
-.ciBarActualConnector.ciBarActualMarkExpected {
-  background: #8d6b15;
-}
-
-.ciBarActualConnector.ciBarActualMarkAbove {
-  background: #155b39;
-}
-
-.ciBarActualConnector.ciBarActualMarkBelow {
-  background: #812b28;
 }
 
 .rateValue {
@@ -332,7 +303,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: 4px;
+  margin-bottom: 5px;
   color: #6b5f4e;
   font-size: 12px;
   line-height: 1.15;
