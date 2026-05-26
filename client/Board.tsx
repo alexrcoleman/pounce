@@ -28,7 +28,7 @@ import ActivePlayerStackTargets from "./ActivePlayerStackTargets";
 import MobileDragPreviewLayer from "./MobileDragPreviewLayer";
 import RoomShare from "./RoomShare";
 import { useClientContext } from "./ClientContext";
-import { Button } from "antd";
+import { Button, Modal } from "antd";
 import {
   BoardLayoutProvider,
   FIELD_LEFT,
@@ -378,6 +378,23 @@ const PileSection = observer(function PileSection({
   const selectAIDifficulty = (speed: number) => {
     socket?.emit("set_ai_level", { speed });
   };
+  const handleStartGame = () => {
+    const disconnectedPlayers = board.players.filter(
+      (player) => player.disconnected
+    );
+    if (disconnectedPlayers.length === 0) {
+      socket?.emit("start_game");
+      return;
+    }
+
+    Modal.confirm({
+      title: "Start without disconnected players?",
+      content: getDisconnectedStartConfirmationMessage(disconnectedPlayers),
+      okText: "Start game",
+      cancelText: "Cancel",
+      onOk: () => socket?.emit("start_game"),
+    });
+  };
 
   return (
     <div
@@ -429,7 +446,7 @@ const PileSection = observer(function PileSection({
                 ) : null}
                 <Button
                   className={styles.dealButton}
-                  onClick={() => socket?.emit("start_game")}
+                  onClick={handleStartGame}
                 >
                   Start game
                 </Button>
@@ -494,6 +511,18 @@ function getWaitingForDealCount(
       isPlayerWaitingForDeal(player, isSimulationMode) &&
       isPlayerUndealt(player)
   ).length;
+}
+
+function getDisconnectedStartConfirmationMessage(
+  disconnectedPlayers: PlayerState[]
+): string {
+  const playerCount = disconnectedPlayers.length;
+  const playerLabel = playerCount === 1 ? "player" : "players";
+  const names = disconnectedPlayers
+    .map((player) => player.name || "Unnamed player")
+    .join(", ");
+
+  return `Are you sure you want to start? This will remove ${playerCount} disconnected ${playerLabel} (${names}).`;
 }
 
 function isPlayerWaitingForDeal(
