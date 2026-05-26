@@ -8,6 +8,7 @@ import { Move } from "./MoveHandler";
 import type { ServerDrainStage } from "./ServerDrainNotice";
 import type { RoomSettings } from "./RoomState";
 import type { RoundAnalysis } from "./RoundAnalysis";
+import type { RoomToast } from "./RoomToast";
 
 export type ActionEnvelope<T> = {
   actionId: string;
@@ -54,6 +55,7 @@ export type JoinRoomAck =
 
 export type ServerToClientEvents = {
   alert: (args: { message: string }) => void;
+  room_toast: (args: RoomToast) => void;
   server_notice: (args: ServerNotice) => void;
   update_hands: (args: { hands: CursorState[] }) => void;
   update: (args: BoardUpdate) => void;

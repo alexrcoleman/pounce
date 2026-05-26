@@ -28,14 +28,20 @@ import {
   type RoundSnapshot,
   type RoundSnapshotReason,
 } from "./RoundAnalysis";
+import {
+  createDeckRotationToast,
+  type RoomToast,
+} from "./RoomToast";
 
 export type RoomTickResult = {
   hasUpdate: boolean;
   hasHandUpdate: boolean;
+  roomToast?: RoomToast | null;
   roundAnalysisSnapshots?: RoundSnapshot[] | null;
 };
 
 export const DISCONNECTED_PLAYER_TIMEOUT_MS = 5 * 60 * 1000;
+export const STUCK_BOARD_ROTATION_TICKS = 100;
 const AI_PILE_KNOWLEDGE_MIN_DURATION_MS = 3000;
 const AI_PILE_KNOWLEDGE_REACTION_MULTIPLIER = 2;
 const AI_OBSOLETE_TARGET_RECONSIDER_DELAY_MS = 180;
@@ -46,11 +52,13 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
   const aiCooldowns = room.aiCooldowns;
   let hasUpdate = false;
   let hasHandUpdate = false;
+  let roomToast: RoomToast | null = null;
   let roundAnalysisSnapshots: RoundSnapshot[] | null = null;
 
-  if (board.isActive && !board.isPaused && board.ticksSinceMove >= 100) {
+  if (shouldAutoRotateDecks(board)) {
     rotateDecks(board);
     recordRoundSnapshot(room, "auto_rotate", now);
+    roomToast = createDeckRotationToast("auto_stuck_board");
     hasUpdate = true;
   }
   if (!board.isActive || board.isPaused) {
@@ -163,7 +171,16 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
     hasHandUpdate = true;
   }
 
-  return { hasUpdate, hasHandUpdate, roundAnalysisSnapshots };
+  return { hasUpdate, hasHandUpdate, roomToast, roundAnalysisSnapshots };
+}
+
+function shouldAutoRotateDecks(board: BoardState): boolean {
+  // This is a move-count heuristic, not an exhaustive search for unblocking moves.
+  return (
+    board.isActive &&
+    !board.isPaused &&
+    board.ticksSinceMove >= STUCK_BOARD_ROTATION_TICKS
+  );
 }
 
 function getVisibleBoard(

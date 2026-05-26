@@ -42,6 +42,11 @@ import { Actions } from "./useGameSocket";
 import { type ActionAck, type ActionEnvelope } from "../shared/SocketTypes";
 import { toastRejectedMove } from "./moveRejectionToast";
 import type { RoundSnapshot } from "../shared/RoundAnalysis";
+import {
+  createDeckRotationToast,
+  type RoomToast,
+} from "../shared/RoomToast";
+import { showRoomToast } from "./RoomToast";
 
 const LOCAL_SOCKET_ID = "local-player";
 const LOCAL_PLAYER_SESSION_ID = "local-player-session";
@@ -79,6 +84,9 @@ export default function useLocalGame(name: string | null) {
       runInAction(() => {
         state.updateHands(deepClone(getRoomHands(room)));
       });
+    };
+    const emitRoomToast = (roomToast: RoomToast) => {
+      showRoomToast(roomToast);
     };
     const schedulePlayerCenterCursorReset = (
       playerIndex: number,
@@ -266,6 +274,7 @@ export default function useLocalGame(name: string | null) {
           recordRoundSnapshot(room, "manual_rotate", Date.now());
           markRoomUpdated();
           emitUpdate();
+          emitRoomToast(createDeckRotationToast("manual"));
         } else if (event === "restart_game") {
           resetRoom(room);
           markRoomUpdated();
@@ -319,7 +328,7 @@ export default function useLocalGame(name: string | null) {
       });
     }
     const interval = window.setInterval(() => {
-      const { hasUpdate, hasHandUpdate, roundAnalysisSnapshots } =
+      const { hasUpdate, hasHandUpdate, roomToast, roundAnalysisSnapshots } =
         tickRoom(room);
       if (hasUpdate) {
         room.revision += 1;
@@ -327,6 +336,9 @@ export default function useLocalGame(name: string | null) {
       }
       if (hasHandUpdate) {
         emitHands();
+      }
+      if (roomToast) {
+        emitRoomToast(roomToast);
       }
       if (roundAnalysisSnapshots) {
         scheduleRoundAnalysis(roundAnalysisSnapshots);

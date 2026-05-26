@@ -7,6 +7,7 @@ import {
   tickRoom,
 } from "../shared/RoomLogic";
 import type { RoundSnapshot } from "../shared/RoundAnalysis";
+import type { RoomToast } from "../shared/RoomToast";
 
 export type ServerRoomState = RoomState & {
   io: Server;
@@ -35,7 +36,7 @@ export function createRoom(io: Server, roomId: string) {
   };
   room.interval = setInterval(() => {
     const currentRoom = rooms[roomId];
-    const { hasUpdate, hasHandUpdate, roundAnalysisSnapshots } =
+    const { hasUpdate, hasHandUpdate, roomToast, roundAnalysisSnapshots } =
       tickRoom(currentRoom);
     if (hasUpdate) {
       markRoomUpdated(roomId);
@@ -43,6 +44,9 @@ export function createRoom(io: Server, roomId: string) {
     }
     if (hasHandUpdate) {
       broadcastHands(roomId);
+    }
+    if (roomToast) {
+      broadcastRoomToast(roomId, roomToast);
     }
     if (roundAnalysisSnapshots) {
       scheduleRoundAnalysis(roomId, roundAnalysisSnapshots);
@@ -73,6 +77,10 @@ export function broadcastHands(roomId: string) {
   room.io.to(roomId).emit("update_hands", {
     hands: getRoomHands(room),
   });
+}
+
+export function broadcastRoomToast(roomId: string, roomToast: RoomToast) {
+  getRoom(roomId).io.to(roomId).emit("room_toast", roomToast);
 }
 
 export function getRoom(roomId: string) {

@@ -18,6 +18,7 @@ import { runInAction } from "mobx";
 import { toast } from "sonner";
 import { toastRejectedMove } from "./moveRejectionToast";
 import { showServerNoticeToast } from "./ServerNoticeToast";
+import { showRoomToast } from "./RoomToast";
 
 export type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 const PLAYER_SESSION_STORAGE_KEY = "pounce::playerSessionId";
@@ -208,6 +209,7 @@ export default function useGameSocket(
     socket.on("alert", (message) => {
       alert(message);
     });
+    socket.on("room_toast", showRoomToast);
     socket.on("server_notice", showServerNotice);
     socket.on("update_hands", ({ hands }) => {
       runInAction(() => state.updateHands(hands));

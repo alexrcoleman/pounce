@@ -8,6 +8,7 @@ import {
 } from "../shared/GameUtils";
 import {
   broadcastHands,
+  broadcastRoomToast,
   broadcastUpdate,
   createRoom,
   getRoom,
@@ -47,6 +48,7 @@ import {
   ServerToClientEvents,
   type ServerNotice,
 } from "../shared/SocketTypes";
+import { createDeckRotationToast } from "../shared/RoomToast";
 
 const socketData: Record<
   string,
@@ -406,6 +408,10 @@ export default function createSocketIOServer() {
       recordRoundSnapshot(room, "manual_rotate", Date.now());
       markRoomUpdated(user.currentRoom);
       broadcastUpdate(user.currentRoom);
+      broadcastRoomToast(
+        user.currentRoom,
+        createDeckRotationToast("manual")
+      );
     });
     socket.on("restart_game", () => {
       if (user.currentRoom == null) {
