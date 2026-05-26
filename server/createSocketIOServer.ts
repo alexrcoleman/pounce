@@ -73,8 +73,12 @@ const DEFAULT_SOCKET_PORT = 3001;
 const DEFAULT_DRAIN_WINDOW_MS = 5 * 60 * 1000;
 const DRAIN_ENDPOINT_PATH = "/api/admin/drain";
 const SOCKET_HEALTH_ENDPOINT_PATH = "/api/socketio/health";
+const STARTUP_READY_ENDPOINT_PATH = "/api/startup/ready";
 const DRAIN_SECRET_ENV_VAR = "GAME_SERVER_DRAIN_SECRET";
 const DRAIN_WINDOW_ENV_VAR = "GAME_SERVER_DRAIN_WINDOW_MS";
+const NEXT_STARTUP_HEALTH_URL_ENV_VAR = "NEXT_STARTUP_HEALTH_URL";
+const DEFAULT_NEXT_STARTUP_HEALTH_URL = "http://127.0.0.1:3000/";
+const STARTUP_READY_CHECK_TIMEOUT_MS = 1000;
 
 let drainingUntil = 0;
 let drainStarted = false;
@@ -86,6 +90,11 @@ export default function createSocketIOServer() {
   const httpServer = createServer((req, res) => {
     if (isSocketHealthEndpointRequest(req)) {
       handleSocketHealthRequest(req, res);
+      return;
+    }
+
+    if (isStartupReadyEndpointRequest(req)) {
+      void handleStartupReadyRequest(req, res);
       return;
     }
 
@@ -588,6 +597,11 @@ function isSocketHealthEndpointRequest(req: IncomingMessage): boolean {
   return url.pathname === SOCKET_HEALTH_ENDPOINT_PATH;
 }
 
+function isStartupReadyEndpointRequest(req: IncomingMessage): boolean {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  return url.pathname === STARTUP_READY_ENDPOINT_PATH;
+}
+
 function handleSocketHealthRequest(req: IncomingMessage, res: ServerResponse) {
   setSocketHealthCorsHeaders(req, res);
 
@@ -605,6 +619,59 @@ function handleSocketHealthRequest(req: IncomingMessage, res: ServerResponse) {
 
   res.statusCode = 204;
   res.end();
+}
+
+async function handleStartupReadyRequest(
+  req: IncomingMessage,
+  res: ServerResponse
+) {
+  res.setHeader("Cache-Control", "no-store");
+
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    res.setHeader("Allow", "GET, HEAD");
+    respondJson(res, 405, { ok: false, error: "Method not allowed" });
+    return;
+  }
+
+  const nextReady = await isNextReady();
+  if (!nextReady) {
+    respondJson(res, 503, {
+      ok: false,
+      socketio: true,
+      next: false,
+    });
+    return;
+  }
+
+  res.statusCode = 204;
+  res.end();
+}
+
+async function isNextReady() {
+  const controller = new AbortController();
+  const timeout = setTimeout(
+    () => controller.abort(),
+    STARTUP_READY_CHECK_TIMEOUT_MS
+  );
+
+  try {
+    const response = await fetch(getNextStartupHealthUrl(), {
+      cache: "no-store",
+      signal: controller.signal,
+    });
+    return response.status >= 200 && response.status < 400;
+  } catch (error) {
+    return false;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function getNextStartupHealthUrl() {
+  return (
+    process.env[NEXT_STARTUP_HEALTH_URL_ENV_VAR] ??
+    DEFAULT_NEXT_STARTUP_HEALTH_URL
+  );
 }
 
 function setSocketHealthCorsHeaders(

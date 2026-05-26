@@ -153,6 +153,8 @@ jobs:
             GAME_SERVER_DRAIN_SECRET=${{ secrets.GAME_SERVER_DRAIN_SECRET }}
             GAME_SERVER_DRAIN_WINDOW_MS=300000
           env_vars_update_strategy: merge
+          flags: >-
+            --startup-probe=httpGet.path=/api/startup/ready,httpGet.port=8080,initialDelaySeconds=0,periodSeconds=2,timeoutSeconds=1,failureThreshold=60
 
       - name: Show deployed URL
         run: echo "${{ steps.deploy.outputs.url }}"
