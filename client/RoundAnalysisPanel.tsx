@@ -214,7 +214,7 @@ export default function RoundAnalysisPanel({
           }
         />
         <Stat
-          label="Helper players missed"
+          label="Helper plays missed"
           tooltip={STAT_TOOLTIPS.pounceHelpersMissed}
           value={selectedReport.summary.missedPounceHelpers}
         />
