@@ -210,6 +210,9 @@ export default function useGameSocket(
       alert(message);
     });
     socket.on("room_toast", showRoomToast);
+    socket.on("player_reaction", (reaction) => {
+      runInAction(() => state.addReaction(reaction));
+    });
     socket.on("server_notice", showServerNotice);
     socket.on("update_hands", ({ hands }) => {
       runInAction(() => state.updateHands(hands));

@@ -1,12 +1,14 @@
 import styles from "./Header.module.css";
 import SettingOutlined from "@ant-design/icons/SettingOutlined";
-import { useEffect, useState } from "react";
+import SmileOutlined from "@ant-design/icons/SmileOutlined";
+import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react-lite";
 import { Button, Modal, Tooltip } from "antd";
 import { useClientContext } from "./ClientContext";
 import ScoresTable from "./ScoresTable";
 import isTouchDevice from "./isTouchDevice";
 import type { BoardState } from "../shared/GameUtils";
+import { REACTION_OPTIONS, type ReactionId } from "../shared/Reactions";
 import SettingsDialog, {
   type SettingsOpenRequest,
   type SettingsPage,
@@ -39,6 +41,10 @@ export default observer(function Header(props: Props) {
   const isPaused = state.board?.isPaused ?? false;
   const isHost = state.getIsHost();
   const canTogglePause = isStarted && isHost;
+  const canSendReactions =
+    board != null &&
+    socket != null &&
+    getCanSendReactions(board, props.roomId, state.getActivePlayerIndex());
   const showRoomCode =
     !isStarted &&
     !isHost &&
@@ -87,6 +93,13 @@ export default observer(function Header(props: Props) {
         role="toolbar"
         aria-label="Game controls"
       >
+        {canSendReactions ? (
+          <HeaderReactionButton
+            onSelectReaction={(reactionId) =>
+              socket?.emit("send_reaction", { reactionId })
+            }
+          />
+        ) : null}
         {canTogglePause ? (
           <HeaderPauseButton
             isPaused={isPaused}
@@ -132,6 +145,91 @@ export default observer(function Header(props: Props) {
     </>
   );
 });
+
+function HeaderReactionButton({
+  onSelectReaction,
+}: {
+  onSelectReaction: (reactionId: ReactionId) => void;
+}) {
+  const [isOpen, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const menuId = "pounce-reaction-menu";
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+      }
+    };
+    const closeOnOutsidePointerDown = (event: PointerEvent) => {
+      const root = rootRef.current;
+      if (root && !root.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("pointerdown", closeOnOutsidePointerDown);
+    return () => {
+      window.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("pointerdown", closeOnOutsidePointerDown);
+    };
+  }, [isOpen]);
+
+  return (
+    <div className={styles.reactionControl} ref={rootRef}>
+      <Tooltip title="Send reaction">
+        <button
+          aria-controls={isOpen ? menuId : undefined}
+          aria-expanded={isOpen}
+          aria-haspopup="menu"
+          aria-label="Send reaction"
+          className={`${styles.floatingButton} ${styles.iconButton} ${
+            isOpen ? styles.reactionButtonOpen : ""
+          }`}
+          onClick={() => setOpen((current) => !current)}
+          title="Send reaction"
+          type="button"
+        >
+          <SmileOutlined
+            aria-hidden="true"
+            className={styles.reactionIcon}
+            rev={undefined}
+          />
+        </button>
+      </Tooltip>
+      {isOpen ? (
+        <div
+          aria-label="Reactions"
+          className={styles.reactionMenu}
+          id={menuId}
+          role="menu"
+        >
+          {REACTION_OPTIONS.map((reaction) => (
+            <button
+              aria-label={`Send ${reaction.label} reaction`}
+              className={styles.reactionOption}
+              key={reaction.id}
+              onClick={() => {
+                onSelectReaction(reaction.id);
+                setOpen(false);
+              }}
+              role="menuitem"
+              title={reaction.label}
+              type="button"
+            >
+              {reaction.emoji}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function HeaderPauseButton({
   isPaused,
@@ -206,4 +304,25 @@ function HeaderScoreboardButton({ board }: { board: BoardState }) {
       </Modal>
     </>
   );
+}
+
+function getCanSendReactions(
+  board: BoardState,
+  roomId: string | null | undefined,
+  activePlayerIndex: number
+) {
+  if (roomId == null || roomId.toLowerCase() === "offline") {
+    return false;
+  }
+
+  const activePlayer = board.players[activePlayerIndex];
+  if (
+    !activePlayer ||
+    activePlayer.socketId == null ||
+    activePlayer.disconnected
+  ) {
+    return false;
+  }
+
+  return true;
 }

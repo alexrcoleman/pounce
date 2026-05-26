@@ -50,6 +50,7 @@ import {
   type ServerNotice,
 } from "../shared/SocketTypes";
 import { createDeckRotationToast } from "../shared/RoomToast";
+import { isAllowedReactionId } from "../shared/Reactions";
 
 const socketData: Record<
   string,
@@ -69,6 +70,7 @@ const DRAIN_WINDOW_ENV_VAR = "GAME_SERVER_DRAIN_WINDOW_MS";
 let drainingUntil = 0;
 let drainStarted = false;
 let drainRestartNoticeTimer: ReturnType<typeof setTimeout> | undefined;
+let nextReactionNumber = 0;
 
 export default function createSocketIOServer() {
   let io: Server<ClientToServerEvents, ServerToClientEvents>;
@@ -475,6 +477,39 @@ export default function createSocketIOServer() {
     });
     socket.on("room_ping", (_args, ack) => {
       ack?.({ serverTime: Date.now() });
+    });
+    socket.on("send_reaction", (args) => {
+      if (user.currentRoom == null) {
+        return;
+      }
+
+      const reactionId = args?.reactionId;
+      if (!isAllowedReactionId(reactionId)) {
+        return;
+      }
+
+      const room = getRoom(user.currentRoom);
+      if (!room) {
+        return;
+      }
+
+      const playerIndex = room.board.players.findIndex(
+        (p) => p.socketId === socket.id
+      );
+      const player = room.board.players[playerIndex];
+      if (!player || player.disconnected) {
+        return;
+      }
+
+      const sentAt = Date.now();
+      room.io.to(user.currentRoom).emit("player_reaction", {
+        eventId: `${socket.id}:${sentAt}:${++nextReactionNumber}`,
+        reactionId,
+        playerIndex,
+        playerName: player.name,
+        playerColor: player.color,
+        sentAt,
+      });
     });
     socket.on("update_hand", ({ item, items, location }) => {
       if (user.currentRoom == null) {

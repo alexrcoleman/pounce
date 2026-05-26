@@ -9,6 +9,7 @@ import type { ServerDrainStage } from "./ServerDrainNotice";
 import type { RoomSettings } from "./RoomState";
 import type { RoundAnalysis } from "./RoundAnalysis";
 import type { RoomToast } from "./RoomToast";
+import type { PlayerReaction, ReactionId } from "./Reactions";
 
 export type ActionEnvelope<T> = {
   actionId: string;
@@ -56,6 +57,7 @@ export type JoinRoomAck =
 export type ServerToClientEvents = {
   alert: (args: { message: string }) => void;
   room_toast: (args: RoomToast) => void;
+  player_reaction: (args: PlayerReaction) => void;
   server_notice: (args: ServerNotice) => void;
   update_hands: (args: { hands: CursorState[] }) => void;
   update: (args: BoardUpdate) => void;
@@ -87,6 +89,7 @@ export type ClientToServerEvents = {
   remove_ai: () => void;
   set_ai_count: (args: { count: number }) => void;
   set_fair_hand_rotation: (args: { enabled: boolean }) => void;
+  send_reaction: (args: { reactionId: ReactionId }) => void;
   remove_disconnected_players: () => void;
   room_ping: (
     args: { clientTime: number },

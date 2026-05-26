@@ -9,6 +9,7 @@ import {
   type BoardUpdate,
 } from "../shared/SocketTypes";
 import type { RoundAnalysis } from "../shared/RoundAnalysis";
+import type { PlayerReaction } from "../shared/Reactions";
 
 type PendingMoveAction = {
   actionId: string;
@@ -38,6 +39,7 @@ export default class SocketState {
   playerSessionId: string | null = null;
   hands: CursorState[] = [];
   pendingMoves: PendingMoveAction[] = [];
+  reactions: PlayerReaction[] = [];
   roundAnalysis: RoundAnalysis | null = null;
   private isAwaitingRoomSync = false;
   private nextActionNumber = 0;
@@ -88,10 +90,22 @@ export default class SocketState {
   updateHands(hands: CursorState[]) {
     this.hands = applyDeepUpdate(this.hands, hands);
   }
+  addReaction(reaction: PlayerReaction) {
+    this.reactions = this.reactions
+      .filter((existing) => existing.eventId !== reaction.eventId)
+      .concat(reaction)
+      .slice(-12);
+  }
+  removeReaction(eventId: string) {
+    this.reactions = this.reactions.filter(
+      (reaction) => reaction.eventId !== eventId
+    );
+  }
   onDisconnect() {
     this.isConnected = false;
     this.pingLatency = null;
     this.hands = [];
+    this.reactions = [];
     this.recomputeBoard();
   }
   getActivePlayerIndex() {
@@ -163,6 +177,7 @@ export default class SocketState {
     this.roomSettings = createDefaultRoomSettings();
     this.serverRevision = 0;
     this.pendingMoves = [];
+    this.reactions = [];
     this.hands = [];
     this.roundAnalysis = null;
     this.isAwaitingRoomSync = false;

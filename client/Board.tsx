@@ -27,6 +27,7 @@ import FieldStackDragTargets from "./FieldStackDragTargets";
 import ActivePlayerStackTargets from "./ActivePlayerStackTargets";
 import MobileDragPreviewLayer from "./MobileDragPreviewLayer";
 import InfoTooltipIcon from "./InfoTooltipIcon";
+import ReactionBubbles from "./ReactionBubbles";
 import RoomShare from "./RoomShare";
 import { useClientContext } from "./ClientContext";
 import { Button, Modal } from "antd";
@@ -173,6 +174,7 @@ export default observer(function Board({
             ))}
             <PlayerZoomTargets onTogglePlayer={togglePlayerFocus} />
             <HandsLayer />
+            <ReactionBubbles />
             <PauseOverlay />
             <VictoryOverlay />
           </div>

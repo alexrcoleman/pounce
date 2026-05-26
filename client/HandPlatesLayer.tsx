@@ -7,13 +7,13 @@ import { useBoardLayout } from "./BoardLayout";
 import { useClientContext } from "./ClientContext";
 import styles from "./HandPlatesLayer.module.css";
 
-const HAND_PLATE_LEFT = -20;
-const HAND_PLATE_TOP_OFFSET = 36;
-const HAND_PLATE_WIDTH = 528;
-const HAND_PLATE_HEIGHT = 168;
-const ACTIVE_HAND_PLATE_HEIGHT = 209;
-const COMPACT_ACTIVE_HAND_PLATE_TOP_OFFSET = -1;
-const COMPACT_ACTIVE_HAND_PLATE_HEIGHT = 225;
+export const HAND_PLATE_LEFT = -20;
+export const HAND_PLATE_TOP_OFFSET = 36;
+export const HAND_PLATE_WIDTH = 528;
+export const HAND_PLATE_HEIGHT = 168;
+export const ACTIVE_HAND_PLATE_HEIGHT = 209;
+export const COMPACT_ACTIVE_HAND_PLATE_TOP_OFFSET = -1;
+export const COMPACT_ACTIVE_HAND_PLATE_HEIGHT = 225;
 
 export default observer(function HandPlatesLayer() {
   const { state } = useClientContext();
