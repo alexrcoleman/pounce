@@ -170,17 +170,32 @@ export default function JoinForm({
             Done
           </Button>,
         ];
+  const brandContent = (
+    <>
+      <img className={styles.logo} src={FAVICON_SRC} alt="" />
+      <div>
+        <h1 className={styles.title}>Pounce</h1>
+        <div className={styles.subtitle}>Online</div>
+      </div>
+    </>
+  );
 
   return (
     <div className={styles.root}>
       <div className={styles.stage}>
-        <header className={styles.brand} aria-label="Pounce Online">
-          <img className={styles.logo} src={FAVICON_SRC} alt="" />
-          <div>
-            <h1 className={styles.title}>Pounce</h1>
-            <div className={styles.subtitle}>Online</div>
-          </div>
-        </header>
+        {isInviteMode ? (
+          <Link
+            aria-label="Pounce Online home"
+            className={`${styles.brand} ${styles.brandLink}`}
+            href="/"
+          >
+            {brandContent}
+          </Link>
+        ) : (
+          <header className={styles.brand} aria-label="Pounce Online">
+            {brandContent}
+          </header>
+        )}
 
         <Form className={styles.form} onFinish={joinRoom}>
           <div className={styles.menu}>
