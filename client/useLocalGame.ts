@@ -20,6 +20,7 @@ import { createRoomState, RoomState } from "../shared/RoomState";
 import {
   clearRoomStuckPlayers,
   completeRoundAnalysis,
+  completeRoundStartCountdown,
   dealRemainingRoomPlayers,
   dealRoomHands,
   getRoomHandUpdateVersion,
@@ -185,8 +186,14 @@ export default function useLocalGame(name: string | null) {
         if (event === "move") {
           const envelope = args[0] as ActionEnvelope<Move>;
           const ack = args[1] as ((args: ActionAck) => void) | undefined;
+          const didCompleteCountdown = completeRoundStartCountdown(room);
           const result = executeMove(room.board, playerIndex, envelope.payload);
           if (result == null) {
+            if (didCompleteCountdown) {
+              markRoomUpdated();
+              emitUpdate();
+              emitHands();
+            }
             ack?.({
               actionId: envelope.actionId,
               ok: false,
@@ -414,7 +421,7 @@ export default function useLocalGame(name: string | null) {
           !state.board ||
           playerIndex < 0 ||
           player?.isSpectating === true ||
-          !isBoardAcceptingMoves(state.board)
+          !isBoardAcceptingMoves(state.board, state.getEstimatedServerTime())
         ) {
           return;
         }

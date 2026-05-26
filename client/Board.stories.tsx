@@ -198,7 +198,7 @@ function createBoardStoryState(
   if (readyRole) {
     tuneStoryRoundReady(room.board, readyRole, activePlayerIndex);
   } else {
-    startRoomGame(room);
+    startRoomGame(room, Date.now(), { countdownMs: 0 });
     tuneActivePlayerHand(room.board.players[0]);
     if (fullSolitairePile) {
       tuneActivePlayerFullPile(room.board.players[0]);

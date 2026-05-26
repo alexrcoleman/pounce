@@ -1,9 +1,11 @@
-import type {
-  BoardState,
-  CardState,
-  CursorLocation,
-  PlayerState,
+import {
+  ROUND_START_GO_DURATION_MS,
+  type BoardState,
+  type CardState,
+  type CursorLocation,
+  type PlayerState,
 } from "../shared/GameUtils";
+import type SocketState from "./SocketState";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
@@ -51,6 +53,49 @@ type Props = {
   roomId?: string | null;
   zoom: number;
 };
+
+function getRoundStartClockUntil(board: BoardState): number | null {
+  return board.roundStartsAt == null
+    ? null
+    : board.roundStartsAt + ROUND_START_GO_DURATION_MS;
+}
+
+function useEstimatedServerTime(
+  state: SocketState,
+  tickUntil: number | null
+): number {
+  const [serverTime, setServerTime] = useState(() =>
+    state.getEstimatedServerTime()
+  );
+
+  useEffect(() => {
+    const updateServerTime = () => state.getEstimatedServerTime();
+    setServerTime(updateServerTime());
+    if (tickUntil == null) {
+      return;
+    }
+
+    let intervalId: number | undefined;
+    const tick = () => {
+      const nextServerTime = updateServerTime();
+      setServerTime(nextServerTime);
+      if (nextServerTime >= tickUntil && intervalId != null) {
+        window.clearInterval(intervalId);
+        intervalId = undefined;
+      }
+    };
+
+    intervalId = window.setInterval(tick, 50);
+    return () => {
+      if (intervalId != null) {
+        window.clearInterval(intervalId);
+      }
+    };
+  }, [state, tickUntil]);
+
+  return serverTime;
+}
+
 export default observer(function Board({
   executeMove,
   easyReadCards,
@@ -65,10 +110,14 @@ export default observer(function Board({
   const activePlayerIndex = state.getActivePlayerIndex();
   const activePlayer =
     activePlayerIndex >= 0 ? board.players[activePlayerIndex] : undefined;
+  const estimatedServerTime = useEstimatedServerTime(
+    state,
+    getRoundStartClockUntil(board)
+  );
   const canInteractWithCards =
     activePlayer != null &&
     activePlayer.isSpectating !== true &&
-    isBoardAcceptingMoves(board);
+    isBoardAcceptingMoves(board, estimatedServerTime);
   const [focusedPlayerIndex, setFocusedPlayerIndex] = useState<number | null>(
     null
   );
@@ -168,7 +217,11 @@ export default observer(function Board({
               canInteract={canInteractWithCards}
               executeMove={executeMove}
             />
-            <RoundStartOverlay isRoundActive={board.isActive} />
+            <RoundStartOverlay
+              board={board}
+              state={state}
+              serverNow={estimatedServerTime}
+            />
             {board.players.map((p, i) => (
               <PlayerArea player={p} playerIndex={i} key={p.socketId ?? i} />
             ))}
@@ -184,17 +237,21 @@ export default observer(function Board({
   );
 });
 
-const ROUND_START_NOTICE_DURATION_MS = 4_000;
-
 function RoundStartOverlay({
-  isRoundActive,
+  board,
+  state,
+  serverNow,
 }: {
-  isRoundActive: boolean;
+  board: BoardState;
+  state: SocketState;
+  serverNow: number;
 }): JSX.Element | null {
   const layout = useBoardLayout();
-  const wasRoundActiveRef = useRef(isRoundActive);
-  const [noticeKey, setNoticeKey] = useState(0);
-  const [isNoticeVisible, setNoticeVisible] = useState(false);
+  const wasRoundActiveRef = useRef(board.isActive);
+  const [noticeStartsAt, setNoticeStartsAt] = useState<number | null>(
+    board.roundStartsAt ?? null
+  );
+  const [noticeServerNow, setNoticeServerNow] = useState(serverNow);
   const fieldArea = { type: "field" } as const;
   const [left, top] = layout.mapPoint(
     [FIELD_LEFT + FIELD_SIZE / 2, FIELD_TOP + FIELD_SIZE / 2],
@@ -203,41 +260,79 @@ function RoundStartOverlay({
   const scale = layout.getScale(fieldArea);
 
   useEffect(() => {
-    const wasRoundActive = wasRoundActiveRef.current;
-    wasRoundActiveRef.current = isRoundActive;
+    setNoticeServerNow(serverNow);
+  }, [serverNow]);
 
-    if (!isRoundActive) {
-      setNoticeVisible(false);
+  useEffect(() => {
+    const wasRoundActive = wasRoundActiveRef.current;
+    wasRoundActiveRef.current = board.isActive;
+
+    if (board.roundStartsAt != null) {
+      setNoticeStartsAt(board.roundStartsAt);
+      return;
+    }
+
+    if (!board.isActive) {
+      setNoticeStartsAt(null);
       return;
     }
 
     if (!wasRoundActive) {
-      setNoticeKey((current) => current + 1);
-      setNoticeVisible(true);
+      setNoticeStartsAt(serverNow);
     }
-  }, [isRoundActive]);
+  }, [board.isActive, board.roundStartsAt, serverNow]);
 
   useEffect(() => {
-    if (!isNoticeVisible) {
+    if (noticeStartsAt == null) {
       return;
     }
 
-    const timeoutId = window.setTimeout(() => {
-      setNoticeVisible(false);
-    }, ROUND_START_NOTICE_DURATION_MS);
+    const visibleUntil = noticeStartsAt + ROUND_START_GO_DURATION_MS;
+    let intervalId: number | undefined;
+    const tick = () => {
+      const nextServerNow = state.getEstimatedServerTime();
+      setNoticeServerNow(nextServerNow);
+      if (nextServerNow < visibleUntil) {
+        return;
+      }
 
-    return () => window.clearTimeout(timeoutId);
-  }, [isNoticeVisible, noticeKey]);
+      setNoticeStartsAt(null);
+      if (intervalId != null) {
+        window.clearInterval(intervalId);
+        intervalId = undefined;
+      }
+    };
 
-  if (!isNoticeVisible) {
+    tick();
+    intervalId = window.setInterval(tick, 50);
+    return () => {
+      if (intervalId != null) {
+        window.clearInterval(intervalId);
+      }
+    };
+  }, [noticeStartsAt, state]);
+
+  if (noticeStartsAt == null) {
     return null;
   }
+
+  const timeUntilStart = noticeStartsAt - noticeServerNow;
+  const isCountingDown = timeUntilStart > 0;
+  const isGoVisible =
+    noticeServerNow < noticeStartsAt + ROUND_START_GO_DURATION_MS;
+  if (!isCountingDown && !isGoVisible) {
+    return null;
+  }
+
+  const label = isCountingDown
+    ? String(Math.min(3, Math.max(1, Math.ceil(timeUntilStart / 1000))))
+    : "Go!";
+  const phase = isCountingDown ? "count" : "go";
 
   return (
     <div
       aria-hidden="true"
       className={styles.roundStartOverlay}
-      key={noticeKey}
       style={
         {
           "--round-start-scale": scale,
@@ -246,7 +341,13 @@ function RoundStartOverlay({
         } as CSSProperties
       }
     >
-      <span className={styles.roundStartText}>Go!</span>
+      <span
+        className={styles.roundStartText}
+        data-phase={phase}
+        key={`${noticeStartsAt}:${label}`}
+      >
+        {label}
+      </span>
     </div>
   );
 }

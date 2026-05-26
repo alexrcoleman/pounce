@@ -84,6 +84,7 @@ export type BoardState = {
   isActive: boolean;
   isDealt: boolean;
   isPaused: boolean;
+  roundStartsAt?: number;
   players: PlayerState[];
   piles: CardState[][];
   pileLocs: [number, number, number][];
@@ -97,6 +98,16 @@ type StartGameRoomState = {
     fairHandRotation: boolean;
   };
 };
+
+export const ROUND_START_COUNTDOWN_MS = 3000;
+export const ROUND_START_GO_DURATION_MS = 1000;
+
+export function isRoundStartPending(
+  board: BoardState,
+  now = Date.now()
+): boolean {
+  return board.roundStartsAt != null && now < board.roundStartsAt;
+}
 
 function createUnshuffledDeck(player: number): CardState[] {
   return SUITS.flatMap((suit) =>
@@ -373,6 +384,7 @@ export function resetBoard(boardState: BoardState, decks?: CardState[][]) {
   boardState.pouncer = undefined;
   boardState.isDealt = false;
   boardState.isPaused = false;
+  boardState.roundStartsAt = undefined;
   boardState.players.forEach((player, index) => {
     player.deck =
       decks?.[index]?.map((c) => ({ ...c, player: index })) ??
@@ -407,6 +419,7 @@ export function scoreBoard(board: BoardState) {
   board.isActive = false;
   board.isDealt = false;
   board.isPaused = false;
+  board.roundStartsAt = undefined;
   board.pouncer = pouncer;
   board.players.forEach((player) => {
     player.isReadyForRound = false;

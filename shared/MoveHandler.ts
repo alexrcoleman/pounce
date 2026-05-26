@@ -6,6 +6,7 @@ import {
   fixBoardPiles,
   isCardCursorLocation,
   isGameOver,
+  isRoundStartPending,
 } from "./GameUtils";
 import {
   canMoveToSolitairePile,
@@ -51,8 +52,16 @@ function cursorLocationEqualsCard(
   return isCardCursorLocation(location) && cardEquals(location, card);
 }
 
-export function isBoardAcceptingMoves(board: BoardState): boolean {
-  return board.isActive && !board.isPaused && !isGameOver(board);
+export function isBoardAcceptingMoves(
+  board: BoardState,
+  now = Date.now()
+): boolean {
+  return (
+    board.isActive &&
+    !board.isPaused &&
+    !isRoundStartPending(board, now) &&
+    !isGameOver(board)
+  );
 }
 
 function getSourceCard(
@@ -89,14 +98,12 @@ export function executeMove(
   board: BoardState,
   playerIndex: number,
   move: Move,
-  aiCursor?: AICursorData
+  aiCursor?: AICursorData,
+  now = Date.now()
 ): MoveResult | null {
   try {
-    if (!board.isActive || board.isPaused) {
+    if (!isBoardAcceptingMoves(board, now)) {
       throw new Error("Game is not accepting moves");
-    }
-    if (isGameOver(board)) {
-      throw new Error("Game is over");
     }
     const player = board.players[playerIndex];
     if (player.isSpectating) {

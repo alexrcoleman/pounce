@@ -18,6 +18,8 @@ type PendingMoveAction = {
   acceptedRevision?: number;
 };
 
+const SERVER_TIME_SAFETY_BUFFER_MS = 100;
+
 function createDefaultRoomSettings(): RoomSettings {
   return {
     fairHandRotation: false,
@@ -35,6 +37,7 @@ export default class SocketState {
   latency = 0;
   stuckPlayerIndices: number[] = [];
   pingLatency: number | null = null;
+  serverClockOffset = 0;
   isConnected = false;
   socketId = "";
   playerSessionId: string | null = null;
@@ -69,6 +72,8 @@ export default class SocketState {
         action.acceptedRevision > data.revision
     );
     this.latency = Date.now() - data.time;
+    this.serverClockOffset =
+      data.time - Date.now() - SERVER_TIME_SAFETY_BUFFER_MS;
     this.lastTime = data.time;
     this.roundAnalysis = applyDeepUpdate(
       this.roundAnalysis,
@@ -91,6 +96,9 @@ export default class SocketState {
   setPingLatency(latency: number | null) {
     this.pingLatency =
       typeof latency === "number" ? Math.max(0, Math.round(latency)) : null;
+  }
+  getEstimatedServerTime(now = Date.now()) {
+    return now + this.serverClockOffset;
   }
   updateHands(hands: CursorState[]) {
     this.hands = applyDeepUpdate(this.hands, hands);
@@ -182,6 +190,7 @@ export default class SocketState {
     this.roomSettings = createDefaultRoomSettings();
     this.stuckPlayerIndices = [];
     this.serverRevision = 0;
+    this.serverClockOffset = 0;
     this.pendingMoves = [];
     this.reactions = [];
     this.hands = [];
@@ -201,7 +210,13 @@ export default class SocketState {
     const playerIndex = this.getActivePlayerIndexForBoard(nextBoard);
     if (playerIndex >= 0) {
       this.pendingMoves.forEach((action) => {
-        executeMove(nextBoard, playerIndex, action.move);
+        executeMove(
+          nextBoard,
+          playerIndex,
+          action.move,
+          undefined,
+          this.getEstimatedServerTime()
+        );
       });
     }
     const currentBoard = this.board === this.serverBoard ? null : this.board;

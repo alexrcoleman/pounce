@@ -2,6 +2,7 @@ import {
   addPlayer,
   type BoardState,
   isGameOver,
+  isRoundStartPending,
   type PlayerState,
   removePlayer,
   rotateDecks,
@@ -18,6 +19,7 @@ import {
 import {
   clearRoomHand,
   clearRoomStuckPlayers,
+  completeRoundStartCountdown,
   dealRemainingRoomPlayers,
   dealRoomHands,
   getRoomHandUpdateVersion,
@@ -207,9 +209,15 @@ export default function createSocketIOServer() {
         return;
       }
       const room = getRoom(user.currentRoom);
+      const didCompleteCountdown = completeRoundStartCountdown(room);
       const board = room.board;
       const blockedReason = getBlockedMoveReason(board, board.players[pid]);
       if (blockedReason) {
+        if (didCompleteCountdown) {
+          markRoomUpdated(user.currentRoom);
+          broadcastUpdate(user.currentRoom);
+          broadcastHands(user.currentRoom);
+        }
         ack?.({
           actionId: args.actionId,
           ok: false,
@@ -220,6 +228,11 @@ export default function createSocketIOServer() {
       }
       const result = executeMove(board, pid, args.payload);
       if (result == null) {
+        if (didCompleteCountdown) {
+          markRoomUpdated(user.currentRoom);
+          broadcastUpdate(user.currentRoom);
+          broadcastHands(user.currentRoom);
+        }
         ack?.({
           actionId: args.actionId,
           ok: false,
@@ -773,6 +786,9 @@ function getBlockedMoveReason(
   }
   if (board.isPaused) {
     return "The game is paused.";
+  }
+  if (isRoundStartPending(board)) {
+    return "The round is starting.";
   }
   if (isGameOver(board)) {
     return "The round is already over.";

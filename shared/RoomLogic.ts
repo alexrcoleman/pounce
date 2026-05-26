@@ -7,11 +7,13 @@ import {
   cursorLocationsEqual,
   dealPlayerHand,
   dealGameHands,
+  isRoundStartPending,
   isCardCursorLocation,
   isGameOver,
   removePlayer,
   resetCenterPiles,
   resetBoard,
+  ROUND_START_COUNTDOWN_MS,
   rotateDecks,
   scoreBoard,
   startGame,
@@ -77,7 +79,11 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
     roomToast = createDeckRotationToast("auto_stuck_board");
     hasUpdate = true;
   }
-  if (!board.isActive || board.isPaused) {
+  if (completeRoundStartCountdown(room, now)) {
+    hasUpdate = true;
+    hasHandUpdate = true;
+  }
+  if (!board.isActive || board.isPaused || isRoundStartPending(board, now)) {
     // no-op
   } else if (isGameOver(board)) {
     roundAnalysisSnapshots = takeRoundAnalysisSnapshots(room, now);
@@ -112,7 +118,9 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
         aiCooldowns[index] = now + getAIRetargetDelay(room);
         return false;
       }
-      const moveResult = move ? executeMove(board, index, move, hand) : null;
+      const moveResult = move
+        ? executeMove(board, index, move, hand, now)
+        : null;
       // AI cursor movement is an intention, not a completed board move.
       if (move && moveResult?.boardChanged) {
         rememberAIMoveFocus(room, index, move, now);
@@ -548,19 +556,72 @@ export function scheduleAIReactionBoard(room: RoomState): void {
   }, getReactionDelay(room));
 }
 
-export function startRoomGame(room: RoomState, now = Date.now()): void {
+type StartRoomGameOptions = {
+  countdownMs?: number;
+};
+
+export function startRoomGame(
+  room: RoomState,
+  now = Date.now(),
+  options: StartRoomGameOptions = {}
+): void {
+  if (room.board.isActive) {
+    return;
+  }
+
   removeDisconnectedPlayers(room);
   if (!room.board.isDealt) {
     clearPlayersWaitingForDeal(room);
   }
   clearRoomStuckPlayers(room);
-  room.aiCooldowns = room.board.players.map(() => now + 2000 + Math.random());
   startGame(room);
   clearPlayersReadyForRound(room.board);
+  room.handUpdateVersions = [];
+  room.lastRoundAnalysis = null;
+  room.roundSnapshots = [];
+  room.aiBoard = deepClone(room.board);
+  resetAIVisibilityMemory(room);
+
+  const countdownMs =
+    options.countdownMs ?? getRoomStartCountdownDurationMs(room);
+  if (countdownMs <= 0) {
+    beginRoomGame(room, now);
+    return;
+  }
+
+  const startsAt = now + countdownMs;
+  room.board.roundStartsAt = startsAt;
+  room.aiCooldowns = room.board.players.map(() => startsAt + Math.random());
+}
+
+function beginRoomGame(room: RoomState, now: number): void {
+  room.board.roundStartsAt = undefined;
+  room.aiCooldowns = room.board.players.map(() => now + Math.random());
   room.handUpdateVersions = [];
   startRoundAnalysis(room, now);
   room.aiBoard = deepClone(room.board);
   resetAIVisibilityMemory(room);
+}
+
+export function completeRoundStartCountdown(
+  room: RoomState,
+  now = Date.now()
+): boolean {
+  const startsAt = room.board.roundStartsAt;
+  if (
+    !room.board.isActive ||
+    startsAt == null ||
+    now < startsAt
+  ) {
+    return false;
+  }
+
+  beginRoomGame(room, startsAt);
+  return true;
+}
+
+function getRoomStartCountdownDurationMs(room: RoomState): number {
+  return room.autoStart ? 0 : ROUND_START_COUNTDOWN_MS / room.timescale;
 }
 
 export function dealRoomHands(room: RoomState): boolean {
@@ -1107,7 +1168,7 @@ export function recordRoundSnapshot(
   playerIndex?: number,
   move?: Move
 ): void {
-  if (!room.board.isActive) {
+  if (!room.board.isActive || isRoundStartPending(room.board, now)) {
     return;
   }
 

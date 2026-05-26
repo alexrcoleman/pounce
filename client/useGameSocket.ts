@@ -135,7 +135,7 @@ export default function useGameSocket(
       !state.board ||
       playerIndex < 0 ||
       player?.isSpectating === true ||
-      !isBoardAcceptingMoves(state.board)
+      !isBoardAcceptingMoves(state.board, state.getEstimatedServerTime())
     ) {
       dropQueuedMoveActions();
       return;
@@ -203,8 +203,9 @@ export default function useGameSocket(
           clearTimeout(pingTimeout);
           pingTimeout = undefined;
         }
+        const roundTripMs = performance.now() - startedAt;
         hasPendingPing = false;
-        updatePingLatency(performance.now() - startedAt);
+        updatePingLatency(roundTripMs);
       });
     };
     socket.on("connect_error", () => {
@@ -321,7 +322,10 @@ export default function useGameSocket(
             !state.board ||
             playerIndex < 0 ||
             player?.isSpectating === true ||
-            !isBoardAcceptingMoves(state.board)
+            !isBoardAcceptingMoves(
+              state.board,
+              state.getEstimatedServerTime()
+            )
           ) {
             return;
           }
