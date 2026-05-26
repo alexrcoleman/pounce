@@ -26,7 +26,7 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.55);
   text-shadow: 0 1px 2px rgba(255, 255, 255, 0.72);
   transform: translate(-50%, -50%) translateY(20px) scale(0.82);
-  animation: reactionBubbleFloat 4.8s ease-out both;
+  animation: reactionBubbleFloat 4.8s linear both;
   will-change: opacity, transform;
 }
 
@@ -35,11 +35,13 @@
     opacity: 0;
     transform: translate(-50%, -50%) translateY(20px) scale(0.78)
       rotate(-4deg);
+    animation-timing-function: cubic-bezier(0.18, 0.84, 0.26, 1);
   }
 
   10% {
     opacity: 1;
     transform: translate(-50%, -50%) translateY(0) scale(1) rotate(0deg);
+    animation-timing-function: linear;
   }
 
   56% {
