@@ -43,6 +43,11 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  if (url.pathname === "/api/socketio/health") {
+    event.respondWith(fetch(request));
+    return;
+  }
+
   if (url.pathname.startsWith("/_next/static/")) {
     event.respondWith(cacheFirst(request));
     return;

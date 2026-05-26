@@ -72,6 +72,7 @@ const socketData: Record<
 const DEFAULT_SOCKET_PORT = 3001;
 const DEFAULT_DRAIN_WINDOW_MS = 5 * 60 * 1000;
 const DRAIN_ENDPOINT_PATH = "/api/admin/drain";
+const SOCKET_HEALTH_ENDPOINT_PATH = "/api/socketio/health";
 const DRAIN_SECRET_ENV_VAR = "GAME_SERVER_DRAIN_SECRET";
 const DRAIN_WINDOW_ENV_VAR = "GAME_SERVER_DRAIN_WINDOW_MS";
 
@@ -83,6 +84,11 @@ let nextReactionNumber = 0;
 export default function createSocketIOServer() {
   let io: Server<ClientToServerEvents, ServerToClientEvents>;
   const httpServer = createServer((req, res) => {
+    if (isSocketHealthEndpointRequest(req)) {
+      handleSocketHealthRequest(req, res);
+      return;
+    }
+
     if (isDrainEndpointRequest(req)) {
       handleDrainRequest(req, res, () => startDrain(io));
     }
@@ -575,6 +581,44 @@ export default function createSocketIOServer() {
 function isDrainEndpointRequest(req: IncomingMessage): boolean {
   const url = new URL(req.url ?? "/", "http://localhost");
   return url.pathname === DRAIN_ENDPOINT_PATH;
+}
+
+function isSocketHealthEndpointRequest(req: IncomingMessage): boolean {
+  const url = new URL(req.url ?? "/", "http://localhost");
+  return url.pathname === SOCKET_HEALTH_ENDPOINT_PATH;
+}
+
+function handleSocketHealthRequest(req: IncomingMessage, res: ServerResponse) {
+  setSocketHealthCorsHeaders(req, res);
+
+  if (req.method === "OPTIONS") {
+    res.statusCode = 204;
+    res.end();
+    return;
+  }
+
+  if (req.method !== "GET" && req.method !== "HEAD") {
+    res.setHeader("Allow", "GET, HEAD, OPTIONS");
+    respondJson(res, 405, { ok: false, error: "Method not allowed" });
+    return;
+  }
+
+  res.statusCode = 204;
+  res.end();
+}
+
+function setSocketHealthCorsHeaders(
+  req: IncomingMessage,
+  res: ServerResponse
+) {
+  const origin = getFirstHeader(req.headers.origin);
+  res.setHeader("Access-Control-Allow-Origin", origin ?? "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "content-type");
+  res.setHeader("Cache-Control", "no-store");
+  if (origin) {
+    res.setHeader("Vary", "Origin");
+  }
 }
 
 function handleDrainRequest(

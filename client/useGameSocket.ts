@@ -26,6 +26,9 @@ const PLAYER_SESSION_STORAGE_KEY = "pounce::playerSessionId";
 const DEFAULT_SOCKET_PORT = "3001";
 const RECONNECT_TOAST_ID = "room-reconnect";
 const STUCK_TOAST_ID = "room-stuck-status";
+const SOCKET_HEALTH_ENDPOINT_PATH = "/api/socketio/health";
+const INITIAL_SOCKET_WARMUP_TIMEOUT_MS = 10000;
+const SOCKET_WARMUP_RETRY_MS = 500;
 
 export default function useGameSocket(
   roomId: string | null,
@@ -154,6 +157,8 @@ export default function useGameSocket(
     let socket: ClientSocket;
     socket = createSocket();
     let isClosed = false;
+    let hasAttemptedInitialWarmup = false;
+    let isInitialWarmupInFlight = false;
     let hasPendingPing = false;
     let pingTimeout: ReturnType<typeof setTimeout> | undefined;
     const showReconnectToast = () => {
@@ -208,11 +213,41 @@ export default function useGameSocket(
         updatePingLatency(roundTripMs);
       });
     };
+    const warmUpServerAndReconnect = () => {
+      if (hasAttemptedInitialWarmup || isInitialWarmupInFlight) {
+        return;
+      }
+
+      hasAttemptedInitialWarmup = true;
+      isInitialWarmupInFlight = true;
+      waitForSocketServerWarmup()
+        .catch((error) => {
+          console.warn(
+            "Unable to warm up socket server before reconnect",
+            error
+          );
+          if (!isClosed && !socket.connected) {
+            setError("No connection to socket server");
+          }
+        })
+        .finally(() => {
+          isInitialWarmupInFlight = false;
+          if (!isClosed && !socket.connected) {
+            socket.connect();
+          }
+        });
+    };
     socket.on("connect_error", () => {
       updatePingLatency(null);
       if (hasConnectedRef.current || state.board != null) {
         setError(null);
         showReconnectToast();
+        return;
+      }
+
+      if (!hasAttemptedInitialWarmup || isInitialWarmupInFlight) {
+        setError(null);
+        warmUpServerAndReconnect();
         return;
       }
 
@@ -388,18 +423,56 @@ export type Actions = {
 };
 
 function createSocket(): ClientSocket {
-  const { hostname, protocol } = window.location;
-  const isLocalHost =
-    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
-
-  if (isLocalHost) {
-    const socketHost = hostname.includes(":") ? `[${hostname}]` : hostname;
-    const socketPort =
-      process.env.NEXT_PUBLIC_SOCKET_PORT || DEFAULT_SOCKET_PORT;
-    return io(`${protocol}//${socketHost}:${socketPort}`);
+  const localSocketOrigin = getLocalSocketOrigin();
+  if (localSocketOrigin) {
+    return io(localSocketOrigin);
   }
 
   return io();
+}
+
+function getSocketWarmupUrl(): string {
+  return `${getLocalSocketOrigin() ?? ""}${SOCKET_HEALTH_ENDPOINT_PATH}`;
+}
+
+function getLocalSocketOrigin(): string | null {
+  const { hostname, protocol } = window.location;
+  const isLocalHost =
+    hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+  if (!isLocalHost) {
+    return null;
+  }
+
+  const socketHost = hostname.includes(":") ? `[${hostname}]` : hostname;
+  const socketPort = process.env.NEXT_PUBLIC_SOCKET_PORT || DEFAULT_SOCKET_PORT;
+  return `${protocol}//${socketHost}:${socketPort}`;
+}
+
+async function waitForSocketServerWarmup() {
+  const deadline = Date.now() + INITIAL_SOCKET_WARMUP_TIMEOUT_MS;
+  let lastError: unknown;
+
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(getSocketWarmupUrl(), {
+        cache: "no-store",
+      });
+      if (response.ok) {
+        return;
+      }
+      lastError = new Error(`Socket health check failed: ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+
+    await delay(SOCKET_WARMUP_RETRY_MS);
+  }
+
+  throw lastError ?? new Error("Socket health check timed out");
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function getOrCreatePlayerSessionId() {
