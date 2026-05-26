@@ -9,6 +9,7 @@ import RoundAnalysisPanel from "./RoundAnalysisPanel";
 import { useEffect, useState } from "react";
 
 const CONFETTI_DURATION_MS = 10_000;
+const POST_GAME_ACTION_DELAY_MS = 1_000;
 
 export default observer(function VictoryOverlay() {
   const { state, socket } = useClientContext();
@@ -19,22 +20,38 @@ export default observer(function VictoryOverlay() {
   const activePlayerIndex = state.getActivePlayerIndex();
   const [isAnalysisOpen, setAnalysisOpen] = useState(false);
   const [isConfettiActive, setConfettiActive] = useState(false);
+  const [unlockedPostGameRoundKey, setUnlockedPostGameRoundKey] = useState<
+    string | null
+  >(null);
+  const postGameRoundKey =
+    board.pouncer != null && pouncer != null
+      ? `${board.pouncer}:${pouncer.scores.length}`
+      : null;
+  const arePostGameActionsLocked =
+    postGameRoundKey != null && unlockedPostGameRoundKey !== postGameRoundKey;
 
   useEffect(() => {
     setAnalysisOpen(false);
 
-    if (board.pouncer == null) {
+    if (postGameRoundKey == null) {
       setConfettiActive(false);
+      setUnlockedPostGameRoundKey(null);
       return;
     }
 
     setConfettiActive(true);
-    const timeoutId = window.setTimeout(() => {
+    const actionDelayTimeoutId = window.setTimeout(() => {
+      setUnlockedPostGameRoundKey(postGameRoundKey);
+    }, POST_GAME_ACTION_DELAY_MS);
+    const confettiTimeoutId = window.setTimeout(() => {
       setConfettiActive(false);
     }, CONFETTI_DURATION_MS);
 
-    return () => window.clearTimeout(timeoutId);
-  }, [board.pouncer]);
+    return () => {
+      window.clearTimeout(actionDelayTimeoutId);
+      window.clearTimeout(confettiTimeoutId);
+    };
+  }, [postGameRoundKey]);
 
   if (pouncer == null) {
     return null;
@@ -53,17 +70,21 @@ export default observer(function VictoryOverlay() {
           <Button
             aria-expanded={isAnalysisOpen}
             aria-haspopup="dialog"
-            disabled={isAnalysisLoading}
+            disabled={isAnalysisLoading || arePostGameActionsLocked}
             loading={isAnalysisLoading}
             onClick={() => setAnalysisOpen(true)}
           >
             {isAnalysisLoading ? "Analyzing" : "Game Analysis"}
           </Button>
           <Link legacyBehavior href="/" passHref>
-            <Button>Leave Room</Button>
+            <Button disabled={arePostGameActionsLocked}>Leave Room</Button>
           </Link>
           {isHost ? (
-            <Button type="primary" onClick={() => socket?.emit("deal_hands")}>
+            <Button
+              disabled={arePostGameActionsLocked}
+              type="primary"
+              onClick={() => socket?.emit("deal_hands")}
+            >
               Deal hands
             </Button>
           ) : (
