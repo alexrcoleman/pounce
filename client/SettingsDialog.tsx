@@ -1,10 +1,11 @@
 import styles from "./Header.module.css";
 import { type ReactNode, useEffect, useState } from "react";
 import { observer } from "mobx-react-lite";
-import { Button, Flex, Modal, Slider, Switch, Tooltip } from "antd";
+import { Button, Flex, Modal, Slider, Switch } from "antd";
 import { useClientContext } from "./ClientContext";
 import RoomShare from "./RoomShare";
 import ChevronLeftIcon from "./icons/ChevronLeftIcon";
+import InfoTooltipIcon from "./InfoTooltipIcon";
 
 export type SettingsPage = "main" | "room" | "appearance";
 
@@ -210,23 +211,17 @@ export default observer(function SettingsDialog({
               title={
                 <Flex align="center" gap={6}>
                   <span>Fair hand rotation</span>
-                  <Tooltip
-                    title={FAIR_HAND_ROTATION_HELP}
-                    open={isFairHandHelpOpen}
+                  <InfoTooltipIcon
+                    aria-label="How fair hand rotation works"
+                    onBlur={() => setFairHandHelpOpen(false)}
+                    onClick={() => setFairHandHelpOpen(true)}
+                    onFocus={() => setFairHandHelpOpen(true)}
+                    onMouseEnter={() => setFairHandHelpOpen(true)}
+                    onMouseLeave={() => setFairHandHelpOpen(false)}
+                    tooltipOpen={isFairHandHelpOpen}
                   >
-                    <button
-                      type="button"
-                      className={styles.infoButton}
-                      aria-label="How fair hand rotation works"
-                      onBlur={() => setFairHandHelpOpen(false)}
-                      onClick={() => setFairHandHelpOpen(true)}
-                      onFocus={() => setFairHandHelpOpen(true)}
-                      onMouseEnter={() => setFairHandHelpOpen(true)}
-                      onMouseLeave={() => setFairHandHelpOpen(false)}
-                    >
-                      i
-                    </button>
-                  </Tooltip>
+                    {FAIR_HAND_ROTATION_HELP}
+                  </InfoTooltipIcon>
                 </Flex>
               }
               control={

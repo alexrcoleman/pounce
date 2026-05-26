@@ -13,8 +13,9 @@ import type {
   RoundAnalysisMoveEvent,
 } from "../shared/RoundAnalysis";
 import type { CardState } from "../shared/GameUtils";
-import { Drawer, Modal, Tooltip } from "antd";
+import { Drawer, Modal } from "antd";
 import ChevronLeftIcon from "./icons/ChevronLeftIcon";
+import InfoTooltipIcon from "./InfoTooltipIcon";
 import styles from "./RoundAnalysisPanel.module.css";
 
 type Props = {
@@ -304,15 +305,9 @@ function Stat({
       <div className={styles.statLabel}>
         <span>{label}</span>
         {tooltip ? (
-          <Tooltip title={tooltip}>
-            <button
-              aria-label={`${label} info`}
-              className={styles.statInfoButton}
-              type="button"
-            >
-              i
-            </button>
-          </Tooltip>
+          <InfoTooltipIcon aria-label={`${label} info`}>
+            {tooltip}
+          </InfoTooltipIcon>
         ) : null}
       </div>
       <div className={styles.statValue}>{value}</div>

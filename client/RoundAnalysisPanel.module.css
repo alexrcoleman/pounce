@@ -313,31 +313,6 @@
   min-width: 0;
 }
 
-.statInfoButton {
-  display: inline-grid;
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-  place-items: center;
-  padding: 0;
-  border: 1px solid #9ba99f;
-  border-radius: 50%;
-  background: #ffffff;
-  color: #405246;
-  cursor: help;
-  font: inherit;
-  font-size: 10px;
-  font-weight: 900;
-  line-height: 1;
-}
-
-.statInfoButton:hover,
-.statInfoButton:focus-visible {
-  border-color: #17683b;
-  color: #17683b;
-  outline: none;
-}
-
 .focusBand {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
