@@ -42,7 +42,11 @@ import {
 import { createServer, IncomingMessage, ServerResponse } from "http";
 import { timingSafeEqual } from "crypto";
 import { Server } from "socket.io";
-import { executeMove, type Move } from "../shared/MoveHandler";
+import {
+  executeMove,
+  isProductiveMove,
+  type Move,
+} from "../shared/MoveHandler";
 import {
   getServerDrainDescription,
   getServerDrainStage,
@@ -242,7 +246,7 @@ export default function createSocketIOServer() {
         return;
       }
       recordRoundSnapshot(room, "move", Date.now(), pid, args.payload);
-      if (result.boardChanged) {
+      if (result.boardChanged && isProductiveMove(args.payload)) {
         clearRoomStuckPlayers(room);
       }
       const didReleaseHand = releaseRoomHandAfterCenterPlay(
@@ -735,7 +739,6 @@ function markPlayerDisconnected(roomId: string, socketId: string): boolean {
   player.disconnectedAt = Date.now();
   player.isReadyForRound = false;
   clearRoomHand(room, playerIndex);
-  clearRoomStuckPlayers(room);
   return true;
 }
 

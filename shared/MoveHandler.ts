@@ -64,6 +64,14 @@ export function isBoardAcceptingMoves(
   );
 }
 
+export function isProductiveMove(move: Move): boolean {
+  return (
+    move.type !== "cycle" &&
+    move.type !== "flip_deck" &&
+    move.type !== "move_field_stack"
+  );
+}
+
 function getSourceCard(
   boardState: BoardState,
   player: PlayerState,
@@ -188,11 +196,7 @@ export function executeMove(
       player.deck.length * -1 +
       player.flippedDeck.length * -1 +
       player.stacks.reduce((s, x) => s + x.length, 0) * -1;
-    if (
-      move.type !== "cycle" &&
-      move.type !== "move_field_stack" &&
-      move.type !== "flip_deck"
-    ) {
+    if (isProductiveMove(move)) {
       // Progress is made on the board
       board.ticksSinceMove = 0;
     }

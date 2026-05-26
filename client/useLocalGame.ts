@@ -15,6 +15,7 @@ import {
   Move,
   executeMove,
   isBoardAcceptingMoves,
+  isProductiveMove,
 } from "../shared/MoveHandler";
 import { createRoomState, RoomState } from "../shared/RoomState";
 import {
@@ -209,7 +210,7 @@ export default function useLocalGame(name: string | null) {
             playerIndex,
             envelope.payload
           );
-          if (result.boardChanged) {
+          if (result.boardChanged && isProductiveMove(envelope.payload)) {
             clearRoomStuckPlayers(room);
           }
           const didReleaseHand = releaseRoomHandAfterCenterPlay(

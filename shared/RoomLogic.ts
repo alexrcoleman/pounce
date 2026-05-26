@@ -20,7 +20,12 @@ import {
 } from "./GameUtils";
 
 import type { AIPileKnowledge, RoomState } from "./RoomState";
-import { executeMove, getDistance, type Move } from "./MoveHandler";
+import {
+  executeMove,
+  getDistance,
+  isProductiveMove,
+  type Move,
+} from "./MoveHandler";
 import { getApproximateCardLocation } from "./CardLocations";
 import { getBasicAIMove, getCurrentAIDragMove } from "./ComputerV1";
 import deepClone from "./deepClone";
@@ -125,7 +130,9 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       if (move && moveResult?.boardChanged) {
         rememberAIMoveFocus(room, index, move, now);
         recordRoundSnapshot(room, "move", now, index, move);
-        clearRoomStuckPlayers(room);
+        if (isProductiveMove(move)) {
+          clearRoomStuckPlayers(room);
+        }
       }
 
       let cooldownDist = {
