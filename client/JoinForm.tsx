@@ -102,10 +102,18 @@ export default function JoinForm({
 
   const joinRoom = () => {
     const room = currentRoom.trim().toUpperCase();
-    if (!currentName.trim() || !room) {
+    if (!room || (isInviteMode && !currentName.trim())) {
       return;
     }
+
     setCurrentRoom(room);
+    if (!currentName.trim()) {
+      startNavigation("join", () =>
+        router.push(`/join/${encodeURIComponent(room)}`)
+      );
+      return;
+    }
+
     const name = saveName();
     startNavigation("join", () => onSubmit(room, name));
   };
@@ -121,7 +129,8 @@ export default function JoinForm({
   const isNavigating = pendingAction != null;
   const isInviteMode = inviteRoomCode.length > 0;
   const canCreateRoom = currentName.trim().length > 0;
-  const canJoinRoom = canCreateRoom && currentRoom.trim().length > 0;
+  const canJoinRoom =
+    currentRoom.trim().length > 0 && (!isInviteMode || canCreateRoom);
   const showMobileOfflinePrompt =
     installContext.isMobile || installContext.isStandalone;
   const isInstalledApp = installContext.isStandalone;
