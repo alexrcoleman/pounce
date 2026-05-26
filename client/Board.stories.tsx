@@ -275,7 +275,8 @@ function createStoryRoundAnalysis(
         dealSimulation: {
           playerIndex,
           predictedScore,
-          predictedScoreConfidenceInterval95: 2.4 + playerIndex * 0.3,
+          predictedScoreConfidenceInterval95:
+            playerIndex === 0 ? 0 : 2.4 + playerIndex * 0.3,
           predictedPointDifferential: getStoryPointDifferential(
             predictedScore,
             predictedScoreTotal,

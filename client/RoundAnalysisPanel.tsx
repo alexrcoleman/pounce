@@ -329,11 +329,12 @@ function ScoreComparison({
   valueFormatter?: (score: number) => string;
 }) {
   const delta = actualScore - predictedScore;
-  const confidenceIntervalText =
+  const hasConfidenceInterval =
     typeof confidenceInterval95 === "number" &&
-    Number.isFinite(confidenceInterval95)
-      ? formatScore(confidenceInterval95)
-      : null;
+    Number.isFinite(confidenceInterval95) &&
+    confidenceInterval95 >= 0;
+  const confidenceIntervalText =
+    hasConfidenceInterval ? formatScore(confidenceInterval95) : null;
 
   return (
     <div className={styles.scoreComparison}>
@@ -381,7 +382,7 @@ function ConfidenceRangeBar({
   if (
     typeof confidenceInterval95 !== "number" ||
     !Number.isFinite(confidenceInterval95) ||
-    confidenceInterval95 <= 0 ||
+    confidenceInterval95 < 0 ||
     !Number.isFinite(actualScore) ||
     !Number.isFinite(predictedScore)
   ) {
