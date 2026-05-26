@@ -32,6 +32,21 @@
   text-shadow: 0 2px 10px rgba(0, 0, 0, 0.34);
 }
 
+.brandLink {
+  text-decoration: none;
+}
+
+.brandLink:hover,
+.brandLink:focus {
+  color: white;
+}
+
+.brandLink:focus-visible {
+  border-radius: 8px;
+  outline: 3px solid rgba(248, 232, 198, 0.88);
+  outline-offset: 6px;
+}
+
 .logo {
   width: 56px;
   height: 56px;
