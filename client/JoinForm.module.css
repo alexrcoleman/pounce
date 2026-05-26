@@ -63,6 +63,23 @@
   width: 100%;
 }
 
+.rulesLink {
+  align-self: center;
+  color: #f8e8c6;
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 1.2;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.38);
+}
+
+.rulesLink:hover,
+.rulesLink:focus {
+  color: #ffffff;
+}
+
 .menu {
   width: 100%;
   overflow: hidden;

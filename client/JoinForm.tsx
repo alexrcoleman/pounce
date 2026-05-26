@@ -2,6 +2,7 @@ import { Button, Form, Input, Modal } from "antd";
 import styles from "./JoinForm.module.css";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
+import Link from "next/link";
 import usePwaInstall from "./usePwaInstall";
 import { FAVICON_SRC } from "../shared/gameAssets";
 type Props = {
@@ -318,6 +319,11 @@ export default function JoinForm({
             ) : null}
           </div>
         </Form>
+        {!isInviteMode ? (
+          <Link className={styles.rulesLink} href="/how-to-play">
+            How to play Pounce
+          </Link>
+        ) : null}
       </div>
       <Modal
         title="Add to home screen"
