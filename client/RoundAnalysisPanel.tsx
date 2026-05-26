@@ -8,6 +8,7 @@ import type {
 } from "../shared/RoundAnalysis";
 import type { CardState } from "../shared/GameUtils";
 import { Drawer, Modal, Tooltip } from "antd";
+import ChevronLeftIcon from "./icons/ChevronLeftIcon";
 import styles from "./RoundAnalysisPanel.module.css";
 
 type Props = {
@@ -348,37 +349,69 @@ function RateValue({ value, ratio }: { value: string; ratio: string }) {
 }
 
 function PounceDeckSection({ report }: { report: PlayerRoundAnalysis }) {
+  const [isExpanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    setExpanded(false);
+  }, [report.playerIndex]);
+
   if (report.pounceDeck.length === 0) {
     return null;
   }
 
   const playedCount = report.pounceDeck.filter(({ played }) => played).length;
+  const deckListId = `round-analysis-pounce-deck-${report.playerIndex}`;
 
   return (
-    <div className={styles.pounceDeckSection}>
-      <div className={styles.pounceDeckHeader}>
-        <div>
-          <div className={styles.momentsHeader}>Pounce deck</div>
+    <div
+      className={[
+        styles.pounceDeckSection,
+        isExpanded ? styles.pounceDeckSectionExpanded : "",
+      ].join(" ")}
+    >
+      <button
+        aria-controls={deckListId}
+        aria-expanded={isExpanded}
+        className={styles.pounceDeckHeader}
+        onClick={() => setExpanded((current) => !current)}
+        type="button"
+      >
+        <span className={styles.pounceDeckTitleGroup}>
+          <span className={styles.momentsHeader}>Pounce deck</span>
+        </span>
+        <span className={styles.pounceDeckSummary}>
+          <span className={styles.pounceDeckMeta}>
+            {playedCount}/{report.pounceDeck.length} played
+          </span>
+          <ChevronLeftIcon
+            aria-hidden="true"
+            className={styles.pounceDeckChevron}
+          />
+        </span>
+      </button>
+      <div
+        aria-hidden={!isExpanded}
+        className={styles.pounceDeckContent}
+        id={deckListId}
+      >
+        <div className={styles.pounceDeckContentInner}>
           <div className={styles.pounceDeckMeta}>Top to bottom</div>
-        </div>
-        <div className={styles.pounceDeckMeta}>
-          {playedCount}/{report.pounceDeck.length} played
+          <ol className={styles.pounceDeckList}>
+            {report.pounceDeck.map(({ card, played }, index) => (
+              <li
+                className={[
+                  styles.pounceDeckItem,
+                  played ? styles.pounceDeckItemPlayed : "",
+                ].join(" ")}
+                key={`${card.player}:${card.suit}:${card.value}`}
+              >
+                <span className={styles.pounceDeckIndex}>{index + 1}</span>
+                <CardPill card={card} />
+              </li>
+            ))}
+          </ol>
         </div>
       </div>
-      <ol className={styles.pounceDeckList}>
-        {report.pounceDeck.map(({ card, played }, index) => (
-          <li
-            className={[
-              styles.pounceDeckItem,
-              played ? styles.pounceDeckItemPlayed : "",
-            ].join(" ")}
-            key={`${card.player}:${card.suit}:${card.value}`}
-          >
-            <span className={styles.pounceDeckIndex}>{index + 1}</span>
-            <CardPill card={card} />
-          </li>
-        ))}
-      </ol>
     </div>
   );
 }
