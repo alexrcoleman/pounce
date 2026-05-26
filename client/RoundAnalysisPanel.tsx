@@ -20,8 +20,8 @@ const STAT_TOOLTIPS = {
     "Center plays made divided by every detected center-play opportunity for this player.",
   contestedCenterWinRate:
     "How often this player won a shared center-card race before another player played the same card.",
-  dealPerformance:
-    "Compares the actual score with the simulated score prediction for this deal. The prediction includes a 95% confidence interval from the simulated sample size.",
+  score:
+    "The player's actual round score compared with the simulated score prediction for this deal. The prediction includes a 95% confidence interval.",
   dealRank:
     "The player's predicted rank for this deal, sorted by simulated score among analyzed players.",
   pointDifferential:
@@ -114,8 +114,8 @@ export default function RoundAnalysisPanel({
       <div className={styles.statGrid}>
         {selectedReport.dealSimulation && (
           <Stat
-            label="Deal performance"
-            tooltip={STAT_TOOLTIPS.dealPerformance}
+            label="Score"
+            tooltip={STAT_TOOLTIPS.score}
             value={
               <ScoreComparison
                 actualScore={selectedReport.score}
@@ -124,7 +124,6 @@ export default function RoundAnalysisPanel({
                     .predictedScoreConfidenceInterval95
                 }
                 predictedScore={selectedReport.dealSimulation.predictedScore}
-                sampleSize={selectedReport.dealSimulation.simulationCount}
               />
             }
           />
@@ -138,6 +137,10 @@ export default function RoundAnalysisPanel({
               value={
                 <ScoreComparison
                   actualScore={selectedReport.pointDifferential}
+                  confidenceInterval95={
+                    selectedReport.dealSimulation
+                      .predictedPointDifferentialConfidenceInterval95
+                  }
                   predictedScore={
                     selectedReport.dealSimulation.predictedPointDifferential
                   }
@@ -156,14 +159,6 @@ export default function RoundAnalysisPanel({
           />
         )}
         <Stat
-          label="Center cards played"
-          value={selectedReport.summary.cardsPlayedToCenter}
-        />
-        <Stat
-          label="Solitaire moves played"
-          value={selectedReport.summary.solitaireMoves}
-        />
-        <Stat
           label="3-card deck cycles/sec"
           value={
             <RateValue
@@ -173,10 +168,6 @@ export default function RoundAnalysisPanel({
               value={formatRate(selectedReport.summary.deckCyclesPerSecond)}
             />
           }
-        />
-        <Stat
-          label="Center plays missed"
-          value={selectedReport.summary.missedCenterPlays}
         />
         <Stat
           label="Center play rate"
@@ -317,13 +308,11 @@ function ScoreComparison({
   actualScore,
   confidenceInterval95,
   predictedScore,
-  sampleSize,
   valueFormatter = formatScore,
 }: {
   actualScore: number;
   confidenceInterval95?: number;
   predictedScore: number;
-  sampleSize?: number;
   valueFormatter?: (score: number) => string;
 }) {
   const delta = actualScore - predictedScore;
@@ -336,19 +325,14 @@ function ScoreComparison({
   return (
     <div className={styles.scoreComparison}>
       <div className={styles.scoreComparisonLead}>
-        {formatPerformanceDelta(delta)}
+        {valueFormatter(actualScore)}
       </div>
       <div className={styles.scoreComparisonMeta}>
         Predicted {valueFormatter(predictedScore)}
         {confidenceIntervalText ? ` +/- ${confidenceIntervalText}` : ""}
       </div>
-      {confidenceIntervalText && sampleSize ? (
-        <div className={styles.scoreComparisonMeta}>
-          95% CI, n={sampleSize}
-        </div>
-      ) : null}
       <div className={styles.scoreComparisonMeta}>
-        Actual {valueFormatter(actualScore)}
+        {formatPerformanceDelta(delta)}
       </div>
     </div>
   );

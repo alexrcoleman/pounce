@@ -250,6 +250,8 @@ function createStoryRoundAnalysis(
             predictedScoreTotal,
             board.players.length
           ),
+          predictedPointDifferentialConfidenceInterval95:
+            5.8 + playerIndex * 0.7,
           predictedRank: predictedRanks[playerIndex],
           simulationCount: 16,
           pounceOutRate: playerIndex === 0 ? 0.5 : 0.2,
