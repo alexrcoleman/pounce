@@ -698,14 +698,20 @@ function getPointDifferential(
   }
 
   const playerScore = board.players[playerIndex]?.currentPoints ?? 0;
-  return activePlayerIndices.reduce((sum, otherPlayerIndex) => {
-    if (otherPlayerIndex === playerIndex) {
-      return sum;
-    }
-    return (
-      sum + playerScore - (board.players[otherPlayerIndex]?.currentPoints ?? 0)
-    );
-  }, 0);
+  const totalDifferential = activePlayerIndices.reduce(
+    (sum, otherPlayerIndex) => {
+      if (otherPlayerIndex === playerIndex) {
+        return sum;
+      }
+      return (
+        sum +
+        playerScore -
+        (board.players[otherPlayerIndex]?.currentPoints ?? 0)
+      );
+    },
+    0
+  );
+  return totalDifferential / (activePlayerIndices.length - 1);
 }
 
 function getDealSimulationByPlayer(

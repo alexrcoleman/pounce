@@ -326,7 +326,7 @@ function getStoryPointDifferential(
   if (playerCount <= 1) {
     return 0;
   }
-  return score * playerCount - totalScore;
+  return (score * playerCount - totalScore) / (playerCount - 1);
 }
 
 function tuneActivePlayerFullPile(player: {

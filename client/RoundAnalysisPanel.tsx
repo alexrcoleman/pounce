@@ -32,7 +32,7 @@ const STAT_TOOLTIPS = {
   dealRank:
     "The player's predicted rank for this deal, sorted by simulated score among analyzed players.",
   pointDifferential:
-    "The sum of this player's score minus each other active player's score, compared with the simulated prediction. Higher is better.",
+    "The player's score minus the average score of the other active players, compared with the simulated prediction. Higher is better.",
   solitaireRate:
     "Solitaire moves played divided by every detected useful solitaire opportunity for this player.",
   pounceHelpersMissed:
