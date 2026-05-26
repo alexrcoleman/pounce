@@ -1,4 +1,5 @@
 import styles from "./Header.module.css";
+import SettingOutlined from "@ant-design/icons/SettingOutlined";
 import { useEffect, useState } from "react";
 import { observer } from "mobx-react-lite";
 import { Button, Tooltip } from "antd";
@@ -82,25 +83,32 @@ export default observer(function Header(props: Props) {
         </div>
       ) : null}
       <div
-        className={`${styles.floatingControls} ${
-          canTogglePause ? styles.floatingControlsWithPause : ""
-        }`}
+        className={styles.floatingControls}
+        role="toolbar"
+        aria-label="Game controls"
       >
-        {showScoreButton && board != null && board.pouncer == null ? (
-          <HeaderScoreboardButton board={board} />
-        ) : null}
         {canTogglePause ? (
           <HeaderPauseButton
             isPaused={isPaused}
             onToggle={() => socket?.emit("set_paused", { paused: !isPaused })}
           />
         ) : null}
+        {showScoreButton && board != null && board.pouncer == null ? (
+          <HeaderScoreboardButton board={board} />
+        ) : null}
         <button
           className={styles.floatingButton}
           onClick={() => openSettings("main")}
+          aria-label="Open settings"
+          title="Settings"
           type="button"
         >
-          Settings
+          <SettingOutlined
+            aria-hidden="true"
+            className={styles.settingsIcon}
+            rev={undefined}
+          />
+          <span className={styles.buttonLabel}>Settings</span>
         </button>
       </div>
       {isSettingsOpen ? (
@@ -183,9 +191,11 @@ function HeaderScoreboardButton({ board }: { board: BoardState }) {
         aria-haspopup="dialog"
         className={styles.floatingButton}
         onClick={() => setOpen(true)}
+        title="Scores"
         type="button"
       >
-        Scores
+        <span aria-hidden="true" className={styles.scoresIcon} />
+        <span className={styles.buttonLabel}>Scores</span>
       </button>
       {isOpen ? (
         <div
