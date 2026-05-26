@@ -96,18 +96,43 @@ function BoardStoryFrame({
           maxHeight: "100vh",
           maxWidth: "100vw",
           overflow: "hidden",
+          position: "relative",
           width,
         }}
       >
-        <Board
-          easyReadCards={easyReadCards}
-          executeMove={() => undefined}
-          isLeftHandedLayout={false}
-          onOpenRoomSettings={() => undefined}
-          onUpdateHand={() => undefined}
-          roomId="storybook"
-          zoom={zoom}
-        />
+        {postRound ? (
+          <div
+            data-testid="story-header-row"
+            style={{
+              background: "rgb(220, 220, 220)",
+              border: "1px solid rgba(0, 0, 0, 0.25)",
+              borderTop: "none",
+              borderRadius: "0 0 4px 4px",
+              fontSize: 15,
+              fontWeight: 600,
+              height: 38,
+              lineHeight: "38px",
+              padding: "0 10px",
+              position: "absolute",
+              right: 20,
+              top: 0,
+              zIndex: 900,
+            }}
+          >
+            Header row
+          </div>
+        ) : null}
+        <div style={{ height: "100%", isolation: "isolate" }}>
+          <Board
+            easyReadCards={easyReadCards}
+            executeMove={() => undefined}
+            isLeftHandedLayout={false}
+            onOpenRoomSettings={() => undefined}
+            onUpdateHand={() => undefined}
+            roomId="storybook"
+            zoom={zoom}
+          />
+        </div>
       </div>
     </ClientContext.Provider>
   );
@@ -192,9 +217,15 @@ function createStoryRoundAnalysis(
   const scores = board.players.map(
     (player) => player.scores[player.scores.length - 1] ?? 0
   );
-  const predictedScores = scores.map(
-    (score, playerIndex) => score + (playerIndex === 0 ? -2.6 : 1.2)
-  );
+  const predictedScores = scores.map((score, playerIndex) => {
+    if (playerIndex === 0) {
+      return score - 4.4;
+    }
+    if (playerIndex === 1) {
+      return score + 3.6;
+    }
+    return score + 0.8 + playerIndex * 0.3;
+  });
   const scoreTotal = scores.reduce((sum, score) => sum + score, 0);
   const predictedScoreTotal = predictedScores.reduce(
     (sum, score) => sum + score,
@@ -250,6 +281,8 @@ function createStoryRoundAnalysis(
             predictedScoreTotal,
             board.players.length
           ),
+          predictedPointDifferentialConfidenceInterval95:
+            5.8 + playerIndex * 0.7,
           predictedRank: predictedRanks[playerIndex],
           simulationCount: 16,
           pounceOutRate: playerIndex === 0 ? 0.5 : 0.2,
@@ -293,7 +326,7 @@ function getStoryPointDifferential(
   if (playerCount <= 1) {
     return 0;
   }
-  return score * playerCount - totalScore;
+  return (score * playerCount - totalScore) / (playerCount - 1);
 }
 
 function tuneActivePlayerFullPile(player: {

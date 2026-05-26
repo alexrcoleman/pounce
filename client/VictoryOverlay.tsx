@@ -2,7 +2,7 @@ import Confetti from "react-confetti";
 import ScoresTable from "./ScoresTable";
 import { observer } from "mobx-react-lite";
 import { useClientContext } from "./ClientContext";
-import { Button, Flex } from "antd";
+import { Button, Flex, Modal } from "antd";
 import Link from "next/link";
 import styles from "./VictoryOverlay.module.css";
 import RoundAnalysisPanel from "./RoundAnalysisPanel";
@@ -36,22 +36,11 @@ export default observer(function VictoryOverlay() {
     return () => window.clearTimeout(timeoutId);
   }, [board.pouncer]);
 
-  useEffect(() => {
-    if (!isAnalysisOpen) {
-      return;
-    }
+  if (pouncer == null) {
+    return null;
+  }
 
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setAnalysisOpen(false);
-      }
-    };
-
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [isAnalysisOpen]);
-
-  return pouncer != null ? (
+  return (
     <div className={styles.overlay}>
       <div className={styles.dialog}>
         <div className={styles.title}>
@@ -82,40 +71,31 @@ export default observer(function VictoryOverlay() {
           )}
         </Flex>
       </div>
-      {isAnalysisOpen ? (
-        <div
-          className={styles.analysisOverlay}
-          onClick={() => setAnalysisOpen(false)}
-        >
-          <div
-            aria-labelledby="round-analysis-title"
-            aria-modal="true"
-            className={styles.analysisDialog}
-            onClick={(event) => event.stopPropagation()}
-            role="dialog"
-          >
-            <div className={styles.analysisTitle} id="round-analysis-title">
-              Game Analysis
-            </div>
-            <div className={styles.analysisBody}>
-              <RoundAnalysisPanel
-                activePlayerIndex={activePlayerIndex}
-                analysis={state.roundAnalysis}
-              />
-            </div>
-            <Flex
-              justify="end"
-              align="center"
-              className={`${styles.actions} ${styles.analysisActions}`}
-            >
-              <Button onClick={() => setAnalysisOpen(false)}>
-                Back to Scoreboard
-              </Button>
-            </Flex>
-          </div>
+      <Modal
+        centered
+        closeIcon={<span className={styles.analysisCloseIcon}>X</span>}
+        footer={
+          <Flex justify="end" align="center" className={styles.analysisActions}>
+            <Button onClick={() => setAnalysisOpen(false)}>
+              Back to Scoreboard
+            </Button>
+          </Flex>
+        }
+        maskClosable
+        onCancel={() => setAnalysisOpen(false)}
+        open={isAnalysisOpen}
+        rootClassName={styles.analysisModal}
+        title="Game Analysis"
+        width={880}
+      >
+        <div className={styles.analysisBody}>
+          <RoundAnalysisPanel
+            activePlayerIndex={activePlayerIndex}
+            analysis={state.roundAnalysis}
+          />
         </div>
-      ) : null}
+      </Modal>
       {isConfettiActive && <Confetti />}
     </div>
-  ) : null;
+  );
 });

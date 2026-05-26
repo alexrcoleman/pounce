@@ -5,6 +5,7 @@ import {
   CursorState,
 } from "./GameUtils";
 import { Move } from "./MoveHandler";
+import type { ServerDrainStage } from "./ServerDrainNotice";
 import type { RoomSettings } from "./RoomState";
 import type { RoundAnalysis } from "./RoundAnalysis";
 
@@ -32,7 +33,7 @@ export type RoomPingAck = {
 
 export type ServerNotice = {
   type: "server_draining";
-  stage: "scheduled" | "restarting";
+  stage: ServerDrainStage;
   message: string;
   description: string;
   retryAfterMs: number;
@@ -44,7 +45,7 @@ export type JoinRoomAck =
   | {
       ok: false;
       code: "server_draining";
-      stage: "scheduled" | "restarting";
+      stage: ServerDrainStage;
       message: string;
       description: string;
       retryAfterMs: number;

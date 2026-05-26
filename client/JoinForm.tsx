@@ -2,6 +2,7 @@ import { Button, Form, Input, Modal } from "antd";
 import styles from "./JoinForm.module.css";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
+import Link from "next/link";
 import usePwaInstall from "./usePwaInstall";
 import { FAVICON_SRC } from "../shared/gameAssets";
 type Props = {
@@ -101,10 +102,18 @@ export default function JoinForm({
 
   const joinRoom = () => {
     const room = currentRoom.trim().toUpperCase();
-    if (!currentName.trim() || !room) {
+    if (!room || (isInviteMode && !currentName.trim())) {
       return;
     }
+
     setCurrentRoom(room);
+    if (!currentName.trim()) {
+      startNavigation("join", () =>
+        router.push(`/join/${encodeURIComponent(room)}`)
+      );
+      return;
+    }
+
     const name = saveName();
     startNavigation("join", () => onSubmit(room, name));
   };
@@ -120,7 +129,8 @@ export default function JoinForm({
   const isNavigating = pendingAction != null;
   const isInviteMode = inviteRoomCode.length > 0;
   const canCreateRoom = currentName.trim().length > 0;
-  const canJoinRoom = canCreateRoom && currentRoom.trim().length > 0;
+  const canJoinRoom =
+    currentRoom.trim().length > 0 && (!isInviteMode || canCreateRoom);
   const showMobileOfflinePrompt =
     installContext.isMobile || installContext.isStandalone;
   const isInstalledApp = installContext.isStandalone;
@@ -160,17 +170,32 @@ export default function JoinForm({
             Done
           </Button>,
         ];
+  const brandContent = (
+    <>
+      <img className={styles.logo} src={FAVICON_SRC} alt="" />
+      <div>
+        <h1 className={styles.title}>Pounce</h1>
+        <div className={styles.subtitle}>Online</div>
+      </div>
+    </>
+  );
 
   return (
     <div className={styles.root}>
       <div className={styles.stage}>
-        <header className={styles.brand} aria-label="Pounce Online">
-          <img className={styles.logo} src={FAVICON_SRC} alt="" />
-          <div>
-            <h1 className={styles.title}>Pounce</h1>
-            <div className={styles.subtitle}>Online</div>
-          </div>
-        </header>
+        {isInviteMode ? (
+          <Link
+            aria-label="Pounce Online home"
+            className={`${styles.brand} ${styles.brandLink}`}
+            href="/"
+          >
+            {brandContent}
+          </Link>
+        ) : (
+          <header className={styles.brand} aria-label="Pounce Online">
+            {brandContent}
+          </header>
+        )}
 
         <Form className={styles.form} onFinish={joinRoom}>
           <div className={styles.menu}>
@@ -318,6 +343,11 @@ export default function JoinForm({
             ) : null}
           </div>
         </Form>
+        {!isInviteMode ? (
+          <Link className={styles.rulesLink} href="/how-to-play">
+            How to play Pounce
+          </Link>
+        ) : null}
       </div>
       <Modal
         title="Add to home screen"

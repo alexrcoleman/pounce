@@ -8,6 +8,7 @@ export type DealSimulationPlayerResult = {
   predictedScore: number;
   predictedScoreConfidenceInterval95: number;
   predictedPointDifferential: number;
+  predictedPointDifferentialConfidenceInterval95: number;
   predictedRank: number;
   simulationCount: number;
   pounceOutRate: number;
@@ -54,6 +55,8 @@ export function simulateDealQuality(
     {
       score: number;
       scoreSquared: number;
+      pointDifferential: number;
+      pointDifferentialSquared: number;
       pouncedOut: number;
       pounceCardsLeft: number;
     }
@@ -62,6 +65,8 @@ export function simulateDealQuality(
     totals.set(playerIndex, {
       score: 0,
       scoreSquared: 0,
+      pointDifferential: 0,
+      pointDifferentialSquared: 0,
       pouncedOut: 0,
       pounceCardsLeft: 0,
     });
@@ -75,13 +80,24 @@ export function simulateDealQuality(
       `${baseSeed}:${trialIndex}`,
       maxMovesPerTrial
     );
+    const trialScoreTotal = activePlayerIndices.reduce(
+      (sum, playerIndex) => sum + (trialResults.get(playerIndex)?.score ?? 0),
+      0
+    );
     trialResults.forEach((result, playerIndex) => {
       const total = totals.get(playerIndex);
       if (!total) {
         return;
       }
+      const pointDifferential = getPointDifferentialFromScore(
+        result.score,
+        trialScoreTotal,
+        activePlayerIndices.length
+      );
       total.score += result.score;
       total.scoreSquared += result.score * result.score;
+      total.pointDifferential += pointDifferential;
+      total.pointDifferentialSquared += pointDifferential * pointDifferential;
       total.pouncedOut += result.pouncedOut ? 1 : 0;
       total.pounceCardsLeft += result.pounceCardsLeft;
     });
@@ -90,6 +106,7 @@ export function simulateDealQuality(
   const unranked = activePlayerIndices.map((playerIndex) => {
     const total = totals.get(playerIndex)!;
     const predictedScore = total.score / maxTrials;
+    const predictedPointDifferential = total.pointDifferential / maxTrials;
     return {
       playerIndex,
       predictedScore,
@@ -97,23 +114,21 @@ export function simulateDealQuality(
         getSampleVariance(total.score, total.scoreSquared, maxTrials),
         maxTrials
       ),
-      predictedPointDifferential: 0,
+      predictedPointDifferential,
+      predictedPointDifferentialConfidenceInterval95:
+        getMeanConfidenceInterval95(
+          getSampleVariance(
+            total.pointDifferential,
+            total.pointDifferentialSquared,
+            maxTrials
+          ),
+          maxTrials
+        ),
       predictedRank: 1,
       simulationCount: maxTrials,
       pounceOutRate: total.pouncedOut / maxTrials,
       averagePounceCardsLeft: total.pounceCardsLeft / maxTrials,
     };
-  });
-  const predictedScoreTotal = unranked.reduce(
-    (sum, result) => sum + result.predictedScore,
-    0
-  );
-  unranked.forEach((result) => {
-    result.predictedPointDifferential = getPointDifferentialFromScore(
-      result.predictedScore,
-      predictedScoreTotal,
-      activePlayerIndices.length
-    );
   });
   const ranked = unranked
     .slice()
@@ -136,7 +151,7 @@ function getPointDifferentialFromScore(
   if (playerCount <= 1) {
     return 0;
   }
-  return score * playerCount - totalScore;
+  return (score * playerCount - totalScore) / (playerCount - 1);
 }
 
 function getSampleVariance(

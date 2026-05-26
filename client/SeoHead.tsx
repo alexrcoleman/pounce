@@ -12,6 +12,7 @@ type SeoHeadProps = {
   description: string;
   origin: string;
   path: string;
+  keywords?: string[];
   imagePath?: string;
   imageAlt?: string;
   noIndex?: boolean;
@@ -22,6 +23,7 @@ export default function SeoHead({
   description,
   origin,
   path,
+  keywords,
   imagePath = DEFAULT_SHARE_IMAGE_PATH,
   imageAlt = DEFAULT_SHARE_IMAGE_ALT,
   noIndex = false,
@@ -33,6 +35,9 @@ export default function SeoHead({
     <Head>
       <title key="title">{title}</title>
       <meta name="description" content={description} key="description" />
+      {keywords && keywords.length > 0 ? (
+        <meta name="keywords" content={keywords.join(", ")} key="keywords" />
+      ) : null}
       <link rel="canonical" href={pageUrl} key="canonical" />
       {noIndex ? (
         <meta name="robots" content="noindex" key="robots" />

@@ -6,6 +6,11 @@
   src: url("/fonts/single-day-korean-400-normal.woff2") format("woff2");
 }
 
+:root {
+  --pounce-dialog-viewport-gutter-block: 42px;
+  --pounce-dialog-viewport-gutter-inline: 12px;
+}
+
 html,
 body,
 #__next {

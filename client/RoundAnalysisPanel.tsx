@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 
 import type {
   PlayerRoundAnalysis,
@@ -7,7 +13,9 @@ import type {
   RoundAnalysisMoveEvent,
 } from "../shared/RoundAnalysis";
 import type { CardState } from "../shared/GameUtils";
-import { Drawer, Modal, Tooltip } from "antd";
+import { Drawer, Modal } from "antd";
+import ChevronLeftIcon from "./icons/ChevronLeftIcon";
+import InfoTooltipIcon from "./InfoTooltipIcon";
 import styles from "./RoundAnalysisPanel.module.css";
 
 type Props = {
@@ -20,17 +28,20 @@ const STAT_TOOLTIPS = {
     "Center plays made divided by every detected center-play opportunity for this player.",
   contestedCenterWinRate:
     "How often this player won a shared center-card race before another player played the same card.",
-  dealPerformance:
-    "Compares the actual score with the simulated score prediction for this deal. The prediction includes a 95% confidence interval from the simulated sample size.",
+  score:
+    "The player's actual round score compared with the simulated score prediction for this deal. The prediction includes a 95% confidence interval.",
   dealRank:
     "The player's predicted rank for this deal, sorted by simulated score among analyzed players.",
   pointDifferential:
-    "The sum of this player's score minus each other active player's score, compared with the simulated prediction. Higher is better.",
+    "The player's score minus the average score of the other active players, compared with the simulated prediction. Higher is better.",
   solitaireRate:
     "Solitaire moves played divided by every detected useful solitaire opportunity for this player.",
   pounceHelpersMissed:
     "Missed solitaire moves that would have helped move, expose, or connect the pounce card.",
 };
+
+const CONFIDENCE_INTERVAL_95_STANDARD_DEVIATIONS = 1.96;
+const DEFAULT_CONFIDENCE_RANGE_STANDARD_DEVIATIONS = 3;
 
 export default function RoundAnalysisPanel({
   analysis,
@@ -114,8 +125,8 @@ export default function RoundAnalysisPanel({
       <div className={styles.statGrid}>
         {selectedReport.dealSimulation && (
           <Stat
-            label="Deal performance"
-            tooltip={STAT_TOOLTIPS.dealPerformance}
+            label="Score"
+            tooltip={STAT_TOOLTIPS.score}
             value={
               <ScoreComparison
                 actualScore={selectedReport.score}
@@ -123,8 +134,10 @@ export default function RoundAnalysisPanel({
                   selectedReport.dealSimulation
                     .predictedScoreConfidenceInterval95
                 }
+                isActivePlayer={
+                  selectedReport.playerIndex === activePlayerIndex
+                }
                 predictedScore={selectedReport.dealSimulation.predictedScore}
-                sampleSize={selectedReport.dealSimulation.simulationCount}
               />
             }
           />
@@ -138,6 +151,13 @@ export default function RoundAnalysisPanel({
               value={
                 <ScoreComparison
                   actualScore={selectedReport.pointDifferential}
+                  confidenceInterval95={
+                    selectedReport.dealSimulation
+                      .predictedPointDifferentialConfidenceInterval95
+                  }
+                  isActivePlayer={
+                    selectedReport.playerIndex === activePlayerIndex
+                  }
                   predictedScore={
                     selectedReport.dealSimulation.predictedPointDifferential
                   }
@@ -156,14 +176,6 @@ export default function RoundAnalysisPanel({
           />
         )}
         <Stat
-          label="Center cards played"
-          value={selectedReport.summary.cardsPlayedToCenter}
-        />
-        <Stat
-          label="Solitaire moves played"
-          value={selectedReport.summary.solitaireMoves}
-        />
-        <Stat
           label="3-card deck cycles/sec"
           value={
             <RateValue
@@ -173,10 +185,6 @@ export default function RoundAnalysisPanel({
               value={formatRate(selectedReport.summary.deckCyclesPerSecond)}
             />
           }
-        />
-        <Stat
-          label="Center plays missed"
-          value={selectedReport.summary.missedCenterPlays}
         />
         <Stat
           label="Center play rate"
@@ -192,7 +200,7 @@ export default function RoundAnalysisPanel({
           }
         />
         <Stat
-          label="Contested center win rate"
+          label="Contested win rate"
           tooltip={STAT_TOOLTIPS.contestedCenterWinRate}
           value={
             <RateValue
@@ -207,7 +215,7 @@ export default function RoundAnalysisPanel({
           }
         />
         <Stat
-          label="Pounce-helper plays missed"
+          label="Helper plays missed"
           tooltip={STAT_TOOLTIPS.pounceHelpersMissed}
           value={selectedReport.summary.missedPounceHelpers}
         />
@@ -294,21 +302,15 @@ function Stat({
 }) {
   return (
     <div className={styles.stat}>
-      <div className={styles.statValue}>{value}</div>
       <div className={styles.statLabel}>
         <span>{label}</span>
         {tooltip ? (
-          <Tooltip title={tooltip}>
-            <button
-              aria-label={`${label} info`}
-              className={styles.statInfoButton}
-              type="button"
-            >
-              i
-            </button>
-          </Tooltip>
+          <InfoTooltipIcon aria-label={`${label} info`}>
+            {tooltip}
+          </InfoTooltipIcon>
         ) : null}
       </div>
+      <div className={styles.statValue}>{value}</div>
     </div>
   );
 }
@@ -316,14 +318,14 @@ function Stat({
 function ScoreComparison({
   actualScore,
   confidenceInterval95,
+  isActivePlayer = false,
   predictedScore,
-  sampleSize,
   valueFormatter = formatScore,
 }: {
   actualScore: number;
   confidenceInterval95?: number;
+  isActivePlayer?: boolean;
   predictedScore: number;
-  sampleSize?: number;
   valueFormatter?: (score: number) => string;
 }) {
   const delta = actualScore - predictedScore;
@@ -336,19 +338,123 @@ function ScoreComparison({
   return (
     <div className={styles.scoreComparison}>
       <div className={styles.scoreComparisonLead}>
-        {formatPerformanceDelta(delta)}
+        {valueFormatter(actualScore)}
       </div>
       <div className={styles.scoreComparisonMeta}>
         Predicted {valueFormatter(predictedScore)}
-        {confidenceIntervalText ? ` +/- ${confidenceIntervalText}` : ""}
+        {confidenceIntervalText ? ` ± ${confidenceIntervalText}` : ""}
       </div>
-      {confidenceIntervalText && sampleSize ? (
-        <div className={styles.scoreComparisonMeta}>
-          95% CI, n={sampleSize}
-        </div>
-      ) : null}
       <div className={styles.scoreComparisonMeta}>
-        Actual {valueFormatter(actualScore)}
+        {formatPerformanceDelta(delta)}
+      </div>
+      <ConfidenceRangeBar
+        actualScore={actualScore}
+        confidenceInterval95={confidenceInterval95}
+        isActivePlayer={isActivePlayer}
+        predictedScore={predictedScore}
+        valueFormatter={valueFormatter}
+      />
+    </div>
+  );
+}
+
+type ScoreRange = {
+  min: number;
+  max: number;
+};
+
+type ConfidenceBand = "below" | "expected" | "above";
+
+function ConfidenceRangeBar({
+  actualScore,
+  confidenceInterval95,
+  isActivePlayer,
+  predictedScore,
+  valueFormatter,
+}: {
+  actualScore: number;
+  confidenceInterval95?: number;
+  isActivePlayer: boolean;
+  predictedScore: number;
+  valueFormatter: (score: number) => string;
+}) {
+  if (
+    typeof confidenceInterval95 !== "number" ||
+    !Number.isFinite(confidenceInterval95) ||
+    confidenceInterval95 <= 0 ||
+    !Number.isFinite(actualScore) ||
+    !Number.isFinite(predictedScore)
+  ) {
+    return null;
+  }
+
+  const lower95 = predictedScore - confidenceInterval95;
+  const upper95 = predictedScore + confidenceInterval95;
+  const standardDeviation =
+    confidenceInterval95 / CONFIDENCE_INTERVAL_95_STANDARD_DEVIATIONS;
+  const range = getConfidenceRange({
+    actualScore,
+    predictedScore,
+    standardDeviation,
+  });
+  const zeroPercent = getRangePercent(0, range);
+  const actualPercent = getRangePercent(actualScore, range);
+  const confidenceBand = getConfidenceBand(actualScore, lower95, upper95);
+  const actualLabel = `${isActivePlayer ? "You" : "Actual"} ${valueFormatter(
+    actualScore
+  )}`;
+  const barStyle = {
+    "--ci-lower": `${getRangePercent(lower95, range)}%`,
+    "--ci-upper": `${getRangePercent(upper95, range)}%`,
+    "--ci-zero": `${zeroPercent}%`,
+    "--ci-predicted": `${getRangePercent(predictedScore, range)}%`,
+    "--ci-actual": `${actualPercent}%`,
+  } as CSSProperties;
+
+  return (
+    <div
+      aria-label={`${actualLabel}. Predicted ${valueFormatter(
+        predictedScore
+      )} plus or minus ${formatScore(confidenceInterval95)}.`}
+      className={styles.ciBar}
+    >
+      <div className={styles.ciBarPlot}>
+        <div className={styles.ciBarTrackRow}>
+          <span className={styles.ciBarScaleSide} aria-hidden="true">
+            {formatScoreTick(range.min)}
+          </span>
+          <div className={styles.ciBarTrackWrap} style={barStyle}>
+            <span className={styles.ciBarScaleZero} aria-hidden="true">
+              0
+            </span>
+            <div className={styles.ciBarTrack} aria-hidden="true">
+              <span className={styles.ciBarZeroMark} />
+              <span className={styles.ciBarPredictionMark} />
+              <span
+                className={[
+                  styles.ciBarActualMark,
+                  isActivePlayer ? styles.ciBarActualMarkYou : "",
+                ].join(" ")}
+              />
+            </div>
+            <div className={styles.ciBarMarkerLayer} aria-hidden="true">
+              <span className={styles.ciBarActualConnector} />
+              <span
+                className={[
+                  styles.ciBarActualLabel,
+                  getConfidenceLabelClass(confidenceBand),
+                  isActivePlayer ? styles.ciBarActualLabelYou : "",
+                  getMarkerAlignmentClass(actualPercent),
+                ].join(" ")}
+              >
+                {actualLabel}
+              </span>
+            </div>
+          </div>
+          <span className={styles.ciBarScaleSide} aria-hidden="true">
+            {formatScoreTick(range.max)}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -364,37 +470,69 @@ function RateValue({ value, ratio }: { value: string; ratio: string }) {
 }
 
 function PounceDeckSection({ report }: { report: PlayerRoundAnalysis }) {
+  const [isExpanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    setExpanded(false);
+  }, [report.playerIndex]);
+
   if (report.pounceDeck.length === 0) {
     return null;
   }
 
   const playedCount = report.pounceDeck.filter(({ played }) => played).length;
+  const deckListId = `round-analysis-pounce-deck-${report.playerIndex}`;
 
   return (
-    <div className={styles.pounceDeckSection}>
-      <div className={styles.pounceDeckHeader}>
-        <div>
-          <div className={styles.momentsHeader}>Pounce deck</div>
+    <div
+      className={[
+        styles.pounceDeckSection,
+        isExpanded ? styles.pounceDeckSectionExpanded : "",
+      ].join(" ")}
+    >
+      <button
+        aria-controls={deckListId}
+        aria-expanded={isExpanded}
+        className={styles.pounceDeckHeader}
+        onClick={() => setExpanded((current) => !current)}
+        type="button"
+      >
+        <span className={styles.pounceDeckTitleGroup}>
+          <span className={styles.momentsHeader}>Pounce deck</span>
+        </span>
+        <span className={styles.pounceDeckSummary}>
+          <span className={styles.pounceDeckMeta}>
+            {playedCount}/{report.pounceDeck.length} played
+          </span>
+          <ChevronLeftIcon
+            aria-hidden="true"
+            className={styles.pounceDeckChevron}
+          />
+        </span>
+      </button>
+      <div
+        aria-hidden={!isExpanded}
+        className={styles.pounceDeckContent}
+        id={deckListId}
+      >
+        <div className={styles.pounceDeckContentInner}>
           <div className={styles.pounceDeckMeta}>Top to bottom</div>
-        </div>
-        <div className={styles.pounceDeckMeta}>
-          {playedCount}/{report.pounceDeck.length} played
+          <ol className={styles.pounceDeckList}>
+            {report.pounceDeck.map(({ card, played }, index) => (
+              <li
+                className={[
+                  styles.pounceDeckItem,
+                  played ? styles.pounceDeckItemPlayed : "",
+                ].join(" ")}
+                key={`${card.player}:${card.suit}:${card.value}`}
+              >
+                <span className={styles.pounceDeckIndex}>{index + 1}</span>
+                <CardPill card={card} />
+              </li>
+            ))}
+          </ol>
         </div>
       </div>
-      <ol className={styles.pounceDeckList}>
-        {report.pounceDeck.map(({ card, played }, index) => (
-          <li
-            className={[
-              styles.pounceDeckItem,
-              played ? styles.pounceDeckItemPlayed : "",
-            ].join(" ")}
-            key={`${card.player}:${card.suit}:${card.value}`}
-          >
-            <span className={styles.pounceDeckIndex}>{index + 1}</span>
-            <CardPill card={card} />
-          </li>
-        ))}
-      </ol>
     </div>
   );
 }
@@ -913,6 +1051,17 @@ function formatSignedScore(score: number): string {
   return rounded.toFixed(1);
 }
 
+function formatScoreTick(score: number): string {
+  const rounded = Math.round(score * 10) / 10;
+  const text = Number.isInteger(rounded)
+    ? String(rounded)
+    : rounded.toFixed(1);
+  if (rounded > 0) {
+    return `+${text}`;
+  }
+  return text;
+}
+
 function formatPerformanceDelta(delta: number): string {
   const rounded = Math.round(delta * 10) / 10;
   if (Math.abs(rounded) < 0.05) {
@@ -924,6 +1073,83 @@ function formatPerformanceDelta(delta: number): string {
   }
 
   return `Below prediction by ${Math.abs(rounded).toFixed(1)}`;
+}
+
+function getRangePercent(value: number, range: ScoreRange): number {
+  return clamp(((value - range.min) / (range.max - range.min)) * 100, 0, 100);
+}
+
+function getConfidenceRange({
+  actualScore,
+  predictedScore,
+  standardDeviation,
+}: {
+  actualScore: number;
+  predictedScore: number;
+  standardDeviation: number;
+}): ScoreRange {
+  const defaultRangeRadius =
+    standardDeviation * DEFAULT_CONFIDENCE_RANGE_STANDARD_DEVIATIONS;
+  const minValue = Math.min(predictedScore - defaultRangeRadius, actualScore, 0);
+  const maxValue = Math.max(predictedScore + defaultRangeRadius, actualScore, 0);
+  const span = Math.max(1, maxValue - minValue);
+  const padding = Math.max(1, span * 0.06, standardDeviation * 0.35);
+  const paddedMin = minValue - padding;
+  const paddedMax = maxValue + padding;
+  const step = getScaleStep(paddedMax - paddedMin);
+
+  return {
+    min: Math.floor(paddedMin / step) * step,
+    max: Math.ceil(paddedMax / step) * step,
+  };
+}
+
+function getScaleStep(span: number): number {
+  if (span <= 12) {
+    return 1;
+  }
+  if (span <= 30) {
+    return 5;
+  }
+  return 10;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function getConfidenceBand(
+  actualScore: number,
+  lower95: number,
+  upper95: number
+): ConfidenceBand {
+  if (actualScore < lower95) {
+    return "below";
+  }
+  if (actualScore > upper95) {
+    return "above";
+  }
+  return "expected";
+}
+
+function getConfidenceLabelClass(band: ConfidenceBand): string {
+  if (band === "below") {
+    return styles.ciBarActualLabelBelow;
+  }
+  if (band === "above") {
+    return styles.ciBarActualLabelAbove;
+  }
+  return styles.ciBarActualLabelExpected;
+}
+
+function getMarkerAlignmentClass(percent: number): string {
+  if (percent < 12) {
+    return styles.ciBarActualLabelStart;
+  }
+  if (percent > 88) {
+    return styles.ciBarActualLabelEnd;
+  }
+  return "";
 }
 
 function getDealRankSize(analysis: RoundAnalysis): number {

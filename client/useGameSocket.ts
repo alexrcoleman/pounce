@@ -17,12 +17,12 @@ import SocketState from "./SocketState";
 import { runInAction } from "mobx";
 import { toast } from "sonner";
 import { toastRejectedMove } from "./moveRejectionToast";
+import { showServerNoticeToast } from "./ServerNoticeToast";
 
 export type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 const PLAYER_SESSION_STORAGE_KEY = "pounce::playerSessionId";
 const DEFAULT_SOCKET_PORT = "3001";
 const RECONNECT_TOAST_ID = "room-reconnect";
-const SERVER_NOTICE_TOAST_ID = "server-notice";
 
 export default function useGameSocket(
   roomId: string | null,
@@ -64,13 +64,7 @@ export default function useGameSocket(
     discardPendingMoveActions(actionIds);
   };
   const showServerNotice = (notice: ServerNotice) => {
-    const showToast =
-      notice.stage === "restarting" ? toast.error : toast.warning;
-    showToast(notice.message, {
-      description: notice.description,
-      duration: notice.stage === "restarting" ? Infinity : 15000,
-      id: SERVER_NOTICE_TOAST_ID,
-    });
+    showServerNoticeToast(notice);
   };
   const sendMoveAction = (
     activeSocket: GameSocket,
