@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://pounce.live/sitemap.xml
+

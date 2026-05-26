@@ -7,7 +7,7 @@ import type { AppProps } from "next/app";
 import Head from "next/head";
 import PageErrorBoundary from "../client/PageErrorBoundary";
 import PwaRegistration from "../client/PwaRegistration";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/router";
 import { getPageThemeColor } from "../shared/themeColors";
 import theme from "../client/theme";
@@ -16,6 +16,16 @@ function MyApp({ Component, pageProps }: AppProps) {
   const [name, setName] = useState("");
   const router = useRouter();
   const pageThemeColor = getPageThemeColor(router.pathname);
+
+  useEffect(() => {
+    if (!router.isReady) {
+      return;
+    }
+
+    if (router.pathname !== "/") {
+      void router.prefetch("/");
+    }
+  }, [router, router.isReady, router.pathname]);
 
   return (
     <>

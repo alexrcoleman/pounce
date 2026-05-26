@@ -17,13 +17,14 @@ export default function RoomShare({
   const [inviteUrl, setInviteUrl] = useState("");
   const [canShare, setCanShare] = useState(false);
   const [copied, setCopied] = useState(false);
+  const invitePath = useMemo(() => buildRoomInvitePath(roomCode), [roomCode]);
   const displayUrl = useMemo(() => formatInviteUrl(inviteUrl), [inviteUrl]);
 
   useEffect(() => {
-    const nextInviteUrl = buildRoomInviteUrl(roomCode);
+    const nextInviteUrl = buildRoomInviteUrl(invitePath);
     setInviteUrl(nextInviteUrl);
     setCanShare(typeof navigator !== "undefined" && "share" in navigator);
-  }, [roomCode]);
+  }, [invitePath]);
 
   useEffect(() => {
     if (!copied) {
@@ -67,8 +68,16 @@ export default function RoomShare({
     <div className={`${styles.root} ${styles[variant]}`}>
       <div className={styles.copy}>
         <span>Invite link</span>
-        <a className={styles.link} href={inviteUrl || undefined}>
-          {displayUrl || `/join/${roomCode}`}
+        <a
+          className={styles.link}
+          draggable={false}
+          href={inviteUrl || invitePath}
+          onClick={(event) => event.stopPropagation()}
+          onMouseDown={(event) => event.stopPropagation()}
+          rel="noreferrer"
+          target="_blank"
+        >
+          {displayUrl || invitePath}
         </a>
       </div>
       <Button className={styles.action} onClick={shareRoom}>
@@ -78,8 +87,11 @@ export default function RoomShare({
   );
 }
 
-function buildRoomInviteUrl(roomCode: string) {
-  const path = `/join/${encodeURIComponent(roomCode)}`;
+function buildRoomInvitePath(roomCode: string) {
+  return `/join/${encodeURIComponent(roomCode)}`;
+}
+
+function buildRoomInviteUrl(path: string) {
   if (typeof window === "undefined") {
     return path;
   }

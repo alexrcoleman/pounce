@@ -1,6 +1,6 @@
 import Head from "next/head";
 import Link from "next/link";
-import type { GetServerSideProps, NextPage } from "next";
+import type { NextPage } from "next";
 
 import styles from "../client/HowToPlay.module.css";
 import SeoHead from "../client/SeoHead";
@@ -10,7 +10,6 @@ import {
   DEFAULT_SHARE_IMAGE_PATH,
   getSeoOrigin,
   SITE_NAME,
-  type SeoRequestProps,
 } from "../shared/seo";
 
 const PAGE_PATH = "/how-to-play";
@@ -109,9 +108,8 @@ const faqItems = [
   },
 ];
 
-type HowToPlayProps = SeoRequestProps;
-
-const HowToPlayPage: NextPage<HowToPlayProps> = ({ seoOrigin }) => {
+const HowToPlayPage: NextPage = () => {
+  const seoOrigin = getSeoOrigin();
   const structuredData = getStructuredData(seoOrigin);
 
   return (
@@ -356,14 +354,6 @@ const HowToPlayPage: NextPage<HowToPlayProps> = ({ seoOrigin }) => {
     </>
   );
 };
-
-export const getServerSideProps: GetServerSideProps<HowToPlayProps> = async ({
-  req,
-}) => ({
-  props: {
-    seoOrigin: getSeoOrigin(req),
-  },
-});
 
 function getStructuredData(origin: string) {
   const pageUrl = absoluteUrl(origin, PAGE_PATH);

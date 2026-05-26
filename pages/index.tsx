@@ -1,24 +1,24 @@
 import { useRouter } from "next/router";
 import JoinForm from "../client/JoinForm";
 import { observer } from "mobx-react-lite";
-import type { GetServerSideProps, NextPage } from "next";
+import type { NextPage } from "next";
 import { useEffect } from "react";
 import SeoHead from "../client/SeoHead";
 import {
   DEFAULT_SEO_DESCRIPTION,
   DEFAULT_SEO_TITLE,
   getSeoOrigin,
-  type SeoRequestProps,
 } from "../shared/seo";
 
-type AppProps = SeoRequestProps & {
+type AppProps = {
   name?: string;
   setName?: (name: string) => void;
 };
 
 const Home: NextPage<AppProps> = observer(
-  ({ name, setName, seoOrigin }: AppProps) => {
+  ({ name, setName }: AppProps) => {
     const router = useRouter();
+    const seoOrigin = getSeoOrigin();
 
     useEffect(() => {
       if (!router.isReady) {
@@ -52,13 +52,5 @@ const Home: NextPage<AppProps> = observer(
     );
   }
 );
-
-export const getServerSideProps: GetServerSideProps<SeoRequestProps> = async ({
-  req,
-}) => ({
-  props: {
-    seoOrigin: getSeoOrigin(req),
-  },
-});
 
 export default Home;

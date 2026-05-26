@@ -5,6 +5,9 @@ import { useRouter } from "next/router";
 import Link from "next/link";
 import usePwaInstall from "./usePwaInstall";
 import { FAVICON_SRC } from "../shared/gameAssets";
+
+const ROOM_CODE_PREFETCH_MIN_LENGTH = 1;
+
 type Props = {
   placeholderName: string;
   inviteRoom?: string | null;
@@ -58,6 +61,22 @@ export default function JoinForm({
       setNamePlaceholder("Your name");
     }
   }, [inviteRoomCode, placeholderName, router.isReady, router.query.roomid]);
+
+  useEffect(() => {
+    const room = normalizeRoomCode(currentRoom);
+    if (
+      !router.isReady ||
+      inviteRoomCode ||
+      room.length < ROOM_CODE_PREFETCH_MIN_LENGTH
+    ) {
+      return;
+    }
+
+    void router.prefetch(
+      "/join/[roomid]",
+      `/join/${encodeURIComponent(room)}`
+    );
+  }, [currentRoom, inviteRoomCode, router]);
 
   const saveName = () => {
     const name = currentName.trim();
