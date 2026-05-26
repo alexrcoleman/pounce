@@ -20,6 +20,8 @@ import { TouchBackend } from "react-dnd-touch-backend";
 import VictoryOverlay from "./VictoryOverlay";
 import isTouchDevice from "./isTouchDevice";
 import styles from "./Board.module.css";
+import BorderOutlined from "@ant-design/icons/BorderOutlined";
+import CheckSquareOutlined from "@ant-design/icons/CheckSquareOutlined";
 
 import { observer } from "mobx-react-lite";
 import CardsLayer from "./CardsLayer";
@@ -650,6 +652,7 @@ const RoundReadyControl = observer(function RoundReadyControl({
     (entry) => entry.player.isReadyForRound === true
   );
   const playerLabel = readyPlayers.length === 1 ? "player" : "players";
+  const ReadyIcon = activePlayerReady ? CheckSquareOutlined : BorderOutlined;
 
   return (
     <div className={styles.roundReadyControl}>
@@ -670,7 +673,11 @@ const RoundReadyControl = observer(function RoundReadyControl({
         data-ready={activePlayerReady ? "true" : "false"}
         onClick={() => onToggleReady(!activePlayerReady)}
       >
-        <span aria-hidden="true" className={styles.readyButtonIndicator} />
+        <ReadyIcon
+          aria-hidden="true"
+          className={styles.readyButtonIcon}
+          rev={undefined}
+        />
         Ready for round
       </Button>
     </div>

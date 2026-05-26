@@ -294,11 +294,29 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
-.readyButton:global(.ant-btn):hover,
-.readyButton:global(.ant-btn):focus {
+.readyButton:global(.ant-btn.ant-btn-default):not(:disabled):focus {
+  outline: none;
+  border-color: rgba(46, 38, 30, 0.22);
+  background: #ffffff;
+  color: #372719;
+}
+
+.readyButton:global(.ant-btn.ant-btn-default):not(:disabled):hover,
+.readyButton:global(.ant-btn.ant-btn-default):not(:disabled):focus-visible {
   border-color: rgba(39, 106, 73, 0.44);
   background: #f7faf6;
   color: #173f2a;
+}
+
+.readyButton:global(.ant-btn.ant-btn-default):not(:disabled):active {
+  border-color: rgba(39, 106, 73, 0.56);
+  background: #eef6ed;
+  color: #173f2a;
+}
+
+.readyButton:global(.ant-btn.ant-btn-default):not(:disabled):focus-visible {
+  outline: 2px solid rgba(39, 106, 73, 0.55);
+  outline-offset: 2px;
 }
 
 .readyButton:global(.ant-btn)[data-ready="true"] {
@@ -308,31 +326,34 @@
   text-shadow: 0 1px 0 rgba(0, 0, 0, 0.22);
 }
 
-.readyButton:global(.ant-btn)[data-ready="true"]:hover,
-.readyButton:global(.ant-btn)[data-ready="true"]:focus {
+.readyButton:global(.ant-btn.ant-btn-default)[data-ready="true"]:not(:disabled):focus {
+  border-color: rgba(18, 90, 54, 0.7);
+  background: #17683b;
+  color: #ffffff;
+}
+
+.readyButton:global(.ant-btn.ant-btn-default)[data-ready="true"]:not(:disabled):hover,
+.readyButton:global(.ant-btn.ant-btn-default)[data-ready="true"]:not(:disabled):focus-visible {
   border-color: rgba(18, 90, 54, 0.85);
   background: #1d7746;
   color: #ffffff;
 }
 
-.readyButtonIndicator {
+.readyButton:global(.ant-btn.ant-btn-default)[data-ready="true"]:not(:disabled):active {
+  border-color: rgba(18, 90, 54, 0.9);
+  background: #155f36;
+  color: #ffffff;
+}
+
+.readyButtonIcon {
   width: 16px;
   height: 16px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   flex: 0 0 auto;
-  border: 2px solid currentColor;
-  border-radius: 4px;
-}
-
-.readyButton:global(.ant-btn)[data-ready="true"] .readyButtonIndicator::after {
-  content: "";
-  width: 8px;
-  height: 5px;
-  border-left: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
-  transform: rotate(-45deg) translate(1px, -1px);
+  font-size: 16px;
+  line-height: 1;
 }
 
 .roundReadySummary {
