@@ -35,6 +35,7 @@ export type RoomState = {
    */
   aiPileKnowledge: (AIPileKnowledge | null)[][];
   queuedHands: CardState[][][];
+  stuckPlayerIndices: number[];
   autoStart: boolean;
   settings: RoomSettings;
   roundSnapshots: RoundSnapshot[];
@@ -55,6 +56,7 @@ export function createRoomState(playerCount: number): RoomState {
       Array(board.piles.length).fill(null)
     ),
     queuedHands: [],
+    stuckPlayerIndices: [],
     autoStart: false,
     settings: {
       fairHandRotation: false,

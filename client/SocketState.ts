@@ -33,6 +33,7 @@ export default class SocketState {
   serverRevision = 0;
   lastTime = 0;
   latency = 0;
+  stuckPlayerIndices: number[] = [];
   pingLatency: number | null = null;
   isConnected = false;
   socketId = "";
@@ -57,6 +58,10 @@ export default class SocketState {
     this.isAwaitingRoomSync = false;
     this.serverBoard = applyDeepUpdate(this.serverBoard, data.board);
     this.roomSettings = applyDeepUpdate(this.roomSettings, data.settings);
+    this.stuckPlayerIndices = applyDeepUpdate(
+      this.stuckPlayerIndices,
+      data.stuckPlayerIndices
+    );
     this.serverRevision = data.revision;
     this.pendingMoves = this.pendingMoves.filter(
       (action) =>
@@ -175,6 +180,7 @@ export default class SocketState {
     this.board = null;
     this.serverBoard = null;
     this.roomSettings = createDefaultRoomSettings();
+    this.stuckPlayerIndices = [];
     this.serverRevision = 0;
     this.pendingMoves = [];
     this.reactions = [];

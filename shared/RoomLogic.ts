@@ -32,6 +32,10 @@ import {
   createDeckRotationToast,
   type RoomToast,
 } from "./RoomToast";
+import {
+  getStuckVoteStatus,
+  getStuckVotingPlayerIndices,
+} from "./StuckPlayers";
 
 export type RoomTickResult = {
   hasUpdate: boolean;
@@ -47,6 +51,16 @@ const AI_PILE_KNOWLEDGE_REACTION_MULTIPLIER = 2;
 const AI_OBSOLETE_TARGET_RECONSIDER_DELAY_MS = 180;
 export const PLAYER_CENTER_CURSOR_RESET_DELAY_MS = 1000;
 
+export type SetRoomPlayerStuckResult = {
+  changed: boolean;
+  playerIndex: number;
+  playerName: string;
+  isStuck: boolean;
+  stuckCount: number;
+  stuckTotal: number;
+  rotated: boolean;
+};
+
 export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
   const { board } = room;
   const aiCooldowns = room.aiCooldowns;
@@ -57,6 +71,7 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
 
   if (shouldAutoRotateDecks(board)) {
     rotateDecks(board);
+    clearRoomStuckPlayers(room);
     recordRoundSnapshot(room, "auto_rotate", now);
     roomToast = createDeckRotationToast("auto_stuck_board");
     hasUpdate = true;
@@ -66,6 +81,7 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
   } else if (isGameOver(board)) {
     roundAnalysisSnapshots = takeRoundAnalysisSnapshots(room, now);
     scoreBoard(board);
+    clearRoomStuckPlayers(room);
     hasUpdate = true;
     if (room.autoStart) {
       roundAnalysisSnapshots = null;
@@ -100,6 +116,7 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       if (move && moveResult?.boardChanged) {
         rememberAIMoveFocus(room, index, move, now);
         recordRoundSnapshot(room, "move", now, index, move);
+        clearRoomStuckPlayers(room);
       }
 
       let cooldownDist = {
@@ -226,6 +243,84 @@ function getVisibleBoard(
 
 export function getRoomHands(room: RoomState): CursorState[] {
   return room.board.players.map((_, index) => room.hands[index] ?? {});
+}
+
+export function getRoomStuckPlayerIndices(room: RoomState): number[] {
+  return getStuckVoteStatus(
+    room.board,
+    room.stuckPlayerIndices
+  ).playerIndices;
+}
+
+export function clearRoomStuckPlayers(room: RoomState): boolean {
+  if (room.stuckPlayerIndices.length === 0) {
+    return false;
+  }
+
+  room.stuckPlayerIndices = [];
+  return true;
+}
+
+export function setRoomPlayerStuck(
+  room: RoomState,
+  playerIndex: number,
+  isStuck: unknown,
+  now = Date.now()
+): SetRoomPlayerStuckResult | null {
+  const votingPlayerIndices = getStuckVotingPlayerIndices(room.board);
+  if (!votingPlayerIndices.includes(playerIndex)) {
+    return null;
+  }
+
+  const player = room.board.players[playerIndex];
+  const nextIsStuck = isStuck === true;
+  room.stuckPlayerIndices = getStuckVoteStatus(
+    room.board,
+    room.stuckPlayerIndices
+  ).playerIndices;
+  const wasStuck = room.stuckPlayerIndices.includes(playerIndex);
+  const currentStatus = getStuckVoteStatus(room.board, room.stuckPlayerIndices);
+
+  if (wasStuck === nextIsStuck) {
+    return {
+      changed: false,
+      playerIndex,
+      playerName: player.name,
+      isStuck: nextIsStuck,
+      stuckCount: currentStatus.count,
+      stuckTotal: currentStatus.total,
+      rotated: false,
+    };
+  }
+
+  if (nextIsStuck) {
+    room.stuckPlayerIndices = room.stuckPlayerIndices.concat(playerIndex);
+  } else {
+    room.stuckPlayerIndices = room.stuckPlayerIndices.filter(
+      (index) => index !== playerIndex
+    );
+  }
+
+  const nextStatus = getStuckVoteStatus(room.board, room.stuckPlayerIndices);
+  room.stuckPlayerIndices = nextStatus.playerIndices;
+  const shouldRotate =
+    nextIsStuck && nextStatus.total > 0 && nextStatus.count >= nextStatus.total;
+
+  if (shouldRotate) {
+    rotateDecks(room.board);
+    recordRoundSnapshot(room, "manual_rotate", now);
+    clearRoomStuckPlayers(room);
+  }
+
+  return {
+    changed: true,
+    playerIndex,
+    playerName: player.name,
+    isStuck: nextIsStuck,
+    stuckCount: nextStatus.count,
+    stuckTotal: nextStatus.total,
+    rotated: shouldRotate,
+  };
 }
 
 export function getReactionDelay(room: RoomState): number {
@@ -457,6 +552,7 @@ export function startRoomGame(room: RoomState, now = Date.now()): void {
   if (!room.board.isDealt) {
     clearPlayersWaitingForDeal(room);
   }
+  clearRoomStuckPlayers(room);
   room.aiCooldowns = room.board.players.map(() => now + 2000 + Math.random());
   startGame(room);
   clearPlayersReadyForRound(room.board);
@@ -471,6 +567,7 @@ export function dealRoomHands(room: RoomState): boolean {
   clearPlayersWaitingForDeal(room);
   const didDeal = dealGameHands(room);
   if (didDeal) {
+    clearRoomStuckPlayers(room);
     room.handUpdateVersions = [];
     room.lastRoundAnalysis = null;
     room.roundSnapshots = [];
@@ -503,6 +600,7 @@ export function dealRemainingRoomPlayers(room: RoomState): boolean {
 
   clearPlayersReadyForRound(board);
   room.queuedHands = [];
+  clearRoomStuckPlayers(room);
   room.hands = [];
   room.handUpdateVersions = [];
   room.aiBoard = deepClone(room.board);
@@ -528,6 +626,7 @@ export function setRoomPaused(
   }
 
   room.board.isPaused = isPaused;
+  clearRoomStuckPlayers(room);
   room.hands = [];
   room.handUpdateVersions = [];
   if (!isPaused) {
@@ -571,6 +670,7 @@ function removeRoomPlayers(room: RoomState, playerIndices: number[]): boolean {
     room.handUpdateVersions.splice(index, 1);
     room.aiCooldowns.splice(index, 1);
   });
+  clearRoomStuckPlayers(room);
   removePlayer(room.board, ...playerIndices);
   room.queuedHands = [];
   room.aiBoard = deepClone(room.board);
@@ -586,6 +686,7 @@ export function resetRoom(room: RoomState): void {
     p.totalPoints = 0;
   });
   room.queuedHands = [];
+  clearRoomStuckPlayers(room);
   room.hands = [];
   room.handUpdateVersions = [];
   room.roundSnapshots = [];
@@ -612,6 +713,7 @@ export function setRoomFairHandRotation(
 
 export function setRoomAILevel(room: RoomState, speed: number): void {
   const isSimulationMode = speed === 1000;
+  clearRoomStuckPlayers(room);
   if (isSimulationMode) {
     room.autoStart = true;
     room.timescale = 100;

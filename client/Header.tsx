@@ -1,4 +1,7 @@
 import styles from "./Header.module.css";
+import BorderOutlined from "@ant-design/icons/BorderOutlined";
+import CheckSquareOutlined from "@ant-design/icons/CheckSquareOutlined";
+import OrderedListOutlined from "@ant-design/icons/OrderedListOutlined";
 import SettingOutlined from "@ant-design/icons/SettingOutlined";
 import SmileOutlined from "@ant-design/icons/SmileOutlined";
 import { useEffect, useRef, useState } from "react";
@@ -9,6 +12,7 @@ import ScoresTable from "./ScoresTable";
 import isTouchDevice from "./isTouchDevice";
 import type { BoardState } from "../shared/GameUtils";
 import { REACTION_OPTIONS, type ReactionId } from "../shared/Reactions";
+import { getStuckVoteStatus } from "../shared/StuckPlayers";
 import SettingsDialog, {
   type SettingsOpenRequest,
   type SettingsPage,
@@ -40,11 +44,17 @@ export default observer(function Header(props: Props) {
   const isStarted = state.board?.isActive ?? false;
   const isPaused = state.board?.isPaused ?? false;
   const isHost = state.getIsHost();
+  const activePlayerIndex = state.getActivePlayerIndex();
+  const stuckStatus = getStuckVoteStatus(board, state.stuckPlayerIndices);
+  const isActivePlayerStuck = stuckStatus.playerIndices.includes(
+    activePlayerIndex
+  );
   const canTogglePause = isStarted && isHost;
   const canSendReactions =
     board != null &&
     socket != null &&
     getCanSendReactions(board, props.roomId, state.getActivePlayerIndex());
+  const canMarkStuck = stuckStatus.total > 0 && activePlayerIndex >= 0;
   const showRoomCode =
     !isStarted &&
     !isHost &&
@@ -109,8 +119,19 @@ export default observer(function Header(props: Props) {
         {showScoreButton && board != null && board.pouncer == null ? (
           <HeaderScoreboardButton board={board} />
         ) : null}
+        {canMarkStuck ? (
+          <HeaderStuckButton
+            disabled={!socket}
+            isStuck={isActivePlayerStuck}
+            stuckCount={stuckStatus.count}
+            stuckTotal={stuckStatus.total}
+            onToggle={() =>
+              socket?.emit("set_stuck", { stuck: !isActivePlayerStuck })
+            }
+          />
+        ) : null}
         <button
-          className={styles.floatingButton}
+          className={`${styles.floatingButton} ${styles.settingsButton}`}
           onClick={() => openSettings("main")}
           aria-label="Open settings"
           title="Settings"
@@ -231,6 +252,44 @@ function HeaderReactionButton({
   );
 }
 
+function HeaderStuckButton({
+  disabled,
+  isStuck,
+  onToggle,
+  stuckCount,
+  stuckTotal,
+}: {
+  disabled: boolean;
+  isStuck: boolean;
+  onToggle: () => void;
+  stuckCount: number;
+  stuckTotal: number;
+}) {
+  const label = isStuck ? "Clear stuck mark" : "Mark yourself stuck";
+  const buttonLabel =
+    stuckCount > 0 ? `${stuckCount}/${stuckTotal} stuck` : "I'm stuck";
+  const Icon = isStuck ? CheckSquareOutlined : BorderOutlined;
+
+  return (
+    <Tooltip title={label}>
+      <button
+        aria-label={label}
+        aria-pressed={isStuck}
+        className={`${styles.floatingButton} ${styles.stuckButton} ${
+          isStuck ? styles.stuckButtonActive : ""
+        }`}
+        disabled={disabled}
+        onClick={onToggle}
+        title={label}
+        type="button"
+      >
+        <Icon aria-hidden="true" className={styles.stuckIcon} rev={undefined} />
+        <span className={styles.buttonLabel}>{buttonLabel}</span>
+      </button>
+    </Tooltip>
+  );
+}
+
 function HeaderPauseButton({
   isPaused,
   onToggle,
@@ -273,13 +332,17 @@ function HeaderScoreboardButton({ board }: { board: BoardState }) {
       <button
         aria-expanded={isOpen}
         aria-haspopup="dialog"
-        className={styles.floatingButton}
+        aria-label="Open scores"
+        className={`${styles.floatingButton} ${styles.iconButton}`}
         onClick={() => setOpen(true)}
         title="Scores"
         type="button"
       >
-        <span aria-hidden="true" className={styles.scoresIcon} />
-        <span className={styles.buttonLabel}>Scores</span>
+        <OrderedListOutlined
+          aria-hidden="true"
+          className={styles.scoresIcon}
+          rev={undefined}
+        />
       </button>
       <Modal
         centered

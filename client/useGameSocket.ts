@@ -10,6 +10,7 @@ import {
   ServerToClientEvents,
   ClientToServerEvents,
   type ServerNotice,
+  type StuckUpdate,
 } from "../shared/SocketTypes";
 
 import { useLocalObservable } from "mobx-react-lite";
@@ -24,6 +25,7 @@ export type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 const PLAYER_SESSION_STORAGE_KEY = "pounce::playerSessionId";
 const DEFAULT_SOCKET_PORT = "3001";
 const RECONNECT_TOAST_ID = "room-reconnect";
+const STUCK_TOAST_ID = "room-stuck-status";
 
 export default function useGameSocket(
   roomId: string | null,
@@ -66,6 +68,24 @@ export default function useGameSocket(
   };
   const showServerNotice = (notice: ServerNotice) => {
     showServerNoticeToast(notice);
+  };
+  const showStuckUpdate = (update: StuckUpdate) => {
+    if (update.rotated) {
+      return;
+    }
+    if (update.playerIndex === state.getActivePlayerIndex()) {
+      return;
+    }
+
+    toast(
+      update.isStuck
+        ? `${update.playerName} marked stuck`
+        : `${update.playerName} cleared stuck`,
+      {
+        description: `${update.stuckCount}/${update.stuckTotal} players marked stuck`,
+        id: STUCK_TOAST_ID,
+      }
+    );
   };
   const sendMoveAction = (
     activeSocket: GameSocket,
@@ -214,6 +234,7 @@ export default function useGameSocket(
       runInAction(() => state.addReaction(reaction));
     });
     socket.on("server_notice", showServerNotice);
+    socket.on("stuck_update", showStuckUpdate);
     socket.on("update_hands", ({ hands }) => {
       runInAction(() => state.updateHands(hands));
     });

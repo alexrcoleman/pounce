@@ -1,6 +1,9 @@
 export type RoomToastTone = "info" | "warning";
 
-export type DeckRotationToastReason = "auto_stuck_board" | "manual";
+export type DeckRotationToastReason =
+  | "auto_stuck_board"
+  | "consensus_stuck"
+  | "manual";
 
 export type RoomToast = {
   type: "deck_rotation";
@@ -19,6 +22,14 @@ export function createDeckRotationToast(
       message: "Stuck board detected",
       description:
         "Decks were auto-rotated after repeated deck cycling without card progress.",
+    };
+  }
+  if (reason === "consensus_stuck") {
+    return {
+      type: "deck_rotation",
+      tone: "info",
+      message: "Everyone marked stuck",
+      description: "Decks were rotated for all players.",
     };
   }
 

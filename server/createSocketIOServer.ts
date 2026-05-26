@@ -17,6 +17,7 @@ import {
 } from "../server/Rooms";
 import {
   clearRoomHand,
+  clearRoomStuckPlayers,
   dealRemainingRoomPlayers,
   dealRoomHands,
   getRoomHandUpdateVersion,
@@ -27,6 +28,7 @@ import {
   resetRoomHandAfterDeckAdvance,
   resetRoomHandAfterCenterPlay,
   resetRoom,
+  setRoomPlayerStuck,
   setRoomFairHandRotation,
   setRoomAILevel,
   setRoomPaused,
@@ -227,6 +229,9 @@ export default function createSocketIOServer() {
         return;
       }
       recordRoundSnapshot(room, "move", Date.now(), pid, args.payload);
+      if (result.boardChanged) {
+        clearRoomStuckPlayers(room);
+      }
       const didReleaseHand = releaseRoomHandAfterCenterPlay(
         room,
         pid,
@@ -433,6 +438,7 @@ export default function createSocketIOServer() {
 
       const room = getRoom(user.currentRoom);
       rotateDecks(room.board);
+      clearRoomStuckPlayers(room);
       recordRoundSnapshot(room, "manual_rotate", Date.now());
       markRoomUpdated(user.currentRoom);
       broadcastUpdate(user.currentRoom);
@@ -440,6 +446,30 @@ export default function createSocketIOServer() {
         user.currentRoom,
         createDeckRotationToast("manual")
       );
+    });
+    socket.on("set_stuck", (args) => {
+      if (user.currentRoom == null) {
+        return;
+      }
+
+      const room = getRoom(user.currentRoom);
+      const playerIndex = room.board.players.findIndex(
+        (p) => p.socketId === socket.id
+      );
+      const result = setRoomPlayerStuck(room, playerIndex, args.stuck);
+      if (!result?.changed) {
+        return;
+      }
+
+      markRoomUpdated(user.currentRoom);
+      io.to(user.currentRoom).emit("stuck_update", result);
+      broadcastUpdate(user.currentRoom);
+      if (result.rotated) {
+        broadcastRoomToast(
+          user.currentRoom,
+          createDeckRotationToast("consensus_stuck")
+        );
+      }
     });
     socket.on("restart_game", () => {
       if (user.currentRoom == null) {
@@ -692,6 +722,7 @@ function markPlayerDisconnected(roomId: string, socketId: string): boolean {
   player.disconnectedAt = Date.now();
   player.isReadyForRound = false;
   clearRoomHand(room, playerIndex);
+  clearRoomStuckPlayers(room);
   return true;
 }
 

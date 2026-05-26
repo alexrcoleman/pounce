@@ -24,6 +24,7 @@ export type ActionAck =
 export type BoardUpdate = {
   board: BoardState;
   settings: RoomSettings;
+  stuckPlayerIndices: number[];
   time: number;
   revision: number;
   roundAnalysis?: RoundAnalysis | null;
@@ -40,6 +41,15 @@ export type ServerNotice = {
   description: string;
   retryAfterMs: number;
   drainingUntil: number;
+};
+
+export type StuckUpdate = {
+  playerIndex: number;
+  playerName: string;
+  isStuck: boolean;
+  stuckCount: number;
+  stuckTotal: number;
+  rotated: boolean;
 };
 
 export type JoinRoomAck =
@@ -59,6 +69,7 @@ export type ServerToClientEvents = {
   room_toast: (args: RoomToast) => void;
   player_reaction: (args: PlayerReaction) => void;
   server_notice: (args: ServerNotice) => void;
+  stuck_update: (args: StuckUpdate) => void;
   update_hands: (args: { hands: CursorState[] }) => void;
   update: (args: BoardUpdate) => void;
 };
@@ -80,6 +91,7 @@ export type ClientToServerEvents = {
   }) => void;
   move: (args: ActionEnvelope<Move>, ack?: (args: ActionAck) => void) => void;
   rotate_decks: () => void;
+  set_stuck: (args: { stuck: boolean }) => void;
   deal_hands: () => void;
   deal_remaining_players: () => void;
   start_game: () => void;

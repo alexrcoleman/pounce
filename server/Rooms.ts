@@ -3,6 +3,7 @@ import { createRoomState, RoomState } from "../shared/RoomState";
 import {
   completeRoundAnalysis,
   getRoomHands,
+  getRoomStuckPlayerIndices,
   scheduleAIReactionBoard,
   tickRoom,
 } from "../shared/RoomLogic";
@@ -61,6 +62,7 @@ export function broadcastUpdate(roomId: string) {
   room.io.to(roomId).emit("update", {
     board: room.board,
     settings: room.settings,
+    stuckPlayerIndices: getRoomStuckPlayerIndices(room),
     time: Date.now(),
     revision: room.revision,
     roundAnalysis: room.lastRoundAnalysis,

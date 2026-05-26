@@ -18,11 +18,13 @@ import {
 } from "../shared/MoveHandler";
 import { createRoomState, RoomState } from "../shared/RoomState";
 import {
+  clearRoomStuckPlayers,
   completeRoundAnalysis,
   dealRemainingRoomPlayers,
   dealRoomHands,
   getRoomHandUpdateVersion,
   getRoomHands,
+  getRoomStuckPlayerIndices,
   PLAYER_CENTER_CURSOR_RESET_DELAY_MS,
   recordRoundSnapshot,
   releaseRoomHandAfterCenterPlay,
@@ -30,6 +32,7 @@ import {
   resetRoomHandAfterCenterPlay,
   resetRoom,
   scheduleAIReactionBoard,
+  setRoomPlayerStuck,
   setRoomFairHandRotation,
   setRoomAILevel,
   setRoomPaused,
@@ -71,6 +74,7 @@ export default function useLocalGame(name: string | null) {
         state.onUpdate({
           board: deepClone(room.board),
           settings: deepClone(room.settings),
+          stuckPlayerIndices: getRoomStuckPlayerIndices(room),
           time: Date.now(),
           revision: room.revision,
           roundAnalysis: deepClone(room.lastRoundAnalysis),
@@ -198,6 +202,9 @@ export default function useLocalGame(name: string | null) {
             playerIndex,
             envelope.payload
           );
+          if (result.boardChanged) {
+            clearRoomStuckPlayers(room);
+          }
           const didReleaseHand = releaseRoomHandAfterCenterPlay(
             room,
             playerIndex,
@@ -286,10 +293,25 @@ export default function useLocalGame(name: string | null) {
           }
         } else if (event === "rotate_decks") {
           rotateDecks(room.board);
+          clearRoomStuckPlayers(room);
           recordRoundSnapshot(room, "manual_rotate", Date.now());
           markRoomUpdated();
           emitUpdate();
           emitRoomToast(createDeckRotationToast("manual"));
+        } else if (event === "set_stuck") {
+          const stuckArgs = args[0] as { stuck: boolean };
+          const result = setRoomPlayerStuck(
+            room,
+            playerIndex,
+            stuckArgs.stuck
+          );
+          if (result?.changed) {
+            markRoomUpdated();
+            emitUpdate();
+            if (result.rotated) {
+              emitRoomToast(createDeckRotationToast("consensus_stuck"));
+            }
+          }
         } else if (event === "restart_game") {
           resetRoom(room);
           markRoomUpdated();

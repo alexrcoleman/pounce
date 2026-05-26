@@ -241,6 +241,7 @@ function createBoardStoryState(
     revision: 1,
     roundAnalysis: postRound ? createStoryRoundAnalysis(room.board) : null,
     settings: room.settings,
+    stuckPlayerIndices: [],
     time: Date.now(),
   });
   return state;
