@@ -203,26 +203,23 @@ function HeaderReactionButton({
 
   return (
     <div className={styles.reactionControl} ref={rootRef}>
-      <Tooltip title="Send reaction">
-        <button
-          aria-controls={isOpen ? menuId : undefined}
-          aria-expanded={isOpen}
-          aria-haspopup="menu"
-          aria-label="Send reaction"
-          className={`${styles.floatingButton} ${styles.iconButton} ${
-            isOpen ? styles.reactionButtonOpen : ""
-          }`}
-          onClick={() => setOpen((current) => !current)}
-          title="Send reaction"
-          type="button"
-        >
-          <SmileOutlined
-            aria-hidden="true"
-            className={styles.reactionIcon}
-            rev={undefined}
-          />
-        </button>
-      </Tooltip>
+      <button
+        aria-controls={isOpen ? menuId : undefined}
+        aria-expanded={isOpen}
+        aria-haspopup="menu"
+        aria-label="Send reaction"
+        className={`${styles.floatingButton} ${styles.iconButton} ${
+          isOpen ? styles.reactionButtonOpen : ""
+        }`}
+        onClick={() => setOpen((current) => !current)}
+        type="button"
+      >
+        <SmileOutlined
+          aria-hidden="true"
+          className={styles.reactionIcon}
+          rev={undefined}
+        />
+      </button>
       {isOpen ? (
         <div
           aria-label="Reactions"

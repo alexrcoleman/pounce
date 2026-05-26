@@ -7,6 +7,8 @@ export const REACTION_OPTIONS = [
   { id: "sad", emoji: "😢", label: "Sad" },
   { id: "nice", emoji: "👍", label: "Nice" },
   { id: "watching", emoji: "👀", label: "Watching" },
+  { id: "cat", emoji: "😺", label: "Cat" },
+  { id: "heart", emoji: "❤️", label: "Heart" },
 ] as const;
 
 export type ReactionId = (typeof REACTION_OPTIONS)[number]["id"];
