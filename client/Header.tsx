@@ -6,13 +6,17 @@ import SettingOutlined from "@ant-design/icons/SettingOutlined";
 import SmileOutlined from "@ant-design/icons/SmileOutlined";
 import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react-lite";
-import { Button, Modal, Tooltip } from "antd";
+import { Button, Modal } from "antd";
 import { useClientContext } from "./ClientContext";
+import DesktopOnlyTooltip from "./DesktopOnlyTooltip";
 import ScoresTable from "./ScoresTable";
 import isTouchDevice from "./isTouchDevice";
 import type { BoardState } from "../shared/GameUtils";
 import { REACTION_OPTIONS, type ReactionId } from "../shared/Reactions";
-import { getStuckVoteStatus } from "../shared/StuckPlayers";
+import {
+  getStuckVoteStatus,
+  getStuckVotingPlayerIndices,
+} from "../shared/StuckPlayers";
 import SettingsDialog, {
   type SettingsOpenRequest,
   type SettingsPage,
@@ -45,7 +49,16 @@ export default observer(function Header(props: Props) {
   const isPaused = state.board?.isPaused ?? false;
   const isHost = state.getIsHost();
   const activePlayerIndex = state.getActivePlayerIndex();
-  const stuckStatus = getStuckVoteStatus(board, state.stuckPlayerIndices);
+  const stuckOptions = { includePaused: true };
+  const stuckStatus = getStuckVoteStatus(
+    board,
+    state.stuckPlayerIndices,
+    stuckOptions
+  );
+  const stuckVotingPlayerIndices = getStuckVotingPlayerIndices(
+    board,
+    stuckOptions
+  );
   const isActivePlayerStuck = stuckStatus.playerIndices.includes(
     activePlayerIndex
   );
@@ -54,7 +67,8 @@ export default observer(function Header(props: Props) {
     board != null &&
     socket != null &&
     getCanSendReactions(board, props.roomId, state.getActivePlayerIndex());
-  const canMarkStuck = stuckStatus.total > 0 && activePlayerIndex >= 0;
+  const showStuckButton = stuckVotingPlayerIndices.includes(activePlayerIndex);
+  const canMarkStuck = showStuckButton && !isPaused && socket != null;
   const showRoomCode =
     !isStarted &&
     !isHost &&
@@ -119,9 +133,9 @@ export default observer(function Header(props: Props) {
         {showScoreButton && board != null && board.pouncer == null ? (
           <HeaderScoreboardButton board={board} />
         ) : null}
-        {canMarkStuck ? (
+        {showStuckButton ? (
           <HeaderStuckButton
-            disabled={!socket}
+            disabled={!canMarkStuck}
             isStuck={isActivePlayerStuck}
             stuckCount={stuckStatus.count}
             stuckTotal={stuckStatus.total}
@@ -130,20 +144,21 @@ export default observer(function Header(props: Props) {
             }
           />
         ) : null}
-        <button
-          className={`${styles.floatingButton} ${styles.settingsButton}`}
-          onClick={() => openSettings("main")}
-          aria-label="Open settings"
-          title="Settings"
-          type="button"
-        >
-          <SettingOutlined
-            aria-hidden="true"
-            className={styles.settingsIcon}
-            rev={undefined}
-          />
-          <span className={styles.buttonLabel}>Settings</span>
-        </button>
+        <DesktopOnlyTooltip title="Open settings">
+          <button
+            className={`${styles.floatingButton} ${styles.settingsButton}`}
+            onClick={() => openSettings("main")}
+            aria-label="Open settings"
+            type="button"
+          >
+            <SettingOutlined
+              aria-hidden="true"
+              className={styles.settingsIcon}
+              rev={undefined}
+            />
+            <span className={styles.buttonLabel}>Settings</span>
+          </button>
+        </DesktopOnlyTooltip>
       </div>
       {isSettingsOpen ? (
         <SettingsDialog
@@ -203,23 +218,25 @@ function HeaderReactionButton({
 
   return (
     <div className={styles.reactionControl} ref={rootRef}>
-      <button
-        aria-controls={isOpen ? menuId : undefined}
-        aria-expanded={isOpen}
-        aria-haspopup="menu"
-        aria-label="Send reaction"
-        className={`${styles.floatingButton} ${styles.iconButton} ${
-          isOpen ? styles.reactionButtonOpen : ""
-        }`}
-        onClick={() => setOpen((current) => !current)}
-        type="button"
-      >
-        <SmileOutlined
-          aria-hidden="true"
-          className={styles.reactionIcon}
-          rev={undefined}
-        />
-      </button>
+      <DesktopOnlyTooltip title="Send reaction">
+        <button
+          aria-controls={isOpen ? menuId : undefined}
+          aria-expanded={isOpen}
+          aria-haspopup="menu"
+          aria-label="Send reaction"
+          className={`${styles.floatingButton} ${styles.iconButton} ${
+            isOpen ? styles.reactionButtonOpen : ""
+          }`}
+          onClick={() => setOpen((current) => !current)}
+          type="button"
+        >
+          <SmileOutlined
+            aria-hidden="true"
+            className={styles.reactionIcon}
+            rev={undefined}
+          />
+        </button>
+      </DesktopOnlyTooltip>
       {isOpen ? (
         <div
           aria-label="Reactions"
@@ -237,7 +254,6 @@ function HeaderReactionButton({
                 setOpen(false);
               }}
               role="menuitem"
-              title={reaction.label}
               type="button"
             >
               {reaction.emoji}
@@ -268,7 +284,7 @@ function HeaderStuckButton({
   const Icon = isStuck ? CheckSquareOutlined : BorderOutlined;
 
   return (
-    <Tooltip title={label}>
+    <DesktopOnlyTooltip title={label}>
       <button
         aria-label={label}
         aria-pressed={isStuck}
@@ -277,13 +293,12 @@ function HeaderStuckButton({
         }`}
         disabled={disabled}
         onClick={onToggle}
-        title={label}
         type="button"
       >
         <Icon aria-hidden="true" className={styles.stuckIcon} rev={undefined} />
         <span className={styles.buttonLabel}>{buttonLabel}</span>
       </button>
-    </Tooltip>
+    </DesktopOnlyTooltip>
   );
 }
 
@@ -297,13 +312,12 @@ function HeaderPauseButton({
   const label = isPaused ? "Resume game" : "Pause game";
 
   return (
-    <Tooltip title={label}>
+    <DesktopOnlyTooltip title={label}>
       <button
         aria-label={label}
         aria-pressed={isPaused}
         className={`${styles.floatingButton} ${styles.iconButton}`}
         onClick={onToggle}
-        title={label}
         type="button"
       >
         <span
@@ -311,7 +325,7 @@ function HeaderPauseButton({
           className={isPaused ? styles.playIcon : styles.pauseIcon}
         />
       </button>
-    </Tooltip>
+    </DesktopOnlyTooltip>
   );
 }
 
@@ -326,21 +340,22 @@ function HeaderScoreboardButton({ board }: { board: BoardState }) {
 
   return (
     <>
-      <button
-        aria-expanded={isOpen}
-        aria-haspopup="dialog"
-        aria-label="Open scores"
-        className={`${styles.floatingButton} ${styles.iconButton}`}
-        onClick={() => setOpen(true)}
-        title="Scores"
-        type="button"
-      >
-        <OrderedListOutlined
-          aria-hidden="true"
-          className={styles.scoresIcon}
-          rev={undefined}
-        />
-      </button>
+      <DesktopOnlyTooltip title="Open scores">
+        <button
+          aria-expanded={isOpen}
+          aria-haspopup="dialog"
+          aria-label="Open scores"
+          className={`${styles.floatingButton} ${styles.iconButton}`}
+          onClick={() => setOpen(true)}
+          type="button"
+        >
+          <OrderedListOutlined
+            aria-hidden="true"
+            className={styles.scoresIcon}
+            rev={undefined}
+          />
+        </button>
+      </DesktopOnlyTooltip>
       <Modal
         centered
         closeIcon={<span className={styles.scoreboardCloseIcon}>X</span>}

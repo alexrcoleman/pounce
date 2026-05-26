@@ -482,21 +482,26 @@ const PileSection = observer(function PileSection({
   const selectAIDifficulty = (speed: number) => {
     socket?.emit("set_ai_level", { speed });
   };
+  const handleDealHands = () => {
+    confirmRemovingInactivePlayers({
+      action: "Dealing",
+      disconnectedPlayers: getDisconnectedPlayers(board),
+      okText: "Deal",
+      title: "Deal without inactive players?",
+      onConfirm: () => {
+        socket?.emit("deal_hands");
+      },
+    });
+  };
   const handleStartGame = () => {
-    const disconnectedPlayers = board.players.filter(
-      (player) => player.disconnected
-    );
-    if (disconnectedPlayers.length === 0) {
-      socket?.emit("start_game");
-      return;
-    }
-
-    Modal.confirm({
-      title: "Start without disconnected players?",
-      content: getDisconnectedStartConfirmationMessage(disconnectedPlayers),
+    confirmRemovingInactivePlayers({
+      action: "Starting",
+      disconnectedPlayers: getDisconnectedPlayers(board),
       okText: "Start game",
-      cancelText: "Cancel",
-      onOk: () => socket?.emit("start_game"),
+      title: "Start without inactive players?",
+      onConfirm: () => {
+        socket?.emit("start_game");
+      },
     });
   };
 
@@ -609,7 +614,7 @@ const PileSection = observer(function PileSection({
                   </Button>
                   <Button
                     className={styles.dealButton}
-                    onClick={() => socket?.emit("deal_hands")}
+                    onClick={handleDealHands}
                   >
                     Deal
                   </Button>
@@ -623,7 +628,7 @@ const PileSection = observer(function PileSection({
   );
 });
 
-function RoundReadyControl({
+const RoundReadyControl = observer(function RoundReadyControl({
   activePlayerIndex,
   board,
   onToggleReady,
@@ -670,7 +675,7 @@ function RoundReadyControl({
       </Button>
     </div>
   );
-}
+});
 
 function RoundReadyTooltip({
   players,
@@ -737,7 +742,44 @@ function getWaitingForDealCount(
   ).length;
 }
 
-function getDisconnectedStartConfirmationMessage(
+function confirmRemovingInactivePlayers({
+  action,
+  disconnectedPlayers,
+  okText,
+  onConfirm,
+  title,
+}: {
+  action: string;
+  disconnectedPlayers: PlayerState[];
+  okText: string;
+  onConfirm: () => void;
+  title: string;
+}): void {
+  if (disconnectedPlayers.length === 0) {
+    onConfirm();
+    return;
+  }
+
+  Modal.confirm({
+    title,
+    content: getInactivePlayersConfirmationMessage(
+      action,
+      disconnectedPlayers
+    ),
+    okText,
+    cancelText: "Cancel",
+    onOk: () => {
+      onConfirm();
+    },
+  });
+}
+
+function getDisconnectedPlayers(board: BoardState): PlayerState[] {
+  return board.players.filter((player) => player.disconnected);
+}
+
+function getInactivePlayersConfirmationMessage(
+  action: string,
   disconnectedPlayers: PlayerState[]
 ): string {
   const playerCount = disconnectedPlayers.length;
@@ -746,7 +788,7 @@ function getDisconnectedStartConfirmationMessage(
     .map((player) => player.name || "Unnamed player")
     .join(", ");
 
-  return `Are you sure you want to start? This will remove ${playerCount} disconnected ${playerLabel} (${names}).`;
+  return `${action} will remove ${playerCount} inactive ${playerLabel} (${names}).`;
 }
 
 function isPlayerWaitingForDeal(
