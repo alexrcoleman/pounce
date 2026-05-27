@@ -62,6 +62,28 @@ function getEstimatedServerTimeUntracked(state: SocketState): number {
   return untracked(() => state.getEstimatedServerTime());
 }
 
+function getNextRoundStartNoticeUpdateDelay(
+  noticeStartsAt: number,
+  serverNow: number
+): number | null {
+  const visibleUntil = noticeStartsAt + ROUND_START_GO_DURATION_MS;
+  if (serverNow >= visibleUntil) {
+    return null;
+  }
+
+  if (serverNow >= noticeStartsAt) {
+    return visibleUntil - serverNow;
+  }
+
+  const secondsUntilStart = Math.ceil((noticeStartsAt - serverNow) / 1000);
+  const displayedSeconds = Math.min(3, Math.max(1, secondsUntilStart));
+  const nextLabelAt =
+    displayedSeconds > 1
+      ? noticeStartsAt - (displayedSeconds - 1) * 1000
+      : noticeStartsAt;
+  return Math.max(16, nextLabelAt - serverNow);
+}
+
 function useIsBoardAcceptingMoves(
   state: SocketState,
   board: BoardState
@@ -239,13 +261,17 @@ function RoundStartOverlay({
   state: SocketState;
 }): JSX.Element | null {
   const layout = useBoardLayout();
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  const getOverlayServerTime = useCallback(
+    () => getEstimatedServerTimeUntracked(stateRef.current),
+    []
+  );
   const wasRoundActiveRef = useRef(board.isActive);
   const [noticeStartsAt, setNoticeStartsAt] = useState<number | null>(
     board.roundStartsAt ?? null
   );
-  const [noticeServerNow, setNoticeServerNow] = useState(() =>
-    state.getEstimatedServerTime()
-  );
+  const [noticeServerNow, setNoticeServerNow] = useState(getOverlayServerTime);
   const fieldArea = { type: "field" } as const;
   const [left, top] = layout.mapPoint(
     [FIELD_LEFT + FIELD_SIZE / 2, FIELD_TOP + FIELD_SIZE / 2],
@@ -254,9 +280,6 @@ function RoundStartOverlay({
   const scale = layout.getScale(fieldArea);
 
   useEffect(() => {
-    const nextServerNow = state.getEstimatedServerTime();
-    setNoticeServerNow(nextServerNow);
-
     const wasRoundActive = wasRoundActiveRef.current;
     wasRoundActiveRef.current = board.isActive;
 
@@ -271,39 +294,40 @@ function RoundStartOverlay({
     }
 
     if (!wasRoundActive) {
+      const nextServerNow = getOverlayServerTime();
+      setNoticeServerNow(nextServerNow);
       setNoticeStartsAt(nextServerNow);
     }
-  }, [board.isActive, board.roundStartsAt, state]);
+  }, [board.isActive, board.roundStartsAt, getOverlayServerTime]);
 
   useEffect(() => {
     if (noticeStartsAt == null) {
       return;
     }
 
-    const visibleUntil = noticeStartsAt + ROUND_START_GO_DURATION_MS;
-    let intervalId: number | undefined;
+    let timeoutId: number | undefined;
     const tick = () => {
-      const nextServerNow = state.getEstimatedServerTime();
+      const nextServerNow = getOverlayServerTime();
       setNoticeServerNow(nextServerNow);
-      if (nextServerNow < visibleUntil) {
+      const delay = getNextRoundStartNoticeUpdateDelay(
+        noticeStartsAt,
+        nextServerNow
+      );
+      if (delay == null) {
+        setNoticeStartsAt(null);
         return;
       }
 
-      setNoticeStartsAt(null);
-      if (intervalId != null) {
-        window.clearInterval(intervalId);
-        intervalId = undefined;
-      }
+      timeoutId = window.setTimeout(tick, delay);
     };
 
     tick();
-    intervalId = window.setInterval(tick, 50);
     return () => {
-      if (intervalId != null) {
-        window.clearInterval(intervalId);
+      if (timeoutId != null) {
+        window.clearTimeout(timeoutId);
       }
     };
-  }, [noticeStartsAt, state]);
+  }, [noticeStartsAt, getOverlayServerTime]);
 
   if (noticeStartsAt == null) {
     return null;
