@@ -56,46 +56,36 @@ type Props = {
   zoom: number;
 };
 
-function getRoundStartClockUntil(board: BoardState): number | null {
-  return board.roundStartsAt == null
-    ? null
-    : board.roundStartsAt + ROUND_START_GO_DURATION_MS;
-}
-
-function useEstimatedServerTime(
+function useIsBoardAcceptingMoves(
   state: SocketState,
-  tickUntil: number | null
-): number {
-  const [serverTime, setServerTime] = useState(() =>
-    state.getEstimatedServerTime()
-  );
+  board: BoardState
+): boolean {
+  const [, requestBoardAcceptingMovesCheck] = useState(0);
+  const serverClockOffset = state.serverClockOffset;
+  const estimatedServerTime = Date.now() + serverClockOffset;
+  const isAcceptingMoves = isBoardAcceptingMoves(board, estimatedServerTime);
+  const roundStartsAt = board.roundStartsAt ?? null;
+  const nextCheckAt =
+    board.isActive &&
+    !board.isPaused &&
+    roundStartsAt != null &&
+    estimatedServerTime < roundStartsAt
+      ? roundStartsAt
+      : null;
 
   useEffect(() => {
-    const updateServerTime = () => state.getEstimatedServerTime();
-    setServerTime(updateServerTime());
-    if (tickUntil == null) {
+    if (nextCheckAt == null) {
       return;
     }
 
-    let intervalId: number | undefined;
-    const tick = () => {
-      const nextServerTime = updateServerTime();
-      setServerTime(nextServerTime);
-      if (nextServerTime >= tickUntil && intervalId != null) {
-        window.clearInterval(intervalId);
-        intervalId = undefined;
-      }
-    };
+    const timeoutId = window.setTimeout(
+      () => requestBoardAcceptingMovesCheck((check) => check + 1),
+      Math.max(0, nextCheckAt - state.getEstimatedServerTime())
+    );
+    return () => window.clearTimeout(timeoutId);
+  }, [nextCheckAt, serverClockOffset, state]);
 
-    intervalId = window.setInterval(tick, 50);
-    return () => {
-      if (intervalId != null) {
-        window.clearInterval(intervalId);
-      }
-    };
-  }, [state, tickUntil]);
-
-  return serverTime;
+  return isAcceptingMoves;
 }
 
 export default observer(function Board({
@@ -112,14 +102,11 @@ export default observer(function Board({
   const activePlayerIndex = state.getActivePlayerIndex();
   const activePlayer =
     activePlayerIndex >= 0 ? board.players[activePlayerIndex] : undefined;
-  const estimatedServerTime = useEstimatedServerTime(
-    state,
-    getRoundStartClockUntil(board)
-  );
+  const isAcceptingMoves = useIsBoardAcceptingMoves(state, board);
   const canInteractWithCards =
     activePlayer != null &&
     activePlayer.isSpectating !== true &&
-    isBoardAcceptingMoves(board, estimatedServerTime);
+    isAcceptingMoves;
   const [focusedPlayerIndex, setFocusedPlayerIndex] = useState<number | null>(
     null
   );
@@ -219,11 +206,7 @@ export default observer(function Board({
               canInteract={canInteractWithCards}
               executeMove={executeMove}
             />
-            <RoundStartOverlay
-              board={board}
-              state={state}
-              serverNow={estimatedServerTime}
-            />
+            <RoundStartOverlay board={board} state={state} />
             {board.players.map((p, i) => (
               <PlayerArea player={p} playerIndex={i} key={p.socketId ?? i} />
             ))}
@@ -242,18 +225,18 @@ export default observer(function Board({
 function RoundStartOverlay({
   board,
   state,
-  serverNow,
 }: {
   board: BoardState;
   state: SocketState;
-  serverNow: number;
 }): JSX.Element | null {
   const layout = useBoardLayout();
   const wasRoundActiveRef = useRef(board.isActive);
   const [noticeStartsAt, setNoticeStartsAt] = useState<number | null>(
     board.roundStartsAt ?? null
   );
-  const [noticeServerNow, setNoticeServerNow] = useState(serverNow);
+  const [noticeServerNow, setNoticeServerNow] = useState(() =>
+    state.getEstimatedServerTime()
+  );
   const fieldArea = { type: "field" } as const;
   const [left, top] = layout.mapPoint(
     [FIELD_LEFT + FIELD_SIZE / 2, FIELD_TOP + FIELD_SIZE / 2],
@@ -262,10 +245,9 @@ function RoundStartOverlay({
   const scale = layout.getScale(fieldArea);
 
   useEffect(() => {
-    setNoticeServerNow(serverNow);
-  }, [serverNow]);
+    const nextServerNow = state.getEstimatedServerTime();
+    setNoticeServerNow(nextServerNow);
 
-  useEffect(() => {
     const wasRoundActive = wasRoundActiveRef.current;
     wasRoundActiveRef.current = board.isActive;
 
@@ -280,9 +262,9 @@ function RoundStartOverlay({
     }
 
     if (!wasRoundActive) {
-      setNoticeStartsAt(serverNow);
+      setNoticeStartsAt(nextServerNow);
     }
-  }, [board.isActive, board.roundStartsAt, serverNow]);
+  }, [board.isActive, board.roundStartsAt, state]);
 
   useEffect(() => {
     if (noticeStartsAt == null) {
