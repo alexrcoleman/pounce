@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import CardFace from "./CardFace";
 import React from "react";
-import { SourceType } from "./CardDnDItem";
+import { CardDnDItem, SourceType } from "./CardDnDItem";
 import joinClasses from "./joinClasses";
 import styles from "./Card.module.css";
 import { useDrag } from "react-dnd";
@@ -95,10 +95,9 @@ const CardContentMemo = observer(function CardContent({
     location.type !== "field_stack" &&
     !fullSizePlayerIndices.includes(card.player);
 
-  const source = useMemo(
-    () => computed(() => getSource(card, state, location)),
-    [card, state, location]
-  ).get();
+  const nextSource = computed(() => getSource(card, state, location)).get();
+  const sourceKey = getSourceKey(nextSource);
+  const source = useMemo(() => nextSource, [sourceKey]);
 
   let [positionX, positionY] = getPosition(card, state, location);
   let layoutArea: BoardLayoutArea = getCardLayoutArea(card, location);
@@ -177,7 +176,13 @@ const CardContentMemo = observer(function CardContent({
               number
             ],
           },
-    [source, JSON.stringify(toJS(card)), board.pileLocs, geometry.x, geometry.y]
+    [
+      source,
+      JSON.stringify(toJS(card)),
+      getFieldStackInitialPositionKey(board, source),
+      geometry.x,
+      geometry.y,
+    ]
   );
   const [{ isDragging, canDrag }, drag, preview] = useDrag(
     () =>
@@ -214,8 +219,11 @@ const CardContentMemo = observer(function CardContent({
                 return true;
               }
               const dragItem = monitor.getItem();
-              if (dragItem.source == null || item.source == null) {
+              if (!isCardDnDItem(dragItem) || !isCardDnDItem(item)) {
                 return false;
+              }
+              if (isSameSingleCardDrag(dragItem, item)) {
+                return true;
               }
               return (
                 dragItem.source.type === "solitaire" &&
@@ -226,7 +234,7 @@ const CardContentMemo = observer(function CardContent({
             },
             canDrag: () => canInteract && source.type !== "other",
           },
-    [canInteract, source, item]
+    [canInteract, sourceKey, item]
   );
   useEffect(() => {
     // React DnD clears the preview connection when the source handler changes,
@@ -361,4 +369,75 @@ function getSource(
           location.cardIndex === player.stacks[location.pileIndex].length - 1,
       };
   }
+}
+
+function getSourceKey(source: SourceType): string {
+  switch (source.type) {
+    case "field_stack":
+      return `field_stack:${source.index}:${source.isTopCard ? 1 : 0}`;
+    case "solitaire":
+      return `solitaire:${source.pileIndex}:${source.slotIndex}:${
+        source.isTopCard ? 1 : 0
+      }`;
+    case "flippedDeck":
+    case "other":
+    case "pounce":
+      return source.type;
+  }
+}
+
+function getFieldStackInitialPositionKey(
+  board: { pileLocs: [number, number, number][] },
+  source: SourceType
+): string {
+  if (source.type !== "field_stack") {
+    return "";
+  }
+
+  return board.pileLocs[source.index]?.join(":") ?? "";
+}
+
+function isCardDnDItem(item: unknown): item is CardDnDItem {
+  return (
+    typeof item === "object" &&
+    item != null &&
+    "source" in item &&
+    "card" in item
+  );
+}
+
+function isSameSingleCardDrag(
+  dragItem: CardDnDItem,
+  item: CardDnDItem
+): boolean {
+  if (!cardsEqual(dragItem.card, item.card)) {
+    return false;
+  }
+  if (dragItem.source.type !== item.source.type) {
+    return false;
+  }
+
+  switch (item.source.type) {
+    case "flippedDeck":
+    case "pounce":
+      return true;
+    case "solitaire":
+      return (
+        dragItem.source.type === "solitaire" &&
+        dragItem.source.pileIndex === item.source.pileIndex &&
+        dragItem.source.slotIndex === item.source.slotIndex
+      );
+    case "field_stack":
+    case "other":
+      return false;
+  }
+}
+
+function cardsEqual(
+  a: CardState | null | undefined,
+  b: CardState | null | undefined
+): boolean {
+  return (
+    a?.player === b?.player && a?.suit === b?.suit && a?.value === b?.value
+  );
 }
