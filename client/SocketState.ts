@@ -29,7 +29,6 @@ function createDefaultRoomSettings(): RoomSettings {
 }
 
 export default class SocketState {
-  board: BoardState | null = null;
   serverBoard: BoardState | null = null;
   roomSettings: RoomSettings = createDefaultRoomSettings();
   serverRevision = 0;
@@ -45,10 +44,17 @@ export default class SocketState {
   pendingMoves: PendingMoveAction[] = [];
   reactions: PlayerReaction[] = [];
   roundAnalysis: RoundAnalysis | null = null;
+  // Client-owned board view. It is always synced in place from the server
+  // snapshot plus any pending optimistic moves, so observers keep one stable
+  // board object across optimistic/non-optimistic transitions.
+  private clientsideMutableBoard: BoardState | null = null;
   private isAwaitingRoomSync = false;
   private nextActionNumber = 0;
   constructor() {
     makeAutoObservable(this);
+  }
+  get board(): BoardState | null {
+    return this.clientsideMutableBoard;
   }
   onUpdate(data: BoardUpdate) {
     if (data.revision < this.serverRevision) {
@@ -190,8 +196,8 @@ export default class SocketState {
     this.recomputeBoard();
   }
   private resetBoardState() {
-    this.board = null;
     this.serverBoard = null;
+    this.clientsideMutableBoard = null;
     this.roomSettings = createDefaultRoomSettings();
     this.stuckPlayerIndices = [];
     this.serverRevision = 0;
@@ -204,28 +210,37 @@ export default class SocketState {
   }
   private recomputeBoard() {
     if (!this.serverBoard) {
-      this.board = null;
+      this.clientsideMutableBoard = null;
       return;
     }
-    if (this.pendingMoves.length === 0) {
-      this.board = this.serverBoard;
-      return;
-    }
-    const nextBoard = deepClone(this.serverBoard);
+
+    const nextBoard =
+      this.pendingMoves.length === 0
+        ? this.serverBoard
+        : this.createOptimisticBoard(this.serverBoard);
+    this.clientsideMutableBoard = applyDeepUpdate(
+      this.clientsideMutableBoard,
+      nextBoard,
+      nextBoard === this.serverBoard
+    );
+  }
+  private createOptimisticBoard(serverBoard: BoardState) {
+    const nextBoard = deepClone(serverBoard);
     const playerIndex = this.getActivePlayerIndexForBoard(nextBoard);
-    if (playerIndex >= 0) {
-      this.pendingMoves.forEach((action) => {
-        executeMove(
-          nextBoard,
-          playerIndex,
-          action.move,
-          undefined,
-          this.getEstimatedServerTime()
-        );
-      });
+    if (playerIndex < 0) {
+      return nextBoard;
     }
-    const currentBoard = this.board === this.serverBoard ? null : this.board;
-    this.board = applyDeepUpdate(currentBoard, nextBoard);
+
+    this.pendingMoves.forEach((action) => {
+      executeMove(
+        nextBoard,
+        playerIndex,
+        action.move,
+        undefined,
+        this.getEstimatedServerTime()
+      );
+    });
+    return nextBoard;
   }
   private getActivePlayerIndexForBoard(board: BoardState | null) {
     if (!board) {
@@ -247,7 +262,11 @@ export default class SocketState {
 }
 
 // Must handle objects, arrays, and primitives (boolean, number, string, null, undefined)
-function applyDeepUpdate<T>(target: T, value: unknown): T {
+function applyDeepUpdate<T>(
+  target: T,
+  value: unknown,
+  cloneNewValues = false
+): T {
   if (value === target) {
     return target;
   }
@@ -256,13 +275,13 @@ function applyDeepUpdate<T>(target: T, value: unknown): T {
     Array.isArray(target) !== Array.isArray(value) ||
     (target == null) !== (value == null)
   ) {
-    return value as T;
+    return cloneNewValues ? cloneDeepUpdateValue(value as T) : (value as T);
   }
 
   if (Array.isArray(target) && Array.isArray(value)) {
     if (target.length === value.length) {
       for (let i = 0; i < target.length; i++) {
-        target[i] = applyDeepUpdate(target[i], value[i]);
+        target[i] = applyDeepUpdate(target[i], value[i], cloneNewValues);
         // todo: Does this assignment cause issues with mobx?
       }
       return target;
@@ -273,7 +292,7 @@ function applyDeepUpdate<T>(target: T, value: unknown): T {
     const newValues = value.map((v, i): any => {
       // Look if theres a "match" to update
       const elTarget = target[i];
-      return applyDeepUpdate(elTarget, v);
+      return applyDeepUpdate(elTarget, v, cloneNewValues);
     });
     target.splice(0, target.length, ...newValues);
     return target;
@@ -289,7 +308,11 @@ function applyDeepUpdate<T>(target: T, value: unknown): T {
     const targetObj = target as Record<string, unknown>;
     const valueObj = value as Record<string, unknown>;
     for (const key in valueObj) {
-      targetObj[key] = applyDeepUpdate(targetObj[key], valueObj[key]);
+      targetObj[key] = applyDeepUpdate(
+        targetObj[key],
+        valueObj[key],
+        cloneNewValues
+      );
       // todo: Does this assignment cause issues with mobx?
     }
     // Remove any old ones
@@ -303,4 +326,8 @@ function applyDeepUpdate<T>(target: T, value: unknown): T {
     // Primitive changing value
     return value as T;
   }
+}
+
+function cloneDeepUpdateValue<T>(value: T): T {
+  return value == null || typeof value !== "object" ? value : deepClone(value);
 }
