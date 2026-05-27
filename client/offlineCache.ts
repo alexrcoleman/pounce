@@ -1,6 +1,6 @@
 import { OFFLINE_STATIC_ASSETS } from "../shared/gameAssets";
 
-const OFFLINE_CACHE_NAME = "pounce-offline-v12";
+const OFFLINE_CACHE_NAME = "pounce-offline-v13";
 const OFFLINE_PAGES = ["/", "/offline"];
 const STATIC_ASSETS = OFFLINE_STATIC_ASSETS;
 

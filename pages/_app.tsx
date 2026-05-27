@@ -2,7 +2,7 @@ import { ConfigProvider } from "antd";
 import { Toaster } from "sonner";
 import "../styles/globals.css";
 
-import { ASSET_CSS_VARIABLES } from "../shared/gameAssets";
+import { ASSET_STYLES } from "../shared/gameAssets";
 import type { AppProps } from "next/app";
 import Head from "next/head";
 import PageErrorBoundary from "../client/PageErrorBoundary";
@@ -47,7 +47,7 @@ function MyApp({ Component, pageProps }: AppProps) {
           key="page-theme-color"
         />
       </Head>
-      <style dangerouslySetInnerHTML={{ __html: ASSET_CSS_VARIABLES }} />
+      <style dangerouslySetInnerHTML={{ __html: ASSET_STYLES }} />
       <PwaRegistration />
       <ConfigProvider theme={theme}>
         <PageErrorBoundary resetKey={router.asPath}>

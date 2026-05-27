@@ -36,4 +36,12 @@ module.exports = {
     NEXT_PUBLIC_BUILD_DATE: new Date().toISOString(),
     NEXT_PUBLIC_SITE_URL: siteUrl,
   },
+  webpack(config) {
+    config.module.rules.push({
+      test: /\.woff2$/i,
+      type: "asset/resource",
+    });
+
+    return config;
+  },
 };

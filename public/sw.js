@@ -1,4 +1,4 @@
-const CACHE_NAME = "pounce-offline-v12";
+const CACHE_NAME = "pounce-offline-v13";
 const GAME_ASSET_MANIFEST_URL = "/game-assets.json";
 const OFFLINE_PAGES = ["/", "/offline"];
 const APP_SHELL = [...OFFLINE_PAGES, GAME_ASSET_MANIFEST_URL];
