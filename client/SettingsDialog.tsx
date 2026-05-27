@@ -1,4 +1,5 @@
 import styles from "./Header.module.css";
+import CloseOutlined from "@ant-design/icons/CloseOutlined";
 import { type ReactNode, useEffect, useState } from "react";
 import { observer } from "mobx-react-lite";
 import { Button, Flex, Modal, Slider, Switch } from "antd";
@@ -133,7 +134,11 @@ export default observer(function SettingsDialog({
             onClick={props.onClose}
             type="button"
           >
-            &times;
+            <CloseOutlined
+              aria-hidden="true"
+              className={styles.settingsCloseIcon}
+              rev={undefined}
+            />
           </button>
         </div>
       }

@@ -1,6 +1,7 @@
 import styles from "./Header.module.css";
 import BorderOutlined from "@ant-design/icons/BorderOutlined";
 import CheckSquareOutlined from "@ant-design/icons/CheckSquareOutlined";
+import CloseOutlined from "@ant-design/icons/CloseOutlined";
 import OrderedListOutlined from "@ant-design/icons/OrderedListOutlined";
 import SettingOutlined from "@ant-design/icons/SettingOutlined";
 import SmileOutlined from "@ant-design/icons/SmileOutlined";
@@ -363,7 +364,13 @@ function HeaderScoreboardButton({ board }: { board: BoardState }) {
       </DesktopOnlyTooltip>
       <Modal
         centered
-        closeIcon={<span className={styles.scoreboardCloseIcon}>X</span>}
+        closeIcon={
+          <CloseOutlined
+            aria-hidden="true"
+            className={styles.scoreboardCloseIcon}
+            rev={undefined}
+          />
+        }
         footer={
           <div className={styles.scoreboardActions}>
             <Button type="primary" onClick={() => setOpen(false)}>

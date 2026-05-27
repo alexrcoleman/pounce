@@ -1,4 +1,5 @@
 import Confetti from "react-confetti";
+import CloseOutlined from "@ant-design/icons/CloseOutlined";
 import ScoresTable from "./ScoresTable";
 import { observer } from "mobx-react-lite";
 import { useClientContext } from "./ClientContext";
@@ -94,7 +95,13 @@ export default observer(function VictoryOverlay() {
       </div>
       <Modal
         centered
-        closeIcon={<span className={styles.analysisCloseIcon}>X</span>}
+        closeIcon={
+          <CloseOutlined
+            aria-hidden="true"
+            className={styles.analysisCloseIcon}
+            rev={undefined}
+          />
+        }
         footer={
           <Flex justify="end" align="center" className={styles.analysisActions}>
             <Button onClick={() => setAnalysisOpen(false)}>

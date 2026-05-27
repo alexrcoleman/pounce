@@ -110,32 +110,38 @@
   right: 12px;
   width: 34px;
   height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
 }
 
 .analysisModal :global(.ant-modal-close-x) {
   width: 34px;
   height: 34px;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-}
-
-.analysisCloseIcon {
-  color: #4a4035;
-  font-size: 14px;
-  font-weight: 900;
   line-height: 1;
 }
 
-.analysisModal :global(.ant-modal-close) {
-  background: rgba(255, 255, 255, 0.82);
-  border: 1px solid rgba(0, 0, 0, 0.14);
-  border-radius: 50%;
+.analysisCloseIcon {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #4a4035;
+  font-size: 14px;
+  line-height: 1;
 }
 
 .analysisModal :global(.ant-modal-close:hover),
 .analysisModal :global(.ant-modal-close:focus) {
-  background: white;
+  background: rgba(46, 38, 30, 0.08);
 }
 
 .analysisModal :global(.ant-modal-body) {
