@@ -4,9 +4,9 @@ import CheckSquareOutlined from "@ant-design/icons/CheckSquareOutlined";
 import OrderedListOutlined from "@ant-design/icons/OrderedListOutlined";
 import SettingOutlined from "@ant-design/icons/SettingOutlined";
 import SmileOutlined from "@ant-design/icons/SmileOutlined";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { observer } from "mobx-react-lite";
-import { Button, Modal } from "antd";
+import { Button, Modal, Popover } from "antd";
 import { useClientContext } from "./ClientContext";
 import DesktopOnlyTooltip from "./DesktopOnlyTooltip";
 import ScoresTable from "./ScoresTable";
@@ -188,7 +188,6 @@ function HeaderReactionButton({
   onSelectReaction: (reactionId: ReactionId) => void;
 }) {
   const [isOpen, setOpen] = useState(false);
-  const rootRef = useRef<HTMLDivElement>(null);
   const menuId = "pounce-reaction-menu";
 
   useEffect(() => {
@@ -201,66 +200,72 @@ function HeaderReactionButton({
         setOpen(false);
       }
     };
-    const closeOnOutsidePointerDown = (event: PointerEvent) => {
-      const root = rootRef.current;
-      if (root && !root.contains(event.target as Node)) {
-        setOpen(false);
-      }
-    };
 
     window.addEventListener("keydown", closeOnEscape);
-    document.addEventListener("pointerdown", closeOnOutsidePointerDown);
     return () => {
       window.removeEventListener("keydown", closeOnEscape);
-      document.removeEventListener("pointerdown", closeOnOutsidePointerDown);
     };
   }, [isOpen]);
 
-  return (
-    <div className={styles.reactionControl} ref={rootRef}>
-      <DesktopOnlyTooltip title="Send reaction">
+  const reactionMenu = (
+    <div
+      aria-label="Reactions"
+      className={styles.reactionMenu}
+      id={menuId}
+      role="menu"
+    >
+      {REACTION_OPTIONS.map((reaction) => (
         <button
-          aria-controls={isOpen ? menuId : undefined}
-          aria-expanded={isOpen}
-          aria-haspopup="menu"
-          aria-label="Send reaction"
-          className={`${styles.floatingButton} ${styles.iconButton} ${
-            isOpen ? styles.reactionButtonOpen : ""
-          }`}
-          onClick={() => setOpen((current) => !current)}
+          aria-label={`Send ${reaction.label} reaction`}
+          className={styles.reactionOption}
+          key={reaction.id}
+          onClick={() => {
+            onSelectReaction(reaction.id);
+            setOpen(false);
+          }}
+          role="menuitem"
           type="button"
         >
-          <SmileOutlined
-            aria-hidden="true"
-            className={styles.reactionIcon}
-            rev={undefined}
-          />
+          {reaction.emoji}
         </button>
-      </DesktopOnlyTooltip>
-      {isOpen ? (
-        <div
-          aria-label="Reactions"
-          className={styles.reactionMenu}
-          id={menuId}
-          role="menu"
-        >
-          {REACTION_OPTIONS.map((reaction) => (
+      ))}
+    </div>
+  );
+
+  return (
+    <div className={styles.reactionControl}>
+      <Popover
+        arrow={false}
+        autoAdjustOverflow
+        content={reactionMenu}
+        destroyTooltipOnHide
+        onOpenChange={setOpen}
+        open={isOpen}
+        placement="bottom"
+        rootClassName={styles.reactionPopover}
+        trigger="click"
+      >
+        <span className={styles.reactionTrigger}>
+          <DesktopOnlyTooltip title="Send reaction">
             <button
-              aria-label={`Send ${reaction.label} reaction`}
-              className={styles.reactionOption}
-              key={reaction.id}
-              onClick={() => {
-                onSelectReaction(reaction.id);
-                setOpen(false);
-              }}
-              role="menuitem"
+              aria-controls={isOpen ? menuId : undefined}
+              aria-expanded={isOpen}
+              aria-haspopup="menu"
+              aria-label="Send reaction"
+              className={`${styles.floatingButton} ${styles.iconButton} ${
+                isOpen ? styles.reactionButtonOpen : ""
+              }`}
               type="button"
             >
-              {reaction.emoji}
+              <SmileOutlined
+                aria-hidden="true"
+                className={styles.reactionIcon}
+                rev={undefined}
+              />
             </button>
-          ))}
-        </div>
-      ) : null}
+          </DesktopOnlyTooltip>
+        </span>
+      </Popover>
     </div>
   );
 }
