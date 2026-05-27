@@ -179,7 +179,7 @@ const CardContentMemo = observer(function CardContent({
           },
     [source, JSON.stringify(toJS(card)), board.pileLocs, geometry.x, geometry.y]
   );
-  const [{ isDragging, isDraggingOther, canDrag }, drag, preview] = useDrag(
+  const [{ isDragging, canDrag }, drag, preview] = useDrag(
     () =>
       source.type === "field_stack"
         ? {
@@ -188,8 +188,6 @@ const CardContentMemo = observer(function CardContent({
             collect: (monitor) => ({
               isDragging: !!monitor.isDragging(),
               canDrag: monitor.canDrag(),
-              isDraggingOther:
-                monitor.getItem() != null && monitor.getItem() !== item,
             }),
             isDragging: (monitor) => {
               const dragItem = monitor.getItem();
@@ -210,8 +208,6 @@ const CardContentMemo = observer(function CardContent({
             collect: (monitor) => ({
               isDragging: !!monitor.isDragging(),
               canDrag: monitor.canDrag(),
-              isDraggingOther:
-                monitor.getItem() != null && monitor.getItem() !== item,
               // TODO: Find a way to make this work, maybe a child component which
             }),
             isDragging: (monitor) => {
@@ -256,9 +252,9 @@ const CardContentMemo = observer(function CardContent({
         canClick && styles.clickable,
         canDrag && styles.draggable
       )}
+      data-is-dragging-this-card={isDragging ? "true" : undefined}
       style={
         {
-          pointerEvents: isDraggingOther ? "none" : "",
           zIndex: zIndexBase + zIndex + (isAnimating ? 1000 : 0),
           "--c": color,
           "--r": geometry.rotationDegrees + "deg",

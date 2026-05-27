@@ -29,6 +29,10 @@
 .draggable:active {
   cursor: grabbing;
 }
+:global([data-is-dragging-card="true"])
+  .root:not([data-is-dragging-this-card="true"]) {
+  pointer-events: none;
+}
 .clickable:hover .rotator,
 .draggable:hover .rotator {
   outline: 2px solid #ffe63f;

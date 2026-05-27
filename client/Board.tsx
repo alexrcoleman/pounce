@@ -142,6 +142,7 @@ export default observer(function Board({
     null
   );
   const [useTouch, setUseTouch] = useState<boolean | null>(null);
+  const boardRootRef = useRef<HTMLDivElement | null>(null);
   const { layout, ref } = useResponsiveBoardLayout({
     activePlayerIndex,
     board,
@@ -204,12 +205,16 @@ export default observer(function Board({
       backend={useTouch ? TouchBackend : HTML5Backend}
       key={String(useTouch)}
     >
-      <DragReporter onUpdateGrabbedItem={handleUpdateGrabbedItem} />
+      <DragReporter
+        boardRootRef={boardRootRef}
+        onUpdateGrabbedItem={handleUpdateGrabbedItem}
+      />
       <MobileDragPreviewLayer enabled easyReadCards={easyReadCards} />
       <div
         className={styles.root}
         data-card-readability={easyReadCards ? "easy" : "standard"}
         data-layout-mode={layout.mode}
+        ref={boardRootRef}
       >
         <BoardLayoutProvider value={layout}>
           <div className={styles.rootInside} ref={ref}>

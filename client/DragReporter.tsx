@@ -6,13 +6,17 @@ import { useDragDropManager } from "react-dnd";
 import { useClientContext } from "./ClientContext";
 
 type Props = {
+  boardRootRef: React.RefObject<HTMLDivElement | null>;
   onUpdateGrabbedItem: (
     item: CardState | null,
     items: CardState[] | null
   ) => void;
 };
 
-export default function DragReporter({ onUpdateGrabbedItem }: Props) {
+export default function DragReporter({
+  boardRootRef,
+  onUpdateGrabbedItem,
+}: Props) {
   const { state } = useClientContext();
   const manager = useDragDropManager();
   useEffect(() => {
@@ -24,6 +28,10 @@ export default function DragReporter({ onUpdateGrabbedItem }: Props) {
         return;
       }
       lastItem = item;
+      setBoardCardDragState(
+        boardRootRef.current,
+        item != null && isCardDragItemType(monitor.getItemType())
+      );
       setDocumentDragCursor(item != null);
       if (item == null) {
         onUpdateGrabbedItem(null, null);
@@ -35,9 +43,10 @@ export default function DragReporter({ onUpdateGrabbedItem }: Props) {
     });
     return () => {
       setDocumentDragCursor(false);
+      setBoardCardDragState(boardRootRef.current, false);
       unsub();
     };
-  }, [manager, onUpdateGrabbedItem, state]);
+  }, [boardRootRef, manager, onUpdateGrabbedItem, state]);
   return <React.Fragment />;
 }
 
@@ -47,6 +56,24 @@ function setDocumentDragCursor(isDragging: boolean) {
     return;
   }
   delete document.body.dataset.pounceDragging;
+}
+
+function setBoardCardDragState(
+  boardRoot: HTMLDivElement | null,
+  isDraggingCard: boolean
+) {
+  if (!boardRoot) {
+    return;
+  }
+  if (isDraggingCard) {
+    boardRoot.dataset.isDraggingCard = "true";
+    return;
+  }
+  delete boardRoot.dataset.isDraggingCard;
+}
+
+function isCardDragItemType(itemType: unknown): boolean {
+  return itemType === "card" || itemType === "field_stack";
 }
 
 function getDraggedCards(
