@@ -202,6 +202,7 @@ const CardContentMemo = observer(function CardContent({
               canInteract &&
               source.type === "field_stack" &&
               source.isTopCard,
+            options: { dropEffect: "move" },
           }
         : {
             type: "card",
@@ -229,7 +230,7 @@ const CardContentMemo = observer(function CardContent({
               );
             },
             canDrag: () => canInteract && source.type !== "other",
-            // options: { dropEffect: "move" },
+            options: { dropEffect: "move" },
           },
     [canInteract, source, item]
   );

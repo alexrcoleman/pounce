@@ -26,6 +26,9 @@
 .draggable {
   cursor: grab;
 }
+.draggable:active {
+  cursor: grabbing;
+}
 .clickable:hover .rotator,
 .draggable:hover .rotator {
   outline: 2px solid #ffe63f;

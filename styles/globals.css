@@ -35,6 +35,11 @@ body {
   box-sizing: border-box;
 }
 
+body[data-pounce-dragging="true"],
+body[data-pounce-dragging="true"] * {
+  cursor: grabbing !important;
+}
+
 [data-sonner-toast][data-styled="true"] {
   padding: 10px 12px;
 }
