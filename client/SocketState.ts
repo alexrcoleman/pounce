@@ -1,4 +1,4 @@
-import { BoardState, CursorState } from "../shared/GameUtils";
+import { BoardState, CursorState, isGameOver } from "../shared/GameUtils";
 import { makeAutoObservable } from "mobx";
 import deepClone from "../shared/deepClone";
 import { executeMove, type Move } from "../shared/MoveHandler";
@@ -99,6 +99,11 @@ export default class SocketState {
   }
   getEstimatedServerTime(now = Date.now()) {
     return now + this.serverClockOffset;
+  }
+  get isGameOver() {
+    // makeAutoObservable treats getters as computed, so observers only update
+    // when this broad pounce-deck scan changes the boolean result.
+    return this.board != null && isGameOver(this.board);
   }
   updateHands(hands: CursorState[]) {
     this.hands = applyDeepUpdate(this.hands, hands);

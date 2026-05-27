@@ -1,5 +1,6 @@
 import {
   ROUND_START_GO_DURATION_MS,
+  isRoundStartPending,
   type BoardState,
   type CardState,
   type CursorLocation,
@@ -12,7 +13,7 @@ import type { CSSProperties } from "react";
 import { DndProvider } from "react-dnd";
 import DragReporter from "./DragReporter";
 import { HTML5Backend } from "react-dnd-html5-backend";
-import { isBoardAcceptingMoves, type Move } from "../shared/MoveHandler";
+import { type Move } from "../shared/MoveHandler";
 import PlayerArea from "./PlayerArea";
 import PauseOverlay from "./PauseOverlay";
 import ScoresTable from "./ScoresTable";
@@ -67,7 +68,11 @@ function useIsBoardAcceptingMoves(
 ): boolean {
   const [, requestBoardAcceptingMovesCheck] = useState(0);
   const estimatedServerTime = getEstimatedServerTimeUntracked(state);
-  const isAcceptingMoves = isBoardAcceptingMoves(board, estimatedServerTime);
+  const isAcceptingMoves =
+    board.isActive &&
+    !board.isPaused &&
+    !isRoundStartPending(board, estimatedServerTime) &&
+    !state.isGameOver;
   const roundStartsAt = board.roundStartsAt ?? null;
   const nextCheckAt =
     board.isActive &&
