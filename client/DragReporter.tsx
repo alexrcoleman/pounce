@@ -24,6 +24,7 @@ export default function DragReporter({ onUpdateGrabbedItem }: Props) {
         return;
       }
       lastItem = item;
+      setDocumentDragCursor(item != null);
       if (item == null) {
         onUpdateGrabbedItem(null, null);
       } else if ("card" in item) {
@@ -32,9 +33,20 @@ export default function DragReporter({ onUpdateGrabbedItem }: Props) {
         onUpdateGrabbedItem(null, null);
       }
     });
-    return () => unsub();
+    return () => {
+      setDocumentDragCursor(false);
+      unsub();
+    };
   }, [manager, onUpdateGrabbedItem, state]);
   return <React.Fragment />;
+}
+
+function setDocumentDragCursor(isDragging: boolean) {
+  if (isDragging) {
+    document.body.dataset.pounceDragging = "true";
+    return;
+  }
+  delete document.body.dataset.pounceDragging;
 }
 
 function getDraggedCards(
