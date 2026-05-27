@@ -47,23 +47,43 @@
   56% {
     opacity: 1;
     transform: translate(-50%, -50%)
-      translateX(calc(var(--reaction-drift) * 0.45))
-      translateY(calc(var(--reaction-rise) * -0.55)) scale(1.04)
+      translateX(
+        calc(
+          (var(--reaction-travel-x) * 0.52) +
+            (var(--reaction-arc-x) * 0.72)
+        )
+      )
+      translateY(
+        calc(
+          (var(--reaction-travel-y) * 0.52) +
+            (var(--reaction-arc-y) * 0.72)
+        )
+      ) scale(1.04)
       rotate(calc(var(--reaction-rotation) * 0.45));
   }
 
   82% {
     opacity: 0.95;
     transform: translate(-50%, -50%)
-      translateX(calc(var(--reaction-drift) * 0.82))
-      translateY(calc(var(--reaction-rise) * -0.86)) scale(1.07)
+      translateX(
+        calc(
+          (var(--reaction-travel-x) * 0.84) +
+            (var(--reaction-arc-x) * 0.34)
+        )
+      )
+      translateY(
+        calc(
+          (var(--reaction-travel-y) * 0.84) +
+            (var(--reaction-arc-y) * 0.34)
+        )
+      ) scale(1.05)
       rotate(calc(var(--reaction-rotation) * 0.82));
   }
 
   100% {
     opacity: 0;
-    transform: translate(-50%, -50%) translateX(var(--reaction-drift))
-      translateY(calc(var(--reaction-rise) * -1)) scale(1.08)
+    transform: translate(-50%, -50%) translateX(var(--reaction-travel-x))
+      translateY(var(--reaction-travel-y)) scale(0.96)
       rotate(var(--reaction-rotation));
   }
 }

@@ -5,8 +5,13 @@ import { observer } from "mobx-react-lite";
 import type { BoardState } from "../shared/GameUtils";
 import { getPlayerLocation } from "../shared/CardLocations";
 import { getReactionOption, type PlayerReaction } from "../shared/Reactions";
-import type { BoardLayout } from "./BoardLayout";
-import { useBoardLayout } from "./BoardLayout";
+import {
+  FIELD_LEFT,
+  FIELD_SIZE,
+  FIELD_TOP,
+  type BoardLayout,
+  useBoardLayout,
+} from "./BoardLayout";
 import { useClientContext } from "./ClientContext";
 import {
   ACTIVE_HAND_PLATE_HEIGHT,
@@ -21,6 +26,7 @@ import styles from "./ReactionBubbles.module.css";
 
 const REACTION_BUBBLE_DURATION_MS = 4800;
 const REACTION_PLATE_TOP_OFFSET = 24;
+const REACTION_FIELD_EDGE_INSET = 46;
 
 export default observer(function ReactionBubbles() {
   const { state } = useClientContext();
@@ -85,9 +91,11 @@ function ReactionBubble({
       style={
         {
           "--reaction-color": reaction.playerColor,
-          "--reaction-drift": `${anchor.drift}px`,
-          "--reaction-rise": `${anchor.rise}px`,
+          "--reaction-arc-x": `${anchor.arcX}px`,
+          "--reaction-arc-y": `${anchor.arcY}px`,
           "--reaction-rotation": `${anchor.rotation}deg`,
+          "--reaction-travel-x": `${anchor.travelX}px`,
+          "--reaction-travel-y": `${anchor.travelY}px`,
           "--reaction-x": `${anchor.x}px`,
           "--reaction-y": `${anchor.y}px`,
         } as CSSProperties
@@ -116,11 +124,14 @@ function getBubbleAnchor({
   }
 
   const hash = hashString(reaction.eventId);
-  const area = { type: "player", playerIndex: reaction.playerIndex } as const;
-  const scale = layout.getScale(area);
+  const playerArea = {
+    type: "player",
+    playerIndex: reaction.playerIndex,
+  } as const;
+  const scale = layout.getScale(playerArea);
   if (scale <= 0.05) {
     return null;
-  };
+  }
 
   const [, playerTop] = getPlayerLocation(
     reaction.playerIndex,
@@ -138,25 +149,128 @@ function getBubbleAnchor({
     : isActivePlayer
     ? ACTIVE_HAND_PLATE_HEIGHT
     : HAND_PLATE_HEIGHT;
-  const xNudge = ((hash >>> 5) % 89) - 44;
+  const xNudge = (hash >>> 5) % 22;
   const yNudge = (hash >>> 11) % 18;
-  const [x, y] = layout.mapPoint(
-    [
-      HAND_PLATE_LEFT + HAND_PLATE_WIDTH / 2 + xNudge,
-      playerTop +
-        plateTopOffset +
-        Math.min(plateHeight - 34, REACTION_PLATE_TOP_OFFSET + yNudge),
-    ],
-    area
+  const plateY =
+    playerTop +
+    plateTopOffset +
+    Math.min(plateHeight - 34, REACTION_PLATE_TOP_OFFSET + yNudge);
+  const fieldArea = { type: "field" } as const;
+  const fieldCenter = layout.mapPoint(
+    [FIELD_LEFT + FIELD_SIZE / 2, FIELD_TOP + FIELD_SIZE / 2],
+    fieldArea
   );
+  const [x, y] = getNearestPlateLaunchPoint({
+    fieldCenter,
+    layout,
+    playerArea,
+    plateY,
+    xNudge,
+  });
+  const fieldTarget = getNearestFieldEdgeTarget({
+    layout,
+    startX: x,
+    startY: y,
+  });
+  const travelX = fieldTarget.x - x;
+  const travelY = fieldTarget.y - y;
+  const travelLength = Math.hypot(travelX, travelY);
+  const arcDistance = 18 + ((hash >>> 17) % 22);
+  const arcSign = (hash >>> 23) % 2 === 0 ? 1 : -1;
+  const arcX =
+    travelLength > 0 ? (-travelY / travelLength) * arcDistance * arcSign : 0;
+  const arcY =
+    (travelLength > 0
+      ? (travelX / travelLength) * arcDistance * arcSign
+      : -arcDistance) - 18;
 
   return {
-    drift: ((hash >>> 17) % 53) - 26,
-    rise: 180 + ((hash >>> 23) % 80),
     rotation: ((hash >>> 28) % 19) - 9,
+    arcX,
+    arcY,
+    travelX,
+    travelY,
     x,
     y,
   };
+}
+
+function getNearestPlateLaunchPoint({
+  fieldCenter,
+  layout,
+  playerArea,
+  plateY,
+  xNudge,
+}: {
+  fieldCenter: [number, number];
+  layout: BoardLayout;
+  playerArea: { type: "player"; playerIndex: number };
+  plateY: number;
+  xNudge: number;
+}) {
+  const launchXs = [
+    HAND_PLATE_LEFT + 58 + xNudge,
+    HAND_PLATE_LEFT + HAND_PLATE_WIDTH / 2 + xNudge - 11,
+    HAND_PLATE_LEFT + HAND_PLATE_WIDTH - 58 - xNudge,
+  ];
+
+  return launchXs
+    .map((launchX) => layout.mapPoint([launchX, plateY], playerArea))
+    .reduce((nearest, point) =>
+      getDistanceSquared(point, fieldCenter) <
+      getDistanceSquared(nearest, fieldCenter)
+        ? point
+        : nearest
+    );
+}
+
+function getNearestFieldEdgeTarget({
+  layout,
+  startX,
+  startY,
+}: {
+  layout: BoardLayout;
+  startX: number;
+  startY: number;
+}) {
+  const fieldArea = { type: "field" } as const;
+  const fieldScale = layout.getScale(fieldArea);
+  const inset = REACTION_FIELD_EDGE_INSET * fieldScale;
+  const [fieldLeft, fieldTop] = layout.mapPoint(
+    [FIELD_LEFT, FIELD_TOP],
+    fieldArea
+  );
+  const [fieldRight, fieldBottom] = layout.mapPoint(
+    [FIELD_LEFT + FIELD_SIZE, FIELD_TOP + FIELD_SIZE],
+    fieldArea
+  );
+  const targetLeft = Math.min(fieldLeft, fieldRight) + inset;
+  const targetRight = Math.max(fieldLeft, fieldRight) - inset;
+  const targetTop = Math.min(fieldTop, fieldBottom) + inset;
+  const targetBottom = Math.max(fieldTop, fieldBottom) - inset;
+  const clampedX = clamp(startX, targetLeft, targetRight);
+  const clampedY = clamp(startY, targetTop, targetBottom);
+  const edgeCandidates = [
+    { x: targetLeft, y: clampedY },
+    { x: targetRight, y: clampedY },
+    { x: clampedX, y: targetTop },
+    { x: clampedX, y: targetBottom },
+  ];
+
+  return edgeCandidates.reduce((nearest, point) =>
+    getDistanceSquared([point.x, point.y], [startX, startY]) <
+    getDistanceSquared([nearest.x, nearest.y], [startX, startY])
+      ? point
+      : nearest
+  );
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getDistanceSquared(a: [number, number], b: [number, number]) {
+  return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2;
 }
 
 function hashString(value: string): number {
