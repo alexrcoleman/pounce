@@ -2,6 +2,8 @@
   position: fixed;
   inset: 0;
   z-index: 1000000000;
+  /* Keep drag-preview layout, style invalidation, and paint isolated. */
+  contain: layout style paint;
   pointer-events: none;
 }
 
@@ -10,7 +12,12 @@
   width: var(--card-width);
   height: var(--stack-height);
   opacity: 0.9;
+  /* JS reveals this after writing the first pointer-aligned transform. */
+  visibility: hidden;
   transform-origin: 0% 0%;
+  transform: translate3d(-10000px, -10000px, 0) scale(var(--preview-scale));
+  /* The preview moves every drag frame, so prepare transform compositing. */
+  will-change: transform;
 }
 
 .card {

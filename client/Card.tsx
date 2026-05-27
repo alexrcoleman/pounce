@@ -234,8 +234,10 @@ const CardContentMemo = observer(function CardContent({
     [canInteract, source, item]
   );
   useEffect(() => {
+    // React DnD clears the preview connection when the source handler changes,
+    // which happens when a card becomes a draggable center field stack.
     preview(getEmptyImage(), { captureDraggingState: true });
-  }, [preview]);
+  }, [preview, source.type]);
   // So moving cards are "lifted" while moving
   useEffect(() => {
     setIsAnimating(true);

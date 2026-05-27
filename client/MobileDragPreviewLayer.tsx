@@ -1,4 +1,5 @@
-import { useDragLayer } from "react-dnd";
+import { useDragDropManager, useDragLayer } from "react-dnd";
+import { useEffect, useRef } from "react";
 import type { CSSProperties } from "react";
 
 import { CardDnDItem } from "./CardDnDItem";
@@ -20,16 +21,57 @@ export default function MobileDragPreviewLayer({
   enabled,
 }: Props) {
   const { state } = useClientContext();
-  const { item, itemType, isDragging, currentOffset } = useDragLayer(
+  const manager = useDragDropManager();
+  const cardStackRef = useRef<HTMLDivElement | null>(null);
+  const { item, itemType, isDragging } = useDragLayer(
     (monitor) => ({
       item: monitor.getItem(),
       itemType: monitor.getItemType(),
       isDragging: monitor.isDragging(),
-      currentOffset: monitor.getClientOffset(),
     })
   );
 
-  if (!enabled || !isDragging || !currentOffset) {
+  useEffect(() => {
+    if (!enabled || !isDragging) {
+      return;
+    }
+
+    const monitor = manager.getMonitor();
+    let frameId: number | null = null;
+
+    const updatePreviewPosition = () => {
+      frameId = null;
+      const node = cardStackRef.current;
+      const offset = monitor.getClientOffset();
+      if (!node || !offset) {
+        return;
+      }
+
+      node.style.transform = getPreviewTransform(offset.x, offset.y);
+      node.style.visibility = "visible";
+    };
+
+    const schedulePreviewPositionUpdate = () => {
+      if (frameId != null) {
+        return;
+      }
+      frameId = window.requestAnimationFrame(updatePreviewPosition);
+    };
+
+    updatePreviewPosition();
+    const unsubscribe = monitor.subscribeToOffsetChange(
+      schedulePreviewPositionUpdate
+    );
+
+    return () => {
+      unsubscribe();
+      if (frameId != null) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, [enabled, isDragging, manager]);
+
+  if (!enabled || !isDragging) {
     return null;
   }
 
@@ -50,16 +92,13 @@ export default function MobileDragPreviewLayer({
       data-card-readability={easyReadCards ? "easy" : "standard"}
     >
       <div
+        ref={cardStackRef}
         className={styles.cardStack}
         style={{
           "--card-width": `${CARD_WIDTH}px`,
           "--card-height": `${CARD_HEIGHT}px`,
           "--stack-height": `${stackHeight}px`,
-          transform: `translate(${
-            currentOffset.x - (CARD_WIDTH * CARD_BASE_SCALE) / 2
-          }px, ${
-            currentOffset.y - (CARD_HEIGHT * CARD_BASE_SCALE) / 2
-          }px) scale(${CARD_BASE_SCALE})`,
+          "--preview-scale": `${CARD_BASE_SCALE}`,
         } as CSSProperties}
       >
         {cards.map((card, index) => (
@@ -79,6 +118,12 @@ export default function MobileDragPreviewLayer({
       </div>
     </div>
   );
+}
+
+function getPreviewTransform(x: number, y: number): string {
+  return `translate3d(${x - (CARD_WIDTH * CARD_BASE_SCALE) / 2}px, ${
+    y - (CARD_HEIGHT * CARD_BASE_SCALE) / 2
+  }px, 0) scale(${CARD_BASE_SCALE})`;
 }
 
 function getPreviewCards(
