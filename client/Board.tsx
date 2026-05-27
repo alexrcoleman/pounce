@@ -23,6 +23,7 @@ import styles from "./Board.module.css";
 import BorderOutlined from "@ant-design/icons/BorderOutlined";
 import CheckSquareOutlined from "@ant-design/icons/CheckSquareOutlined";
 
+import { untracked } from "mobx";
 import { observer } from "mobx-react-lite";
 import CardsLayer from "./CardsLayer";
 import HandsLayer from "./HandsLayer";
@@ -56,13 +57,16 @@ type Props = {
   zoom: number;
 };
 
+function getEstimatedServerTimeUntracked(state: SocketState): number {
+  return untracked(() => state.getEstimatedServerTime());
+}
+
 function useIsBoardAcceptingMoves(
   state: SocketState,
   board: BoardState
 ): boolean {
   const [, requestBoardAcceptingMovesCheck] = useState(0);
-  const serverClockOffset = state.serverClockOffset;
-  const estimatedServerTime = Date.now() + serverClockOffset;
+  const estimatedServerTime = getEstimatedServerTimeUntracked(state);
   const isAcceptingMoves = isBoardAcceptingMoves(board, estimatedServerTime);
   const roundStartsAt = board.roundStartsAt ?? null;
   const nextCheckAt =
@@ -80,10 +84,10 @@ function useIsBoardAcceptingMoves(
 
     const timeoutId = window.setTimeout(
       () => requestBoardAcceptingMovesCheck((check) => check + 1),
-      Math.max(0, nextCheckAt - state.getEstimatedServerTime())
+      Math.max(0, nextCheckAt - getEstimatedServerTimeUntracked(state))
     );
     return () => window.clearTimeout(timeoutId);
-  }, [nextCheckAt, serverClockOffset, state]);
+  }, [nextCheckAt, state]);
 
   return isAcceptingMoves;
 }
