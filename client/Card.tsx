@@ -1,4 +1,4 @@
-import type { CardState, CursorState } from "../shared/GameUtils";
+import type { CardState } from "../shared/GameUtils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import CardFace from "./CardFace";
@@ -21,8 +21,6 @@ import {
   getCardScreenGeometry,
   getPosition,
 } from "./cardGeometry";
-import { cardEquals } from "../shared/CardUtils";
-import { getCursorItemCards } from "../shared/GameUtils";
 
 type Props = {
   card: CardState;
@@ -30,6 +28,7 @@ type Props = {
   onClick?: () => void;
   location: CardLocation;
   isHandTarget?: boolean;
+  isRemoteCursorDragged?: boolean;
   postGameStage?: number;
 };
 
@@ -41,6 +40,7 @@ const CardContentMemo = observer(function CardContent({
   canInteract = true,
   location,
   isHandTarget,
+  isRemoteCursorDragged = false,
   onClick,
   postGameStage,
 }: Props) {
@@ -248,11 +248,6 @@ const CardContentMemo = observer(function CardContent({
   }, [positionX, positionY, zIndex]);
 
   const canClick = canInteract && onClick != null;
-  const isRemoteCursorDragged = isCardInRemoteCursorDrag(
-    card,
-    state.hands,
-    activePlayerIndex
-  );
   return (
     <div
       className={joinClasses(
@@ -329,18 +324,6 @@ function getCursorUpdate(
     return { location: card };
   }
   return { location: card, item: card };
-}
-
-function isCardInRemoteCursorDrag(
-  card: CardState,
-  hands: CursorState[],
-  activePlayerIndex: number
-): boolean {
-  return hands.some(
-    (hand, index) =>
-      index !== activePlayerIndex &&
-      getCursorItemCards(hand).some((cursorCard) => cardEquals(cursorCard, card))
-  );
 }
 
 function getSource(

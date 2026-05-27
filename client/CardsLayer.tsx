@@ -1,9 +1,12 @@
 import { observer } from "mobx-react-lite";
 import Card from "./Card";
-import SocketState from "./SocketState";
 import { useCallback, useEffect, useState } from "react";
 import { Move } from "../shared/MoveHandler";
-import { CardState } from "../shared/GameUtils";
+import {
+  CardState,
+  CursorState,
+  getCursorItemCards,
+} from "../shared/GameUtils";
 import { useClientContext } from "./ClientContext";
 
 export default observer(function CardsLayer({
@@ -21,6 +24,11 @@ export default observer(function CardsLayer({
   const flipDeck = useCallback(() => {
     executeMove({ type: "flip_deck" });
   }, [executeMove]);
+  const activePlayerIndex = state.getActivePlayerIndex();
+  const remoteDraggedCardKeys = getRemoteDraggedCardKeys(
+    state.hands,
+    activePlayerIndex
+  );
 
   const [postGameStage, setPostGameStage] = useState(0);
   const shouldRunPostGameCleanup = !board.isActive && board.pouncer != null;
@@ -57,13 +65,16 @@ export default observer(function CardsLayer({
             })}
             postGameStage={postGameStage}
             isHandTarget={canInteract}
+            isRemoteCursorDragged={remoteDraggedCardKeys.has(
+              getCardKey(card)
+            )}
           />
         );
       })
     )
     .concat(
       board.players.flatMap((player, playerIndex) => {
-        const isActivePlayer = playerIndex === state.getActivePlayerIndex();
+        const isActivePlayer = playerIndex === activePlayerIndex;
         return [
           player.deck.map((card, index) => {
             const isTopCard = index === player.deck.length - 1;
@@ -79,6 +90,9 @@ export default observer(function CardsLayer({
                 }
                 location={stableObject({ type: "deck", cardIndex: index })}
                 isHandTarget={canInteract && isTopCard && isActivePlayer}
+                isRemoteCursorDragged={remoteDraggedCardKeys.has(
+                  getCardKey(card)
+                )}
                 postGameStage={postGameStage}
               />
             );
@@ -100,6 +114,9 @@ export default observer(function CardsLayer({
                     : undefined
                 }
                 isHandTarget={canInteract && isTopCard && isActivePlayer}
+                isRemoteCursorDragged={remoteDraggedCardKeys.has(
+                  getCardKey(card)
+                )}
                 postGameStage={postGameStage}
               />
             );
@@ -117,6 +134,9 @@ export default observer(function CardsLayer({
                   cardIndex: index,
                 })}
                 isHandTarget={canInteract && isTopCard && isActivePlayer}
+                isRemoteCursorDragged={remoteDraggedCardKeys.has(
+                  getCardKey(card)
+                )}
                 postGameStage={postGameStage}
               />
             );
@@ -134,6 +154,9 @@ export default observer(function CardsLayer({
                     cardIndex: index,
                   })}
                   isHandTarget={canInteract && isActivePlayer}
+                  isRemoteCursorDragged={remoteDraggedCardKeys.has(
+                    getCardKey(card)
+                  )}
                   postGameStage={postGameStage}
                 />
               );
@@ -151,6 +174,20 @@ export default observer(function CardsLayer({
 
 export function getCardKey(card: CardState) {
   return card.player + ":" + card.value + "_" + card.suit;
+}
+
+function getRemoteDraggedCardKeys(
+  hands: CursorState[],
+  activePlayerIndex: number
+) {
+  const keys = new Set<string>();
+  hands.forEach((hand, index) => {
+    if (index === activePlayerIndex) {
+      return;
+    }
+    getCursorItemCards(hand).forEach((card) => keys.add(getCardKey(card)));
+  });
+  return keys;
 }
 
 const memo: Record<string, unknown> = {};

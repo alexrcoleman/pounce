@@ -4,6 +4,7 @@
   width: 55px;
   transition: transform 0.5s ease-in-out, opacity 0.25s ease-in-out;
   user-select: none;
+  contain: layout style;
   transform-origin: 0% 0%;
   transform: translate(var(--x), var(--y)) scale(var(--s), var(--s));
 }
