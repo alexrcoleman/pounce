@@ -495,7 +495,7 @@
 
 .moment {
   display: grid;
-  grid-template-columns: 54px minmax(0, 1fr);
+  grid-template-columns: 64px minmax(0, 1fr);
   gap: 10px;
   min-width: 0;
   width: 100%;
@@ -529,6 +529,7 @@
   line-height: 1;
   text-align: center;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .high {
