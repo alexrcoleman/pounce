@@ -243,8 +243,8 @@ function clampVolume(volume: number): number {
 }
 
 function runWhenIdle(callback: () => void): void {
-  if (requestIdleCallback) {
-    requestIdleCallback(callback, { timeout: 3000 });
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(callback, { timeout: 3000 });
     return;
   }
 
