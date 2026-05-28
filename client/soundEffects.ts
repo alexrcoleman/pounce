@@ -39,36 +39,46 @@ const BASE_SOUND_VOLUMES: Record<SoundEffect, number> = {
   place_card: 0.58,
   place_card_2: 0.58,
   place_card_3: 0.58,
-  move_stack_in_hand: .58,
-  move_card_in_hand: .5,
+  move_stack_in_hand: 0.58,
+  move_card_in_hand: 0.5,
   three_card_flip: 0.15,
   three_card_flip_2: 0.15,
   pick_up_deck: 0.15,
 };
 
-const audioPools = new Map<SoundEffect, HTMLAudioElement[]>();
-const MAX_POOL_SIZE = 10;
+const audioDataPromises = new Map<SoundEffect, Promise<ArrayBuffer>>();
+const audioBufferPromises = new Map<SoundEffect, Promise<AudioBuffer>>();
 const LOCAL_PLAYER_VOLUME_MULTIPLIER = 1.25;
 const OTHER_PLAYER_VOLUME_MULTIPLIER = 0.72;
 const CENTER_PLAY_VOLUME_MULTIPLIER = 1.25;
 const SOLITAIRE_PLAY_VOLUME_MULTIPLIER = 0.5;
-export const DEFAULT_SOUND_EFFECT_VOLUME_PERCENT = 100;
-let soundEffectVolumeMultiplier = 1;
+export const DEFAULT_SOUND_EFFECT_VOLUME_PERCENT = 0;
+let audioContext: AudioContext | null = null;
+let soundEffectVolumeMultiplier = DEFAULT_SOUND_EFFECT_VOLUME_PERCENT / 100;
+let didRegisterAudioUnlockListeners = false;
 
 export function setSoundEffectVolumePercent(volumePercent: number): void {
   soundEffectVolumeMultiplier = clampVolume(volumePercent / 100);
+
+  if (soundEffectVolumeMultiplier > 0) {
+    registerAudioUnlockListeners();
+    runWhenIdle(preloadDecodedSoundEffects);
+  }
 }
 
 export function preloadSoundEffects(): void {
-  if (typeof window === "undefined" || typeof Audio === "undefined") {
+  if (typeof window === "undefined" || typeof window.fetch !== "function") {
     return;
   }
 
   runWhenIdle(() => {
     (Object.keys(SOUND_SOURCES) as SoundEffect[]).forEach((soundEffect) => {
-      const audio = getAudioElement(soundEffect);
-      audio.load();
+      void fetchSoundEffectData(soundEffect).catch(ignoreAudioLoadError);
     });
+
+    if (soundEffectVolumeMultiplier > 0) {
+      preloadDecodedSoundEffects();
+    }
   });
 }
 
@@ -103,18 +113,18 @@ function getActionDelay(soundEffect: SoundEffect) {
 
 function getMoveSoundEffect(move: Move): SoundEffect | null {
   if (move.type === "cycle") {
-    return Math.random() < .5 ? "three_card_flip" : "three_card_flip_2";
+    return Math.random() < 0.5 ? "three_card_flip" : "three_card_flip_2";
   }
 
   if (move.type === "flip_deck") {
     return "pick_up_deck";
   }
 
-  if (move.type === 's2s' && move.count > 1) {
-    return 'move_stack_in_hand';
+  if (move.type === "s2s" && move.count > 1) {
+    return "move_stack_in_hand";
   }
-  if (move.type === 'c2s' || move.type === 's2s') {
-    return 'move_card_in_hand';
+  if (move.type === "c2s" || move.type === "s2s") {
+    return "move_card_in_hand";
   }
   if (move.type === "c2c") {
     return pickRandomSoundEffect([
@@ -123,7 +133,6 @@ function getMoveSoundEffect(move: Move): SoundEffect | null {
       "place_card_3",
     ]);
   }
-
 
   return null;
 }
@@ -164,7 +173,9 @@ function pickRandomSoundEffect<T extends SoundEffect>(
 }
 
 function isDeckAdvanceSound(soundEffect: SoundEffect): boolean {
-  return soundEffect.includes("three_card_flip") || soundEffect === "pick_up_deck";
+  return (
+    soundEffect.includes("three_card_flip") || soundEffect === "pick_up_deck"
+  );
 }
 
 function getPlaybackRate(): number {
@@ -174,68 +185,196 @@ function getPlaybackRate(): number {
 
 function playSoundEffect(
   soundEffect: SoundEffect,
-  options: { playbackRate: number; volume: number; }
+  options: { playbackRate: number; volume: number }
 ): void {
-  if (typeof window === "undefined" || typeof Audio === "undefined") {
+  if (typeof window === "undefined") {
     return;
   }
 
-  const audio = getAudioElement(soundEffect);
-  setPreservesPitch(audio, false);
-  audio.playbackRate = options.playbackRate;
-  audio.volume = options.volume;
-  audio.currentTime = 0;
-  void audio.play().catch(() => {
-    // Browsers can reject play() before the user has interacted with the page.
+  void playWebAudioSoundEffect(soundEffect, options).catch(ignoreAudioLoadError);
+}
+
+async function playWebAudioSoundEffect(
+  soundEffect: SoundEffect,
+  options: { playbackRate: number; volume: number }
+): Promise<void> {
+  const context = getAudioContext();
+  if (!context) {
+    return;
+  }
+
+  const resumePromise =
+    context.state === "suspended"
+      ? context.resume().catch(ignoreAudioLoadError)
+      : Promise.resolve();
+  const buffer = await loadAudioBuffer(soundEffect);
+  await resumePromise;
+
+  if (context.state === "suspended") {
+    registerAudioUnlockListeners();
+    return;
+  }
+
+  const source = context.createBufferSource();
+  const gain = context.createGain();
+  source.buffer = buffer;
+  source.playbackRate.setValueAtTime(
+    options.playbackRate,
+    context.currentTime
+  );
+  gain.gain.setValueAtTime(options.volume, context.currentTime);
+  source.connect(gain);
+  gain.connect(context.destination);
+  source.onended = () => {
+    source.disconnect();
+    gain.disconnect();
+  };
+  source.start();
+}
+
+function preloadDecodedSoundEffects(): void {
+  (Object.keys(SOUND_SOURCES) as SoundEffect[]).forEach((soundEffect) => {
+    void loadAudioBuffer(soundEffect).catch(ignoreAudioLoadError);
   });
 }
 
-function getAudioElement(soundEffect: SoundEffect): HTMLAudioElement {
-  const pool = audioPools.get(soundEffect) ?? [];
-  audioPools.set(soundEffect, pool);
-
-  const availableAudio = pool.find((audio) => audio.paused || audio.ended);
-  if (availableAudio) {
-    return availableAudio;
+function fetchSoundEffectData(soundEffect: SoundEffect): Promise<ArrayBuffer> {
+  const existingPromise = audioDataPromises.get(soundEffect);
+  if (existingPromise) {
+    return existingPromise;
   }
 
-  if (pool.length >= MAX_POOL_SIZE) {
-    return getAudioClosestToEnd(pool);
+  const promise = fetch(SOUND_SOURCES[soundEffect])
+    .then((response) => {
+      if (!response.ok) {
+        throw new Error(`Failed to load sound effect: ${soundEffect}`);
+      }
+
+      return response.arrayBuffer();
+    })
+    .catch((error) => {
+      audioDataPromises.delete(soundEffect);
+      throw error;
+    });
+  audioDataPromises.set(soundEffect, promise);
+  return promise;
+}
+
+function loadAudioBuffer(soundEffect: SoundEffect): Promise<AudioBuffer> {
+  const existingPromise = audioBufferPromises.get(soundEffect);
+  if (existingPromise) {
+    return existingPromise;
   }
 
-  const audio = new Audio(SOUND_SOURCES[soundEffect]);
-  audio.preload = "auto";
-  pool.push(audio);
-  return audio;
-}
-
-function getAudioClosestToEnd(
-  pool: readonly HTMLAudioElement[]
-): HTMLAudioElement {
-  return pool.reduce((closestAudio, audio) =>
-    getPlaybackProgress(audio) > getPlaybackProgress(closestAudio)
-      ? audio
-      : closestAudio
-  );
-}
-
-function getPlaybackProgress(audio: HTMLAudioElement): number {
-  if (Number.isFinite(audio.duration) && audio.duration > 0) {
-    return audio.currentTime / audio.duration;
+  const context = getAudioContext();
+  if (!context) {
+    return Promise.reject(new Error("Web Audio is unavailable."));
   }
 
-  return audio.currentTime;
+  const promise = fetchSoundEffectData(soundEffect)
+    .then((audioData) => decodeAudioData(context, audioData.slice(0)))
+    .catch((error) => {
+      audioBufferPromises.delete(soundEffect);
+      throw error;
+    });
+  audioBufferPromises.set(soundEffect, promise);
+  return promise;
 }
 
-function setPreservesPitch(audio: HTMLAudioElement, preservesPitch: boolean) {
-  const pitchAudio = audio as HTMLAudioElement & {
-    preservesPitch?: boolean;
-    mozPreservesPitch?: boolean;
-    webkitPreservesPitch?: boolean;
-  };
-  pitchAudio.preservesPitch = preservesPitch;
-  pitchAudio.mozPreservesPitch = preservesPitch;
-  pitchAudio.webkitPreservesPitch = preservesPitch;
+function getAudioContext(): AudioContext | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  if (audioContext && audioContext.state !== "closed") {
+    return audioContext;
+  }
+
+  const AudioContextConstructor =
+    window.AudioContext ??
+    (window as Window & {
+      webkitAudioContext?: typeof AudioContext;
+    }).webkitAudioContext;
+  if (!AudioContextConstructor) {
+    return null;
+  }
+
+  audioContext = new AudioContextConstructor();
+  return audioContext;
+}
+
+function decodeAudioData(
+  context: AudioContext,
+  audioData: ArrayBuffer
+): Promise<AudioBuffer> {
+  return new Promise((resolve, reject) => {
+    const decodePromise = context.decodeAudioData(
+      audioData,
+      resolve,
+      reject
+    );
+    if (decodePromise) {
+      decodePromise.then(resolve, reject);
+    }
+  });
+}
+
+function registerAudioUnlockListeners(): void {
+  if (typeof window === "undefined" || didRegisterAudioUnlockListeners) {
+    return;
+  }
+
+  didRegisterAudioUnlockListeners = true;
+  const options = { passive: true };
+  AUDIO_UNLOCK_EVENTS.forEach((eventName) => {
+    window.addEventListener(eventName, unlockAudioPlayback, options);
+  });
+}
+
+const AUDIO_UNLOCK_EVENTS = [
+  "pointerdown",
+  "touchstart",
+  "mousedown",
+  "keydown",
+] as const;
+
+function unlockAudioPlayback(): void {
+  if (soundEffectVolumeMultiplier <= 0) {
+    return;
+  }
+
+  const context = getAudioContext();
+  if (!context) {
+    removeAudioUnlockListeners();
+    return;
+  }
+
+  const resumePromise =
+    context.state === "suspended"
+      ? context.resume().catch(ignoreAudioLoadError)
+      : Promise.resolve();
+  void resumePromise.then(() => {
+    preloadDecodedSoundEffects();
+    if (context.state === "running") {
+      removeAudioUnlockListeners();
+    }
+  });
+}
+
+function removeAudioUnlockListeners(): void {
+  if (typeof window === "undefined" || !didRegisterAudioUnlockListeners) {
+    return;
+  }
+
+  didRegisterAudioUnlockListeners = false;
+  AUDIO_UNLOCK_EVENTS.forEach((eventName) => {
+    window.removeEventListener(eventName, unlockAudioPlayback);
+  });
+}
+
+function ignoreAudioLoadError(): void {
+  // Audio is best-effort; unsupported autoplay or decode failures should not
+  // affect gameplay.
 }
 
 function clampVolume(volume: number): number {
