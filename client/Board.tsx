@@ -12,7 +12,6 @@ import type { CSSProperties } from "react";
 
 import { DndProvider } from "react-dnd";
 import DragReporter from "./DragReporter";
-import { HTML5Backend } from "react-dnd-html5-backend";
 import { type Move } from "../shared/MoveHandler";
 import PlayerArea from "./PlayerArea";
 import PauseOverlay from "./PauseOverlay";
@@ -56,6 +55,11 @@ type Props = {
   easyReadCards: boolean;
   roomId?: string | null;
   zoom: number;
+};
+
+const DESKTOP_DND_BACKEND_OPTIONS = {
+  enableMouseEvents: true,
+  enableTouchEvents: false,
 };
 
 function getEstimatedServerTimeUntracked(state: SocketState): number {
@@ -202,8 +206,9 @@ export default observer(function Board({
   }
   return (
     <DndProvider
-      backend={useTouch ? TouchBackend : HTML5Backend}
-      key={String(useTouch)}
+      backend={TouchBackend}
+      options={useTouch ? undefined : DESKTOP_DND_BACKEND_OPTIONS}
+      key={useTouch ? "touch" : "mouse"}
     >
       <DragReporter
         boardRootRef={boardRootRef}
