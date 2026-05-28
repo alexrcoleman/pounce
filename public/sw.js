@@ -1,4 +1,4 @@
-const CACHE_NAME = "pounce-offline-v13";
+const CACHE_NAME = "pounce-offline-v14";
 const GAME_ASSET_MANIFEST_URL = "/game-assets.json";
 const OFFLINE_PAGES = ["/", "/offline"];
 const APP_SHELL = [...OFFLINE_PAGES, GAME_ASSET_MANIFEST_URL];
@@ -59,6 +59,7 @@ self.addEventListener("fetch", (event) => {
     url.pathname.endsWith(".svg") ||
     url.pathname.endsWith(".png") ||
     url.pathname.endsWith(".webp") ||
+    url.pathname.endsWith(".wav") ||
     url.pathname.endsWith(".woff2")
   ) {
     event.respondWith(networkFirst(request, undefined, { cache: "reload" }));
@@ -145,6 +146,14 @@ function getGameAssetUrls(manifest) {
 
   if (Array.isArray(manifest.preload)) {
     manifest.preload.forEach((asset) => {
+      if (asset && typeof asset.href === "string") {
+        urls.push(asset.href);
+      }
+    });
+  }
+
+  if (Array.isArray(manifest.prefetch)) {
+    manifest.prefetch.forEach((asset) => {
       if (asset && typeof asset.href === "string") {
         urls.push(asset.href);
       }

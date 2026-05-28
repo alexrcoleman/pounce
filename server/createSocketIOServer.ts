@@ -9,6 +9,7 @@ import {
 } from "../shared/GameUtils";
 import {
   broadcastHands,
+  broadcastRoomAction,
   broadcastRoomToast,
   broadcastUpdate,
   createRoom,
@@ -260,7 +261,8 @@ export default function createSocketIOServer() {
         });
         return;
       }
-      recordRoundSnapshot(room, "move", Date.now(), pid, args.payload);
+      const acceptedAt = Date.now();
+      recordRoundSnapshot(room, "move", acceptedAt, pid, args.payload);
       if (result.boardChanged && isProductiveMove(args.payload)) {
         clearRoomStuckPlayers(room);
       }
@@ -278,6 +280,13 @@ export default function createSocketIOServer() {
       markRoomUpdated(user.currentRoom);
       ack?.({ actionId: args.actionId, ok: true, revision: room.revision });
       broadcastUpdate(user.currentRoom);
+      broadcastRoomAction(user.currentRoom, {
+        type: "move",
+        actionId: args.actionId,
+        playerIndex: pid,
+        move: args.payload,
+        time: acceptedAt,
+      });
       if (didResetHand) {
         broadcastHands(user.currentRoom);
       }

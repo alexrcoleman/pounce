@@ -41,6 +41,10 @@ module.exports = {
       test: /\.woff2$/i,
       type: "asset/resource",
     });
+    config.module.rules.push({
+      test: /\.wav$/i,
+      type: "asset/resource",
+    });
 
     return config;
   },

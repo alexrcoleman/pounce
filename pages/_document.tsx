@@ -9,6 +9,7 @@ import Document, {
 import {
   APPLE_TOUCH_ICON_SRC,
   FAVICON_SRC,
+  HEAD_PREFETCH_ASSETS,
   HEAD_PRELOAD_ASSETS,
 } from "../shared/gameAssets";
 
@@ -33,7 +34,16 @@ export default function MyDocument() {
             crossOrigin={asset.crossOrigin}
           />
         ))}
-
+        {HEAD_PREFETCH_ASSETS.map((asset) => (
+          <link
+            key={asset.href}
+            rel="prefetch"
+            href={asset.href}
+            as={asset.as}
+            type={asset.type}
+            crossOrigin={asset.crossOrigin}
+          />
+        ))}
       </Head>
       <body>
         <Main />

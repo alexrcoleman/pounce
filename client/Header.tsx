@@ -38,6 +38,8 @@ type Props = {
   setEasyReadCards: (use: boolean) => void;
   scale: number;
   setScale: (scale: number) => void;
+  soundEffectVolume: number;
+  setSoundEffectVolume: (volume: number) => void;
 };
 
 export default observer(function Header(props: Props) {
@@ -175,7 +177,9 @@ export default observer(function Header(props: Props) {
           setLeftHandedMode={props.setLeftHandedMode}
           setPage={setSettingsPage}
           setScale={props.setScale}
+          setSoundEffectVolume={props.setSoundEffectVolume}
           setUseAnimations={props.setUseAnimations}
+          soundEffectVolume={props.soundEffectVolume}
           useAnimations={props.useAnimations}
         />
       ) : null}

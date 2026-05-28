@@ -11,13 +11,14 @@ import queenBlackImage from "../public/card-faces/queen-black.webp";
 import queenRedImage from "../public/card-faces/queen-red.webp";
 import singleDayFontSrc from "../public/fonts/single-day-korean-400-normal.woff2";
 import tableWoodTileImage from "../public/table-wood-tile.webp";
+import { WAV_AUDIO_ASSETS } from "./sfxAssets";
 
 export type FaceCardColor = "red" | "black";
 export type FaceCardRank = "jack" | "queen" | "king";
 
 type PreloadAsset = {
   href: string;
-  as: "font" | "image";
+  as: "audio" | "font" | "image";
   type: string;
   crossOrigin?: string;
 };
@@ -25,6 +26,7 @@ type PreloadAsset = {
 type GameAssetManifest = {
   faceCards: Record<FaceCardColor, Record<FaceCardRank, string>>;
   preload: PreloadAsset[];
+  prefetch: PreloadAsset[];
   offline: string[];
 };
 
@@ -116,6 +118,7 @@ export const GAME_ASSET_MANIFEST: GameAssetManifest = {
       crossOrigin: "anonymous",
     },
   ],
+  prefetch: WAV_AUDIO_ASSETS.map((src) => ({ href: src, as: "audio", type: "audio/wav", })),
   offline: [
     "/manifest.webmanifest",
     FAVICON_SRC,
@@ -139,8 +142,12 @@ export const HEAD_PRELOAD_ASSETS: PreloadAsset[] = [
   }, []),
 ];
 
+export const HEAD_PREFETCH_ASSETS: PreloadAsset[] =
+  GAME_ASSET_MANIFEST.prefetch;
+
 export const OFFLINE_STATIC_ASSETS = [
   "/game-assets.json",
   ...GAME_ASSET_MANIFEST.offline,
   ...HEAD_PRELOAD_ASSETS.map((asset) => asset.href),
+  ...HEAD_PREFETCH_ASSETS.map((asset) => asset.href),
 ];

@@ -21,6 +21,18 @@ export type ActionAck =
   | { actionId: string; ok: true; revision: number }
   | { actionId: string; ok: false; revision: number; reason?: string };
 
+export type RoomMoveAction = {
+  type: "move";
+  actionId: string;
+  playerIndex: number;
+  move: Move;
+  time: number;
+  revision: number;
+};
+
+export type RoomAction = RoomMoveAction;
+export type PendingRoomAction = Omit<RoomAction, "revision">;
+
 export type BoardUpdate = {
   board: BoardState;
   settings: RoomSettings;
@@ -70,6 +82,7 @@ export type ServerToClientEvents = {
   player_reaction: (args: PlayerReaction) => void;
   server_notice: (args: ServerNotice) => void;
   stuck_update: (args: StuckUpdate) => void;
+  room_action: (args: RoomAction) => void;
   update_hands: (args: { hands: CursorState[] }) => void;
   update: (args: BoardUpdate) => void;
 };

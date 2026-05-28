@@ -9,6 +9,7 @@ import {
 } from "../shared/RoomLogic";
 import type { RoundSnapshot } from "../shared/RoundAnalysis";
 import type { RoomToast } from "../shared/RoomToast";
+import type { PendingRoomAction, RoomAction } from "../shared/SocketTypes";
 
 export type ServerRoomState = RoomState & {
   io: Server;
@@ -37,11 +38,19 @@ export function createRoom(io: Server, roomId: string) {
   };
   room.interval = setInterval(() => {
     const currentRoom = rooms[roomId];
-    const { hasUpdate, hasHandUpdate, roomToast, roundAnalysisSnapshots } =
-      tickRoom(currentRoom);
+    const {
+      hasUpdate,
+      hasHandUpdate,
+      actions,
+      roomToast,
+      roundAnalysisSnapshots,
+    } = tickRoom(currentRoom);
     if (hasUpdate) {
       markRoomUpdated(roomId);
       broadcastUpdate(roomId);
+    }
+    if (actions.length > 0) {
+      broadcastRoomActions(roomId, actions);
     }
     if (hasHandUpdate) {
       broadcastHands(roomId);
@@ -83,6 +92,24 @@ export function broadcastHands(roomId: string) {
 
 export function broadcastRoomToast(roomId: string, roomToast: RoomToast) {
   getRoom(roomId).io.to(roomId).emit("room_toast", roomToast);
+}
+
+export function broadcastRoomAction(
+  roomId: string,
+  action: PendingRoomAction | RoomAction
+) {
+  const room = getRoom(roomId);
+  room.io.to(roomId).emit("room_action", {
+    ...action,
+    revision: room.revision,
+  });
+}
+
+export function broadcastRoomActions(
+  roomId: string,
+  actions: readonly (PendingRoomAction | RoomAction)[]
+) {
+  actions.forEach((action) => broadcastRoomAction(roomId, action));
 }
 
 export function getRoom(roomId: string) {

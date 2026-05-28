@@ -1,6 +1,8 @@
 import styles from "./Header.module.css";
+import AudioMutedOutlined from "@ant-design/icons/AudioMutedOutlined";
 import CloseOutlined from "@ant-design/icons/CloseOutlined";
-import { type ReactNode, useEffect, useState } from "react";
+import SoundOutlined from "@ant-design/icons/SoundOutlined";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react-lite";
 import { Button, Flex, Modal, Slider, Switch } from "antd";
 import { useClientContext } from "./ClientContext";
@@ -30,6 +32,8 @@ type SettingsDialogProps = {
   setEasyReadCards: (use: boolean) => void;
   scale: number;
   setScale: (scale: number) => void;
+  soundEffectVolume: number;
+  setSoundEffectVolume: (volume: number) => void;
 };
 
 const FAIR_HAND_ROTATION_HELP =
@@ -61,6 +65,9 @@ export default observer(function SettingsDialog({
     state.board?.players.filter((p) => p.disconnected).length ?? 0;
   const buildDate = useLocalBuildDate(process.env.NEXT_PUBLIC_BUILD_DATE);
   const [isFairHandHelpOpen, setFairHandHelpOpen] = useState(false);
+  const previousSoundEffectVolumeRef = useRef(
+    props.soundEffectVolume > 0 ? props.soundEffectVolume : 100
+  );
   const [localAICount, setLocalAICount] = useState(serverAICount);
   const currentAISpeed = state.roomSettings.aiSpeed ?? 3;
   const [aiDifficultyMode, setAIDifficultyMode] = useState<AIDifficultyMode>(
@@ -108,6 +115,21 @@ export default observer(function SettingsDialog({
       setFairHandHelpOpen(false);
     }
   }, [props.isSettingsOpen]);
+
+  useEffect(() => {
+    if (props.soundEffectVolume > 0) {
+      previousSoundEffectVolumeRef.current = props.soundEffectVolume;
+    }
+  }, [props.soundEffectVolume]);
+
+  const toggleSoundEffectMute = () => {
+    if (props.soundEffectVolume > 0) {
+      props.setSoundEffectVolume(0);
+      return;
+    }
+
+    props.setSoundEffectVolume(previousSoundEffectVolumeRef.current || 100);
+  };
 
   return (
     <Modal
@@ -373,6 +395,55 @@ export default observer(function SettingsDialog({
                 value={props.scale}
                 onChange={(v) => props.setScale(v)}
               />
+            </div>
+          </SettingsSection>
+          <SettingsSection title="Audio">
+            <div className={styles.volumeBlock}>
+              <div className={styles.sliderHeader}>
+                <span>Sound effects</span>
+                <strong>{Math.round(props.soundEffectVolume)}%</strong>
+              </div>
+              <div className={styles.volumeControl}>
+                <button
+                  type="button"
+                  className={styles.volumeMuteButton}
+                  aria-label={
+                    props.soundEffectVolume > 0
+                      ? "Mute sound effects"
+                      : "Unmute sound effects"
+                  }
+                  aria-pressed={props.soundEffectVolume === 0}
+                  title={
+                    props.soundEffectVolume > 0
+                      ? "Mute sound effects"
+                      : "Unmute sound effects"
+                  }
+                  onClick={toggleSoundEffectMute}
+                >
+                  {props.soundEffectVolume > 0 ? (
+                    <SoundOutlined
+                      aria-hidden="true"
+                      className={styles.volumeIcon}
+                      rev={undefined}
+                    />
+                  ) : (
+                    <AudioMutedOutlined
+                      aria-hidden="true"
+                      className={styles.volumeIcon}
+                      rev={undefined}
+                    />
+                  )}
+                </button>
+                <Slider
+                  aria-label="Sound effect volume"
+                  className={styles.volumeSlider}
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={props.soundEffectVolume}
+                  onChange={(v) => props.setSoundEffectVolume(v)}
+                />
+              </div>
             </div>
           </SettingsSection>
         </div>

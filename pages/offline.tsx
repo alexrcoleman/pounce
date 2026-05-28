@@ -10,8 +10,14 @@ import LoadingState from "../client/LoadingState";
 import type { NextPage } from "next";
 import joinClasses from "../client/joinClasses";
 import styles from "../client/Home.module.css";
+import {
+  DEFAULT_SOUND_EFFECT_VOLUME_PERCENT,
+  preloadSoundEffects,
+  setSoundEffectVolumePercent,
+} from "../client/soundEffects";
 import useLocalGame from "../client/useLocalGame";
 import useStoredBoolean from "../client/useStoredBoolean";
+import useStoredNumber from "../client/useStoredNumber";
 import { observer } from "mobx-react-lite";
 import { useRouter } from "next/router";
 
@@ -28,6 +34,12 @@ const OfflinePage: NextPage<{
     "pounce::easy-read-cards",
     true
   );
+  const [soundEffectVolume, setSoundEffectVolume] = useStoredNumber(
+    "pounce::sound-effect-volume",
+    DEFAULT_SOUND_EFFECT_VOLUME_PERCENT,
+    0,
+    100
+  );
   const [scale, setScale] = useState(1);
   const playerName = name || "Player";
   const { actions, isConnected, state, socket } = useLocalGame(playerName);
@@ -40,6 +52,14 @@ const OfflinePage: NextPage<{
       }
     }
   }, [name, setName]);
+
+  useEffect(() => {
+    setSoundEffectVolumePercent(soundEffectVolume);
+  }, [soundEffectVolume]);
+
+  useEffect(() => {
+    preloadSoundEffects();
+  }, []);
 
   useEffect(() => {
     const pauseIfActive = () => {
@@ -118,6 +138,8 @@ const OfflinePage: NextPage<{
             roomId="Offline"
             scale={scale}
             setScale={setScale}
+            soundEffectVolume={soundEffectVolume}
+            setSoundEffectVolume={setSoundEffectVolume}
           />
           <div className={styles.boardWrapper}>
             <Board

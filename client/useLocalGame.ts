@@ -45,7 +45,12 @@ import {
 } from "../shared/RoomLogic";
 import deepClone from "../shared/deepClone";
 import { Actions } from "./useGameSocket";
-import { type ActionAck, type ActionEnvelope } from "../shared/SocketTypes";
+import {
+  type ActionAck,
+  type ActionEnvelope,
+  type PendingRoomAction,
+  type RoomAction,
+} from "../shared/SocketTypes";
 import { toastRejectedMove } from "./moveRejectionToast";
 import type { RoundSnapshot } from "../shared/RoundAnalysis";
 import {
@@ -53,6 +58,7 @@ import {
   type RoomToast,
 } from "../shared/RoomToast";
 import { showRoomToast } from "./RoomToast";
+import { playRoomActionSound } from "./soundEffects";
 
 const LOCAL_SOCKET_ID = "local-player";
 const LOCAL_PLAYER_SESSION_ID = "local-player-session";
@@ -61,6 +67,7 @@ const DEFAULT_OFFLINE_AI_COUNT = 2;
 export default function useLocalGame(name: string | null) {
   const state = useLocalObservable(() => new SocketState());
   const roomRef = useRef<RoomState | null>(null);
+  const optimisticallyPlayedMoveActionIds = useRef<Set<string>>(new Set());
   const [socket, setSocket] = useState<GameSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -94,6 +101,19 @@ export default function useLocalGame(name: string | null) {
     };
     const emitRoomToast = (roomToast: RoomToast) => {
       showRoomToast(roomToast);
+    };
+    const emitRoomAction = (action: PendingRoomAction) => {
+      if (optimisticallyPlayedMoveActionIds.current.delete(action.actionId)) {
+        return;
+      }
+
+      playRoomActionSound(
+        { ...action, revision: room.revision },
+        { activePlayerIndex: state.getActivePlayerIndex() }
+      );
+    };
+    const emitRoomActions = (actions: readonly PendingRoomAction[]) => {
+      actions.forEach(emitRoomAction);
     };
     const schedulePlayerCenterCursorReset = (
       playerIndex: number,
@@ -203,10 +223,11 @@ export default function useLocalGame(name: string | null) {
             });
             return;
           }
+          const acceptedAt = Date.now();
           recordRoundSnapshot(
             room,
             "move",
-            Date.now(),
+            acceptedAt,
             playerIndex,
             envelope.payload
           );
@@ -232,6 +253,13 @@ export default function useLocalGame(name: string | null) {
             revision: room.revision,
           });
           emitUpdate();
+          emitRoomAction({
+            type: "move",
+            actionId: envelope.actionId,
+            playerIndex,
+            move: envelope.payload,
+            time: acceptedAt,
+          });
           if (didResetHand) {
             emitHands();
           }
@@ -373,11 +401,19 @@ export default function useLocalGame(name: string | null) {
       });
     }
     const interval = window.setInterval(() => {
-      const { hasUpdate, hasHandUpdate, roomToast, roundAnalysisSnapshots } =
-        tickRoom(room);
+      const {
+        hasUpdate,
+        hasHandUpdate,
+        actions,
+        roomToast,
+        roundAnalysisSnapshots,
+      } = tickRoom(room);
       if (hasUpdate) {
         room.revision += 1;
         emitUpdate();
+      }
+      if (actions.length > 0) {
+        emitRoomActions(actions);
       }
       if (hasHandUpdate) {
         emitHands();
@@ -397,6 +433,7 @@ export default function useLocalGame(name: string | null) {
         window.clearTimeout(timeout)
       );
       centerCursorResetTimeouts.clear();
+      optimisticallyPlayedMoveActionIds.current.clear();
       runInAction(() => state.onDisconnect());
       roomRef.current = null;
     };
@@ -427,8 +464,15 @@ export default function useLocalGame(name: string | null) {
           return;
         }
         const action = state.createOptimisticMove(move);
+        playOptimisticMoveSound(
+          action,
+          playerIndex,
+          state.serverRevision,
+          optimisticallyPlayedMoveActionIds.current
+        );
         socket.emit("move", action, (ack) => {
           if (!ack.ok) {
+            optimisticallyPlayedMoveActionIds.current.delete(action.actionId);
             toastRejectedMove({
               board: state.serverBoard,
               move: action.payload,
@@ -472,6 +516,25 @@ export default function useLocalGame(name: string | null) {
     state,
     socket,
   };
+}
+
+function playOptimisticMoveSound(
+  action: ActionEnvelope<Move>,
+  playerIndex: number,
+  revision: number,
+  optimisticallyPlayedMoveActionIds: Set<string>
+): void {
+  const roomAction: RoomAction = {
+    type: "move",
+    actionId: action.actionId,
+    playerIndex,
+    move: action.payload,
+    time: Date.now(),
+    revision,
+  };
+
+  optimisticallyPlayedMoveActionIds.add(action.actionId);
+  playRoomActionSound(roomAction, { activePlayerIndex: playerIndex });
 }
 
 function setRoomAICount(room: RoomState, count: unknown): boolean {

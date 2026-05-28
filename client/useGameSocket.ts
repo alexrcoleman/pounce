@@ -7,6 +7,7 @@ import { GameSocket } from "./GameConnection";
 import {
   type ActionAck,
   type ActionEnvelope,
+  type RoomAction,
   ServerToClientEvents,
   ClientToServerEvents,
   type ServerNotice,
@@ -20,6 +21,7 @@ import { toast } from "sonner";
 import { toastRejectedMove } from "./moveRejectionToast";
 import { showServerNoticeToast } from "./ServerNoticeToast";
 import { showRoomToast } from "./RoomToast";
+import { playRoomActionSound } from "./soundEffects";
 
 export type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 const PLAYER_SESSION_STORAGE_KEY = "pounce::playerSessionId";
@@ -43,6 +45,7 @@ export default function useGameSocket(
   const lastJoinedRoomRef = useRef<string | null>(null);
   const pendingJoinRoomRef = useRef<string | null>(null);
   const queuedMoveActions = useRef<ActionEnvelope<Move>[]>([]);
+  const optimisticallyPlayedMoveActionIds = useRef<Set<string>>(new Set());
   const moveAckTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>(
     {}
   );
@@ -108,12 +111,14 @@ export default function useGameSocket(
         playerIndex: state.getActivePlayerIndex(),
         reason: timeoutAck.reason,
       });
+      optimisticallyPlayedMoveActionIds.current.delete(action.actionId);
       runInAction(() => state.onMoveAck(timeoutAck));
     }, 10000);
     activeSocket.emit("move", action, (ack) => {
       clearTimeout(moveAckTimeouts.current[action.actionId]);
       delete moveAckTimeouts.current[action.actionId];
       if (!ack.ok) {
+        optimisticallyPlayedMoveActionIds.current.delete(action.actionId);
         toastRejectedMove({
           board: state.serverBoard,
           move: action.payload,
@@ -122,6 +127,24 @@ export default function useGameSocket(
         });
       }
       runInAction(() => state.onMoveAck(ack));
+    });
+  };
+  const playOptimisticMoveSound = (
+    action: ActionEnvelope<Move>,
+    playerIndex: number
+  ) => {
+    const roomAction: RoomAction = {
+      type: "move",
+      actionId: action.actionId,
+      playerIndex,
+      move: action.payload,
+      time: Date.now(),
+      revision: state.serverRevision,
+    };
+
+    optimisticallyPlayedMoveActionIds.current.add(action.actionId);
+    playRoomActionSound(roomAction, {
+      activePlayerIndex: playerIndex,
     });
   };
   const flushQueuedMoveActions = (activeSocket: GameSocket) => {
@@ -269,6 +292,15 @@ export default function useGameSocket(
     socket.on("player_reaction", (reaction) => {
       runInAction(() => state.addReaction(reaction));
     });
+    socket.on("room_action", (action) => {
+      if (optimisticallyPlayedMoveActionIds.current.delete(action.actionId)) {
+        return;
+      }
+
+      playRoomActionSound(action, {
+        activePlayerIndex: state.getActivePlayerIndex(),
+      });
+    });
     socket.on("server_notice", showServerNotice);
     socket.on("stuck_update", showStuckUpdate);
     socket.on("update_hands", ({ hands }) => {
@@ -299,6 +331,7 @@ export default function useGameSocket(
       clearInterval(pingInterval);
       clearMoveAckTimeouts();
       queuedMoveActions.current = [];
+      optimisticallyPlayedMoveActionIds.current.clear();
       toast.dismiss(RECONNECT_TOAST_ID);
     };
   }, []);
@@ -365,6 +398,7 @@ export default function useGameSocket(
             return;
           }
           const action = state.createOptimisticMove(move);
+          playOptimisticMoveSound(action, playerIndex);
           if (!socket || !state.isConnected || pendingJoinRoomRef.current) {
             queuedMoveActions.current.push(action);
             return;

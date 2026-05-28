@@ -9,8 +9,14 @@ import LoadingState from "../../client/LoadingState";
 import type { NextPage } from "next";
 import joinClasses from "../../client/joinClasses";
 import styles from "../../client/Home.module.css";
+import {
+  DEFAULT_SOUND_EFFECT_VOLUME_PERCENT,
+  preloadSoundEffects,
+  setSoundEffectVolumePercent,
+} from "../../client/soundEffects";
 import useGameSocket from "../../client/useGameSocket";
 import useStoredBoolean from "../../client/useStoredBoolean";
+import useStoredNumber from "../../client/useStoredNumber";
 import { observer } from "mobx-react-lite";
 import { ClientContext } from "../../client/ClientContext";
 import { useRouter } from "next/router";
@@ -31,6 +37,12 @@ const RoomPage = observer(
       "pounce::easy-read-cards",
       true
     );
+    const [soundEffectVolume, setSoundEffectVolume] = useStoredNumber(
+      "pounce::sound-effect-volume",
+      DEFAULT_SOUND_EFFECT_VOLUME_PERCENT,
+      0,
+      100
+    );
     const [scale, setScale] = useState(1);
     const { actions, isConnected, state, socket, error } = useGameSocket(
       roomId,
@@ -48,6 +60,15 @@ const RoomPage = observer(
     const onSettingsRequestHandled = useCallback(() => {
       setSettingsRequest(null);
     }, []);
+
+    useEffect(() => {
+      setSoundEffectVolumePercent(soundEffectVolume);
+    }, [soundEffectVolume]);
+
+    useEffect(() => {
+      preloadSoundEffects();
+    }, []);
+
     useEffect(() => {
       if (!name && router.isReady) {
         const lsName = localStorage.getItem("pounce::name");
@@ -124,6 +145,8 @@ const RoomPage = observer(
               roomId={roomId}
               scale={scale}
               setScale={setScale}
+              soundEffectVolume={soundEffectVolume}
+              setSoundEffectVolume={setSoundEffectVolume}
             />
             <div className={styles.boardWrapper}>
               <Board

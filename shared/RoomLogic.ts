@@ -39,6 +39,7 @@ import {
   createDeckRotationToast,
   type RoomToast,
 } from "./RoomToast";
+import type { PendingRoomAction } from "./SocketTypes";
 import {
   getStuckVoteStatus,
   getStuckVotingPlayerIndices,
@@ -47,6 +48,7 @@ import {
 export type RoomTickResult = {
   hasUpdate: boolean;
   hasHandUpdate: boolean;
+  actions: PendingRoomAction[];
   roomToast?: RoomToast | null;
   roundAnalysisSnapshots?: RoundSnapshot[] | null;
 };
@@ -74,6 +76,7 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
   const aiCooldowns = room.aiCooldowns;
   let hasUpdate = false;
   let hasHandUpdate = false;
+  const actions: PendingRoomAction[] = [];
   let roomToast: RoomToast | null = null;
   let roundAnalysisSnapshots: RoundSnapshot[] | null = null;
 
@@ -130,6 +133,13 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       if (move && moveResult?.boardChanged) {
         rememberAIMoveFocus(room, index, move, now);
         recordRoundSnapshot(room, "move", now, index, move);
+        actions.push({
+          type: "move",
+          actionId: `ai:${room.revision}:${index}:${now}:${actions.length + 1}`,
+          playerIndex: index,
+          move,
+          time: now,
+        });
         if (isProductiveMove(move)) {
           clearRoomStuckPlayers(room);
         }
@@ -205,7 +215,13 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
     hasHandUpdate = true;
   }
 
-  return { hasUpdate, hasHandUpdate, roomToast, roundAnalysisSnapshots };
+  return {
+    hasUpdate,
+    hasHandUpdate,
+    actions,
+    roomToast,
+    roundAnalysisSnapshots,
+  };
 }
 
 function shouldAutoRotateDecks(board: BoardState): boolean {
