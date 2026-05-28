@@ -98,6 +98,7 @@ const CardContentMemo = observer(function CardContent({
   const nextSource = computed(() => getSource(card, state, location)).get();
   const sourceKey = getSourceKey(nextSource);
   const source = useMemo(() => nextSource, [sourceKey]);
+  const isDraggable = canInteract && canDragSource(source);
 
   let [positionX, positionY] = getPosition(card, state, location);
   let layoutArea: BoardLayoutArea = getCardLayoutArea(card, location);
@@ -184,7 +185,7 @@ const CardContentMemo = observer(function CardContent({
       geometry.y,
     ]
   );
-  const [{ isDragging, canDrag }, drag, preview] = useDrag(
+  const [{ isDragging }, drag, preview] = useDrag(
     () =>
       source.type === "field_stack"
         ? {
@@ -192,7 +193,6 @@ const CardContentMemo = observer(function CardContent({
             item,
             collect: (monitor) => ({
               isDragging: !!monitor.isDragging(),
-              canDrag: monitor.canDrag(),
             }),
             isDragging: (monitor) => {
               const dragItem = monitor.getItem();
@@ -201,17 +201,13 @@ const CardContentMemo = observer(function CardContent({
               }
               return dragItem.index === item.index;
             },
-            canDrag: () =>
-              canInteract &&
-              source.type === "field_stack" &&
-              source.isTopCard,
+            canDrag: () => isDraggable,
           }
         : {
             type: "card",
             item,
             collect: (monitor) => ({
               isDragging: !!monitor.isDragging(),
-              canDrag: monitor.canDrag(),
               // TODO: Find a way to make this work, maybe a child component which
             }),
             isDragging: (monitor) => {
@@ -232,9 +228,9 @@ const CardContentMemo = observer(function CardContent({
                 dragItem.source.slotIndex < item.source.slotIndex
               );
             },
-            canDrag: () => canInteract && source.type !== "other",
+            canDrag: () => isDraggable,
           },
-    [canInteract, sourceKey, item]
+    [isDraggable, sourceKey, item]
   );
   useEffect(() => {
     // React DnD clears the preview connection when the source handler changes,
@@ -256,7 +252,7 @@ const CardContentMemo = observer(function CardContent({
       className={joinClasses(
         styles.root,
         canClick && styles.clickable,
-        canDrag && styles.draggable
+        isDraggable && styles.draggable
       )}
       data-is-dragging-this-card={isDragging ? "true" : undefined}
       style={
@@ -395,6 +391,14 @@ function getFieldStackInitialPositionKey(
   }
 
   return board.pileLocs[source.index]?.join(":") ?? "";
+}
+
+function canDragSource(source: SourceType): boolean {
+  if (source.type === "field_stack") {
+    return source.isTopCard;
+  }
+
+  return source.type !== "other";
 }
 
 function isCardDnDItem(item: unknown): item is CardDnDItem {
