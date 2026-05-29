@@ -22,6 +22,13 @@ import {
   getPosition,
 } from "./cardGeometry";
 
+const CLICK_DRAG_SUPPRESSION_DISTANCE_PX = 8;
+
+type ClickStartPosition = {
+  x: number;
+  y: number;
+};
+
 type Props = {
   card: CardState;
   canInteract?: boolean;
@@ -55,13 +62,30 @@ const CardContentMemo = observer(function CardContent({
     },
     [canInteract, card, isHandTarget, location, socket]
   );
-  const handleClick = useCallback(() => {
-    if (!canInteract) {
-      return;
-    }
-    updateCursorTarget(true);
-    onClick && onClick();
-  }, [canInteract, onClick, updateCursorTarget]);
+  const clickStartRef = useRef<ClickStartPosition | null>(null);
+  const rememberClickStart = useCallback((x: number, y: number) => {
+    clickStartRef.current = { x, y };
+  }, []);
+  const handleClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (!canInteract) {
+        return;
+      }
+      const shouldSuppressClick = didPointerMoveTooFar(
+        clickStartRef.current,
+        event
+      );
+      clickStartRef.current = null;
+      if (shouldSuppressClick) {
+        event.preventDefault();
+        event.stopPropagation();
+        return;
+      }
+      updateCursorTarget(true);
+      onClick && onClick();
+    },
+    [canInteract, onClick, updateCursorTarget]
+  );
   const board = state.board!;
   const activePlayerIndex = state.getActivePlayerIndex();
   const player = board.players[card.player];
@@ -268,12 +292,17 @@ const CardContentMemo = observer(function CardContent({
       }
       onMouseEnter={updateCursorTarget}
       onPointerDown={(event) => {
+        rememberClickStart(event.clientX, event.clientY);
         if (event.pointerType !== "mouse") {
           updateCursorTarget();
         }
       }}
-      onTouchStart={() => {
+      onTouchStart={(event) => {
         if (!window.PointerEvent) {
+          const touch = event.touches[0];
+          if (touch) {
+            rememberClickStart(touch.clientX, touch.clientY);
+          }
           updateCursorTarget();
         }
       }}
@@ -399,6 +428,22 @@ function canDragSource(source: SourceType): boolean {
   }
 
   return source.type !== "other";
+}
+
+function didPointerMoveTooFar(
+  start: ClickStartPosition | null,
+  event: React.MouseEvent<HTMLDivElement>
+): boolean {
+  if (start == null) {
+    return false;
+  }
+
+  const deltaX = event.clientX - start.x;
+  const deltaY = event.clientY - start.y;
+  return (
+    deltaX * deltaX + deltaY * deltaY >
+    CLICK_DRAG_SUPPRESSION_DISTANCE_PX * CLICK_DRAG_SUPPRESSION_DISTANCE_PX
+  );
 }
 
 function isCardDnDItem(item: unknown): item is CardDnDItem {
