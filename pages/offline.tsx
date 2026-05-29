@@ -34,6 +34,10 @@ const OfflinePage: NextPage<{
     "pounce::easy-read-cards",
     true
   );
+  const [showFramerate, setShowFramerate] = useStoredBoolean(
+    "pounce::show-framerate",
+    false
+  );
   const [soundEffectVolume, setSoundEffectVolume] = useStoredNumber(
     "pounce::sound-effect-volume",
     DEFAULT_SOUND_EFFECT_VOLUME_PERCENT,
@@ -132,6 +136,8 @@ const OfflinePage: NextPage<{
             setLeftHandedMode={setLeftHandedMode}
             easyReadCards={easyReadCards}
             setEasyReadCards={setEasyReadCards}
+            showFramerate={showFramerate}
+            setShowFramerate={setShowFramerate}
             onLeaveRoom={onLeaveRoom}
             settingsRequest={settingsRequest}
             onSettingsRequestHandled={onSettingsRequestHandled}

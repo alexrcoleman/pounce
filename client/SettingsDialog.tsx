@@ -30,6 +30,8 @@ type SettingsDialogProps = {
   setLeftHandedMode: (use: boolean) => void;
   easyReadCards: boolean;
   setEasyReadCards: (use: boolean) => void;
+  showFramerate: boolean;
+  setShowFramerate: (show: boolean) => void;
   scale: number;
   setScale: (scale: number) => void;
   soundEffectVolume: number;
@@ -380,6 +382,15 @@ export default observer(function SettingsDialog({
                 <Switch
                   checked={props.leftHandedMode}
                   onChange={(v) => props.setLeftHandedMode(v)}
+                />
+              }
+            />
+            <SettingRow
+              title="Show framerate"
+              control={
+                <Switch
+                  checked={props.showFramerate}
+                  onChange={(v) => props.setShowFramerate(v)}
                 />
               }
             />

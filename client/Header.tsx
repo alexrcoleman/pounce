@@ -36,6 +36,8 @@ type Props = {
   setLeftHandedMode: (use: boolean) => void;
   easyReadCards: boolean;
   setEasyReadCards: (use: boolean) => void;
+  showFramerate: boolean;
+  setShowFramerate: (show: boolean) => void;
   scale: number;
   setScale: (scale: number) => void;
   soundEffectVolume: number;
@@ -120,6 +122,7 @@ export default observer(function Header(props: Props) {
         role="toolbar"
         aria-label="Game controls"
       >
+        {props.showFramerate ? <FramerateIndicator /> : null}
         {canSendReactions ? (
           <HeaderReactionButton
             onSelectReaction={(reactionId) =>
@@ -174,18 +177,68 @@ export default observer(function Header(props: Props) {
           roomId={props.roomId}
           scale={props.scale}
           setEasyReadCards={props.setEasyReadCards}
+          setShowFramerate={props.setShowFramerate}
           setLeftHandedMode={props.setLeftHandedMode}
           setPage={setSettingsPage}
           setScale={props.setScale}
           setSoundEffectVolume={props.setSoundEffectVolume}
           setUseAnimations={props.setUseAnimations}
           soundEffectVolume={props.soundEffectVolume}
+          showFramerate={props.showFramerate}
           useAnimations={props.useAnimations}
         />
       ) : null}
     </>
   );
 });
+
+function FramerateIndicator() {
+  const fps = useFramerate();
+  const fpsText = fps == null ? "--" : String(fps);
+  const label =
+    fps == null
+      ? "Measuring framerate"
+      : `Framerate ${fps} frames per second`;
+
+  return (
+    <div className={styles.framerateIndicator} aria-label={label} title={label}>
+      <strong>{fpsText}</strong>
+      <span>FPS</span>
+    </div>
+  );
+}
+
+function useFramerate() {
+  const [fps, setFps] = useState<number | null>(null);
+
+  useEffect(() => {
+    const sampleDurationMs = 500;
+    let frameCount = 0;
+    let sampleStart = performance.now();
+    let animationFrameId = 0;
+
+    const update = (now: number) => {
+      frameCount += 1;
+      const elapsed = now - sampleStart;
+
+      if (elapsed >= sampleDurationMs) {
+        setFps(Math.round((frameCount * 1000) / elapsed));
+        frameCount = 0;
+        sampleStart = now;
+      }
+
+      animationFrameId = requestAnimationFrame(update);
+    };
+
+    animationFrameId = requestAnimationFrame(update);
+
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, []);
+
+  return fps;
+}
 
 function HeaderReactionButton({
   onSelectReaction,
