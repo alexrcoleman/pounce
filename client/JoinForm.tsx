@@ -5,6 +5,7 @@ import { useRouter } from "next/router";
 import Link from "next/link";
 import usePwaInstall from "./usePwaInstall";
 import { FAVICON_SRC } from "../shared/gameAssets";
+import { markPendingRoomEntry } from "./analytics";
 
 const ROOM_CODE_PREFETCH_MIN_LENGTH = 1;
 
@@ -116,6 +117,7 @@ export default function JoinForm({
     }
     const room = randomCode();
     setCurrentRoom(room);
+    markPendingRoomEntry("create", room);
     const name = saveName();
     startNavigation("create", () => onSubmit(room, name));
   };
@@ -128,6 +130,7 @@ export default function JoinForm({
 
     setCurrentRoom(room);
     if (!currentName.trim()) {
+      markPendingRoomEntry("join", room);
       startNavigation("join", () =>
         router.push(`/join/${encodeURIComponent(room)}`)
       );
@@ -135,6 +138,7 @@ export default function JoinForm({
     }
 
     const name = saveName();
+    markPendingRoomEntry(isInviteMode ? "invite" : "join", room);
     startNavigation("join", () => onSubmit(room, name));
   };
 
@@ -143,6 +147,7 @@ export default function JoinForm({
       return;
     }
     const name = saveName();
+    markPendingRoomEntry("offline", "offline");
     startNavigation("offline", () => onPlayOffline?.(name));
   };
 

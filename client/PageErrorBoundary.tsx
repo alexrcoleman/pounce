@@ -5,6 +5,7 @@ import LoadingState from "./LoadingState";
 
 type PageErrorBoundaryProps = {
   children: ReactNode;
+  onError?: (error: Error, errorInfo: ErrorInfo) => void;
   resetKey: string;
 };
 
@@ -26,6 +27,7 @@ export default class PageErrorBoundary extends Component<
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error("Page render failed", error, errorInfo);
+    this.props.onError?.(error, errorInfo);
   }
 
   componentDidUpdate(previousProps: PageErrorBoundaryProps) {

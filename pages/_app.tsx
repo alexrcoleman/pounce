@@ -3,18 +3,41 @@ import { Toaster } from "sonner";
 import "../styles/globals.css";
 
 import { ASSET_STYLES } from "../shared/gameAssets";
+import { StatsigProvider } from "@statsig/react-bindings";
 import type { AppProps } from "next/app";
 import Head from "next/head";
 import PageErrorBoundary from "../client/PageErrorBoundary";
 import PwaRegistration from "../client/PwaRegistration";
-import { useEffect, useState } from "react";
+import StatsigRouteLogger from "../client/StatsigRouteLogger";
+import { useCallback, useEffect, useState, type ErrorInfo } from "react";
 import { useRouter } from "next/router";
 import { getPageThemeColor } from "../shared/themeColors";
 import theme from "../client/theme";
+import {
+  getRouteAnalyticsMetadata,
+  STATSIG_CLIENT_KEY,
+  STATSIG_OPTIONS,
+  STATSIG_USER,
+  truncateAnalyticsValue,
+  useStatsigLogger,
+} from "../client/analytics";
 
-function MyApp({ Component, pageProps }: AppProps) {
+function MyApp(props: AppProps) {
+  return (
+    <StatsigProvider
+      sdkKey={STATSIG_CLIENT_KEY}
+      user={STATSIG_USER}
+      options={STATSIG_OPTIONS}
+    >
+      <AppContent {...props} />
+    </StatsigProvider>
+  );
+}
+
+function AppContent({ Component, pageProps }: AppProps) {
   const [name, setName] = useState("");
   const router = useRouter();
+  const logStatsigEvent = useStatsigLogger();
   const pageThemeColor = getPageThemeColor(router.pathname);
 
   useEffect(() => {
@@ -27,8 +50,22 @@ function MyApp({ Component, pageProps }: AppProps) {
     }
   }, [router, router.isReady, router.pathname]);
 
+  const handlePageError = useCallback(
+    (error: Error, errorInfo: ErrorInfo) => {
+      logStatsigEvent("error_boundary_caught", {
+        ...getRouteAnalyticsMetadata(router.pathname, router.asPath),
+        error_name: error.name || "Error",
+        error_message: truncateAnalyticsValue(error.message),
+        error_stack: truncateAnalyticsValue(error.stack),
+        component_stack: truncateAnalyticsValue(errorInfo.componentStack),
+      });
+    },
+    [logStatsigEvent, router.asPath, router.pathname]
+  );
+
   return (
     <>
+      <StatsigRouteLogger />
       <Head>
         <title>Pounce</title>
         <meta name="application-name" content="Pounce" />
@@ -50,7 +87,10 @@ function MyApp({ Component, pageProps }: AppProps) {
       <style dangerouslySetInnerHTML={{ __html: ASSET_STYLES }} />
       <PwaRegistration />
       <ConfigProvider theme={theme}>
-        <PageErrorBoundary resetKey={router.asPath}>
+        <PageErrorBoundary
+          onError={handlePageError}
+          resetKey={router.asPath}
+        >
           <Component {...pageProps} name={name} setName={setName} />
         </PageErrorBoundary>
       </ConfigProvider>

@@ -7,6 +7,7 @@ import { GameSocket } from "./GameConnection";
 import {
   type ActionAck,
   type ActionEnvelope,
+  type BoardUpdate,
   type RoomAction,
   ServerToClientEvents,
   ClientToServerEvents,
@@ -22,6 +23,12 @@ import { toastRejectedMove } from "./moveRejectionToast";
 import { showServerNoticeToast } from "./ServerNoticeToast";
 import { showRoomToast } from "./RoomToast";
 import { playRoomActionSound } from "./soundEffects";
+import {
+  getRoomAnalyticsMetadata,
+  takePendingRoomEntry,
+  type PendingRoomEntry,
+  useStatsigLogger,
+} from "./analytics";
 
 export type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 const PLAYER_SESSION_STORAGE_KEY = "pounce::playerSessionId";
@@ -37,13 +44,26 @@ export default function useGameSocket(
   name: string | null
 ) {
   const state = useLocalObservable(() => new SocketState());
+  const logStatsigEvent = useStatsigLogger();
   const [socket, setSocket] = useState<GameSocket | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [playerSessionId, setPlayerSessionId] = useState<string | null>(null);
+  const roomIdRef = useRef(roomId);
   const hasConnectedRef = useRef(false);
   const hasReconnectToastRef = useRef(false);
   const lastJoinedRoomRef = useRef<string | null>(null);
   const pendingJoinRoomRef = useRef<string | null>(null);
+  const pendingJoinMetadataRef = useRef<
+    Record<
+      string,
+      {
+        entry: PendingRoomEntry | null;
+        roomId: string;
+        startedAt: number;
+      }
+    >
+  >({});
+  const loggedRoomJoinKeysRef = useRef<Set<string>>(new Set());
   const queuedMoveActions = useRef<ActionEnvelope<Move>[]>([]);
   const optimisticallyPlayedMoveActionIds = useRef<Set<string>>(new Set());
   const moveAckTimeouts = useRef<Record<string, ReturnType<typeof setTimeout>>>(
@@ -170,11 +190,55 @@ export default function useGameSocket(
     const actions = queuedMoveActions.current.splice(0);
     actions.forEach((action) => sendMoveAction(activeSocket, action));
   };
+  const logPendingRoomJoin = (
+    joinedRoomKey: string | null,
+    board: BoardUpdate["board"]
+  ) => {
+    if (!joinedRoomKey || loggedRoomJoinKeysRef.current.has(joinedRoomKey)) {
+      return;
+    }
+
+    const pendingJoin = pendingJoinMetadataRef.current[joinedRoomKey];
+    if (!pendingJoin) {
+      return;
+    }
+
+    const metadata = getRoomAnalyticsMetadata(pendingJoin.roomId, board, {
+      entry_kind: pendingJoin.entry?.kind ?? "direct",
+      join_latency_ms: Date.now() - pendingJoin.startedAt,
+    });
+    if (pendingJoin.entry?.kind === "create") {
+      logStatsigEvent("room_created", metadata);
+    }
+    logStatsigEvent("room_joined", metadata);
+    loggedRoomJoinKeysRef.current.add(joinedRoomKey);
+    delete pendingJoinMetadataRef.current[joinedRoomKey];
+  };
+  const logRoundStart = (
+    hadBoard: boolean,
+    wasRoundActive: boolean,
+    board: BoardUpdate["board"]
+  ) => {
+    if (!hadBoard || wasRoundActive || !board.isActive) {
+      return;
+    }
+
+    logStatsigEvent(
+      "round_started",
+      getRoomAnalyticsMetadata(roomIdRef.current, board, {
+        round_starts_at: board.roundStartsAt ?? null,
+      })
+    );
+  };
   useEffect(() => {
     const nextPlayerSessionId = getOrCreatePlayerSessionId();
     setPlayerSessionId(nextPlayerSessionId);
     runInAction(() => state.setPlayerSessionId(nextPlayerSessionId));
   }, [state]);
+
+  useEffect(() => {
+    roomIdRef.current = roomId;
+  }, [roomId]);
 
   useEffect(() => {
     let socket: ClientSocket;
@@ -307,7 +371,12 @@ export default function useGameSocket(
       runInAction(() => state.updateHands(hands));
     });
     socket.on("update", (data) => {
+      const pendingJoinKey = pendingJoinRoomRef.current;
+      const hadBoard = state.board != null;
+      const wasRoundActive = state.board?.isActive === true;
       runInAction(() => state.onUpdate(data));
+      logPendingRoomJoin(pendingJoinKey, data.board);
+      logRoundStart(hadBoard, wasRoundActive, data.board);
       pendingJoinRoomRef.current = null;
       resolveReconnectToast();
       flushQueuedMoveActions(socket);
@@ -347,6 +416,11 @@ export default function useGameSocket(
         lastJoinedRoomRef.current = joinedRoomKey;
       }
       pendingJoinRoomRef.current = joinedRoomKey;
+      pendingJoinMetadataRef.current[joinedRoomKey] = {
+        entry: takePendingRoomEntry(roomId),
+        roomId,
+        startedAt: Date.now(),
+      };
       runInAction(() => state.beginRoomSync());
       socket.emit("join_room", { roomId, name, playerSessionId }, (ack) => {
         if (ack.ok) {
@@ -354,6 +428,16 @@ export default function useGameSocket(
         }
 
         pendingJoinRoomRef.current = null;
+        const pendingJoin = pendingJoinMetadataRef.current[joinedRoomKey];
+        delete pendingJoinMetadataRef.current[joinedRoomKey];
+        logStatsigEvent(
+          "room_join_failed",
+          getRoomAnalyticsMetadata(roomId, state.board, {
+            entry_kind: pendingJoin?.entry?.kind ?? "direct",
+            failure_code: ack.code,
+            failure_stage: ack.stage,
+          })
+        );
         dropQueuedMoveActions();
         setError(ack.message);
         showServerNotice({

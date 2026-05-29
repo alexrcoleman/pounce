@@ -59,6 +59,11 @@ import {
 } from "../shared/RoomToast";
 import { showRoomToast } from "./RoomToast";
 import { playRoomActionSound } from "./soundEffects";
+import {
+  getRoomAnalyticsMetadata,
+  takePendingRoomEntry,
+  useStatsigLogger,
+} from "./analytics";
 
 const LOCAL_SOCKET_ID = "local-player";
 const LOCAL_PLAYER_SESSION_ID = "local-player-session";
@@ -66,8 +71,10 @@ const DEFAULT_OFFLINE_AI_COUNT = 2;
 
 export default function useLocalGame(name: string | null) {
   const state = useLocalObservable(() => new SocketState());
+  const logStatsigEvent = useStatsigLogger();
   const roomRef = useRef<RoomState | null>(null);
   const optimisticallyPlayedMoveActionIds = useRef<Set<string>>(new Set());
+  const hasLoggedOfflineJoinRef = useRef(false);
   const [socket, setSocket] = useState<GameSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
@@ -79,6 +86,8 @@ export default function useLocalGame(name: string | null) {
     const centerCursorResetTimeouts = new Set<number>();
 
     const emitUpdate = () => {
+      const hadBoard = state.board != null;
+      const wasRoundActive = state.board?.isActive === true;
       runInAction(() => {
         state.onUpdate({
           board: deepClone(room.board),
@@ -89,6 +98,14 @@ export default function useLocalGame(name: string | null) {
           roundAnalysis: deepClone(room.lastRoundAnalysis),
         });
       });
+      if (hadBoard && !wasRoundActive && room.board.isActive) {
+        logStatsigEvent(
+          "round_started",
+          getRoomAnalyticsMetadata("offline", room.board, {
+            round_starts_at: room.board.roundStartsAt ?? null,
+          })
+        );
+      }
       scheduleAIReactionBoard(room);
     };
     const markRoomUpdated = () => {
@@ -191,6 +208,14 @@ export default function useLocalGame(name: string | null) {
           markRoomUpdated();
           emitUpdate();
           emitHands();
+          if (!hasLoggedOfflineJoinRef.current) {
+            const entry = takePendingRoomEntry("offline");
+            const metadata = getRoomAnalyticsMetadata("offline", room.board, {
+              entry_kind: entry?.kind ?? "offline",
+            });
+            logStatsigEvent("room_joined", metadata);
+            hasLoggedOfflineJoinRef.current = true;
+          }
           return;
         }
         if (event === "room_ping") {
