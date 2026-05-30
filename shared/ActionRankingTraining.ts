@@ -207,6 +207,20 @@ export type PolicyComparisonResult = {
   modelBPounceOutRate: number;
 };
 
+export type CounterfactualRlLabelAudit = {
+  examples: ActionRankingImitationExample[];
+  sampledDecisionCount: number;
+  exploratoryDecisionCount: number;
+  noResultSkippedCount: number;
+  returnGapSkippedCount: number;
+  policyGradientGreedySkippedCount: number;
+  policyMarginSkippedCount: number;
+  confidenceSkippedCount: number;
+  scoreGapSkippedCount: number;
+  averageCounterfactualReturnGap: number;
+  averageCounterfactualCandidateCount: number;
+};
+
 type RolloutTransition = {
   playerIndex: number;
   pointDifferentialBefore: number;
@@ -1727,6 +1741,190 @@ export function trainPolicyGradientFromRollouts(
         : advantageStats.appliedUpdates / options.episodes,
     averageRawAdvantage: advantageStats.mean,
     rawAdvantageStdDev: advantageStats.stdDev,
+  };
+}
+
+export function collectCounterfactualRlLabelAudit(
+  policy: NeuralActionRankingPolicy,
+  options: {
+    playerCount: number;
+    episodes: number;
+    seed: string;
+    temperature: number;
+    commonRandom: boolean;
+    counterfactualRolloutCount: number;
+    counterfactualRolloutMoves: number;
+    counterfactualCandidateLimit: number;
+    counterfactualMinReturnGap: number;
+    counterfactualStateSource: CounterfactualStateSource;
+    counterfactualTrainingMode: CounterfactualTrainingMode;
+    counterfactualGapStandardErrorMultiplier: number;
+    counterfactualMaxPolicyMargin: number;
+    counterfactualMaxScoreGap: number;
+    counterfactualScoreRewardWeight: number;
+    counterfactualPounceRewardWeight: number;
+    updateScope: PolicyGradientUpdateScope;
+    maxMovesPerGame: number;
+  }
+): CounterfactualRlLabelAudit {
+  const examples: ActionRankingImitationExample[] = [];
+  let sampledDecisionCount = 0;
+  let exploratoryDecisionCount = 0;
+  let noResultSkippedCount = 0;
+  let returnGapSkippedCount = 0;
+  let policyGradientGreedySkippedCount = 0;
+  let policyMarginSkippedCount = 0;
+  let confidenceSkippedCount = 0;
+  let scoreGapSkippedCount = 0;
+  let counterfactualReturnGapTotal = 0;
+  let counterfactualCandidateCountTotal = 0;
+  const useGreedyCounterfactualStates =
+    options.counterfactualStateSource === "greedy" &&
+    options.counterfactualTrainingMode !== "policy_gradient";
+
+  for (let episode = 0; episode < options.episodes; episode++) {
+    const neuralPlayerIndex = episode % options.playerCount;
+    const board = createTrainingBoard(
+      options.playerCount,
+      `${options.seed}:deal:${episode}`
+    );
+    const sharedTimingSeed = `${options.seed}:timing:${episode}`;
+    const sampleTimingSeed = options.commonRandom
+      ? sharedTimingSeed
+      : `${options.seed}:sample-timing:${episode}`;
+    const rollout = runPolicyRollout(board, {
+      policy,
+      random: createSeededRandom(sampleTimingSeed),
+      decisionRandom: createSeededRandom(`${options.seed}:sample:${episode}`),
+      temperature: useGreedyCounterfactualStates ? 1 : options.temperature,
+      sample: !useGreedyCounterfactualStates,
+      maxMovesPerGame: options.maxMovesPerGame,
+      neuralPlayerIndices: [neuralPlayerIndex],
+      captureTransitions: useGreedyCounterfactualStates,
+      captureTransitionBoards: true,
+    });
+
+    sampledDecisionCount += rollout.transitions.length;
+    rollout.transitions.forEach((transition, transitionIndex) => {
+      const isExploratoryDecision =
+        transition.selectedCandidateIndex !== transition.greedyCandidateIndex;
+      if (isExploratoryDecision) {
+        exploratoryDecisionCount += 1;
+      }
+      const applyExploratoryFilter =
+        options.updateScope === "exploratory" && !useGreedyCounterfactualStates;
+      if (applyExploratoryFilter && !isExploratoryDecision) {
+        return;
+      }
+
+      const policyTopScoreGap = getPolicyTopScoreGap(
+        transition.candidates,
+        policy
+      );
+      if (
+        options.counterfactualMaxPolicyMargin > 0 &&
+        policyTopScoreGap != null &&
+        policyTopScoreGap > options.counterfactualMaxPolicyMargin
+      ) {
+        policyMarginSkippedCount += 1;
+        return;
+      }
+
+      const result = getCounterfactualTransitionResult(
+        transition,
+        policy,
+        `${options.seed}:counterfactual:${episode}:${transitionIndex}`,
+        options.counterfactualRolloutCount,
+        options.commonRandom,
+        options.counterfactualRolloutMoves,
+        options.counterfactualTrainingMode === "policy_gradient"
+          ? 2
+          : options.counterfactualCandidateLimit,
+        options.counterfactualScoreRewardWeight,
+        options.counterfactualPounceRewardWeight
+      );
+      const counterfactualGap =
+        options.counterfactualTrainingMode === "policy_gradient"
+          ? result?.returnGap
+          : result?.trainingGap;
+      const counterfactualGapStandardError =
+        options.counterfactualTrainingMode === "policy_gradient"
+          ? result?.returnGapStandardError
+          : result?.trainingGapStandardError;
+      const counterfactualGapLowerBound =
+        counterfactualGap == null
+          ? null
+          : Math.abs(counterfactualGap) -
+            Math.max(0, options.counterfactualGapStandardErrorMultiplier) *
+              (counterfactualGapStandardError ?? 0);
+
+      if (!result || counterfactualGap == null) {
+        noResultSkippedCount += 1;
+        return;
+      }
+      if (
+        options.counterfactualTrainingMode === "policy_gradient" &&
+        !isExploratoryDecision
+      ) {
+        policyGradientGreedySkippedCount += 1;
+        return;
+      }
+      if (Math.abs(counterfactualGap) < options.counterfactualMinReturnGap) {
+        returnGapSkippedCount += 1;
+        return;
+      }
+      if (
+        counterfactualGapLowerBound == null ||
+        counterfactualGapLowerBound < options.counterfactualMinReturnGap
+      ) {
+        confidenceSkippedCount += 1;
+        return;
+      }
+
+      const scoreGap = getCounterfactualBestVsGreedyScoreGap(
+        transition,
+        result,
+        policy
+      );
+      if (
+        options.counterfactualTrainingMode !== "policy_gradient" &&
+        options.counterfactualMaxScoreGap > 0 &&
+        scoreGap != null &&
+        scoreGap > options.counterfactualMaxScoreGap
+      ) {
+        scoreGapSkippedCount += 1;
+        return;
+      }
+
+      counterfactualReturnGapTotal += Math.abs(counterfactualGap);
+      counterfactualCandidateCountTotal += result.candidates.length;
+      examples.push(
+        createCounterfactualSupervisedExample(
+          transition,
+          result,
+          episode,
+          transitionIndex
+        )
+      );
+    });
+  }
+
+  return {
+    examples,
+    sampledDecisionCount,
+    exploratoryDecisionCount,
+    noResultSkippedCount,
+    returnGapSkippedCount,
+    policyGradientGreedySkippedCount,
+    policyMarginSkippedCount,
+    confidenceSkippedCount,
+    scoreGapSkippedCount,
+    averageCounterfactualReturnGap:
+      examples.length === 0 ? 0 : counterfactualReturnGapTotal / examples.length,
+    averageCounterfactualCandidateCount:
+      examples.length === 0
+        ? 0
+        : counterfactualCandidateCountTotal / examples.length,
   };
 }
 

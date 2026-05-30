@@ -26,6 +26,7 @@ Useful training knobs:
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare` to compare two models on paired deals/seats
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:diagnose` to compare top-ranked actions on sampled teacher states
 - `MODEL_IN=...\best.json npm run action-ranking:audit-labels` to audit rollout labels before training on them
+- `MODEL_IN=...\best.json npm run action-ranking:audit-rl-labels` to audit accepted counterfactual RL labels before training on them
 - `MODEL_IN=...\best.json npm run action-ranking:tune` to iterate reward fine-tunes and promote only paired-comparison improvements
 - `MODEL_IN=...\best.json npm run action-ranking:tune-rl` to sweep counterfactual RL recipes and promote only paired-comparison improvements
 - `npm run action-ranking:check-rl-modes` to smoke-test legacy feature expansion and counterfactual RL training mode routing
@@ -129,6 +130,12 @@ improvement rollout knobs: `LABEL_STATES`, `LABEL_STATE_SOURCE`,
 `LABEL_CONTINUATION`, `LABEL_REQUIRE_BEHAVIOR_GAP`,
 `LABEL_MIN_BEHAVIOR_IMPROVEMENT`, `LABEL_BEHAVIOR_GAP_SE_MULTIPLIER`, and
 `LABEL_SCORE_WEIGHT`, and `LABEL_MIN_RETURN_GAP`.
+`action-ranking:audit-rl-labels` audits the accepted counterfactual RL labels
+for a model without updating it. It uses the `RL_COUNTERFACTUAL_*` knobs and
+reports skip counts, winner-vs-behavior move-type pairs, rollout return gaps,
+pounce-progress gaps, policy score gaps, and sample candidate return tables.
+`RL_AUDIT_EPISODES`, `RL_AUDIT_FOCUS_PAIR`, `RL_AUDIT_MAX_EXAMPLES`, and
+`RL_AUDIT_SAMPLE_CANDIDATES` control audit size and output detail.
 
 The best policy-state reward candidate so far uses targeted behavior-gap
 examples and a behavior-only pairwise update:
@@ -497,6 +504,17 @@ produced the same three `cycle>c2s` diagnostic flips and the same
 `-0.036 +/- 0.056` paired result as the unweighted run. That suggests the bad
 cycle labels are not caused only by ignoring pounce-out progress within the
 current 450-move continuation horizon.
+`action-ranking:audit-rl-labels` can now inspect those accepted labels directly.
+On the targeted low-margin pairwise recipe above, using the trainer's internal
+RL seed (`SEED=action-ranking-training:rl`) reproduced the 35-label batch:
+1,783 states skipped by policy margin, 47 skipped by confidence, 26 skipped by
+score gap, and 35 accepted. The accepted labels contained only one
+`cycle>c2s` winner-vs-behavior pair, but it was a large outlier:
+`+9.11` objective return, `+9` score return, and `+2.67` pounce progress while
+the policy still scored the connector only `0.23` above cycle. That single label
+was enough to generalize into three deployed `cycle>c2s` flips after training,
+so the next mitigation should focus on high-impact outlier labels or
+feature-local anchoring, not only broad move-type filtering.
 
 Uncertainty-targeted improvement collection is also wired in. With
 `IMPROVEMENT_MAX_SCORE_GAP` and `IMPROVEMENT_POLICY_CANDIDATES`, the collector
