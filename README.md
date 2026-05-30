@@ -16,7 +16,7 @@ npm run action-ranking:train
 Useful training knobs:
 
 - `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`
-- `IMPROVEMENT_STATES`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
+- `IMPROVEMENT_STATES`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
 - `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `HIDDEN_LAYERS`, `MAX_MOVES`, `SEED`
 - `HIDDEN` and `HIDDEN_LAYERS` accept comma-separated layer sizes, for example `HIDDEN=192,96`
@@ -61,7 +61,7 @@ differential. The neural player's raw score was slightly higher than teacher
 opponents on average (`7.09` vs `6.93`), with a `25.0%` solo win rate.
 
 The best reward fine-tune point estimate so far starts from that checkpoint and
-uses a small, soft counterfactual rollout pass:
+uses a small, gap-filtered pairwise counterfactual rollout pass:
 
 ```powershell
 $env:MODEL_IN='.\node_modules\pounce-action-ranking-capacity-model.json'
@@ -71,17 +71,20 @@ $env:IMPROVEMENT_CANDIDATES='8'
 $env:IMPROVEMENT_ROLLOUT_MOVES='450'
 $env:IMPROVEMENT_ROLLOUT_COUNT='1'
 $env:IMPROVEMENT_COMMON_RANDOM='true'
+$env:IMPROVEMENT_MODE='pairwise'
+$env:IMPROVEMENT_MIN_RETURN_GAP='2'
+$env:IMPROVEMENT_MAX_PAIRS='8'
+$env:IMPROVEMENT_PREFERENCE_TEMPERATURE='1'
 $env:IMPROVEMENT_EPOCHS='1'
-$env:IMPROVEMENT_LR='0.001'
-$env:IMPROVEMENT_TEMPERATURE='8'
+$env:IMPROVEMENT_LR='0.0005'
 $env:RL_EPISODES='0'
-$env:MODEL_OUT='.\node_modules\pounce-action-ranking-common-random-80-model.json'
+$env:MODEL_OUT='.\node_modules\pounce-action-ranking-pairwise-gap2-lr5-model.json'
 npm run action-ranking:train
 ```
 
 On the same 768-game / 8-seed evaluation, that fine-tuned checkpoint measured
-`+0.056 +/- 0.326` baseline-adjusted point differential, with raw score `7.15`
-vs `6.93` and a `25.4%` solo win rate. Treat that as directionally interesting,
+`+0.138 +/- 0.321` baseline-adjusted point differential, with raw score `7.23`
+vs `6.93` and a `25.0%` solo win rate. Treat that as directionally interesting,
 not proven: the error bars still overlap zero.
 
 `IMPROVEMENT_STATES` enables the counterfactual rollout pass: it samples
@@ -89,10 +92,13 @@ teacher-game states, tries several legal actions, lets the teacher finish from
 each candidate, and trains from the resulting soft reward targets. By default,
 candidate actions in the same state now share continuation randomness; increasing
 `IMPROVEMENT_ROLLOUT_COUNT` averages multiple continuations per candidate.
-Larger or more aggressive improvement passes have overcorrected in early tests.
-RL fine-tuning is wired in with batch-normalized, clipped advantages and optional
-discounted local reward-to-go, but conservative runs tested so far have mostly
-preserved the imitation checkpoint rather than clearly improving it.
+`IMPROVEMENT_MODE=pairwise` trains only clear rollout-return preferences, using
+`IMPROVEMENT_MIN_RETURN_GAP` and `IMPROVEMENT_MAX_PAIRS` to ignore low-signal
+candidate differences. Larger or more aggressive improvement passes have
+overcorrected in early tests. RL fine-tuning is wired in with batch-normalized,
+clipped advantages and optional discounted local reward-to-go, but conservative
+runs tested so far have mostly preserved the imitation checkpoint rather than
+clearly improving it.
 
 ## Deploying
 

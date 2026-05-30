@@ -51,6 +51,10 @@ export type NeuralTrainingOptions = {
   improvementRolloutMoves?: number;
   improvementRolloutCount?: number;
   improvementCommonRandom?: boolean;
+  improvementTrainingMode?: "softmax" | "pairwise";
+  improvementMinReturnGap?: number;
+  improvementMaxPairsPerExample?: number;
+  improvementPreferenceTemperature?: number;
   improvementEpochs?: number;
   improvementLearningRate?: number;
   improvementTargetTemperature?: number;
@@ -202,12 +206,21 @@ export function trainNeuralActionRankingPolicy(
   const improvementStats =
     improvement.examples.length === 0
       ? emptyTrainingStats(options.improvementEpochs ?? 0)
-      : policy.trainRewardTargets(improvement.examples, {
-          epochs: options.improvementEpochs ?? 3,
-          learningRate: options.improvementLearningRate ?? 0.01,
-          targetTemperature: options.improvementTargetTemperature ?? 4,
-          shuffleSeed: `${seed}:improvement-shuffle`,
-        });
+      : (options.improvementTrainingMode ?? "softmax") === "pairwise"
+        ? policy.trainPairwisePreferences(improvement.examples, {
+            epochs: options.improvementEpochs ?? 3,
+            learningRate: options.improvementLearningRate ?? 0.01,
+            minReturnGap: options.improvementMinReturnGap ?? 1,
+            maxPairsPerExample: options.improvementMaxPairsPerExample ?? 12,
+            temperature: options.improvementPreferenceTemperature ?? 1,
+            shuffleSeed: `${seed}:improvement-shuffle`,
+          })
+        : policy.trainRewardTargets(improvement.examples, {
+            epochs: options.improvementEpochs ?? 3,
+            learningRate: options.improvementLearningRate ?? 0.01,
+            targetTemperature: options.improvementTargetTemperature ?? 4,
+            shuffleSeed: `${seed}:improvement-shuffle`,
+          });
 
   const reinforcement = trainPolicyGradientFromRollouts(policy, {
     playerCount,

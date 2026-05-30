@@ -54,10 +54,18 @@ export type ImitationTrainingStats = {
   updates: number;
   averageLoss: number;
   accuracy: number;
+  pairs?: number;
+  averagePairReturnGap?: number;
 };
 
 export type RewardTargetTrainingOptions = ImitationTrainingOptions & {
   targetTemperature?: number;
+};
+
+export type PreferenceTrainingOptions = ImitationTrainingOptions & {
+  minReturnGap?: number;
+  maxPairsPerExample?: number;
+  temperature?: number;
 };
 
 type ForwardPass = {
@@ -326,6 +334,81 @@ export class NeuralActionRankingPolicy {
     };
   }
 
+  trainPairwisePreferences(
+    examples: readonly ActionRankingImitationExample[],
+    options: PreferenceTrainingOptions = {}
+  ): ImitationTrainingStats {
+    const epochs = Math.max(1, Math.floor(options.epochs ?? 1));
+    const learningRate = options.learningRate ?? DEFAULT_LEARNING_RATE;
+    const l2 = options.l2 ?? 0;
+    const minReturnGap = Math.max(0, options.minReturnGap ?? 1);
+    const maxPairsPerExample = Math.max(
+      0,
+      Math.floor(options.maxPairsPerExample ?? 12)
+    );
+    const temperature = Math.max(1e-6, options.temperature ?? 1);
+    const random = createSeededRandom(options.shuffleSeed ?? "preferences");
+    let totalLoss = 0;
+    let totalExamples = 0;
+    let correct = 0;
+    let updates = 0;
+    let returnGapTotal = 0;
+
+    for (let epoch = 0; epoch < epochs; epoch++) {
+      const shuffled = shuffleCopy(examples, random);
+      shuffled.forEach((example) => {
+        const pairs = getPreferencePairs(
+          example,
+          minReturnGap,
+          maxPairsPerExample,
+          random
+        );
+        if (pairs.length === 0) {
+          return;
+        }
+
+        totalExamples += 1;
+        pairs.forEach((pair) => {
+          const winner = example.candidates[pair.winnerIndex];
+          const loser = example.candidates[pair.loserIndex];
+          const winnerScore = this.scoreFeatures(winner.features);
+          const loserScore = this.scoreFeatures(loser.features);
+          const margin = (winnerScore - loserScore) / temperature;
+          const mistakeProbability = sigmoid(-margin);
+          totalLoss += softplus(-margin);
+          returnGapTotal += pair.returnGap;
+          if (winnerScore > loserScore) {
+            correct += 1;
+          }
+
+          this.applyScoreGradient(
+            winner.features,
+            -mistakeProbability / temperature,
+            learningRate,
+            l2
+          );
+          this.applyScoreGradient(
+            loser.features,
+            mistakeProbability / temperature,
+            learningRate,
+            l2
+          );
+          updates += 1;
+        });
+      });
+    }
+
+    return {
+      epochs,
+      examples: totalExamples,
+      updates,
+      averageLoss: updates === 0 ? 0 : totalLoss / updates,
+      accuracy: updates === 0 ? 0 : correct / updates,
+      pairs: updates,
+      averagePairReturnGap: updates === 0 ? 0 : returnGapTotal / updates,
+    };
+  }
+
   private applyListwiseGradient(
     candidates: readonly Pick<ActionRankingCandidate, "features">[],
     probabilities: readonly number[],
@@ -530,6 +613,58 @@ function isImitationPredictionCorrect(
   return predictedIndex === example.selectedCandidateIndex;
 }
 
+function getPreferencePairs(
+  example: ActionRankingImitationExample,
+  minReturnGap: number,
+  maxPairsPerExample: number,
+  random: () => number
+): { winnerIndex: number; loserIndex: number; returnGap: number }[] {
+  const pairs: { winnerIndex: number; loserIndex: number; returnGap: number }[] =
+    [];
+
+  for (let leftIndex = 0; leftIndex < example.candidates.length; leftIndex++) {
+    const leftReturn =
+      example.candidates[leftIndex].rolloutPointDifferentialReturn;
+    if (leftReturn == null) {
+      continue;
+    }
+
+    for (
+      let rightIndex = leftIndex + 1;
+      rightIndex < example.candidates.length;
+      rightIndex++
+    ) {
+      const rightReturn =
+        example.candidates[rightIndex].rolloutPointDifferentialReturn;
+      if (rightReturn == null) {
+        continue;
+      }
+
+      const returnGap = Math.abs(leftReturn - rightReturn);
+      if (returnGap < minReturnGap) {
+        continue;
+      }
+
+      pairs.push(
+        leftReturn > rightReturn
+          ? {
+              winnerIndex: leftIndex,
+              loserIndex: rightIndex,
+              returnGap,
+            }
+          : {
+              winnerIndex: rightIndex,
+              loserIndex: leftIndex,
+              returnGap,
+            }
+      );
+    }
+  }
+
+  pairs.sort((a, b) => b.returnGap - a.returnGap || random() - 0.5);
+  return maxPairsPerExample === 0 ? pairs : pairs.slice(0, maxPairsPerExample);
+}
+
 export function createNeuralActionRankingModel(
   hiddenLayerInput: number | readonly number[] = DEFAULT_HIDDEN_LAYER_SIZES,
   seed = "neural-action-ranking"
@@ -686,6 +821,25 @@ function softmax(scores: readonly number[], temperature = 1): number[] {
   const exps = scaled.map((score) => Math.exp(score - maxScore));
   const total = exps.reduce((sum, value) => sum + value, 0);
   return exps.map((value) => value / total);
+}
+
+function sigmoid(value: number): number {
+  if (value >= 0) {
+    const exp = Math.exp(-value);
+    return 1 / (1 + exp);
+  }
+  const exp = Math.exp(value);
+  return exp / (1 + exp);
+}
+
+function softplus(value: number): number {
+  if (value > 40) {
+    return value;
+  }
+  if (value < -40) {
+    return Math.exp(value);
+  }
+  return Math.log(1 + Math.exp(value));
 }
 
 function getBestIndex(scores: readonly number[]): number {

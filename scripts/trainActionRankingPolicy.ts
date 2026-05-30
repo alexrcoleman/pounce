@@ -24,6 +24,16 @@ const options = {
   improvementRolloutMoves: readIntegerEnv("IMPROVEMENT_ROLLOUT_MOVES", 450),
   improvementRolloutCount: readIntegerEnv("IMPROVEMENT_ROLLOUT_COUNT", 1),
   improvementCommonRandom: readBooleanEnv("IMPROVEMENT_COMMON_RANDOM", true),
+  improvementTrainingMode: readImprovementTrainingModeEnv(
+    "IMPROVEMENT_MODE",
+    "softmax"
+  ),
+  improvementMinReturnGap: readNumberEnv("IMPROVEMENT_MIN_RETURN_GAP", 1),
+  improvementMaxPairsPerExample: readIntegerEnv("IMPROVEMENT_MAX_PAIRS", 12),
+  improvementPreferenceTemperature: readNumberEnv(
+    "IMPROVEMENT_PREFERENCE_TEMPERATURE",
+    1
+  ),
   improvementEpochs: readIntegerEnv("IMPROVEMENT_EPOCHS", 3),
   improvementLearningRate: readNumberEnv("IMPROVEMENT_LR", 0.01),
   improvementTargetTemperature: readNumberEnv("IMPROVEMENT_TEMPERATURE", 4),
@@ -104,6 +114,17 @@ function readBooleanEnv(name: string, fallback: boolean): boolean {
     return false;
   }
   return fallback;
+}
+
+function readImprovementTrainingModeEnv(
+  name: string,
+  fallback: "softmax" | "pairwise"
+): "softmax" | "pairwise" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  return value.toLowerCase() === "pairwise" ? "pairwise" : fallback;
 }
 
 function getModelHiddenLayerSizes(model: NeuralActionRankingModel): number[] {
