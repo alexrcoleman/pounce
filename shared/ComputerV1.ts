@@ -684,11 +684,34 @@ export function getAIPlayerStrategyProfileByBotIndex(
   return playerStyles[Math.max(0, botIndex) % playerStyles.length];
 }
 
+export function getBasicAIStyleNames(): string[] {
+  return playerStyles.map((style) => style.name);
+}
+
+export function getBasicAIMoveForStyle(
+  boardState: BoardState,
+  playerIndex: number,
+  cursor: CursorState,
+  styleName: string
+): Move | undefined {
+  const player = boardState.players[playerIndex];
+  const playerStyle = playerStyles.find((style) => style.name === styleName);
+  if (!player || !playerStyle) {
+    return;
+  }
+
+  const ai = new AIStrategy(playerStyle.strategy, boardState, player, cursor);
+  return ai.getMove();
+}
+
 export function getAIPlayerStrategyProfile(
   boardState: BoardState,
   playerIndex: number
 ): AIStrategyProfile {
   const player = boardState.players[playerIndex];
+  if (!player) {
+    return;
+  }
   const botIndex = boardState.players
     .filter((p) => p.socketId == null)
     .indexOf(player);

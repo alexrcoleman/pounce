@@ -1,4 +1,4 @@
-import { getBasicAIMove } from "./ComputerV1";
+import { getBasicAIMove, getBasicAIMoveForStyle } from "./ComputerV1";
 import deepClone from "./deepClone";
 import {
   createBoard,
@@ -261,6 +261,11 @@ type RolloutTransition = {
   greedyCandidateIndex: number;
   localReward: number;
 };
+
+type BasicMoveProvider = (
+  board: BoardState,
+  playerIndex: number
+) => Move | undefined;
 
 type RolloutResult = {
   finalScores: number[];
@@ -2960,12 +2965,14 @@ export function evaluateNeuralPolicy(
     games?: number;
     seed?: string;
     maxMovesPerGame?: number;
+    basicMoveProvider?: BasicMoveProvider;
   } = {}
 ): PolicyEvaluationResult {
   const playerCount = options.playerCount ?? 4;
   const games = options.games ?? 12;
   const seed = options.seed ?? "action-ranking-eval";
   const maxMovesPerGame = options.maxMovesPerGame ?? DEFAULT_MAX_MOVES_PER_GAME;
+  const basicMoveProvider = options.basicMoveProvider;
   let neuralDifferentialTotal = 0;
   let teacherBaselineDifferentialTotal = 0;
   let baselineAdjustedDifferentialTotal = 0;
@@ -2991,11 +2998,12 @@ export function evaluateNeuralPolicy(
     const teacherBaseline = runPolicyRollout(board, {
       policy,
       random: createSeededRandom(`${seed}:baseline:${gameIndex}`),
-    temperature: 1,
-    sample: false,
-    maxMovesPerGame,
-    neuralPlayerIndices: [],
-  });
+      temperature: 1,
+      sample: false,
+      maxMovesPerGame,
+      neuralPlayerIndices: [],
+      basicMoveProvider,
+    });
     const random = createSeededRandom(`${seed}:sample:${gameIndex}`);
     const rollout = runPolicyRollout(board, {
       policy,
@@ -3004,6 +3012,7 @@ export function evaluateNeuralPolicy(
       sample: false,
       maxMovesPerGame,
       neuralPlayerIndices: [neuralPlayerIndex],
+      basicMoveProvider,
     });
     const neuralScore = rollout.finalScores[neuralPlayerIndex] ?? 0;
     const teacherScores = rollout.finalScores.filter(
@@ -3141,6 +3150,40 @@ export function evaluateNeuralModel(
   } = {}
 ): PolicyEvaluationResult {
   return evaluateNeuralPolicy(new NeuralActionRankingPolicy(model), options);
+}
+
+export function evaluateNeuralModelAgainstBasicStyle(
+  model: NeuralActionRankingModel,
+  styleName: string,
+  options: {
+    playerCount?: number;
+    games?: number;
+    seed?: string;
+    maxMovesPerGame?: number;
+  } = {}
+): PolicyEvaluationResult {
+  return evaluateNeuralPolicyAgainstBasicStyle(
+    new NeuralActionRankingPolicy(model),
+    styleName,
+    options
+  );
+}
+
+export function evaluateNeuralPolicyAgainstBasicStyle(
+  policy: NeuralActionRankingPolicy,
+  styleName: string,
+  options: {
+    playerCount?: number;
+    games?: number;
+    seed?: string;
+    maxMovesPerGame?: number;
+  } = {}
+): PolicyEvaluationResult {
+  return evaluateNeuralPolicy(policy, {
+    ...options,
+    basicMoveProvider: (board, playerIndex) =>
+      getBasicAIMoveForStyle(board, playerIndex, {}, styleName),
+  });
 }
 
 export function compareNeuralModels(
@@ -3293,6 +3336,7 @@ function runPolicyRollout(
     neuralPlayerIndices?: number[];
     captureTransitions?: boolean;
     captureTransitionBoards?: boolean;
+    basicMoveProvider?: BasicMoveProvider;
   }
 ): RolloutResult {
   const board = deepClone(startBoard);
@@ -3333,7 +3377,9 @@ function runPolicyRollout(
 
     const move = neuralPlayers.has(playerIndex)
       ? chooseNeuralMove(board, playerIndex, options, transitions)
-      : getBasicAIMove(board, playerIndex, {});
+      : options.basicMoveProvider
+        ? options.basicMoveProvider(board, playerIndex)
+        : getBasicAIMove(board, playerIndex, {});
 
     if (move) {
       executeMove(board, playerIndex, move);

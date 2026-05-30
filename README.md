@@ -23,6 +23,7 @@ Useful training knobs:
 - `MODEL_OUT=C:\tmp\pounce-action-ranking-model.json` to save model weights
 - `MODEL_IN=...\model.json npm run action-ranking:train` to fine-tune saved weights
 - `MODEL_IN=...\model.json npm run action-ranking:evaluate` to evaluate saved weights
+- `MODEL_IN=...\model.json npm run action-ranking:evaluate-by-style` to evaluate saved weights against each fixed heuristic AI style
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare` to compare two models on paired deals/seats
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:diagnose` to compare top-ranked actions on sampled teacher states
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:trace-divergences` to inspect the first policy-action divergence in paired games
@@ -184,6 +185,14 @@ point differential delta over a 1,536-game / 16-seed paired comparison, with
 percentage-point pounce-out delta. Treat it as the current best experimental
 direction rather than a fully proven replacement; the effect is real enough to
 keep exploring but still quite small.
+The style-specific evaluator now measures the same neural seat against fixed
+heuristic opponents and a same-seat all-heuristic baseline. A first
+`pounce-action-ranking-behavior-scope-240-lr1` pass over 48 games x 4 seeds per
+style measured baseline-adjusted point differential of `+0.384` vs Mom,
+`+0.668` vs Alex-v2, `+0.174` vs Alex 75%, `+1.288` vs Alex 66%, and `-1.253`
+vs Alex 1.0. That suggests the current neural policy has mostly learned and
+slightly smoothed the rotating teacher population, while Alex 1.0 remains the
+clearest fixed-style antagonist for future self-play/champion training.
 
 For iterative improvement, `action-ranking:tune` repeatedly trains from the
 current best model, runs paired comparison against that current best, and only
@@ -782,6 +791,17 @@ paired comparison against the behavior-scope checkpoint measured
 baseline-favored split. Tracing found that split was `c2c>c2c`, not
 connector-vs-cycle, so this recipe is instrumentation progress rather than a
 promotion candidate.
+A 128-episode label audit with the same behavior-gap connector/cycle settings
+accepted 49 labels: three `c2s>cycle` and three `cycle>c2s`. The new features
+showed why a simple deck-threshold interpretation is still too weak:
+`c2s>cycle` appeared at deck stock fractions around `0.52-0.72`, while
+`cycle>c2s` appeared at `0.34`, `0.875`, and `0.94`. One `cycle>c2s` label
+also had an active stack-root connector
+(`postTopConnectorCount=0.2`, `postTopConnectorCloseness=1`,
+`postTopConnectsStackRoot=1`). So the next likely improvement is not only more
+connector representation; it is filtering or reshaping rollout labels whose
+long-horizon point-differential result prefers cycling over an apparently live
+connector.
 
 ## Deploying
 

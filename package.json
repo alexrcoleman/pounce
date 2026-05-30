@@ -9,6 +9,7 @@
     "action-ranking:examples": "ts-node --transpile-only scripts/generateActionRankingExamples.ts",
     "action-ranking:train": "ts-node --transpile-only scripts/trainActionRankingPolicy.ts",
     "action-ranking:evaluate": "ts-node --transpile-only scripts/evaluateActionRankingPolicy.ts",
+    "action-ranking:evaluate-by-style": "ts-node --transpile-only scripts/evaluateActionRankingPolicyByStyle.ts",
     "action-ranking:compare": "ts-node --transpile-only scripts/compareActionRankingPolicies.ts",
     "action-ranking:diagnose": "ts-node --transpile-only scripts/diagnoseActionRankingPolicyDifferences.ts",
     "action-ranking:trace-divergences": "ts-node --transpile-only scripts/traceActionRankingPolicyDivergences.ts",
