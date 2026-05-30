@@ -113,6 +113,32 @@ export type PolicyEvaluationResult = {
   teacherBaselinePounceOutRate: number;
 };
 
+export type PolicyComparisonResult = {
+  games: number;
+  averageModelAPointDifferential: number;
+  averageModelBPointDifferential: number;
+  averagePointDifferentialDelta: number;
+  pointDifferentialDeltaStandardError: number;
+  modelABetterRate: number;
+  modelBBetterRate: number;
+  tiedPointDifferentialRate: number;
+  averageModelAScore: number;
+  averageModelBScore: number;
+  averageScoreDelta: number;
+  averageModelADecisionCount: number;
+  averageModelBDecisionCount: number;
+  averageModelACenterMoveRate: number;
+  averageModelBCenterMoveRate: number;
+  averageModelASolitaireMoveRate: number;
+  averageModelBSolitaireMoveRate: number;
+  averageModelACycleMoveRate: number;
+  averageModelBCycleMoveRate: number;
+  averageModelAPounceRemaining: number;
+  averageModelBPounceRemaining: number;
+  modelAPounceOutRate: number;
+  modelBPounceOutRate: number;
+};
+
 type RolloutTransition = {
   playerIndex: number;
   pointDifferentialBefore: number;
@@ -991,6 +1017,144 @@ export function evaluateNeuralModel(
   return evaluateNeuralPolicy(new NeuralActionRankingPolicy(model), options);
 }
 
+export function compareNeuralModels(
+  modelA: NeuralActionRankingModel,
+  modelB: NeuralActionRankingModel,
+  options: {
+    playerCount?: number;
+    games?: number;
+    seed?: string;
+    maxMovesPerGame?: number;
+  } = {}
+): PolicyComparisonResult {
+  const policyA = new NeuralActionRankingPolicy(modelA);
+  const policyB = new NeuralActionRankingPolicy(modelB);
+  const playerCount = options.playerCount ?? 4;
+  const games = options.games ?? 12;
+  const seed = options.seed ?? "action-ranking-compare";
+  const maxMovesPerGame = options.maxMovesPerGame ?? DEFAULT_MAX_MOVES_PER_GAME;
+  const pointDifferentialDeltas: number[] = [];
+  let modelADifferentialTotal = 0;
+  let modelBDifferentialTotal = 0;
+  let modelAScoreTotal = 0;
+  let modelBScoreTotal = 0;
+  let modelABetterCount = 0;
+  let modelBBetterCount = 0;
+  let tiedDifferentialCount = 0;
+  let modelADecisionCountTotal = 0;
+  let modelBDecisionCountTotal = 0;
+  let modelACenterMoveRateTotal = 0;
+  let modelBCenterMoveRateTotal = 0;
+  let modelASolitaireMoveRateTotal = 0;
+  let modelBSolitaireMoveRateTotal = 0;
+  let modelACycleMoveRateTotal = 0;
+  let modelBCycleMoveRateTotal = 0;
+  let modelAPounceRemainingTotal = 0;
+  let modelBPounceRemainingTotal = 0;
+  let modelAPounceOuts = 0;
+  let modelBPounceOuts = 0;
+
+  for (let gameIndex = 0; gameIndex < games; gameIndex++) {
+    const neuralPlayerIndex = gameIndex % playerCount;
+    const board = createTrainingBoard(playerCount, `${seed}:deal:${gameIndex}`);
+    const rolloutA = runPolicyRollout(board, {
+      policy: policyA,
+      random: createSeededRandom(`${seed}:rollout:${gameIndex}`),
+      temperature: 1,
+      sample: false,
+      maxMovesPerGame,
+      neuralPlayerIndices: [neuralPlayerIndex],
+    });
+    const rolloutB = runPolicyRollout(board, {
+      policy: policyB,
+      random: createSeededRandom(`${seed}:rollout:${gameIndex}`),
+      temperature: 1,
+      sample: false,
+      maxMovesPerGame,
+      neuralPlayerIndices: [neuralPlayerIndex],
+    });
+    const metricsA = getRolloutPlayerMetrics(rolloutA, neuralPlayerIndex);
+    const metricsB = getRolloutPlayerMetrics(rolloutB, neuralPlayerIndex);
+    const pointDifferentialDelta =
+      metricsA.pointDifferential - metricsB.pointDifferential;
+
+    pointDifferentialDeltas.push(pointDifferentialDelta);
+    modelADifferentialTotal += metricsA.pointDifferential;
+    modelBDifferentialTotal += metricsB.pointDifferential;
+    modelAScoreTotal += metricsA.score;
+    modelBScoreTotal += metricsB.score;
+    modelADecisionCountTotal += metricsA.decisionCount;
+    modelBDecisionCountTotal += metricsB.decisionCount;
+    modelACenterMoveRateTotal += metricsA.centerMoveRate;
+    modelBCenterMoveRateTotal += metricsB.centerMoveRate;
+    modelASolitaireMoveRateTotal += metricsA.solitaireMoveRate;
+    modelBSolitaireMoveRateTotal += metricsB.solitaireMoveRate;
+    modelACycleMoveRateTotal += metricsA.cycleMoveRate;
+    modelBCycleMoveRateTotal += metricsB.cycleMoveRate;
+    modelAPounceRemainingTotal += metricsA.pounceRemaining;
+    modelBPounceRemainingTotal += metricsB.pounceRemaining;
+
+    if (pointDifferentialDelta > 0) {
+      modelABetterCount += 1;
+    } else if (pointDifferentialDelta < 0) {
+      modelBBetterCount += 1;
+    } else {
+      tiedDifferentialCount += 1;
+    }
+    if (metricsA.pounceRemaining === 0) {
+      modelAPounceOuts += 1;
+    }
+    if (metricsB.pounceRemaining === 0) {
+      modelBPounceOuts += 1;
+    }
+  }
+
+  return {
+    games,
+    averageModelAPointDifferential:
+      games === 0 ? 0 : modelADifferentialTotal / games,
+    averageModelBPointDifferential:
+      games === 0 ? 0 : modelBDifferentialTotal / games,
+    averagePointDifferentialDelta:
+      games === 0
+        ? 0
+        : pointDifferentialDeltas.reduce((sum, value) => sum + value, 0) /
+          games,
+    pointDifferentialDeltaStandardError:
+      standardError(pointDifferentialDeltas),
+    modelABetterRate: games === 0 ? 0 : modelABetterCount / games,
+    modelBBetterRate: games === 0 ? 0 : modelBBetterCount / games,
+    tiedPointDifferentialRate:
+      games === 0 ? 0 : tiedDifferentialCount / games,
+    averageModelAScore: games === 0 ? 0 : modelAScoreTotal / games,
+    averageModelBScore: games === 0 ? 0 : modelBScoreTotal / games,
+    averageScoreDelta:
+      games === 0 ? 0 : (modelAScoreTotal - modelBScoreTotal) / games,
+    averageModelADecisionCount:
+      games === 0 ? 0 : modelADecisionCountTotal / games,
+    averageModelBDecisionCount:
+      games === 0 ? 0 : modelBDecisionCountTotal / games,
+    averageModelACenterMoveRate:
+      games === 0 ? 0 : modelACenterMoveRateTotal / games,
+    averageModelBCenterMoveRate:
+      games === 0 ? 0 : modelBCenterMoveRateTotal / games,
+    averageModelASolitaireMoveRate:
+      games === 0 ? 0 : modelASolitaireMoveRateTotal / games,
+    averageModelBSolitaireMoveRate:
+      games === 0 ? 0 : modelBSolitaireMoveRateTotal / games,
+    averageModelACycleMoveRate:
+      games === 0 ? 0 : modelACycleMoveRateTotal / games,
+    averageModelBCycleMoveRate:
+      games === 0 ? 0 : modelBCycleMoveRateTotal / games,
+    averageModelAPounceRemaining:
+      games === 0 ? 0 : modelAPounceRemainingTotal / games,
+    averageModelBPounceRemaining:
+      games === 0 ? 0 : modelBPounceRemainingTotal / games,
+    modelAPounceOutRate: games === 0 ? 0 : modelAPounceOuts / games,
+    modelBPounceOutRate: games === 0 ? 0 : modelBPounceOuts / games,
+  };
+}
+
 function runPolicyRollout(
   startBoard: BoardState,
   options: {
@@ -1106,6 +1270,20 @@ function chooseNeuralMove(
   return selected.move;
 }
 
+function getRolloutPlayerMetrics(rollout: RolloutResult, playerIndex: number) {
+  const moveCounts =
+    rollout.moveTypeCountsByPlayer[playerIndex] ?? createMoveTypeCounts();
+  return {
+    score: rollout.finalScores[playerIndex] ?? 0,
+    pointDifferential: rollout.finalPointDifferentials[playerIndex] ?? 0,
+    pounceRemaining: rollout.finalPounceCounts[playerIndex] ?? 0,
+    decisionCount: getTotalMoveCount(moveCounts),
+    centerMoveRate: getMoveRate(moveCounts, ["c2c"]),
+    solitaireMoveRate: getMoveRate(moveCounts, ["c2s", "s2s"]),
+    cycleMoveRate: getMoveRate(moveCounts, ["cycle", "flip_deck"]),
+  };
+}
+
 function createShuffledDeck(player: number, seed: string): CardState[] {
   const random = createSeededRandom(seed);
   const deck = SUITS.flatMap((suit) =>
@@ -1191,4 +1369,18 @@ function getMoveRate(
     return 0;
   }
   return moveTypes.reduce((sum, type) => sum + counts[type], 0) / total;
+}
+
+function standardError(values: readonly number[]): number {
+  if (values.length <= 1) {
+    return 0;
+  }
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const variance =
+    values.reduce((sum, value) => {
+      const delta = value - mean;
+      return sum + delta * delta;
+    }, 0) /
+    (values.length - 1);
+  return Math.sqrt(variance / values.length);
 }

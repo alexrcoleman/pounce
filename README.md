@@ -23,6 +23,7 @@ Useful training knobs:
 - `MODEL_OUT=C:\tmp\pounce-action-ranking-model.json` to save model weights
 - `MODEL_IN=...\model.json npm run action-ranking:train` to fine-tune saved weights
 - `MODEL_IN=...\model.json npm run action-ranking:evaluate` to evaluate saved weights
+- `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare` to compare two models on paired deals/seats
 - `EVAL_RUNS=4` or `EVAL_SEEDS=seedA,seedB` to evaluate saved weights across multiple seeds
 - `POUNCE_NEURAL_AI_MODEL=...\model.json npm run dev` to run Socket.IO bots with saved weights
 
@@ -86,6 +87,13 @@ On the same 768-game / 8-seed evaluation, that fine-tuned checkpoint measured
 `+0.138 +/- 0.321` baseline-adjusted point differential, with raw score `7.23`
 vs `6.93` and a `25.0%` solo win rate. Treat that as directionally interesting,
 not proven: the error bars still overlap zero.
+
+A paired model-vs-model comparison on the same deals/seats is stricter. Comparing
+that pairwise fine-tune directly against its imitation checkpoint measured
+`-0.026 +/- 0.061` point differential delta for the fine-tune, with tied point
+differential in `95.6%` of games. That means the reward fine-tune is not yet a
+proven replacement for the imitation checkpoint; use `action-ranking:compare`
+before promoting a candidate model.
 
 `IMPROVEMENT_STATES` enables the counterfactual rollout pass: it samples
 teacher-game states, tries several legal actions, lets the teacher finish from

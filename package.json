@@ -9,6 +9,7 @@
     "action-ranking:examples": "ts-node --transpile-only scripts/generateActionRankingExamples.ts",
     "action-ranking:train": "ts-node --transpile-only scripts/trainActionRankingPolicy.ts",
     "action-ranking:evaluate": "ts-node --transpile-only scripts/evaluateActionRankingPolicy.ts",
+    "action-ranking:compare": "ts-node --transpile-only scripts/compareActionRankingPolicies.ts",
     "start": "PORT=3000 next start -p 3000",
     "build-socketio": "echo 'no build needed for socketio server'",
     "start-socketio": "PORT=3001 ts-node --transpile-only server/socketioMain.ts",
