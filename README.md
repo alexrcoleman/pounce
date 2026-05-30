@@ -408,6 +408,21 @@ diagnostic explains the tiny residual comparison drift: on the same compare seed
 sampled decisions, while `modelB` states had zero flips. The non-residual value
 run showed 5-6 flips over the same policy-state diagnostic, matching its larger
 paired-play regression.
+An `action-ranking:tune-rl` sweep with policy-state diagnostics tested stronger
+residual score-weighted value updates and a conservative anchored pairwise
+recipe. The best search result was the pairwise recipe
+(`RL_COUNTERFACTUAL_SCORE_WEIGHT=0.5`, `RL_COUNTERFACTUAL_MAX_SCORE_GAP=0.5`,
+`RL_COUNTERFACTUAL_ANCHOR_WEIGHT=0.25`,
+`RL_COUNTERFACTUAL_PAIRWISE_MARGIN=1`, `RL_LR=0.001`,
+`RL_UPDATE_EPOCHS=5`), which measured `+0.130 +/- 0.127` over 192 search games
+with 2-4 policy-state flips per roughly 5,300 sampled deployment decisions. A
+larger 1,536-game paired comparison rejected it as a promotion candidate:
+`-0.012 +/- 0.021` point differential and `-0.039` raw score. The strongest
+residual value near-miss (`RL_COUNTERFACTUAL_SCORE_WEIGHT=0.25`,
+`RL_LR=0.0002`, `RL_UPDATE_EPOCHS=2`) similarly shrank from
+`+0.050 +/- 0.050` over 192 search games to `-0.009 +/- 0.010` over 1,536
+games, with `-0.019` raw score. These recipes are useful diagnostics for tiny
+decision-boundary movement, but not improved checkpoints.
 
 Uncertainty-targeted improvement collection is also wired in. With
 `IMPROVEMENT_MAX_SCORE_GAP` and `IMPROVEMENT_POLICY_CANDIDATES`, the collector
