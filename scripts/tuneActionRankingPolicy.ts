@@ -74,6 +74,12 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       "IMPROVEMENT_PREFERENCE_SCOPE",
       "all"
     ),
+    improvementValueTargetScale: readNumberEnv("IMPROVEMENT_VALUE_SCALE", 4),
+    improvementValueCenterTargets: readBooleanEnv(
+      "IMPROVEMENT_VALUE_CENTER",
+      true
+    ),
+    improvementValueHuberDelta: readNumberEnv("IMPROVEMENT_VALUE_HUBER", 0),
     improvementRequireBehaviorGap: readBooleanEnv(
       "IMPROVEMENT_REQUIRE_BEHAVIOR_GAP",
       false
@@ -105,6 +111,18 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
     rlCounterfactualTrainingMode: readRlCounterfactualTrainingModeEnv(
       "RL_COUNTERFACTUAL_MODE",
       "policy_gradient"
+    ),
+    rlCounterfactualValueTargetScale: readNumberEnv(
+      "RL_COUNTERFACTUAL_VALUE_SCALE",
+      4
+    ),
+    rlCounterfactualValueCenterTargets: readBooleanEnv(
+      "RL_COUNTERFACTUAL_VALUE_CENTER",
+      true
+    ),
+    rlCounterfactualValueHuberDelta: readNumberEnv(
+      "RL_COUNTERFACTUAL_VALUE_HUBER",
+      0
     ),
     rlUpdateEpochs: readIntegerEnv("RL_UPDATE_EPOCHS", 1),
     rlUpdateScope: readRlUpdateScopeEnv("RL_UPDATE_SCOPE", "all"),
@@ -227,13 +245,17 @@ function readBooleanEnv(name: string, fallback: boolean): boolean {
 
 function readImprovementTrainingModeEnv(
   name: string,
-  fallback: "softmax" | "pairwise"
-): "softmax" | "pairwise" {
+  fallback: "softmax" | "pairwise" | "value"
+): "softmax" | "pairwise" | "value" {
   const value = process.env[name];
   if (value == null || value.trim() === "") {
     return fallback;
   }
-  return value.toLowerCase() === "pairwise" ? "pairwise" : fallback;
+  const normalized = value.toLowerCase();
+  if (normalized === "pairwise" || normalized === "value") {
+    return normalized;
+  }
+  return fallback;
 }
 
 function readImprovementStateSourceEnv(
@@ -284,13 +306,17 @@ function readRlCreditModeEnv(
 
 function readRlCounterfactualTrainingModeEnv(
   name: string,
-  fallback: "policy_gradient" | "pairwise"
-): "policy_gradient" | "pairwise" {
+  fallback: "policy_gradient" | "pairwise" | "value"
+): "policy_gradient" | "pairwise" | "value" {
   const value = process.env[name];
   if (value == null || value.trim() === "") {
     return fallback;
   }
-  return value.toLowerCase() === "pairwise" ? "pairwise" : fallback;
+  const normalized = value.toLowerCase();
+  if (normalized === "pairwise" || normalized === "value") {
+    return normalized;
+  }
+  return fallback;
 }
 
 function readRlUpdateScopeEnv(

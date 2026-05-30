@@ -16,8 +16,8 @@ npm run action-ranking:train
 Useful training knobs:
 
 - `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`
-- `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
-- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MODE`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
+- `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_VALUE_SCALE`, `IMPROVEMENT_VALUE_CENTER`, `IMPROVEMENT_VALUE_HUBER`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
+- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `HIDDEN_LAYERS`, `MAX_MOVES`, `SEED`
 - `HIDDEN` and `HIDDEN_LAYERS` accept comma-separated layer sizes, for example `HIDDEN=192,96`
 - `MODEL_OUT=C:\tmp\pounce-action-ranking-model.json` to save model weights
@@ -159,6 +159,12 @@ updates to the best rollout action versus the recorded behavior action, which is
 useful when policy-state examples are meant to correct the model's own decisions
 instead of reshaping every candidate comparison in the state. Larger or more
 aggressive improvement passes have overcorrected in early tests.
+`IMPROVEMENT_MODE=value` instead treats each candidate's rollout point
+differential as an action-value target and regresses the policy score toward it.
+Targets are centered per state by default, then divided by
+`IMPROVEMENT_VALUE_SCALE`; `IMPROVEMENT_VALUE_HUBER` can clip large regression
+errors. This Q-style mode is useful for testing whether the network can learn
+relative action values without converting every state into hard pairwise labels.
 
 RL fine-tuning is wired in with batch-normalized, clipped advantages and optional
 discounted local reward-to-go. `RL_BASELINE_MODE=teacher` compares sampled policy
@@ -189,6 +195,11 @@ usually cannot be attributed to every sampled decision in the game.
 direct pairwise preferences instead of a listwise policy-gradient update. That
 is often a better match for this data because the counterfactual rollout only
 compares two actions from the same state.
+`RL_COUNTERFACTUAL_MODE=value` uses the same selected-vs-greedy counterfactual
+returns as two action-value regression targets. The value target scale,
+centering, and Huber clipping are controlled by
+`RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, and
+`RL_COUNTERFACTUAL_VALUE_HUBER`.
 
 RL runs tested so far have not beaten the reward-tuned checkpoint. A small
 64-episode greedy-baseline run with `RL_LR=0.00005` preserved the greedy policy
@@ -207,10 +218,18 @@ paired games. A 128-episode lower-LR version measured `-0.033 +/- 0.060`.
 Filtering to gaps of at least `1` reduced the run to 57 updates with average gap
 `5.48` and measured `-0.022 +/- 0.064`. Pairwise selected-vs-greedy training on
 the same counterfactual labels was too sharp at this data scale: a 64-episode
-run created 23 high-gap preferences and measured `-0.081 +/- 0.056`. The main
-open RL problem is now less about plumbing and more about collecting enough
-stable per-decision counterfactual labels, or adding a learned value/Q baseline
-so the model does not have to learn from sparse rollout comparisons alone.
+run created 23 high-gap preferences and measured `-0.081 +/- 0.056`.
+
+The first value-regression runs are wired in but have not produced a better
+deployed greedy policy yet. A 240-state behavior-gap value pass from the capacity
+checkpoint measured `+0.039 +/- 0.123` against capacity over 384 paired games.
+The same value pass on top of the current behavior-scope checkpoint measured
+`-0.002 +/- 0.045` against that checkpoint. A 64-episode
+`RL_COUNTERFACTUAL_MODE=value` run from the behavior-scope checkpoint produced
+247 counterfactual updates and measured `-0.060 +/- 0.035`. The main open RL
+problem is now collecting enough stable per-decision counterfactual labels and
+calibrating action-value targets without washing out the useful imitation and
+behavior-gap rankings.
 
 ## Deploying
 

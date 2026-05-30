@@ -50,7 +50,10 @@ export type NeuralTrainingOptions = {
   rlCounterfactualRolloutCount?: number;
   rlCounterfactualRolloutMoves?: number;
   rlCounterfactualMinReturnGap?: number;
-  rlCounterfactualTrainingMode?: "policy_gradient" | "pairwise";
+  rlCounterfactualTrainingMode?: "policy_gradient" | "pairwise" | "value";
+  rlCounterfactualValueTargetScale?: number;
+  rlCounterfactualValueCenterTargets?: boolean;
+  rlCounterfactualValueHuberDelta?: number;
   rlUpdateEpochs?: number;
   rlUpdateScope?: "all" | "exploratory";
   rlNormalizeAdvantages?: boolean;
@@ -63,11 +66,14 @@ export type NeuralTrainingOptions = {
   improvementRolloutMoves?: number;
   improvementRolloutCount?: number;
   improvementCommonRandom?: boolean;
-  improvementTrainingMode?: "softmax" | "pairwise";
+  improvementTrainingMode?: "softmax" | "pairwise" | "value";
   improvementMinReturnGap?: number;
   improvementMaxPairsPerExample?: number;
   improvementPreferenceTemperature?: number;
   improvementPreferenceScope?: "all" | "behavior";
+  improvementValueTargetScale?: number;
+  improvementValueCenterTargets?: boolean;
+  improvementValueHuberDelta?: number;
   improvementRequireBehaviorGap?: boolean;
   improvementMinBehaviorImprovement?: number;
   improvementEpochs?: number;
@@ -193,7 +199,7 @@ type PolicyGradientUpdate = {
 
 type PolicyGradientBaselineMode = "teacher" | "greedy";
 type PolicyGradientCreditMode = "episode" | "counterfactual";
-type CounterfactualTrainingMode = "policy_gradient" | "pairwise";
+type CounterfactualTrainingMode = "policy_gradient" | "pairwise" | "value";
 type PolicyGradientUpdateScope = "all" | "exploratory";
 
 type RewardImprovementCandidate = ActionRankingCandidate & {
@@ -287,22 +293,20 @@ export function trainNeuralActionRankingPolicy(
   const improvementStats =
     improvement.examples.length === 0
       ? emptyTrainingStats(options.improvementEpochs ?? 0)
-      : (options.improvementTrainingMode ?? "softmax") === "pairwise"
-        ? policy.trainPairwisePreferences(improvement.examples, {
-            epochs: options.improvementEpochs ?? 3,
-            learningRate: options.improvementLearningRate ?? 0.01,
-            minReturnGap: options.improvementMinReturnGap ?? 1,
-            maxPairsPerExample: options.improvementMaxPairsPerExample ?? 12,
-            temperature: options.improvementPreferenceTemperature ?? 1,
-            preferenceScope: options.improvementPreferenceScope ?? "all",
-            shuffleSeed: `${seed}:improvement-shuffle`,
-          })
-        : policy.trainRewardTargets(improvement.examples, {
-            epochs: options.improvementEpochs ?? 3,
-            learningRate: options.improvementLearningRate ?? 0.01,
-            targetTemperature: options.improvementTargetTemperature ?? 4,
-            shuffleSeed: `${seed}:improvement-shuffle`,
-          });
+      : trainImprovementExamples(policy, improvement.examples, {
+          mode: options.improvementTrainingMode ?? "softmax",
+          epochs: options.improvementEpochs ?? 3,
+          learningRate: options.improvementLearningRate ?? 0.01,
+          minReturnGap: options.improvementMinReturnGap ?? 1,
+          maxPairsPerExample: options.improvementMaxPairsPerExample ?? 12,
+          preferenceTemperature: options.improvementPreferenceTemperature ?? 1,
+          preferenceScope: options.improvementPreferenceScope ?? "all",
+          targetTemperature: options.improvementTargetTemperature ?? 4,
+          valueTargetScale: options.improvementValueTargetScale ?? 4,
+          valueCenterTargets: options.improvementValueCenterTargets ?? true,
+          valueHuberDelta: options.improvementValueHuberDelta ?? 0,
+          shuffleSeed: `${seed}:improvement-shuffle`,
+        });
 
   const reinforcement = trainPolicyGradientFromRollouts(policy, {
     playerCount,
@@ -321,6 +325,12 @@ export function trainNeuralActionRankingPolicy(
     counterfactualMinReturnGap: options.rlCounterfactualMinReturnGap ?? 1,
     counterfactualTrainingMode:
       options.rlCounterfactualTrainingMode ?? "policy_gradient",
+    counterfactualValueTargetScale:
+      options.rlCounterfactualValueTargetScale ?? 4,
+    counterfactualValueCenterTargets:
+      options.rlCounterfactualValueCenterTargets ?? true,
+    counterfactualValueHuberDelta:
+      options.rlCounterfactualValueHuberDelta ?? 0,
     updateEpochs: options.rlUpdateEpochs ?? 1,
     updateScope: options.rlUpdateScope ?? "all",
     normalizeAdvantages: options.rlNormalizeAdvantages ?? true,
@@ -532,6 +542,55 @@ export function collectRewardImprovementExamples(options: {
     skippedBehaviorGapCount,
     scannedStateCount,
   };
+}
+
+function trainImprovementExamples(
+  policy: NeuralActionRankingPolicy,
+  examples: ActionRankingImitationExample[],
+  options: {
+    mode: "softmax" | "pairwise" | "value";
+    epochs: number;
+    learningRate: number;
+    minReturnGap: number;
+    maxPairsPerExample: number;
+    preferenceTemperature: number;
+    preferenceScope: "all" | "behavior";
+    targetTemperature: number;
+    valueTargetScale: number;
+    valueCenterTargets: boolean;
+    valueHuberDelta: number;
+    shuffleSeed: string;
+  }
+): ImitationTrainingStats {
+  if (options.mode === "pairwise") {
+    return policy.trainPairwisePreferences(examples, {
+      epochs: options.epochs,
+      learningRate: options.learningRate,
+      minReturnGap: options.minReturnGap,
+      maxPairsPerExample: options.maxPairsPerExample,
+      temperature: options.preferenceTemperature,
+      preferenceScope: options.preferenceScope,
+      shuffleSeed: options.shuffleSeed,
+    });
+  }
+
+  if (options.mode === "value") {
+    return policy.trainValueRegression(examples, {
+      epochs: options.epochs,
+      learningRate: options.learningRate,
+      targetScale: options.valueTargetScale,
+      centerTargets: options.valueCenterTargets,
+      huberDelta: options.valueHuberDelta,
+      shuffleSeed: options.shuffleSeed,
+    });
+  }
+
+  return policy.trainRewardTargets(examples, {
+    epochs: options.epochs,
+    learningRate: options.learningRate,
+    targetTemperature: options.targetTemperature,
+    shuffleSeed: options.shuffleSeed,
+  });
 }
 
 function createRewardImprovementExample(
@@ -892,6 +951,9 @@ export function trainPolicyGradientFromRollouts(
     counterfactualRolloutMoves: number;
     counterfactualMinReturnGap: number;
     counterfactualTrainingMode: CounterfactualTrainingMode;
+    counterfactualValueTargetScale: number;
+    counterfactualValueCenterTargets: boolean;
+    counterfactualValueHuberDelta: number;
     updateEpochs: number;
     updateScope: PolicyGradientUpdateScope;
     normalizeAdvantages: boolean;
@@ -1043,11 +1105,15 @@ export function trainPolicyGradientFromRollouts(
 
   const advantageStats =
     counterfactualExamples.length > 0 &&
-    options.counterfactualTrainingMode === "pairwise"
-      ? trainCounterfactualPreferenceBatch(policy, counterfactualExamples, {
+    options.counterfactualTrainingMode !== "policy_gradient"
+      ? trainCounterfactualSupervisedBatch(policy, counterfactualExamples, {
+          mode: options.counterfactualTrainingMode,
           learningRate: options.learningRate,
           updateEpochs: options.updateEpochs,
           minReturnGap: options.counterfactualMinReturnGap,
+          valueTargetScale: options.counterfactualValueTargetScale,
+          valueCenterTargets: options.counterfactualValueCenterTargets,
+          valueHuberDelta: options.counterfactualValueHuberDelta,
           shuffleSeed: `${options.seed}:counterfactual-shuffle`,
         })
       : applyPolicyGradientBatch(policy, updates, {
@@ -1164,13 +1230,17 @@ function applyPolicyGradientBatch(
   return { mean, stdDev, appliedUpdates };
 }
 
-function trainCounterfactualPreferenceBatch(
+function trainCounterfactualSupervisedBatch(
   policy: NeuralActionRankingPolicy,
   examples: ActionRankingImitationExample[],
   options: {
+    mode: "pairwise" | "value";
     learningRate: number;
     updateEpochs: number;
     minReturnGap: number;
+    valueTargetScale: number;
+    valueCenterTargets: boolean;
+    valueHuberDelta: number;
     shuffleSeed: string;
   }
 ) {
@@ -1182,14 +1252,24 @@ function trainCounterfactualPreferenceBatch(
     return selectedReturn - greedyReturn;
   });
   const stats = summarizeValues(signedGaps);
-  const trainingStats = policy.trainPairwisePreferences(examples, {
-    epochs: options.updateEpochs,
-    learningRate: options.learningRate,
-    minReturnGap: options.minReturnGap,
-    maxPairsPerExample: 1,
-    preferenceScope: "all",
-    shuffleSeed: options.shuffleSeed,
-  });
+  const trainingStats =
+    options.mode === "value"
+      ? policy.trainValueRegression(examples, {
+          epochs: options.updateEpochs,
+          learningRate: options.learningRate,
+          centerTargets: options.valueCenterTargets,
+          targetScale: options.valueTargetScale,
+          huberDelta: options.valueHuberDelta,
+          shuffleSeed: options.shuffleSeed,
+        })
+      : policy.trainPairwisePreferences(examples, {
+          epochs: options.updateEpochs,
+          learningRate: options.learningRate,
+          minReturnGap: options.minReturnGap,
+          maxPairsPerExample: 1,
+          preferenceScope: "all",
+          shuffleSeed: options.shuffleSeed,
+        });
 
   return {
     mean: stats.mean,

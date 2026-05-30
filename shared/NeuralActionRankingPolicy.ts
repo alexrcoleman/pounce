@@ -69,6 +69,12 @@ export type PreferenceTrainingOptions = ImitationTrainingOptions & {
   preferenceScope?: "all" | "behavior";
 };
 
+export type ValueRegressionTrainingOptions = ImitationTrainingOptions & {
+  centerTargets?: boolean;
+  targetScale?: number;
+  huberDelta?: number;
+};
+
 type ForwardPass = {
   layerInputs: number[][];
   activations: number[][];
@@ -409,6 +415,74 @@ export class NeuralActionRankingPolicy {
       accuracy: updates === 0 ? 0 : correct / updates,
       pairs: updates,
       averagePairReturnGap: updates === 0 ? 0 : returnGapTotal / updates,
+    };
+  }
+
+  trainValueRegression(
+    examples: readonly ActionRankingImitationExample[],
+    options: ValueRegressionTrainingOptions = {}
+  ): ImitationTrainingStats {
+    const epochs = Math.max(1, Math.floor(options.epochs ?? 1));
+    const learningRate = options.learningRate ?? DEFAULT_LEARNING_RATE;
+    const l2 = options.l2 ?? 0;
+    const targetScale = Math.max(1e-6, options.targetScale ?? 4);
+    const huberDelta = Math.max(0, options.huberDelta ?? 0);
+    const centerTargets = options.centerTargets ?? true;
+    const random = createSeededRandom(options.shuffleSeed ?? "value-regression");
+    let totalLoss = 0;
+    let totalExamples = 0;
+    let correct = 0;
+    let updates = 0;
+
+    for (let epoch = 0; epoch < epochs; epoch++) {
+      const shuffled = shuffleCopy(examples, random);
+      shuffled.forEach((example) => {
+        const returns = example.candidates.map(
+          (candidate) => candidate.rolloutPointDifferentialReturn
+        );
+        if (
+          example.candidates.length === 0 ||
+          returns.some((value) => value == null)
+        ) {
+          return;
+        }
+
+        const numericReturns = returns as number[];
+        const center =
+          centerTargets && numericReturns.length > 0
+            ? mean(numericReturns)
+            : 0;
+        const targets = numericReturns.map(
+          (value) => (value - center) / targetScale
+        );
+        const scores = example.candidates.map((candidate) =>
+          this.scoreFeatures(candidate.features)
+        );
+        totalExamples += 1;
+        if (getBestIndex(scores) === getBestIndex(numericReturns)) {
+          correct += 1;
+        }
+
+        example.candidates.forEach((candidate, candidateIndex) => {
+          const error = scores[candidateIndex] - targets[candidateIndex];
+          totalLoss += getRegressionLoss(error, huberDelta);
+          this.applyScoreGradient(
+            candidate.features,
+            getRegressionGradient(error, huberDelta),
+            learningRate,
+            l2
+          );
+          updates += 1;
+        });
+      });
+    }
+
+    return {
+      epochs,
+      examples: totalExamples,
+      updates,
+      averageLoss: updates === 0 ? 0 : totalLoss / updates,
+      accuracy: totalExamples === 0 ? 0 : correct / totalExamples,
     };
   }
 
@@ -904,6 +978,24 @@ function getBestIndex(scores: readonly number[]): number {
   return scores.reduce((bestIndex, score, index) => {
     return index === 0 || score > scores[bestIndex] ? index : bestIndex;
   }, 0);
+}
+
+function mean(values: readonly number[]): number {
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function getRegressionLoss(error: number, huberDelta: number): number {
+  if (huberDelta <= 0 || Math.abs(error) <= huberDelta) {
+    return 0.5 * error * error;
+  }
+  return huberDelta * (Math.abs(error) - 0.5 * huberDelta);
+}
+
+function getRegressionGradient(error: number, huberDelta: number): number {
+  if (huberDelta <= 0 || Math.abs(error) <= huberDelta) {
+    return error;
+  }
+  return Math.sign(error) * huberDelta;
 }
 
 function sampleIndex(probabilities: readonly number[], random: () => number) {
