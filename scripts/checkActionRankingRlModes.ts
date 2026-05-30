@@ -386,6 +386,25 @@ assert.ok(
   "confidence filtering should skip labels with unstable rollout gaps"
 );
 
+const behaviorWinRateFiltered = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:behavior-win-rate-filtered",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualRolloutCount: 3,
+  rlCounterfactualRolloutMoves: 40,
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualMinReturnGap: 0,
+  rlCounterfactualMinBehaviorWinRate: 1,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.ok(
+  behaviorWinRateFiltered.reinforcement
+    .counterfactualBehaviorWinRateSkippedCount > 0,
+  "behavior-win-rate filtering should skip labels whose winner is not consistently better than greedy behavior"
+);
+
 const policyMarginFiltered = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:policy-margin-filtered",
@@ -438,6 +457,7 @@ console.log(
       scoreGapFiltered: summarize(scoreGapFiltered),
       behaviorGapFiltered: summarize(behaviorGapFiltered),
       confidenceFiltered: summarize(confidenceFiltered),
+      behaviorWinRateFiltered: summarize(behaviorWinRateFiltered),
       policyMarginFiltered: summarize(policyMarginFiltered),
       maxReturnGapFiltered: summarize(maxReturnGapFiltered),
     },
@@ -479,10 +499,14 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.counterfactualBehaviorGapSkippedCount,
     counterfactualBehaviorConfidenceSkippedCount:
       result.reinforcement.counterfactualBehaviorConfidenceSkippedCount,
+    counterfactualBehaviorWinRateSkippedCount:
+      result.reinforcement.counterfactualBehaviorWinRateSkippedCount,
     counterfactualConfidenceSkippedCount:
       result.reinforcement.counterfactualConfidenceSkippedCount,
     counterfactualScoreGapSkippedCount:
       result.reinforcement.counterfactualScoreGapSkippedCount,
+    averageCounterfactualBehaviorWinRate:
+      result.reinforcement.averageCounterfactualBehaviorWinRate,
     counterfactualAveragePairWeight:
       result.reinforcement.counterfactualAveragePairWeight,
     counterfactualAnchorExamples:

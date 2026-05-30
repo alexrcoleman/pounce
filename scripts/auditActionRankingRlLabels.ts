@@ -121,6 +121,10 @@ const options = {
     "RL_COUNTERFACTUAL_GAP_SE_MULTIPLIER",
     0
   ),
+  counterfactualMinBehaviorWinRate: readNumberEnv(
+    "RL_COUNTERFACTUAL_MIN_BEHAVIOR_WIN_RATE",
+    0
+  ),
   counterfactualMaxPolicyMargin: readNumberEnv(
     "RL_COUNTERFACTUAL_MAX_POLICY_MARGIN",
     0
@@ -172,6 +176,7 @@ console.log(
         behaviorGapSkippedCount: audit.behaviorGapSkippedCount,
         behaviorConfidenceSkippedCount:
           audit.behaviorConfidenceSkippedCount,
+        behaviorWinRateSkippedCount: audit.behaviorWinRateSkippedCount,
         confidenceSkippedCount: audit.confidenceSkippedCount,
         scoreGapSkippedCount: audit.scoreGapSkippedCount,
         maxReturnGapSkippedCount: audit.maxReturnGapSkippedCount,
@@ -179,6 +184,8 @@ console.log(
           audit.averageCounterfactualReturnGap,
         averageCounterfactualCandidateCount:
           audit.averageCounterfactualCandidateCount,
+        averageCounterfactualBehaviorWinRate:
+          audit.averageCounterfactualBehaviorWinRate,
       },
       diagnostics,
     },
