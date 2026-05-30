@@ -46,6 +46,11 @@ export type NeuralTrainingOptions = {
   rlLocalRewardDiscount?: number;
   rlBaselineMode?: "teacher" | "greedy";
   rlCommonRandom?: boolean;
+  rlCreditMode?: "episode" | "counterfactual";
+  rlCounterfactualRolloutCount?: number;
+  rlCounterfactualRolloutMoves?: number;
+  rlCounterfactualMinReturnGap?: number;
+  rlCounterfactualTrainingMode?: "policy_gradient" | "pairwise";
   rlUpdateEpochs?: number;
   rlUpdateScope?: "all" | "exploratory";
   rlNormalizeAdvantages?: boolean;
@@ -103,6 +108,9 @@ export type NeuralTrainingResult = {
     averageSampleMinusGreedyReturn: number;
     averageSampledDecisionCount: number;
     averageExploratoryDecisionCount: number;
+    averageCounterfactualReturnGap: number;
+    counterfactualTrainingUpdates: number;
+    counterfactualUpdateCount: number;
     averagePolicyUpdates: number;
     averageGradientUpdates: number;
     averageRawAdvantage: number;
@@ -162,6 +170,7 @@ export type PolicyComparisonResult = {
 type RolloutTransition = {
   playerIndex: number;
   pointDifferentialBefore: number;
+  board?: BoardState;
   candidates: ActionRankingCandidate[];
   selectedCandidateIndex: number;
   greedyCandidateIndex: number;
@@ -183,6 +192,8 @@ type PolicyGradientUpdate = {
 };
 
 type PolicyGradientBaselineMode = "teacher" | "greedy";
+type PolicyGradientCreditMode = "episode" | "counterfactual";
+type CounterfactualTrainingMode = "policy_gradient" | "pairwise";
 type PolicyGradientUpdateScope = "all" | "exploratory";
 
 type RewardImprovementCandidate = ActionRankingCandidate & {
@@ -303,6 +314,13 @@ export function trainNeuralActionRankingPolicy(
     localRewardDiscount: options.rlLocalRewardDiscount ?? 0,
     baselineMode: options.rlBaselineMode ?? "teacher",
     commonRandom: options.rlCommonRandom ?? true,
+    creditMode: options.rlCreditMode ?? "episode",
+    counterfactualRolloutCount: options.rlCounterfactualRolloutCount ?? 1,
+    counterfactualRolloutMoves:
+      options.rlCounterfactualRolloutMoves ?? Math.min(450, maxMovesPerGame),
+    counterfactualMinReturnGap: options.rlCounterfactualMinReturnGap ?? 1,
+    counterfactualTrainingMode:
+      options.rlCounterfactualTrainingMode ?? "policy_gradient",
     updateEpochs: options.rlUpdateEpochs ?? 1,
     updateScope: options.rlUpdateScope ?? "all",
     normalizeAdvantages: options.rlNormalizeAdvantages ?? true,
@@ -869,6 +887,11 @@ export function trainPolicyGradientFromRollouts(
     localRewardDiscount: number;
     baselineMode: PolicyGradientBaselineMode;
     commonRandom: boolean;
+    creditMode: PolicyGradientCreditMode;
+    counterfactualRolloutCount: number;
+    counterfactualRolloutMoves: number;
+    counterfactualMinReturnGap: number;
+    counterfactualTrainingMode: CounterfactualTrainingMode;
     updateEpochs: number;
     updateScope: PolicyGradientUpdateScope;
     normalizeAdvantages: boolean;
@@ -884,9 +907,13 @@ export function trainPolicyGradientFromRollouts(
   let sampleMinusGreedyReturnTotal = 0;
   let sampledDecisionCountTotal = 0;
   let exploratoryDecisionCountTotal = 0;
+  let counterfactualReturnGapTotal = 0;
+  let counterfactualUpdateCount = 0;
   const updates: PolicyGradientUpdate[] = [];
+  const counterfactualExamples: ActionRankingImitationExample[] = [];
   const baselineMode = options.baselineMode;
   const updateScope = options.updateScope;
+  const creditMode = options.creditMode;
 
   for (let episode = 0; episode < options.episodes; episode++) {
     const neuralPlayerIndex = episode % options.playerCount;
@@ -933,6 +960,7 @@ export function trainPolicyGradientFromRollouts(
       sample: true,
       maxMovesPerGame: options.maxMovesPerGame,
       neuralPlayerIndices: [neuralPlayerIndex],
+      captureTransitionBoards: creditMode === "counterfactual",
     });
     const finalDifferential =
       rollout.finalPointDifferentials[neuralPlayerIndex] ?? 0;
@@ -959,6 +987,43 @@ export function trainPolicyGradientFromRollouts(
       if (updateScope === "exploratory" && !isExploratoryDecision) {
         return;
       }
+      if (creditMode === "counterfactual") {
+        const result = getCounterfactualTransitionAdvantage(
+          transition,
+          policy,
+          `${options.seed}:counterfactual:${episode}:${transitionIndex}`,
+          options.counterfactualRolloutCount,
+          options.commonRandom,
+          options.counterfactualRolloutMoves
+        );
+        if (
+          !result ||
+          Math.abs(result.returnGap) < options.counterfactualMinReturnGap
+        ) {
+          return;
+        }
+        counterfactualReturnGapTotal += Math.abs(result.returnGap);
+        counterfactualUpdateCount += 1;
+        if (options.counterfactualTrainingMode === "pairwise") {
+          counterfactualExamples.push(
+            createCounterfactualPreferenceExample(
+              transition,
+              result,
+              episode,
+              transitionIndex
+            )
+          );
+          return;
+        }
+        updates.push({
+          candidates: transition.candidates,
+          selectedCandidateIndex: transition.selectedCandidateIndex,
+          rawAdvantage:
+            result.returnGap +
+            options.localRewardWeight * localRewardReturns[transitionIndex],
+        });
+        return;
+      }
       updates.push({
         candidates: transition.candidates,
         selectedCandidateIndex: transition.selectedCandidateIndex,
@@ -976,14 +1041,23 @@ export function trainPolicyGradientFromRollouts(
     sampleMinusGreedyReturnTotal += sampleMinusGreedyReturn;
   }
 
-  const advantageStats = applyPolicyGradientBatch(policy, updates, {
-    learningRate: options.learningRate,
-    temperature: options.temperature,
-    updateEpochs: options.updateEpochs,
-    shuffleSeed: `${options.seed}:update-shuffle`,
-    normalizeAdvantages: options.normalizeAdvantages,
-    advantageClip: options.advantageClip,
-  });
+  const advantageStats =
+    counterfactualExamples.length > 0 &&
+    options.counterfactualTrainingMode === "pairwise"
+      ? trainCounterfactualPreferenceBatch(policy, counterfactualExamples, {
+          learningRate: options.learningRate,
+          updateEpochs: options.updateEpochs,
+          minReturnGap: options.counterfactualMinReturnGap,
+          shuffleSeed: `${options.seed}:counterfactual-shuffle`,
+        })
+      : applyPolicyGradientBatch(policy, updates, {
+          learningRate: options.learningRate,
+          temperature: options.temperature,
+          updateEpochs: options.updateEpochs,
+          shuffleSeed: `${options.seed}:update-shuffle`,
+          normalizeAdvantages: options.normalizeAdvantages,
+          advantageClip: options.advantageClip,
+        });
 
   return {
     episodes: options.episodes,
@@ -1017,6 +1091,12 @@ export function trainPolicyGradientFromRollouts(
       options.episodes === 0
         ? 0
         : exploratoryDecisionCountTotal / options.episodes,
+    averageCounterfactualReturnGap:
+      counterfactualUpdateCount === 0
+        ? 0
+        : counterfactualReturnGapTotal / counterfactualUpdateCount,
+    counterfactualTrainingUpdates: advantageStats.appliedUpdates,
+    counterfactualUpdateCount,
     averagePolicyUpdates:
       options.episodes === 0 ? 0 : updates.length / options.episodes,
     averageGradientUpdates:
@@ -1082,6 +1162,177 @@ function applyPolicyGradientBatch(
   }
 
   return { mean, stdDev, appliedUpdates };
+}
+
+function trainCounterfactualPreferenceBatch(
+  policy: NeuralActionRankingPolicy,
+  examples: ActionRankingImitationExample[],
+  options: {
+    learningRate: number;
+    updateEpochs: number;
+    minReturnGap: number;
+    shuffleSeed: string;
+  }
+) {
+  const signedGaps = examples.map((example) => {
+    const selectedReturn =
+      example.candidates[0]?.rolloutPointDifferentialReturn ?? 0;
+    const greedyReturn =
+      example.candidates[1]?.rolloutPointDifferentialReturn ?? 0;
+    return selectedReturn - greedyReturn;
+  });
+  const stats = summarizeValues(signedGaps);
+  const trainingStats = policy.trainPairwisePreferences(examples, {
+    epochs: options.updateEpochs,
+    learningRate: options.learningRate,
+    minReturnGap: options.minReturnGap,
+    maxPairsPerExample: 1,
+    preferenceScope: "all",
+    shuffleSeed: options.shuffleSeed,
+  });
+
+  return {
+    mean: stats.mean,
+    stdDev: stats.stdDev,
+    appliedUpdates: trainingStats.updates,
+  };
+}
+
+function createCounterfactualPreferenceExample(
+  transition: RolloutTransition,
+  result: { selectedReturn: number; greedyReturn: number },
+  episode: number,
+  transitionIndex: number
+): ActionRankingImitationExample {
+  const selected = transition.candidates[transition.selectedCandidateIndex];
+  const greedy = transition.candidates[transition.greedyCandidateIndex];
+  const selectedWins = result.selectedReturn >= result.greedyReturn;
+  const bestReturn = selectedWins ? result.selectedReturn : result.greedyReturn;
+  const bestKey = selectedWins ? selected.key : greedy.key;
+
+  return {
+    trialIndex: episode,
+    stepIndex: transitionIndex,
+    playerIndex: transition.playerIndex,
+    playerPointDifferential: transition.pointDifferentialBefore,
+    finalPlayerPoints: null,
+    finalPointDifferential: transition.pointDifferentialBefore + bestReturn,
+    pointDifferentialReturn: bestReturn,
+    teacherActionKey: null,
+    teacherPointDifferentialReturn: null,
+    behaviorActionKey: greedy.key,
+    behaviorPointDifferentialReturn: result.greedyReturn,
+    selectedActionKey: bestKey,
+    selectedCandidateIndex: selectedWins ? 0 : 1,
+    candidates: [selected, greedy].map((candidate, index) => {
+      const rolloutPointDifferentialReturn =
+        index === 0 ? result.selectedReturn : result.greedyReturn;
+      return {
+        key: candidate.key,
+        equivalenceKey: candidate.equivalenceKey,
+        move: candidate.move,
+        features: candidate.features,
+        label: candidate.key === bestKey ? 1 : 0,
+        immediatePointDelta: candidate.immediatePointDelta,
+        immediatePointDifferentialDelta:
+          candidate.immediatePointDifferentialDelta,
+        rolloutPointDifferential:
+          transition.pointDifferentialBefore + rolloutPointDifferentialReturn,
+        rolloutPointDifferentialReturn,
+        endsRound: candidate.endsRound,
+      };
+    }),
+  };
+}
+
+function summarizeValues(values: readonly number[]) {
+  if (values.length === 0) {
+    return { mean: 0, stdDev: 0 };
+  }
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  if (values.length <= 1) {
+    return { mean, stdDev: 0 };
+  }
+  const variance =
+    values.reduce((sum, value) => {
+      const delta = value - mean;
+      return sum + delta * delta;
+    }, 0) /
+    (values.length - 1);
+  return { mean, stdDev: Math.sqrt(variance) };
+}
+
+function getCounterfactualTransitionAdvantage(
+  transition: RolloutTransition,
+  policy: NeuralActionRankingPolicy,
+  seed: string,
+  rolloutCount: number,
+  commonRandom: boolean,
+  maxMoves: number
+): { selectedReturn: number; greedyReturn: number; returnGap: number } | null {
+  if (
+    !transition.board ||
+    transition.selectedCandidateIndex < 0 ||
+    transition.selectedCandidateIndex >= transition.candidates.length ||
+    transition.greedyCandidateIndex < 0 ||
+    transition.greedyCandidateIndex >= transition.candidates.length ||
+    transition.selectedCandidateIndex === transition.greedyCandidateIndex
+  ) {
+    return null;
+  }
+
+  const selected = transition.candidates[transition.selectedCandidateIndex];
+  const greedy = transition.candidates[transition.greedyCandidateIndex];
+  const selectedReturn =
+    getCounterfactualPolicyPointDifferential(
+      transition.board,
+      transition.playerIndex,
+      selected.move,
+      getCounterfactualSeeds(seed, 0, rolloutCount, commonRandom),
+      maxMoves,
+      policy
+    ) - transition.pointDifferentialBefore;
+  const greedyReturn =
+    getCounterfactualPolicyPointDifferential(
+      transition.board,
+      transition.playerIndex,
+      greedy.move,
+      getCounterfactualSeeds(seed, 1, rolloutCount, commonRandom),
+      maxMoves,
+      policy
+    ) - transition.pointDifferentialBefore;
+
+  return {
+    selectedReturn,
+    greedyReturn,
+    returnGap: selectedReturn - greedyReturn,
+  };
+}
+
+function getCounterfactualPolicyPointDifferential(
+  board: BoardState,
+  playerIndex: number,
+  move: Move,
+  seeds: readonly string[],
+  maxMoves: number,
+  policy: NeuralActionRankingPolicy
+): number {
+  const safeSeeds = seeds.length > 0 ? seeds : ["policy-counterfactual"];
+  const total = safeSeeds.reduce((sum, seed) => {
+    const nextBoard = deepClone(board);
+    executeMove(nextBoard, playerIndex, move);
+    const rollout = runPolicyRollout(nextBoard, {
+      policy,
+      random: createSeededRandom(seed),
+      decisionRandom: createSeededRandom(`${seed}:decision`),
+      temperature: 1,
+      sample: false,
+      maxMovesPerGame: maxMoves,
+      neuralPlayerIndices: [playerIndex],
+    });
+    return sum + (rollout.finalPointDifferentials[playerIndex] ?? 0);
+  }, 0);
+  return total / safeSeeds.length;
 }
 
 function getDiscountedLocalRewardReturns(
@@ -1438,6 +1689,7 @@ function runPolicyRollout(
     sample: boolean;
     maxMovesPerGame: number;
     neuralPlayerIndices?: number[];
+    captureTransitionBoards?: boolean;
   }
 ): RolloutResult {
   const board = deepClone(startBoard);
@@ -1512,6 +1764,7 @@ function chooseNeuralMove(
     decisionRandom?: () => number;
     temperature: number;
     sample: boolean;
+    captureTransitionBoards?: boolean;
   },
   transitions: RolloutTransition[]
 ): Move | undefined {
@@ -1545,6 +1798,7 @@ function chooseNeuralMove(
     transitions.push({
       playerIndex,
       pointDifferentialBefore,
+      board: options.captureTransitionBoards ? deepClone(board) : undefined,
       candidates,
       selectedCandidateIndex,
       greedyCandidateIndex,

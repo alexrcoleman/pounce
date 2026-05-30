@@ -92,6 +92,20 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
     rlLocalRewardDiscount: readNumberEnv("RL_LOCAL_REWARD_DISCOUNT", 0),
     rlBaselineMode: readRlBaselineModeEnv("RL_BASELINE_MODE", "teacher"),
     rlCommonRandom: readBooleanEnv("RL_COMMON_RANDOM", true),
+    rlCreditMode: readRlCreditModeEnv("RL_CREDIT_MODE", "episode"),
+    rlCounterfactualRolloutCount: readIntegerEnv("RL_COUNTERFACTUAL_ROLLOUTS", 1),
+    rlCounterfactualRolloutMoves: readIntegerEnv(
+      "RL_COUNTERFACTUAL_ROLLOUT_MOVES",
+      450
+    ),
+    rlCounterfactualMinReturnGap: readNumberEnv(
+      "RL_COUNTERFACTUAL_MIN_RETURN_GAP",
+      1
+    ),
+    rlCounterfactualTrainingMode: readRlCounterfactualTrainingModeEnv(
+      "RL_COUNTERFACTUAL_MODE",
+      "policy_gradient"
+    ),
     rlUpdateEpochs: readIntegerEnv("RL_UPDATE_EPOCHS", 1),
     rlUpdateScope: readRlUpdateScopeEnv("RL_UPDATE_SCOPE", "all"),
     rlNormalizeAdvantages: readBooleanEnv("RL_NORMALIZE_ADVANTAGES", true),
@@ -253,6 +267,30 @@ function readRlBaselineModeEnv(
     return fallback;
   }
   return value.toLowerCase() === "greedy" ? "greedy" : fallback;
+}
+
+function readRlCreditModeEnv(
+  name: string,
+  fallback: "episode" | "counterfactual"
+): "episode" | "counterfactual" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  return value.toLowerCase() === "counterfactual"
+    ? "counterfactual"
+    : fallback;
+}
+
+function readRlCounterfactualTrainingModeEnv(
+  name: string,
+  fallback: "policy_gradient" | "pairwise"
+): "policy_gradient" | "pairwise" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  return value.toLowerCase() === "pairwise" ? "pairwise" : fallback;
 }
 
 function readRlUpdateScopeEnv(

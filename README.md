@@ -17,7 +17,7 @@ Useful training knobs:
 
 - `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`
 - `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
-- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
+- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MODE`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `HIDDEN_LAYERS`, `MAX_MOVES`, `SEED`
 - `HIDDEN` and `HIDDEN_LAYERS` accept comma-separated layer sizes, for example `HIDDEN=192,96`
 - `MODEL_OUT=C:\tmp\pounce-action-ranking-model.json` to save model weights
@@ -177,6 +177,18 @@ deployed policy. In a 128-episode exploratory run from the current best
 behavior-scope checkpoint, only about `3.8` of `53.4` sampled decisions per game
 were exploratory updates, which is a useful diagnostic for whether RL is
 actually moving the deployed greedy policy.
+`RL_CREDIT_MODE=counterfactual` goes one step further: for sampled decisions that
+are eligible for update, it snapshots the board before the move and rolls out
+both the sampled action and the greedy action with shared continuation
+randomness. The policy-gradient advantage is then the sampled action's
+counterfactual point-differential return minus the greedy action's return, gated
+by `RL_COUNTERFACTUAL_MIN_RETURN_GAP`. This is slower, but it attacks the main
+credit-assignment problem from episode-level REINFORCE: a good or bad final score
+usually cannot be attributed to every sampled decision in the game.
+`RL_COUNTERFACTUAL_MODE=pairwise` trains those selected-vs-greedy labels as
+direct pairwise preferences instead of a listwise policy-gradient update. That
+is often a better match for this data because the counterfactual rollout only
+compares two actions from the same state.
 
 RL runs tested so far have not beaten the reward-tuned checkpoint. A small
 64-episode greedy-baseline run with `RL_LR=0.00005` preserved the greedy policy
@@ -186,6 +198,19 @@ exactly in paired comparison. A stronger all-decision run
 A stronger exploratory-only run (`RL_LR=0.005`, `RL_UPDATE_EPOCHS=2`) changed
 more decisions but measured `-0.068 +/- 0.076` over 384 paired games. The next
 RL work should improve credit assignment, not merely increase learning rate.
+
+The first per-decision counterfactual RL runs improved the learning signal but
+still did not improve the deployed greedy policy. A 64-episode counterfactual
+policy-gradient run produced 247 exploratory selected-vs-greedy updates with
+average absolute return gap `0.62` and measured `-0.002 +/- 0.096` over 384
+paired games. A 128-episode lower-LR version measured `-0.033 +/- 0.060`.
+Filtering to gaps of at least `1` reduced the run to 57 updates with average gap
+`5.48` and measured `-0.022 +/- 0.064`. Pairwise selected-vs-greedy training on
+the same counterfactual labels was too sharp at this data scale: a 64-episode
+run created 23 high-gap preferences and measured `-0.081 +/- 0.056`. The main
+open RL problem is now less about plumbing and more about collecting enough
+stable per-decision counterfactual labels, or adding a learned value/Q baseline
+so the model does not have to learn from sparse rollout comparisons alone.
 
 ## Deploying
 
