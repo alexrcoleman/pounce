@@ -304,6 +304,13 @@ large enough to alter greedy choices. A 64-episode behavior-scope run with
 mostly cycling instead of deck-to-solitaire moves. It measured
 `+0.020 +/- 0.108` over 768 paired games, so the margin mechanism is useful for
 crossing decision boundaries but is not yet a better checkpoint.
+Reducing label noise did not solve that by itself: a 32-episode version with
+`RL_COUNTERFACTUAL_ROLLOUTS=3` changed only one of 2,000 sampled decisions and
+measured `+0.009 +/- 0.109` over 384 paired games. Extending the counterfactual
+horizon to `RL_COUNTERFACTUAL_ROLLOUT_MOVES=1800` also changed one sampled
+decision, still cycle-over-connector, and measured `-0.011 +/- 0.093`. The next
+RL direction should improve state/label targeting or add regularization that
+preserves useful connector priors while applying counterfactual corrections.
 
 Legacy model feature expansion is now enabled before fine-tuning. Re-running the
 240-state behavior-scope recipe from the capacity checkpoint produced a 48-input
