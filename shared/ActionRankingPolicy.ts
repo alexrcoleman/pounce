@@ -45,6 +45,17 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "own.pounceCount",
   "own.deckCount",
   "own.flippedCount",
+  "cycle.revealsCard",
+  "cycle.revealedValue",
+  "cycle.revealedCenterPlayable",
+  "cycle.revealedCanPlaySoon",
+  "cycle.revealedOwnSolitaireDestinationCount",
+  "cycle.revealedOwnSolitaireConnectorForPounce",
+  "cycle.revealedMatchesPounceParity",
+  "cycle.revealedPounceConnectorCloseness",
+  "cycle.resetsWaste",
+  "cycle.stockFractionAfter",
+  "cycle.cardsAdvanced",
   "own.emptyStackCount",
   "own.currentPoints",
   "own.pointDifferential",
@@ -333,6 +344,7 @@ function buildActionRankingFeatures(
   const dest = getMoveDestination(board, player, move);
   const cardShape = getCardShapeFeatures(player, card);
   const sourceShape = getSourceShapeFeatures(board, player, move, card);
+  const cycleShape = getCycleShapeFeatures(board, player, move);
   const centerFollow = getCenterFollowFeatures(board, playerIndex, move, card);
   const cardAlternatives = getCardAlternativeFeatures(
     board,
@@ -388,6 +400,17 @@ function buildActionRankingFeatures(
     normalize(player?.pounceDeck.length, 13),
     normalize(player?.deck.length, 35),
     normalize(player?.flippedDeck.length, 35),
+    bool(cycleShape.revealedCard != null),
+    normalizeCardValue(cycleShape.revealedCard),
+    bool(cycleShape.revealedCenterPlayable),
+    bool(cycleShape.revealedCanPlaySoon),
+    normalize(cycleShape.revealedOwnSolitaireDestinationCount, 4),
+    bool(cycleShape.revealedOwnSolitaireConnectorForPounce),
+    bool(cycleShape.revealedMatchesPounceParity),
+    normalize(cycleShape.revealedPounceConnectorCloseness, 1),
+    bool(cycleShape.resetsWaste),
+    normalize(cycleShape.stockFractionAfter, 1),
+    normalize(cycleShape.cardsAdvanced, 3),
     normalize(player?.stacks.filter((stack) => stack.length === 0).length, 4),
     normalizeSigned(player ? getCurrentPointsFromCards(player) : undefined, 52),
     normalizeSigned(
@@ -536,6 +559,80 @@ function getSourceShapeFeatures(
       exposedCard && pounceCard
         ? getConnectorCloseness(exposedCard, pounceCard)
         : 0,
+  };
+}
+
+function getCycleShapeFeatures(
+  board: BoardState,
+  player: PlayerState | undefined,
+  move: Move
+) {
+  const emptyFeatures = {
+    revealedCard: undefined as CardState | undefined,
+    revealedCenterPlayable: false,
+    revealedCanPlaySoon: false,
+    revealedOwnSolitaireDestinationCount: 0,
+    revealedOwnSolitaireConnectorForPounce: false,
+    revealedMatchesPounceParity: false,
+    revealedPounceConnectorCloseness: 0,
+    resetsWaste: false,
+    stockFractionAfter: 0,
+    cardsAdvanced: 0,
+  };
+  if (!player || move.type !== "cycle") {
+    return emptyFeatures;
+  }
+
+  const total = player.deck.length + player.flippedDeck.length;
+  if (total <= 0) {
+    return emptyFeatures;
+  }
+
+  if (player.deck.length === 0) {
+    return {
+      ...emptyFeatures,
+      resetsWaste: player.flippedDeck.length > 0,
+      stockFractionAfter: 1,
+    };
+  }
+
+  const cardsAdvanced = Math.min(3, player.deck.length);
+  const revealedCard = peek(player.deck.slice(-cardsAdvanced).reverse());
+  const pounceCard = peek(player.pounceDeck);
+  const solitaireDestinations = revealedCard
+    ? player.stacks.flatMap((_, dest) =>
+        canMoveCardToSolitaireStack(player, revealedCard, dest) ? [dest] : []
+      )
+    : [];
+  return {
+    revealedCard,
+    revealedCenterPlayable:
+      revealedCard != null &&
+      board.piles.some((pile) => canPlayOnCenterPile(pile, revealedCard)),
+    revealedCanPlaySoon:
+      revealedCard != null && getCanPlaySoon(revealedCard, board, 4),
+    revealedOwnSolitaireDestinationCount: solitaireDestinations.length,
+    revealedOwnSolitaireConnectorForPounce:
+      revealedCard != null &&
+      solitaireDestinations.some((dest) =>
+        getMakesPouncePlayable(
+          player,
+          { type: "c2s", source: "deck", dest },
+          revealedCard
+        )
+      ),
+    revealedMatchesPounceParity:
+      revealedCard != null &&
+      pounceCard != null &&
+      getStackCompatibilityParity(revealedCard) ===
+        getStackCompatibilityParity(pounceCard),
+    revealedPounceConnectorCloseness:
+      revealedCard && pounceCard
+        ? getConnectorCloseness(revealedCard, pounceCard)
+        : 0,
+    resetsWaste: false,
+    stockFractionAfter: (player.deck.length - cardsAdvanced) / total,
+    cardsAdvanced,
   };
 }
 

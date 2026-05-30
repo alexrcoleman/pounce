@@ -56,6 +56,12 @@ source-stack height/bottom/exposed-card information, whether exposed cards can
 play or match the pounce card's stack-compatibility parity, destination bottom
 value, card parity and pounce-connector closeness, and opponent follow pressure
 split by pounce/deck/solitaire visible cards after center plays.
+Cycle moves now include a stock-memory proxy: the card that would become visible
+after cycling, whether it can play center/solitaire/soon, whether it can connect
+to the pounce card, whether the action only resets the waste pile, and the
+remaining stock fraction after the cycle. These inputs are meant to let reward
+labels explain when cycling is good because a remembered stock card is useful,
+rather than pushing every cycle action up globally.
 
 Current useful baseline recipe:
 
