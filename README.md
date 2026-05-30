@@ -25,6 +25,7 @@ Useful training knobs:
 - `MODEL_IN=...\model.json npm run action-ranking:evaluate` to evaluate saved weights
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare` to compare two models on paired deals/seats
 - `MODEL_IN=...\best.json npm run action-ranking:tune` to iterate reward fine-tunes and promote only paired-comparison improvements
+- `MODEL_IN=...\best.json npm run action-ranking:tune-rl` to sweep counterfactual RL recipes and promote only paired-comparison improvements
 - `npm run action-ranking:check-rl-modes` to smoke-test legacy feature expansion and counterfactual RL training mode routing
 - `EVAL_RUNS=4` or `EVAL_SEEDS=seedA,seedB` to evaluate saved weights across multiple seeds
 - `POUNCE_NEURAL_AI_MODEL=...\model.json npm run dev` to run Socket.IO bots with saved weights
@@ -139,6 +140,17 @@ current best model, runs paired comparison against that current best, and only
 promotes when `averagePointDifferentialDelta - PROMOTE_SE_MULTIPLIER * standardError`
 is greater than `PROMOTE_MIN_DELTA`. Defaults are intentionally conservative:
 `PROMOTE_MIN_DELTA=0`, `PROMOTE_SE_MULTIPLIER=1`.
+
+`action-ranking:tune-rl` runs the same promote-only loop across several
+counterfactual RL recipes from the current best model. The default recipe set
+tries exploratory broad pairwise with `behavior` scope, exploratory broad
+pairwise with `all` scope, and exploratory broad value regression. Use
+`RL_TUNE_RECIPES` as a JSON array of `{ "name": string, "options": { ... } }`
+to sweep custom recipe knobs while inheriting conservative RL defaults.
+`RL_TUNE_ROUNDS`, `RL_TUNE_OUT_DIR`, `COMPARE_GAMES`, and `COMPARE_RUNS` control
+the search budget and verification strength. As with the manual comparisons
+below, this is a search tool; a promoted model still needs a larger final
+paired comparison before replacing the current best checkpoint.
 
 `IMPROVEMENT_STATES` enables the counterfactual rollout pass: it samples
 teacher-game states, tries several legal actions, lets the teacher finish from
