@@ -163,6 +163,14 @@ const CardContentMemo = observer(function CardContent({
   if (postGameStage === 3) {
     cardRotation = 0;
   }
+  const shouldAnimateFlip = getShouldAnimateFlip({
+    activePlayerIndex,
+    card,
+    location,
+    pileLength: pile.length,
+    postGameStage,
+    zIndex,
+  });
 
   const geometry = getCardScreenGeometry({
     area: layoutArea,
@@ -275,6 +283,7 @@ const CardContentMemo = observer(function CardContent({
     <div
       className={joinClasses(
         styles.root,
+        shouldAnimateFlip && styles.rootAnimatedFlip,
         canClick && styles.clickable,
         isDraggable && styles.draggable
       )}
@@ -310,18 +319,28 @@ const CardContentMemo = observer(function CardContent({
       onClick={canClick ? handleClick : undefined}
       ref={drag}
     >
-      <div className={joinClasses(styles.body, faceUp && styles.bodyFaceUp)}>
-        <div
-          className={styles.back}
-          style={
-            {
-              "--hr": colors[color] ?? "0deg",
-            } as any
-          }
-        />
-        <div className={styles.front}>
-          <CardFace suit={suit} value={value} />
-        </div>
+      <div
+        className={joinClasses(
+          styles.body,
+          shouldAnimateFlip && styles.bodyAnimatedFlip,
+          faceUp && styles.bodyFaceUp
+        )}
+      >
+        {shouldAnimateFlip || !faceUp ? (
+          <div
+            className={styles.back}
+            style={
+              {
+                "--hr": colors[color] ?? "0deg",
+              } as any
+            }
+          />
+        ) : null}
+        {shouldAnimateFlip || faceUp ? (
+          <div className={styles.front}>
+            <CardFace suit={suit} value={value} />
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -337,6 +356,33 @@ const colors: Record<string, string | undefined> = {
 };
 // ["red", "blue", "green", "orange", "yellow", "pink"];
 export default CardContentMemo;
+
+function getShouldAnimateFlip({
+  activePlayerIndex,
+  card,
+  location,
+  pileLength,
+  postGameStage,
+  zIndex,
+}: {
+  activePlayerIndex: number;
+  card: CardState;
+  location: CardLocation;
+  pileLength: number;
+  postGameStage: number | undefined;
+  zIndex: number;
+}): boolean {
+  if (postGameStage || card.player !== activePlayerIndex) {
+    return false;
+  }
+  if (location.type === "deck" || location.type === "flippedDeck") {
+    return true;
+  }
+  if (location.type === "pounce") {
+    return zIndex >= pileLength - 2;
+  }
+  return false;
+}
 
 function getCursorUpdate(
   card: CardState,

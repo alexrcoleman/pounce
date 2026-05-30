@@ -60,7 +60,18 @@ type Props = {
 const DESKTOP_DND_BACKEND_OPTIONS = {
   enableMouseEvents: true,
   enableTouchEvents: false,
+  getDropTargetElementsAtPoint,
 };
+
+function getDropTargetElementsAtPoint(
+  _x: number,
+  _y: number,
+  dropTargets: HTMLElement[]
+): HTMLElement[] {
+  // TouchBackend has already populated this list with drop targets under the
+  // pointer. Returning it skips the broader document.elementsFromPoint pass.
+  return dropTargets;
+}
 
 function getEstimatedServerTimeUntracked(state: SocketState): number {
   return untracked(() => state.getEstimatedServerTime());
