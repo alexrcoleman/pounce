@@ -47,6 +47,9 @@ export type NeuralTrainingOptions = {
   rlNormalizeAdvantages?: boolean;
   rlAdvantageClip?: number;
   improvementStates?: number;
+  improvementStateSource?: "teacher" | "policy";
+  improvementStateTemperature?: number;
+  improvementStateSample?: boolean;
   improvementCandidateLimit?: number;
   improvementRolloutMoves?: number;
   improvementRolloutCount?: number;
@@ -222,6 +225,10 @@ export function trainNeuralActionRankingPolicy(
   const improvement = collectRewardImprovementExamples({
     playerCount,
     maxStates: improvementStates,
+    stateSource: options.improvementStateSource ?? "teacher",
+    statePolicy: policy,
+    stateTemperature: options.improvementStateTemperature ?? 1,
+    stateSample: options.improvementStateSample ?? false,
     candidateLimit: options.improvementCandidateLimit ?? 6,
     rolloutMoves: options.improvementRolloutMoves ?? 450,
     rolloutCount: options.improvementRolloutCount ?? 1,
@@ -307,6 +314,10 @@ export function trainNeuralActionRankingPolicy(
 export function collectRewardImprovementExamples(options: {
   playerCount: number;
   maxStates: number;
+  stateSource: "teacher" | "policy";
+  statePolicy?: NeuralActionRankingPolicy;
+  stateTemperature: number;
+  stateSample: boolean;
   candidateLimit: number;
   rolloutMoves: number;
   rolloutCount: number;
@@ -336,6 +347,8 @@ export function collectRewardImprovementExamples(options: {
       `${options.seed}:deal:${dealIndex}`
     );
     const random = createSeededRandom(`${options.seed}:states:${dealIndex}`);
+    const neuralPlayerIndex =
+      options.stateSource === "policy" ? dealIndex % options.playerCount : -1;
     const activePlayerIndices = getActivePlayerIndices(board);
     const cooldowns = board.players.map((_, playerIndex) =>
       activePlayerIndices.includes(playerIndex)
@@ -357,10 +370,23 @@ export function collectRewardImprovementExamples(options: {
 
       const teacherMove = getBasicAIMove(board, playerIndex, {});
       const candidates = enumerateActionRankingCandidates(board, playerIndex);
-      if (teacherMove && candidates.length > 1) {
+      const behaviorMove = getImprovementStateBehaviorMove(
+        board,
+        playerIndex,
+        neuralPlayerIndex,
+        candidates,
+        teacherMove,
+        options,
+        random
+      );
+      const shouldCollect =
+        options.stateSource === "teacher" || playerIndex === neuralPlayerIndex;
+      if (shouldCollect && behaviorMove && candidates.length > 1) {
+        const behaviorKey = getActionRankingMoveKey(behaviorMove);
+        const teacherKey = teacherMove ? getActionRankingMoveKey(teacherMove) : null;
         const selectedCandidates = selectImprovementCandidates(
           candidates,
-          getActionRankingMoveKey(teacherMove),
+          [behaviorKey, teacherKey].filter((key): key is string => key != null),
           options.candidateLimit,
           random
         );
@@ -371,7 +397,7 @@ export function collectRewardImprovementExamples(options: {
           stepIndex,
           playerIndex,
           selectedCandidates,
-          teacherMove,
+          teacherMove ?? behaviorMove,
           `${options.seed}:rollout:${dealIndex}:${stepIndex}`,
           options.rolloutMoves,
           options.rolloutCount,
@@ -385,10 +411,10 @@ export function collectRewardImprovementExamples(options: {
         }
       }
 
-      if (teacherMove) {
-        executeMove(board, playerIndex, teacherMove);
+      if (behaviorMove) {
+        executeMove(board, playerIndex, behaviorMove);
       }
-      cooldowns[playerIndex] += getMoveDelay(teacherMove?.type, random);
+      cooldowns[playerIndex] += getMoveDelay(behaviorMove?.type, random);
     }
     dealIndex += 1;
   }
@@ -513,9 +539,39 @@ function getCounterfactualSeeds(
   );
 }
 
+function getImprovementStateBehaviorMove(
+  board: BoardState,
+  playerIndex: number,
+  neuralPlayerIndex: number,
+  candidates: ActionRankingCandidate[],
+  teacherMove: Move | undefined,
+  options: {
+    stateSource: "teacher" | "policy";
+    statePolicy?: NeuralActionRankingPolicy;
+    stateTemperature: number;
+    stateSample: boolean;
+  },
+  random: () => number
+): Move | undefined {
+  if (
+    options.stateSource === "policy" &&
+    playerIndex === neuralPlayerIndex &&
+    options.statePolicy &&
+    candidates.length > 0
+  ) {
+    return options.statePolicy.chooseCandidate(candidates, {
+      temperature: options.stateTemperature,
+      random,
+      sample: options.stateSample,
+    })?.move;
+  }
+
+  return teacherMove;
+}
+
 function selectImprovementCandidates(
   candidates: ActionRankingCandidate[],
-  teacherKey: string,
+  requiredKeys: readonly string[],
   limit: number,
   random: () => number
 ): ActionRankingCandidate[] {
@@ -524,12 +580,17 @@ function selectImprovementCandidates(
   }
 
   const selected: ActionRankingCandidate[] = [];
-  const teacherCandidate = candidates.find(
-    (candidate) => candidate.key === teacherKey
-  );
-  if (teacherCandidate) {
-    selected.push(teacherCandidate);
-  }
+  requiredKeys.forEach((requiredKey) => {
+    const requiredCandidate = candidates.find(
+      (candidate) => candidate.key === requiredKey
+    );
+    if (
+      requiredCandidate &&
+      !selected.some((candidate) => candidate.key === requiredCandidate.key)
+    ) {
+      selected.push(requiredCandidate);
+    }
+  });
 
   candidates
     .slice()

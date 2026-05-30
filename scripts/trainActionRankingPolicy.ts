@@ -20,6 +20,12 @@ const options = {
   imitationLearningRate: readNumberEnv("IMITATION_LR", 0.02),
   imitationEquivalentTargets: readBooleanEnv("IMITATION_EQUIVALENT_TARGETS", false),
   improvementStates: readIntegerEnv("IMPROVEMENT_STATES", 0),
+  improvementStateSource: readImprovementStateSourceEnv(
+    "IMPROVEMENT_STATE_SOURCE",
+    "teacher"
+  ),
+  improvementStateTemperature: readNumberEnv("IMPROVEMENT_STATE_TEMPERATURE", 1),
+  improvementStateSample: readBooleanEnv("IMPROVEMENT_STATE_SAMPLE", false),
   improvementCandidateLimit: readIntegerEnv("IMPROVEMENT_CANDIDATES", 6),
   improvementRolloutMoves: readIntegerEnv("IMPROVEMENT_ROLLOUT_MOVES", 450),
   improvementRolloutCount: readIntegerEnv("IMPROVEMENT_ROLLOUT_COUNT", 1),
@@ -125,6 +131,17 @@ function readImprovementTrainingModeEnv(
     return fallback;
   }
   return value.toLowerCase() === "pairwise" ? "pairwise" : fallback;
+}
+
+function readImprovementStateSourceEnv(
+  name: string,
+  fallback: "teacher" | "policy"
+): "teacher" | "policy" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  return value.toLowerCase() === "policy" ? "policy" : fallback;
 }
 
 function getModelHiddenLayerSizes(model: NeuralActionRankingModel): number[] {

@@ -16,7 +16,7 @@ npm run action-ranking:train
 Useful training knobs:
 
 - `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`
-- `IMPROVEMENT_STATES`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
+- `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
 - `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `HIDDEN_LAYERS`, `MAX_MOVES`, `SEED`
 - `HIDDEN` and `HIDDEN_LAYERS` accept comma-separated layer sizes, for example `HIDDEN=192,96`
@@ -68,6 +68,7 @@ uses a small, gap-filtered pairwise counterfactual rollout pass:
 $env:MODEL_IN='.\node_modules\pounce-action-ranking-capacity-model.json'
 $env:IMITATION_DEALS='0'
 $env:IMPROVEMENT_STATES='80'
+$env:IMPROVEMENT_STATE_SOURCE='teacher'
 $env:IMPROVEMENT_CANDIDATES='8'
 $env:IMPROVEMENT_ROLLOUT_MOVES='450'
 $env:IMPROVEMENT_ROLLOUT_COUNT='1'
@@ -100,6 +101,11 @@ teacher-game states, tries several legal actions, lets the teacher finish from
 each candidate, and trains from the resulting soft reward targets. By default,
 candidate actions in the same state now share continuation randomness; increasing
 `IMPROVEMENT_ROLLOUT_COUNT` averages multiple continuations per candidate.
+`IMPROVEMENT_STATE_SOURCE=policy` instead collects examples only from states
+reached by the current neural policy in one rotating seat while teacher bots play
+the other seats, which is useful for fine-tuning where the model actually acts.
+Early 80-state policy-source pairwise runs changed more relevant decisions but
+still did not beat the imitation checkpoint in paired comparison.
 `IMPROVEMENT_MODE=pairwise` trains only clear rollout-return preferences, using
 `IMPROVEMENT_MIN_RETURN_GAP` and `IMPROVEMENT_MAX_PAIRS` to ignore low-signal
 candidate differences. Larger or more aggressive improvement passes have
