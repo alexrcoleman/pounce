@@ -74,6 +74,10 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       "IMPROVEMENT_PREFERENCE_SCOPE",
       "all"
     ),
+    improvementPairwiseTargetMargin: readNumberEnv(
+      "IMPROVEMENT_PAIRWISE_MARGIN",
+      0
+    ),
     improvementValueTargetScale: readNumberEnv("IMPROVEMENT_VALUE_SCALE", 4),
     improvementValueCenterTargets: readBooleanEnv(
       "IMPROVEMENT_VALUE_CENTER",
@@ -119,6 +123,10 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
     rlCounterfactualPreferenceScope: readImprovementPreferenceScopeEnv(
       "RL_COUNTERFACTUAL_PREFERENCE_SCOPE",
       "all"
+    ),
+    rlCounterfactualPairwiseTargetMargin: readNumberEnv(
+      "RL_COUNTERFACTUAL_PAIRWISE_MARGIN",
+      0
     ),
     rlCounterfactualValueTargetScale: readNumberEnv(
       "RL_COUNTERFACTUAL_VALUE_SCALE",

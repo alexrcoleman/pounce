@@ -67,6 +67,7 @@ export type PreferenceTrainingOptions = ImitationTrainingOptions & {
   maxPairsPerExample?: number;
   temperature?: number;
   preferenceScope?: "all" | "behavior";
+  targetMargin?: number;
 };
 
 export type ValueRegressionTrainingOptions = ImitationTrainingOptions & {
@@ -357,6 +358,7 @@ export class NeuralActionRankingPolicy {
     );
     const temperature = Math.max(1e-6, options.temperature ?? 1);
     const preferenceScope = options.preferenceScope ?? "all";
+    const targetMargin = Math.max(0, options.targetMargin ?? 0);
     const random = createSeededRandom(options.shuffleSeed ?? "preferences");
     let totalLoss = 0;
     let totalExamples = 0;
@@ -385,8 +387,9 @@ export class NeuralActionRankingPolicy {
           const winnerScore = this.scoreFeatures(winner.features);
           const loserScore = this.scoreFeatures(loser.features);
           const margin = (winnerScore - loserScore) / temperature;
-          const mistakeProbability = sigmoid(-margin);
-          totalLoss += softplus(-margin);
+          const marginError = targetMargin - margin;
+          const mistakeProbability = sigmoid(marginError);
+          totalLoss += softplus(marginError);
           returnGapTotal += pair.returnGap;
           if (winnerScore > loserScore) {
             correct += 1;

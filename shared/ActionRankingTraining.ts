@@ -53,6 +53,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualMinReturnGap?: number;
   rlCounterfactualTrainingMode?: "policy_gradient" | "pairwise" | "value";
   rlCounterfactualPreferenceScope?: "all" | "behavior";
+  rlCounterfactualPairwiseTargetMargin?: number;
   rlCounterfactualValueTargetScale?: number;
   rlCounterfactualValueCenterTargets?: boolean;
   rlCounterfactualValueHuberDelta?: number;
@@ -73,6 +74,7 @@ export type NeuralTrainingOptions = {
   improvementMaxPairsPerExample?: number;
   improvementPreferenceTemperature?: number;
   improvementPreferenceScope?: "all" | "behavior";
+  improvementPairwiseTargetMargin?: number;
   improvementValueTargetScale?: number;
   improvementValueCenterTargets?: boolean;
   improvementValueHuberDelta?: number;
@@ -318,6 +320,7 @@ export function trainNeuralActionRankingPolicy(
           maxPairsPerExample: options.improvementMaxPairsPerExample ?? 12,
           preferenceTemperature: options.improvementPreferenceTemperature ?? 1,
           preferenceScope: options.improvementPreferenceScope ?? "all",
+          pairwiseTargetMargin: options.improvementPairwiseTargetMargin ?? 0,
           targetTemperature: options.improvementTargetTemperature ?? 4,
           valueTargetScale: options.improvementValueTargetScale ?? 4,
           valueCenterTargets: options.improvementValueCenterTargets ?? true,
@@ -345,6 +348,8 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualTrainingMode ?? "policy_gradient",
     counterfactualPreferenceScope:
       options.rlCounterfactualPreferenceScope ?? "all",
+    counterfactualPairwiseTargetMargin:
+      options.rlCounterfactualPairwiseTargetMargin ?? 0,
     counterfactualValueTargetScale:
       options.rlCounterfactualValueTargetScale ?? 4,
     counterfactualValueCenterTargets:
@@ -575,6 +580,7 @@ function trainImprovementExamples(
     maxPairsPerExample: number;
     preferenceTemperature: number;
     preferenceScope: "all" | "behavior";
+    pairwiseTargetMargin: number;
     targetTemperature: number;
     valueTargetScale: number;
     valueCenterTargets: boolean;
@@ -590,6 +596,7 @@ function trainImprovementExamples(
       maxPairsPerExample: options.maxPairsPerExample,
       temperature: options.preferenceTemperature,
       preferenceScope: options.preferenceScope,
+      targetMargin: options.pairwiseTargetMargin,
       shuffleSeed: options.shuffleSeed,
     });
   }
@@ -973,6 +980,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualMinReturnGap: number;
     counterfactualTrainingMode: CounterfactualTrainingMode;
     counterfactualPreferenceScope: "all" | "behavior";
+    counterfactualPairwiseTargetMargin: number;
     counterfactualValueTargetScale: number;
     counterfactualValueCenterTargets: boolean;
     counterfactualValueHuberDelta: number;
@@ -1146,6 +1154,7 @@ export function trainPolicyGradientFromRollouts(
           updateEpochs: options.updateEpochs,
           minReturnGap: options.counterfactualMinReturnGap,
           preferenceScope: options.counterfactualPreferenceScope,
+          pairwiseTargetMargin: options.counterfactualPairwiseTargetMargin,
           valueTargetScale: options.counterfactualValueTargetScale,
           valueCenterTargets: options.counterfactualValueCenterTargets,
           valueHuberDelta: options.counterfactualValueHuberDelta,
@@ -1278,6 +1287,7 @@ function trainCounterfactualSupervisedBatch(
     updateEpochs: number;
     minReturnGap: number;
     preferenceScope: "all" | "behavior";
+    pairwiseTargetMargin: number;
     valueTargetScale: number;
     valueCenterTargets: boolean;
     valueHuberDelta: number;
@@ -1309,6 +1319,7 @@ function trainCounterfactualSupervisedBatch(
           minReturnGap: options.minReturnGap,
           maxPairsPerExample: 1,
           preferenceScope: options.preferenceScope,
+          targetMargin: options.pairwiseTargetMargin,
           shuffleSeed: options.shuffleSeed,
         });
 

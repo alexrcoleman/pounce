@@ -16,8 +16,8 @@ npm run action-ranking:train
 Useful training knobs:
 
 - `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`
-- `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_VALUE_SCALE`, `IMPROVEMENT_VALUE_CENTER`, `IMPROVEMENT_VALUE_HUBER`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
-- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_CANDIDATES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_PREFERENCE_SCOPE`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
+- `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_PAIRWISE_MARGIN`, `IMPROVEMENT_VALUE_SCALE`, `IMPROVEMENT_VALUE_CENTER`, `IMPROVEMENT_VALUE_HUBER`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
+- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_CANDIDATES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_PREFERENCE_SCOPE`, `RL_COUNTERFACTUAL_PAIRWISE_MARGIN`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `HIDDEN_LAYERS`, `MAX_MOVES`, `SEED`
 - `HIDDEN` and `HIDDEN_LAYERS` accept comma-separated layer sizes, for example `HIDDEN=192,96`
 - `MODEL_OUT=C:\tmp\pounce-action-ranking-model.json` to save model weights
@@ -105,12 +105,13 @@ before promoting a candidate model.
 
 For strategy debugging, `action-ranking:diagnose` compares two model checkpoints
 on the same sampled teacher-game decision states and reports top-action
-agreement, teacher-action agreement, move-type deltas, feature deltas, and a few
-concrete disagreements. `DIAG_DEALS`, `DIAG_MAX_EXAMPLES`,
-`DIAG_MAX_DISAGREEMENTS`, and `DIAG_TOP_FEATURES` control the sample size and
-output detail. This is useful for seeing whether a candidate is actually
-changing center-vs-solitaire choices, pounce-card urgency, connector behavior,
-or opponent-helping center plays before spending time on a large paired rollout.
+agreement, teacher-action agreement, score drift, top-score margins, move-type
+deltas, feature deltas, and a few concrete disagreements. `DIAG_DEALS`,
+`DIAG_MAX_EXAMPLES`, `DIAG_MAX_DISAGREEMENTS`, and `DIAG_TOP_FEATURES` control
+the sample size and output detail. This is useful for seeing whether a candidate
+is actually changing center-vs-solitaire choices, pounce-card urgency, connector
+behavior, or opponent-helping center plays before spending time on a large
+paired rollout.
 
 The best policy-state reward candidate so far uses targeted behavior-gap
 examples and a behavior-only pairwise update:
@@ -189,6 +190,9 @@ updates to the best rollout action versus the recorded behavior action, which is
 useful when policy-state examples are meant to correct the model's own decisions
 instead of reshaping every candidate comparison in the state. Larger or more
 aggressive improvement passes have overcorrected in early tests.
+`IMPROVEMENT_PAIRWISE_MARGIN` adds an explicit target score margin to pairwise
+training, so high-confidence preferences can keep pushing until the rollout
+winner is not merely above the loser but separated by that margin.
 `IMPROVEMENT_MODE=value` instead treats each candidate's rollout point
 differential as an action-value target and regresses the policy score toward it.
 Targets are centered per state by default, then divided by
@@ -229,6 +233,10 @@ policy alternatives for supervised `pairwise` and `value` modes.
 `RL_COUNTERFACTUAL_PREFERENCE_SCOPE=behavior` narrows pairwise labels to the
 best rollout candidate versus the current greedy behavior action; the default
 `all` trains the clearest candidate pair in each state.
+`RL_COUNTERFACTUAL_PAIRWISE_MARGIN` applies the same explicit margin to
+counterfactual pairwise labels, which is useful for testing whether RL labels are
+strong enough to actually change the deployed greedy action instead of only
+nudging scores.
 `RL_COUNTERFACTUAL_MODE=value` uses the same counterfactual returns as
 action-value regression targets. The value target scale, centering, and Huber
 clipping are controlled by
@@ -289,6 +297,13 @@ behavior metrics. A follow-up diagnostic over 2,000 sampled teacher-state
 decisions found 100% top-action agreement between that candidate and the
 behavior-scope checkpoint, so treat the search bump as noise or an update too
 small to affect greedy play, not as an RL improvement.
+Adding an explicit pairwise target margin made stronger counterfactual updates
+large enough to alter greedy choices. A 64-episode behavior-scope run with
+`RL_COUNTERFACTUAL_PAIRWISE_MARGIN=1`, `RL_LR=0.001`, and
+`RL_UPDATE_EPOCHS=5` changed `0.35%` of 2,000 sampled teacher-state decisions,
+mostly cycling instead of deck-to-solitaire moves. It measured
+`+0.020 +/- 0.108` over 768 paired games, so the margin mechanism is useful for
+crossing decision boundaries but is not yet a better checkpoint.
 
 Legacy model feature expansion is now enabled before fine-tuning. Re-running the
 240-state behavior-scope recipe from the capacity checkpoint produced a 48-input

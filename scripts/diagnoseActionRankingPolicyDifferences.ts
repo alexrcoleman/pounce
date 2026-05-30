@@ -124,6 +124,15 @@ function diagnoseExamples(examples: readonly SampledExample[]) {
   let modelATeacherAgreementCount = 0;
   let modelBTeacherAgreementCount = 0;
   let disagreementCount = 0;
+  let candidateScoreDeltaAbsTotal = 0;
+  let candidateScoreDeltaTotal = 0;
+  let maxCandidateScoreDeltaAbs = 0;
+  let modelATopMarginTotal = 0;
+  let modelBTopMarginTotal = 0;
+  let topMarginCount = 0;
+  let modelBCloseMarginAt005Count = 0;
+  let modelBCloseMarginAt010Count = 0;
+  let modelBCloseMarginAt025Count = 0;
 
   for (const example of examples) {
     candidateCount += example.candidates.length;
@@ -133,6 +142,38 @@ function diagnoseExamples(examples: readonly SampledExample[]) {
     const topB = rankingB[0];
     if (!topA || !topB) {
       continue;
+    }
+
+    const scoreAByKey = getScoreMap(rankingA);
+    const scoreBByKey = getScoreMap(rankingB);
+    for (const candidate of example.candidates) {
+      const scoreDelta =
+        (scoreAByKey.get(candidate.key) ?? 0) -
+        (scoreBByKey.get(candidate.key) ?? 0);
+      const scoreDeltaAbs = Math.abs(scoreDelta);
+      candidateScoreDeltaTotal += scoreDelta;
+      candidateScoreDeltaAbsTotal += scoreDeltaAbs;
+      maxCandidateScoreDeltaAbs = Math.max(
+        maxCandidateScoreDeltaAbs,
+        scoreDeltaAbs
+      );
+    }
+
+    const marginA = getTopScoreMargin(rankingA);
+    const marginB = getTopScoreMargin(rankingB);
+    if (Number.isFinite(marginA) && Number.isFinite(marginB)) {
+      topMarginCount += 1;
+      modelATopMarginTotal += marginA;
+      modelBTopMarginTotal += marginB;
+      if (marginB <= 0.05) {
+        modelBCloseMarginAt005Count += 1;
+      }
+      if (marginB <= 0.1) {
+        modelBCloseMarginAt010Count += 1;
+      }
+      if (marginB <= 0.25) {
+        modelBCloseMarginAt025Count += 1;
+      }
     }
 
     modelAMoveCounts[topA.candidate.move.type] += 1;
@@ -179,6 +220,21 @@ function diagnoseExamples(examples: readonly SampledExample[]) {
     candidates: candidateCount,
     averageCandidatesPerExample:
       examples.length === 0 ? 0 : candidateCount / examples.length,
+    averageCandidateScoreDelta:
+      candidateCount === 0 ? 0 : candidateScoreDeltaTotal / candidateCount,
+    averageAbsoluteCandidateScoreDelta:
+      candidateCount === 0 ? 0 : candidateScoreDeltaAbsTotal / candidateCount,
+    maxAbsoluteCandidateScoreDelta: maxCandidateScoreDeltaAbs,
+    averageModelATopScoreMargin:
+      topMarginCount === 0 ? 0 : modelATopMarginTotal / topMarginCount,
+    averageModelBTopScoreMargin:
+      topMarginCount === 0 ? 0 : modelBTopMarginTotal / topMarginCount,
+    modelBCloseTopMarginRateAt005:
+      topMarginCount === 0 ? 0 : modelBCloseMarginAt005Count / topMarginCount,
+    modelBCloseTopMarginRateAt010:
+      topMarginCount === 0 ? 0 : modelBCloseMarginAt010Count / topMarginCount,
+    modelBCloseTopMarginRateAt025:
+      topMarginCount === 0 ? 0 : modelBCloseMarginAt025Count / topMarginCount,
     topActionAgreementRate:
       examples.length === 0 ? 0 : topActionAgreementCount / examples.length,
     topEquivalenceAgreementRate:
@@ -302,6 +358,13 @@ function getScoreMap(predictions: readonly ActionRankingPrediction[]) {
       prediction.score,
     ])
   );
+}
+
+function getTopScoreMargin(predictions: readonly ActionRankingPrediction[]) {
+  if (predictions.length <= 1) {
+    return Number.POSITIVE_INFINITY;
+  }
+  return predictions[0].score - predictions[1].score;
 }
 
 function normalizeMoveCounts(counts: MoveTypeCounts, total: number) {

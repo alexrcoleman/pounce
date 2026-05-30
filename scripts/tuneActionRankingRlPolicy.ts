@@ -262,6 +262,10 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
       "RL_COUNTERFACTUAL_CANDIDATES",
       5
     ),
+    rlCounterfactualPairwiseTargetMargin: readNumberEnv(
+      "RL_COUNTERFACTUAL_PAIRWISE_MARGIN",
+      0
+    ),
     rlUpdateEpochs: readIntegerEnv("RL_UPDATE_EPOCHS", 1),
     rlUpdateScope: "exploratory",
     rlNormalizeAdvantages: true,
