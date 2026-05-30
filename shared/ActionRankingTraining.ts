@@ -54,6 +54,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualStateSource?: "sampled" | "greedy";
   rlCounterfactualTrainingMode?: "policy_gradient" | "pairwise" | "value";
   rlCounterfactualGapStandardErrorMultiplier?: number;
+  rlCounterfactualMaxPolicyMargin?: number;
   rlCounterfactualPreferenceScope?: "all" | "behavior";
   rlCounterfactualPairwiseTargetMargin?: number;
   rlCounterfactualMaxScoreGap?: number;
@@ -144,6 +145,7 @@ export type NeuralTrainingResult = {
     averageCounterfactualCandidateCount: number;
     counterfactualTrainingUpdates: number;
     counterfactualUpdateCount: number;
+    counterfactualPolicyMarginSkippedCount: number;
     counterfactualConfidenceSkippedCount: number;
     counterfactualScoreGapSkippedCount: number;
     counterfactualAnchorExamples: number;
@@ -414,6 +416,8 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualTrainingMode ?? "policy_gradient",
     counterfactualGapStandardErrorMultiplier:
       options.rlCounterfactualGapStandardErrorMultiplier ?? 0,
+    counterfactualMaxPolicyMargin:
+      options.rlCounterfactualMaxPolicyMargin ?? 0,
     counterfactualPreferenceScope:
       options.rlCounterfactualPreferenceScope ?? "all",
     counterfactualPairwiseTargetMargin:
@@ -1389,6 +1393,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualStateSource: CounterfactualStateSource;
     counterfactualTrainingMode: CounterfactualTrainingMode;
     counterfactualGapStandardErrorMultiplier: number;
+    counterfactualMaxPolicyMargin: number;
     counterfactualPreferenceScope: "all" | "behavior";
     counterfactualPairwiseTargetMargin: number;
     counterfactualMaxScoreGap: number;
@@ -1418,6 +1423,7 @@ export function trainPolicyGradientFromRollouts(
   let counterfactualReturnGapTotal = 0;
   let counterfactualCandidateCountTotal = 0;
   let counterfactualUpdateCount = 0;
+  let counterfactualPolicyMarginSkippedCount = 0;
   let counterfactualConfidenceSkippedCount = 0;
   let counterfactualScoreGapSkippedCount = 0;
   const updates: PolicyGradientUpdate[] = [];
@@ -1520,6 +1526,18 @@ export function trainPolicyGradientFromRollouts(
         return;
       }
       if (creditMode === "counterfactual") {
+        const policyTopScoreGap = getPolicyTopScoreGap(
+          transition.candidates,
+          policy
+        );
+        if (
+          options.counterfactualMaxPolicyMargin > 0 &&
+          policyTopScoreGap != null &&
+          policyTopScoreGap > options.counterfactualMaxPolicyMargin
+        ) {
+          counterfactualPolicyMarginSkippedCount += 1;
+          return;
+        }
         const result = getCounterfactualTransitionResult(
           transition,
           policy,
@@ -1687,6 +1705,7 @@ export function trainPolicyGradientFromRollouts(
         : counterfactualCandidateCountTotal / counterfactualUpdateCount,
     counterfactualTrainingUpdates: advantageStats.appliedUpdates,
     counterfactualUpdateCount,
+    counterfactualPolicyMarginSkippedCount,
     counterfactualConfidenceSkippedCount,
     counterfactualScoreGapSkippedCount,
     counterfactualAnchorExamples: advantageStats.anchorExamples,

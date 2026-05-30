@@ -233,6 +233,21 @@ assert.ok(
   "confidence filtering should skip labels with unstable rollout gaps"
 );
 
+const policyMarginFiltered = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:policy-margin-filtered",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualMaxPolicyMargin: 0.001,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.ok(
+  policyMarginFiltered.reinforcement.counterfactualPolicyMarginSkippedCount > 0,
+  "policy-margin filtering should skip settled high-margin decision states"
+);
+
 console.log(
   JSON.stringify(
     {
@@ -246,6 +261,7 @@ console.log(
       anchoredValue: summarize(anchoredValue),
       scoreGapFiltered: summarize(scoreGapFiltered),
       confidenceFiltered: summarize(confidenceFiltered),
+      policyMarginFiltered: summarize(policyMarginFiltered),
     },
     null,
     2
@@ -273,6 +289,8 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.averageCounterfactualCandidateCount,
     counterfactualTrainingUpdates:
       result.reinforcement.counterfactualTrainingUpdates,
+    counterfactualPolicyMarginSkippedCount:
+      result.reinforcement.counterfactualPolicyMarginSkippedCount,
     counterfactualConfidenceSkippedCount:
       result.reinforcement.counterfactualConfidenceSkippedCount,
     counterfactualScoreGapSkippedCount:

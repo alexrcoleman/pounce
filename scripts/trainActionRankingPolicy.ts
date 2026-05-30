@@ -124,6 +124,10 @@ const options = {
     "RL_COUNTERFACTUAL_GAP_SE_MULTIPLIER",
     0
   ),
+  rlCounterfactualMaxPolicyMargin: readNumberEnv(
+    "RL_COUNTERFACTUAL_MAX_POLICY_MARGIN",
+    0
+  ),
   rlCounterfactualPreferenceScope: readImprovementPreferenceScopeEnv(
     "RL_COUNTERFACTUAL_PREFERENCE_SCOPE",
     "all"
