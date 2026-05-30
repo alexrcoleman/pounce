@@ -81,6 +81,37 @@ assert.equal(
   "value mode should not fall back to policy-gradient updates"
 );
 
+const outputOnlyInitialModel = createNeuralActionRankingModel(
+  [16],
+  "action-ranking-rl-mode-check:output-only-model"
+);
+const outputOnlyValue = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  initialModel: outputOnlyInitialModel,
+  seed: "action-ranking-rl-mode-check:output-only-value",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+  rlTrainableLayers: "output",
+});
+assertCounterfactualWork(outputOnlyValue, "value");
+assert.deepEqual(
+  (outputOnlyValue.model as NeuralActionRankingModelV2).layerWeights,
+  outputOnlyInitialModel.layerWeights,
+  "output-only RL should leave hidden layer weights unchanged"
+);
+assert.deepEqual(
+  (outputOnlyValue.model as NeuralActionRankingModelV2).layerBiases,
+  outputOnlyInitialModel.layerBiases,
+  "output-only RL should leave hidden layer biases unchanged"
+);
+assert.notDeepEqual(
+  (outputOnlyValue.model as NeuralActionRankingModelV2).outputWeights,
+  outputOnlyInitialModel.outputWeights,
+  "output-only RL should still update output weights"
+);
+
 const scoreWeightedValue = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:score-weighted-value",
@@ -285,6 +316,7 @@ console.log(
       featureExpansion,
       policyGradient: summarize(policyGradient),
       value: summarize(value),
+      outputOnlyValue: summarize(outputOnlyValue),
       scoreWeightedValue: summarize(scoreWeightedValue),
       pounceWeightedValue: summarize(pounceWeightedValue),
       residualValue: summarize(residualValue),

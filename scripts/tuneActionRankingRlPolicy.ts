@@ -351,6 +351,7 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
     ),
     rlUpdateEpochs: readIntegerEnv("RL_UPDATE_EPOCHS", 1),
     rlUpdateScope: "exploratory",
+    rlTrainableLayers: readTrainableLayersEnv("RL_TRAINABLE_LAYERS", "all"),
     rlNormalizeAdvantages: true,
     rlAdvantageClip: readNumberEnv("RL_ADVANTAGE_CLIP", 3),
   };
@@ -417,6 +418,17 @@ function readRlCounterfactualStateSourceEnv(
     return fallback;
   }
   return value.toLowerCase() === "greedy" ? "greedy" : fallback;
+}
+
+function readTrainableLayersEnv(
+  name: string,
+  fallback: "all" | "output"
+): "all" | "output" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  return value.toLowerCase() === "output" ? "output" : fallback;
 }
 
 function sanitizeFilePart(value: string): string {

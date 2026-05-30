@@ -70,6 +70,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualValueHuberDelta?: number;
   rlUpdateEpochs?: number;
   rlUpdateScope?: "all" | "exploratory";
+  rlTrainableLayers?: "all" | "output";
   rlNormalizeAdvantages?: boolean;
   rlAdvantageClip?: number;
   improvementStates?: number;
@@ -464,6 +465,7 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualValueHuberDelta ?? 0,
     updateEpochs: options.rlUpdateEpochs ?? 1,
     updateScope: options.rlUpdateScope ?? "all",
+    trainableLayers: options.rlTrainableLayers ?? "all",
     normalizeAdvantages: options.rlNormalizeAdvantages ?? true,
     advantageClip: options.rlAdvantageClip ?? 3,
     maxMovesPerGame,
@@ -1434,6 +1436,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualValueHuberDelta: number;
     updateEpochs: number;
     updateScope: PolicyGradientUpdateScope;
+    trainableLayers: "all" | "output";
     normalizeAdvantages: boolean;
     advantageClip: number;
     maxMovesPerGame: number;
@@ -1688,6 +1691,7 @@ export function trainPolicyGradientFromRollouts(
           valueCenterTargets: options.counterfactualValueCenterTargets,
           valueTargetMode: options.counterfactualValueTargetMode,
           valueHuberDelta: options.counterfactualValueHuberDelta,
+          trainableLayers: options.trainableLayers,
           shuffleSeed: `${options.seed}:counterfactual-shuffle`,
         })
       : applyPolicyGradientBatch(policy, updates, {
@@ -1695,6 +1699,7 @@ export function trainPolicyGradientFromRollouts(
           temperature: options.temperature,
           updateEpochs: options.updateEpochs,
           shuffleSeed: `${options.seed}:update-shuffle`,
+          trainableLayers: options.trainableLayers,
           normalizeAdvantages: options.normalizeAdvantages,
           advantageClip: options.advantageClip,
         });
@@ -1960,6 +1965,7 @@ function applyPolicyGradientBatch(
     temperature: number;
     updateEpochs: number;
     shuffleSeed: string;
+    trainableLayers: "all" | "output";
     normalizeAdvantages: boolean;
     advantageClip: number;
   }
@@ -1999,7 +2005,9 @@ function applyPolicyGradientBatch(
         update.selectedCandidateIndex,
         advantage,
         options.learningRate,
-        options.temperature
+        options.temperature,
+        0,
+        options.trainableLayers
       );
       appliedUpdates += 1;
     });
@@ -2026,6 +2034,7 @@ function trainCounterfactualSupervisedBatch(
     valueCenterTargets: boolean;
     valueTargetMode: "absolute" | "residual";
     valueHuberDelta: number;
+    trainableLayers: "all" | "output";
     shuffleSeed: string;
   }
 ) {
@@ -2051,6 +2060,7 @@ function trainCounterfactualSupervisedBatch(
           targetScale: options.valueTargetScale,
           targetMode: options.valueTargetMode,
           huberDelta: options.valueHuberDelta,
+          trainableLayers: options.trainableLayers,
           shuffleSeed: options.shuffleSeed,
         })
       : policy.trainPairwisePreferences(examples, {
@@ -2060,6 +2070,7 @@ function trainCounterfactualSupervisedBatch(
           maxPairsPerExample: 1,
           preferenceScope: options.preferenceScope,
           targetMargin: options.pairwiseTargetMargin,
+          trainableLayers: options.trainableLayers,
           shuffleSeed: options.shuffleSeed,
         });
   const anchorExamples =
@@ -2078,6 +2089,7 @@ function trainCounterfactualSupervisedBatch(
           epochs: options.updateEpochs,
           learningRate: options.learningRate * options.anchorWeight,
           targetTemperature: options.anchorTemperature,
+          trainableLayers: options.trainableLayers,
           shuffleSeed: `${options.shuffleSeed}:anchor`,
         });
 

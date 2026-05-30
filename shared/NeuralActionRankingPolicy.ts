@@ -46,6 +46,7 @@ export type ImitationTrainingOptions = {
   l2?: number;
   shuffleSeed?: string;
   equivalentTargets?: boolean;
+  trainableLayers?: "all" | "output";
 };
 
 export type ImitationTrainingStats = {
@@ -178,6 +179,7 @@ export class NeuralActionRankingPolicy {
     const epochs = Math.max(1, Math.floor(options.epochs ?? 1));
     const learningRate = options.learningRate ?? DEFAULT_LEARNING_RATE;
     const l2 = options.l2 ?? 0;
+    const trainableLayers = options.trainableLayers ?? "all";
     const random = createSeededRandom(options.shuffleSeed ?? "imitation");
     let totalLoss = 0;
     let totalExamples = 0;
@@ -227,7 +229,8 @@ export class NeuralActionRankingPolicy {
           targetProbabilities,
           learningRate,
           1,
-          l2
+          l2,
+          trainableLayers
         );
         updates += 1;
       });
@@ -248,7 +251,8 @@ export class NeuralActionRankingPolicy {
     advantage: number,
     learningRate: number,
     temperature = 1,
-    l2 = 0
+    l2 = 0,
+    trainableLayers: "all" | "output" = "all"
   ): void {
     if (
       candidates.length === 0 ||
@@ -269,7 +273,8 @@ export class NeuralActionRankingPolicy {
       selectedCandidateIndex,
       learningRate,
       advantage,
-      l2
+      l2,
+      trainableLayers
     );
   }
 
@@ -280,6 +285,7 @@ export class NeuralActionRankingPolicy {
     const epochs = Math.max(1, Math.floor(options.epochs ?? 1));
     const learningRate = options.learningRate ?? DEFAULT_LEARNING_RATE;
     const l2 = options.l2 ?? 0;
+    const trainableLayers = options.trainableLayers ?? "all";
     const targetTemperature = options.targetTemperature ?? 4;
     const random = createSeededRandom(options.shuffleSeed ?? "reward-targets");
     let totalLoss = 0;
@@ -330,7 +336,8 @@ export class NeuralActionRankingPolicy {
           targetProbabilities,
           learningRate,
           1,
-          l2
+          l2,
+          trainableLayers
         );
         updates += 1;
       });
@@ -352,6 +359,7 @@ export class NeuralActionRankingPolicy {
     const epochs = Math.max(1, Math.floor(options.epochs ?? 1));
     const learningRate = options.learningRate ?? DEFAULT_LEARNING_RATE;
     const l2 = options.l2 ?? 0;
+    const trainableLayers = options.trainableLayers ?? "all";
     const minReturnGap = Math.max(0, options.minReturnGap ?? 1);
     const maxPairsPerExample = Math.max(
       0,
@@ -400,13 +408,15 @@ export class NeuralActionRankingPolicy {
             winner.features,
             -mistakeProbability / temperature,
             learningRate,
-            l2
+            l2,
+            trainableLayers
           );
           this.applyScoreGradient(
             loser.features,
             mistakeProbability / temperature,
             learningRate,
-            l2
+            l2,
+            trainableLayers
           );
           updates += 1;
         });
@@ -431,6 +441,7 @@ export class NeuralActionRankingPolicy {
     const epochs = Math.max(1, Math.floor(options.epochs ?? 1));
     const learningRate = options.learningRate ?? DEFAULT_LEARNING_RATE;
     const l2 = options.l2 ?? 0;
+    const trainableLayers = options.trainableLayers ?? "all";
     const targetScale = Math.max(1e-6, options.targetScale ?? 4);
     const targetMode = options.targetMode ?? "absolute";
     const anchorPolicy =
@@ -487,7 +498,8 @@ export class NeuralActionRankingPolicy {
             candidate.features,
             getRegressionGradient(error, huberDelta),
             learningRate,
-            l2
+            l2,
+            trainableLayers
           );
           updates += 1;
         });
@@ -509,12 +521,19 @@ export class NeuralActionRankingPolicy {
     selectedCandidateIndex: number,
     learningRate: number,
     scale: number,
-    l2: number
+    l2: number,
+    trainableLayers: "all" | "output"
   ): void {
     candidates.forEach((candidate, candidateIndex) => {
       const target = candidateIndex === selectedCandidateIndex ? 1 : 0;
       const dScore = scale * (probabilities[candidateIndex] - target);
-      this.applyScoreGradient(candidate.features, dScore, learningRate, l2);
+      this.applyScoreGradient(
+        candidate.features,
+        dScore,
+        learningRate,
+        l2,
+        trainableLayers
+      );
     });
   }
 
@@ -524,12 +543,19 @@ export class NeuralActionRankingPolicy {
     targets: readonly number[],
     learningRate: number,
     scale: number,
-    l2: number
+    l2: number,
+    trainableLayers: "all" | "output"
   ): void {
     candidates.forEach((candidate, candidateIndex) => {
       const dScore =
         scale * (probabilities[candidateIndex] - targets[candidateIndex]);
-      this.applyScoreGradient(candidate.features, dScore, learningRate, l2);
+      this.applyScoreGradient(
+        candidate.features,
+        dScore,
+        learningRate,
+        l2,
+        trainableLayers
+      );
     });
   }
 
@@ -537,7 +563,8 @@ export class NeuralActionRankingPolicy {
     features: readonly number[],
     dScore: number,
     learningRate: number,
-    l2: number
+    l2: number,
+    trainableLayers: "all" | "output" = "all"
   ): void {
     const modelFeatures = this.prepareFeatures(features);
     const forward = this.forward(modelFeatures);
@@ -558,6 +585,10 @@ export class NeuralActionRankingPolicy {
       this.model.outputWeights[outputIndex] -= learningRate * outputGrad;
     }
     this.model.outputBias -= learningRate * dScore;
+
+    if (trainableLayers === "output") {
+      return;
+    }
 
     const deltas = this.model.hiddenLayerSizes.map((size) =>
       Array.from({ length: size }, () => 0)

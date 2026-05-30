@@ -182,6 +182,7 @@ const options = {
   ),
   rlUpdateEpochs: readIntegerEnv("RL_UPDATE_EPOCHS", 1),
   rlUpdateScope: readRlUpdateScopeEnv("RL_UPDATE_SCOPE", "all"),
+  rlTrainableLayers: readTrainableLayersEnv("RL_TRAINABLE_LAYERS", "all"),
   rlNormalizeAdvantages: readBooleanEnv("RL_NORMALIZE_ADVANTAGES", true),
   rlAdvantageClip: readNumberEnv("RL_ADVANTAGE_CLIP", 3),
   maxMovesPerGame: readIntegerEnv("MAX_MOVES", 1800),
@@ -374,6 +375,17 @@ function readRlUpdateScopeEnv(
     return fallback;
   }
   return value.toLowerCase() === "exploratory" ? "exploratory" : fallback;
+}
+
+function readTrainableLayersEnv(
+  name: string,
+  fallback: "all" | "output"
+): "all" | "output" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  return value.toLowerCase() === "output" ? "output" : fallback;
 }
 
 function getModelHiddenLayerSizes(model: NeuralActionRankingModel): number[] {
