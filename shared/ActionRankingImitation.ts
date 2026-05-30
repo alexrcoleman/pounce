@@ -23,6 +23,7 @@ export type ActionRankingImitationCandidate = {
   rolloutPointDifferentialReturn?: number;
   rolloutScore?: number;
   rolloutScoreReturn?: number;
+  rolloutPounceProgressReturn?: number;
   rolloutObjectiveReturn?: number;
   endsRound: boolean;
 };

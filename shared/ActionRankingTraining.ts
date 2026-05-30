@@ -59,6 +59,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualPairwiseTargetMargin?: number;
   rlCounterfactualMaxScoreGap?: number;
   rlCounterfactualScoreRewardWeight?: number;
+  rlCounterfactualPounceRewardWeight?: number;
   rlCounterfactualAnchorWeight?: number;
   rlCounterfactualAnchorMaxExamples?: number;
   rlCounterfactualAnchorTemperature?: number;
@@ -210,6 +211,7 @@ type RolloutTransition = {
   playerIndex: number;
   pointDifferentialBefore: number;
   scoreBefore: number;
+  pounceRemainingBefore: number;
   board?: BoardState;
   candidates: ActionRankingCandidate[];
   selectedCandidateIndex: number;
@@ -242,6 +244,7 @@ type CounterfactualCandidateReturn = {
   candidateIndex: number;
   rolloutPointDifferentialReturn: number;
   rolloutScoreReturn: number;
+  rolloutPounceProgressReturn: number;
   rolloutObjectiveReturn: number;
   rolloutObjectiveReturns: number[];
 };
@@ -261,6 +264,7 @@ type CounterfactualTransitionResult = {
 type CounterfactualOutcome = {
   pointDifferential: number;
   score: number;
+  pounceRemaining: number;
 };
 
 type RewardImprovementCandidate = ActionRankingCandidate & {
@@ -425,6 +429,8 @@ export function trainNeuralActionRankingPolicy(
     counterfactualMaxScoreGap: options.rlCounterfactualMaxScoreGap ?? 0,
     counterfactualScoreRewardWeight:
       options.rlCounterfactualScoreRewardWeight ?? 0,
+    counterfactualPounceRewardWeight:
+      options.rlCounterfactualPounceRewardWeight ?? 0,
     counterfactualAnchorWeight: options.rlCounterfactualAnchorWeight ?? 0,
     counterfactualAnchorMaxExamples:
       options.rlCounterfactualAnchorMaxExamples ?? 512,
@@ -1058,6 +1064,7 @@ function getCounterfactualOutcomes(
     return {
       pointDifferential: getPointDifferential(nextBoard, playerIndex),
       score: getCurrentPointsFromCards(nextBoard.players[playerIndex]),
+      pounceRemaining: nextBoard.players[playerIndex]?.pounceDeck.length ?? 0,
     };
   });
 }
@@ -1398,6 +1405,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualPairwiseTargetMargin: number;
     counterfactualMaxScoreGap: number;
     counterfactualScoreRewardWeight: number;
+    counterfactualPounceRewardWeight: number;
     counterfactualAnchorWeight: number;
     counterfactualAnchorMaxExamples: number;
     counterfactualAnchorTemperature: number;
@@ -1548,7 +1556,8 @@ export function trainPolicyGradientFromRollouts(
           options.counterfactualTrainingMode === "policy_gradient"
             ? 2
             : options.counterfactualCandidateLimit,
-          options.counterfactualScoreRewardWeight
+          options.counterfactualScoreRewardWeight,
+          options.counterfactualPounceRewardWeight
         );
         const counterfactualGap =
           options.counterfactualTrainingMode === "policy_gradient"
@@ -2006,6 +2015,8 @@ function createCounterfactualSupervisedExample(
         rolloutPointDifferentialReturn,
         rolloutScore: transition.scoreBefore + candidateResult.rolloutScoreReturn,
         rolloutScoreReturn: candidateResult.rolloutScoreReturn,
+        rolloutPounceProgressReturn:
+          candidateResult.rolloutPounceProgressReturn,
         rolloutObjectiveReturn: candidateResult.rolloutObjectiveReturn,
         endsRound: candidate.endsRound,
       };
@@ -2049,7 +2060,8 @@ function getCounterfactualTransitionResult(
   commonRandom: boolean,
   maxMoves: number,
   candidateLimit: number,
-  scoreRewardWeight: number
+  scoreRewardWeight: number,
+  pounceRewardWeight: number
 ): CounterfactualTransitionResult | null {
   if (
     !transition.board ||
@@ -2073,6 +2085,9 @@ function getCounterfactualTransitionResult(
   const safeScoreWeight = Number.isFinite(scoreRewardWeight)
     ? scoreRewardWeight
     : 0;
+  const safePounceWeight = Number.isFinite(pounceRewardWeight)
+    ? pounceRewardWeight
+    : 0;
   const candidates = candidateIndices.map((candidateIndex, index) => {
     const candidate = transition.candidates[candidateIndex];
     const outcomes = getCounterfactualPolicyOutcomes(
@@ -2089,20 +2104,28 @@ function getCounterfactualTransitionResult(
     const scoreReturns = outcomes.map(
       (outcome) => outcome.score - transition.scoreBefore
     );
+    const pounceProgressReturns = outcomes.map(
+      (outcome) =>
+        transition.pounceRemainingBefore - outcome.pounceRemaining
+    );
     const objectiveReturns = pointDifferentialReturns.map(
       (value, outcomeIndex) =>
-        value + safeScoreWeight * (scoreReturns[outcomeIndex] ?? 0)
+        value +
+        safeScoreWeight * (scoreReturns[outcomeIndex] ?? 0) +
+        safePounceWeight * (pounceProgressReturns[outcomeIndex] ?? 0)
     );
     const rolloutPointDifferentialReturn = meanNumbers(
       pointDifferentialReturns
     );
     const rolloutScoreReturn = meanNumbers(scoreReturns);
+    const rolloutPounceProgressReturn = meanNumbers(pounceProgressReturns);
     const rolloutObjectiveReturn = meanNumbers(objectiveReturns);
     return {
       candidate,
       candidateIndex,
       rolloutPointDifferentialReturn,
       rolloutScoreReturn,
+      rolloutPounceProgressReturn,
       rolloutObjectiveReturn,
       rolloutObjectiveReturns: objectiveReturns,
     };
@@ -2275,6 +2298,7 @@ function getCounterfactualPolicyOutcome(
   return {
     pointDifferential: rollout.finalPointDifferentials[playerIndex] ?? 0,
     score: rollout.finalScores[playerIndex] ?? 0,
+    pounceRemaining: rollout.finalPounceCounts[playerIndex] ?? 0,
   };
 }
 
@@ -2720,6 +2744,8 @@ function chooseNeuralMove(
 
   const pointDifferentialBefore = getPointDifferential(board, playerIndex);
   const scoreBefore = getCurrentPointsFromCards(board.players[playerIndex]);
+  const pounceRemainingBefore =
+    board.players[playerIndex]?.pounceDeck.length ?? 0;
   const greedy = options.policy.chooseCandidate(candidates, {
     temperature: 1,
     random: options.decisionRandom ?? options.random,
@@ -2748,6 +2774,7 @@ function chooseNeuralMove(
       playerIndex,
       pointDifferentialBefore,
       scoreBefore,
+      pounceRemainingBefore,
       board: options.captureTransitionBoards ? deepClone(board) : undefined,
       candidates,
       selectedCandidateIndex,

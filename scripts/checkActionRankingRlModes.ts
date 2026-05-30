@@ -102,6 +102,22 @@ assert.equal(
   "score-weighted value mode should not fall back to policy-gradient updates"
 );
 
+const pounceWeightedValue = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:pounce-weighted-value",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualPounceRewardWeight: 1,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assertCounterfactualWork(pounceWeightedValue, "value");
+assert.equal(
+  pounceWeightedValue.reinforcement.averagePolicyUpdates,
+  0,
+  "pounce-weighted value mode should not fall back to policy-gradient updates"
+);
+
 const residualValue = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:residual-value",
@@ -255,6 +271,7 @@ console.log(
       policyGradient: summarize(policyGradient),
       value: summarize(value),
       scoreWeightedValue: summarize(scoreWeightedValue),
+      pounceWeightedValue: summarize(pounceWeightedValue),
       residualValue: summarize(residualValue),
       broadValue: summarize(broadValue),
       greedyStateValue: summarize(greedyStateValue),

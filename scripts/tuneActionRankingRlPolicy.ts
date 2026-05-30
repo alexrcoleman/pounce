@@ -313,6 +313,10 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
       "RL_COUNTERFACTUAL_SCORE_WEIGHT",
       0
     ),
+    rlCounterfactualPounceRewardWeight: readNumberEnv(
+      "RL_COUNTERFACTUAL_POUNCE_WEIGHT",
+      0
+    ),
     rlCounterfactualAnchorWeight: readNumberEnv(
       "RL_COUNTERFACTUAL_ANCHOR_WEIGHT",
       0
