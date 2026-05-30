@@ -381,9 +381,14 @@ export default function JoinForm({
           </div>
         </Form>
         {!isInviteMode ? (
-          <Link className={styles.rulesLink} href="/how-to-play">
-            How to play Pounce
-          </Link>
+          <div className={styles.footerLinks}>
+            <Link className={styles.rulesLink} href="/how-to-play">
+              How to play Pounce
+            </Link>
+            <Link className={styles.rushLink} href="/rush">
+              Pounce Rush
+            </Link>
+          </div>
         ) : null}
       </div>
       <Modal

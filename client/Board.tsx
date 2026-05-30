@@ -52,8 +52,11 @@ type Props = {
   executeMove: (move: Move) => void;
   onOpenRoomSettings: () => void;
   onUpdateHand: (location: CursorLocation) => void;
+  isDeckCyclingBlocked?: boolean;
+  isInteractionDisabled?: boolean;
   isLeftHandedLayout: boolean;
   easyReadCards: boolean;
+  onBlockedMove?: () => void;
   roomId?: string | null;
   zoom: number;
 };
@@ -138,7 +141,10 @@ function useIsBoardAcceptingMoves(
 export default observer(function Board({
   executeMove,
   easyReadCards,
+  isDeckCyclingBlocked = false,
+  isInteractionDisabled = false,
   isLeftHandedLayout,
+  onBlockedMove,
   onOpenRoomSettings,
   onUpdateHand,
   roomId,
@@ -151,6 +157,7 @@ export default observer(function Board({
     activePlayerIndex >= 0 ? board.players[activePlayerIndex] : undefined;
   const isAcceptingMoves = useIsBoardAcceptingMoves(state, board);
   const canInteractWithCards =
+    !isInteractionDisabled &&
     activePlayer != null &&
     activePlayer.isSpectating !== true &&
     isAcceptingMoves;
@@ -278,6 +285,8 @@ export default observer(function Board({
             <CardsLayer
               canInteract={canInteractWithCards}
               executeMove={executeMove}
+              isDeckCyclingBlocked={isDeckCyclingBlocked}
+              onBlockedMove={onBlockedMove}
             />
             <RoundStartOverlay board={board} state={state} />
             {board.players.map((p, i) => (

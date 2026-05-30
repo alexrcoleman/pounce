@@ -36,6 +36,7 @@ type Props = {
   location: CardLocation;
   isHandTarget?: boolean;
   isRemoteCursorDragged?: boolean;
+  isStockLocked?: boolean;
   postGameStage?: number;
 };
 
@@ -48,6 +49,7 @@ const CardContentMemo = observer(function CardContent({
   location,
   isHandTarget,
   isRemoteCursorDragged = false,
+  isStockLocked = false,
   onClick,
   postGameStage,
 }: Props) {
@@ -288,6 +290,7 @@ const CardContentMemo = observer(function CardContent({
         isDraggable && styles.draggable
       )}
       data-is-dragging-this-card={isDragging ? "true" : undefined}
+      data-stock-locked={isStockLocked ? "true" : undefined}
       style={
         {
           zIndex: zIndexBase + zIndex + (isAnimating ? 1000 : 0),

@@ -11,10 +11,14 @@ import { useClientContext } from "./ClientContext";
 
 export default observer(function CardsLayer({
   canInteract,
+  isDeckCyclingBlocked = false,
   executeMove,
+  onBlockedMove,
 }: {
   canInteract: boolean;
+  isDeckCyclingBlocked?: boolean;
   executeMove: (move: Move) => void;
+  onBlockedMove?: () => void;
 }) {
   const { state } = useClientContext();
   const board = state.board!;
@@ -24,6 +28,9 @@ export default observer(function CardsLayer({
   const flipDeck = useCallback(() => {
     executeMove({ type: "flip_deck" });
   }, [executeMove]);
+  const onBlockedDeckClick = useCallback(() => {
+    onBlockedMove?.();
+  }, [onBlockedMove]);
   const activePlayerIndex = state.getActivePlayerIndex();
   const remoteDraggedCardKeys = getRemoteDraggedCardKeys(
     state.hands,
@@ -85,8 +92,13 @@ export default observer(function CardsLayer({
                 canInteract={canInteract}
                 onClick={
                   canInteract && isActivePlayer && isTopCard
-                    ? cycleDeck
+                    ? isDeckCyclingBlocked
+                      ? onBlockedDeckClick
+                      : cycleDeck
                     : undefined
+                }
+                isStockLocked={
+                  isDeckCyclingBlocked && isActivePlayer && isTopCard
                 }
                 location={stableObject({ type: "deck", cardIndex: index })}
                 isHandTarget={canInteract && isTopCard && isActivePlayer}
@@ -110,7 +122,9 @@ export default observer(function CardsLayer({
                 })}
                 onClick={
                   canInteract && isActivePlayer && isTopCard
-                    ? flipDeck
+                    ? isDeckCyclingBlocked
+                      ? onBlockedDeckClick
+                      : flipDeck
                     : undefined
                 }
                 isHandTarget={canInteract && isTopCard && isActivePlayer}

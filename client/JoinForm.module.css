@@ -78,8 +78,16 @@
   width: 100%;
 }
 
-.rulesLink {
+.footerLinks {
   align-self: center;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px 16px;
+}
+
+.rulesLink,
+.rushLink {
   color: #f8e8c6;
   font-size: 14px;
   font-weight: 800;
@@ -91,8 +99,15 @@
 }
 
 .rulesLink:hover,
-.rulesLink:focus {
+.rulesLink:focus,
+.rushLink:hover,
+.rushLink:focus {
   color: #ffffff;
+}
+
+.rushLink {
+  color: rgba(248, 232, 198, 0.78);
+  text-decoration-thickness: 1px;
 }
 
 .menu {

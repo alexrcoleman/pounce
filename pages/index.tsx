@@ -26,6 +26,7 @@ const Home: NextPage<AppProps> = observer(
       }
 
       void router.prefetch("/offline");
+      void router.prefetch("/rush");
       void router.prefetch("/r/[roomid]", "/r/PRELOAD");
     }, [router]);
 
