@@ -11,6 +11,7 @@ import {
   type Values,
 } from "./GameUtils";
 import {
+  ACTION_RANKING_FEATURE_NAMES,
   enumerateActionRankingCandidates,
   getActionRankingMoveKey,
   getCurrentPointsFromCards,
@@ -68,6 +69,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualMaxScoreGap?: number;
   rlCounterfactualScoreRewardWeight?: number;
   rlCounterfactualPounceRewardWeight?: number;
+  rlCounterfactualSkipCycleOverConnector?: boolean;
   rlCounterfactualAnchorWeight?: number;
   rlCounterfactualAnchorMaxExamples?: number;
   rlCounterfactualAnchorTemperature?: number;
@@ -169,6 +171,7 @@ export type NeuralTrainingResult = {
     counterfactualPolicyMarginSkippedCount: number;
     counterfactualConfidenceSkippedCount: number;
     counterfactualScoreGapSkippedCount: number;
+    counterfactualConnectorCycleSkippedCount: number;
     averageCounterfactualBehaviorWinRate: number;
     counterfactualAveragePairWeight: number;
     counterfactualAnchorExamples: number;
@@ -244,6 +247,7 @@ export type CounterfactualRlLabelAudit = {
   behaviorWinRateSkippedCount: number;
   confidenceSkippedCount: number;
   scoreGapSkippedCount: number;
+  connectorCycleSkippedCount: number;
   maxReturnGapSkippedCount: number;
   averageCounterfactualReturnGap: number;
   averageCounterfactualCandidateCount: number;
@@ -499,6 +503,8 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualScoreRewardWeight ?? 0,
     counterfactualPounceRewardWeight:
       options.rlCounterfactualPounceRewardWeight ?? 0,
+    counterfactualSkipCycleOverConnector:
+      options.rlCounterfactualSkipCycleOverConnector ?? false,
     counterfactualAnchorWeight: options.rlCounterfactualAnchorWeight ?? 0,
     counterfactualAnchorMaxExamples:
       options.rlCounterfactualAnchorMaxExamples ?? 512,
@@ -1493,6 +1499,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualMaxScoreGap: number;
     counterfactualScoreRewardWeight: number;
     counterfactualPounceRewardWeight: number;
+    counterfactualSkipCycleOverConnector: boolean;
     counterfactualAnchorWeight: number;
     counterfactualAnchorMaxExamples: number;
     counterfactualAnchorTemperature: number;
@@ -1532,6 +1539,7 @@ export function trainPolicyGradientFromRollouts(
   let counterfactualPolicyMarginSkippedCount = 0;
   let counterfactualConfidenceSkippedCount = 0;
   let counterfactualScoreGapSkippedCount = 0;
+  let counterfactualConnectorCycleSkippedCount = 0;
   let counterfactualBehaviorWinRateTotal = 0;
   const updates: PolicyGradientUpdate[] = [];
   const counterfactualExamples: ActionRankingImitationExample[] = [];
@@ -1750,6 +1758,14 @@ export function trainPolicyGradientFromRollouts(
           counterfactualMaxReturnGapSkippedCount += 1;
           return;
         }
+        if (
+          options.counterfactualTrainingMode !== "policy_gradient" &&
+          options.counterfactualSkipCycleOverConnector &&
+          shouldSkipCycleOverConnectorLabel(result)
+        ) {
+          counterfactualConnectorCycleSkippedCount += 1;
+          return;
+        }
         const scoreGap = getCounterfactualBestVsGreedyScoreGap(
           transition,
           result,
@@ -1904,6 +1920,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualPolicyMarginSkippedCount,
     counterfactualConfidenceSkippedCount,
     counterfactualScoreGapSkippedCount,
+    counterfactualConnectorCycleSkippedCount,
     averageCounterfactualBehaviorWinRate:
       counterfactualUpdateCount === 0
         ? 0
@@ -1949,6 +1966,7 @@ export function collectCounterfactualRlLabelAudit(
     counterfactualMaxScoreGap: number;
     counterfactualScoreRewardWeight: number;
     counterfactualPounceRewardWeight: number;
+    counterfactualSkipCycleOverConnector: boolean;
     updateScope: PolicyGradientUpdateScope;
     maxMovesPerGame: number;
   }
@@ -1966,6 +1984,7 @@ export function collectCounterfactualRlLabelAudit(
   let confidenceSkippedCount = 0;
   let maxReturnGapSkippedCount = 0;
   let scoreGapSkippedCount = 0;
+  let connectorCycleSkippedCount = 0;
   let counterfactualReturnGapTotal = 0;
   let counterfactualCandidateCountTotal = 0;
   let counterfactualBehaviorWinRateTotal = 0;
@@ -2110,6 +2129,14 @@ export function collectCounterfactualRlLabelAudit(
         maxReturnGapSkippedCount += 1;
         return;
       }
+      if (
+        options.counterfactualTrainingMode !== "policy_gradient" &&
+        options.counterfactualSkipCycleOverConnector &&
+        shouldSkipCycleOverConnectorLabel(result)
+      ) {
+        connectorCycleSkippedCount += 1;
+        return;
+      }
 
       const scoreGap = getCounterfactualBestVsGreedyScoreGap(
         transition,
@@ -2153,6 +2180,7 @@ export function collectCounterfactualRlLabelAudit(
     behaviorWinRateSkippedCount,
     confidenceSkippedCount,
     scoreGapSkippedCount,
+    connectorCycleSkippedCount,
     maxReturnGapSkippedCount,
     averageCounterfactualReturnGap:
       examples.length === 0 ? 0 : counterfactualReturnGapTotal / examples.length,
@@ -2525,6 +2553,47 @@ function getCounterfactualBestVsGreedyScoreGap(
     policy.scoreFeatures(greedy.features) -
     policy.scoreFeatures(best.candidate.features)
   );
+}
+
+function shouldSkipCycleOverConnectorLabel(
+  result: CounterfactualTransitionResult
+): boolean {
+  const best = result.candidates.reduce((winner, candidate) =>
+    candidate.rolloutObjectiveReturn > winner.rolloutObjectiveReturn
+      ? candidate
+      : winner
+  );
+  if (best.candidate.move.type !== "cycle") {
+    return false;
+  }
+
+  return result.candidates.some(
+    (candidate) =>
+      candidate.candidate.key !== best.candidate.key &&
+      isSupportedConnectorCandidate(candidate.candidate)
+  );
+}
+
+function isSupportedConnectorCandidate(
+  candidate: ActionRankingCandidate
+): boolean {
+  if (candidate.move.type !== "c2s") {
+    return false;
+  }
+  return (
+    getCandidateFeature(candidate, "solitaire.postTopConnectorCount") > 0 ||
+    getCandidateFeature(candidate, "solitaire.postTopConnectorCloseness") > 0 ||
+    getCandidateFeature(candidate, "solitaire.postTopConnectsPounce") > 0 ||
+    getCandidateFeature(candidate, "solitaire.postTopConnectsStackRoot") > 0
+  );
+}
+
+function getCandidateFeature(
+  candidate: ActionRankingCandidate,
+  featureName: (typeof ACTION_RANKING_FEATURE_NAMES)[number]
+): number {
+  const index = ACTION_RANKING_FEATURE_NAMES.indexOf(featureName);
+  return index < 0 ? 0 : candidate.features[index] ?? 0;
 }
 
 function createCounterfactualAnchorExample(

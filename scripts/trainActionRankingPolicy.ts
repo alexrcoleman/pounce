@@ -180,6 +180,10 @@ const options = {
     "RL_COUNTERFACTUAL_POUNCE_WEIGHT",
     0
   ),
+  rlCounterfactualSkipCycleOverConnector: readBooleanEnv(
+    "RL_COUNTERFACTUAL_SKIP_CYCLE_OVER_CONNECTOR",
+    false
+  ),
   rlCounterfactualAnchorWeight: readNumberEnv(
     "RL_COUNTERFACTUAL_ANCHOR_WEIGHT",
     0

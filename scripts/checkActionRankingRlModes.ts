@@ -505,6 +505,8 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.counterfactualConfidenceSkippedCount,
     counterfactualScoreGapSkippedCount:
       result.reinforcement.counterfactualScoreGapSkippedCount,
+    counterfactualConnectorCycleSkippedCount:
+      result.reinforcement.counterfactualConnectorCycleSkippedCount,
     averageCounterfactualBehaviorWinRate:
       result.reinforcement.averageCounterfactualBehaviorWinRate,
     counterfactualAveragePairWeight:

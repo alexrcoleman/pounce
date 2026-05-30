@@ -141,6 +141,10 @@ const options = {
     "RL_COUNTERFACTUAL_POUNCE_WEIGHT",
     0
   ),
+  counterfactualSkipCycleOverConnector: readBooleanEnv(
+    "RL_COUNTERFACTUAL_SKIP_CYCLE_OVER_CONNECTOR",
+    false
+  ),
   updateScope: readUpdateScopeEnv("RL_UPDATE_SCOPE", "exploratory"),
   maxMovesPerGame,
 };
@@ -179,6 +183,7 @@ console.log(
         behaviorWinRateSkippedCount: audit.behaviorWinRateSkippedCount,
         confidenceSkippedCount: audit.confidenceSkippedCount,
         scoreGapSkippedCount: audit.scoreGapSkippedCount,
+        connectorCycleSkippedCount: audit.connectorCycleSkippedCount,
         maxReturnGapSkippedCount: audit.maxReturnGapSkippedCount,
         averageCounterfactualReturnGap:
           audit.averageCounterfactualReturnGap,
