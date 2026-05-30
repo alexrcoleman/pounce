@@ -86,6 +86,10 @@ const options = {
     "RL_COUNTERFACTUAL_MODE",
     "policy_gradient"
   ),
+  rlCounterfactualPreferenceScope: readImprovementPreferenceScopeEnv(
+    "RL_COUNTERFACTUAL_PREFERENCE_SCOPE",
+    "all"
+  ),
   rlCounterfactualValueTargetScale: readNumberEnv(
     "RL_COUNTERFACTUAL_VALUE_SCALE",
     4

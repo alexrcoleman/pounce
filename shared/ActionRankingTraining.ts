@@ -52,6 +52,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualCandidateLimit?: number;
   rlCounterfactualMinReturnGap?: number;
   rlCounterfactualTrainingMode?: "policy_gradient" | "pairwise" | "value";
+  rlCounterfactualPreferenceScope?: "all" | "behavior";
   rlCounterfactualValueTargetScale?: number;
   rlCounterfactualValueCenterTargets?: boolean;
   rlCounterfactualValueHuberDelta?: number;
@@ -342,6 +343,8 @@ export function trainNeuralActionRankingPolicy(
     counterfactualMinReturnGap: options.rlCounterfactualMinReturnGap ?? 1,
     counterfactualTrainingMode:
       options.rlCounterfactualTrainingMode ?? "policy_gradient",
+    counterfactualPreferenceScope:
+      options.rlCounterfactualPreferenceScope ?? "all",
     counterfactualValueTargetScale:
       options.rlCounterfactualValueTargetScale ?? 4,
     counterfactualValueCenterTargets:
@@ -969,6 +972,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualCandidateLimit: number;
     counterfactualMinReturnGap: number;
     counterfactualTrainingMode: CounterfactualTrainingMode;
+    counterfactualPreferenceScope: "all" | "behavior";
     counterfactualValueTargetScale: number;
     counterfactualValueCenterTargets: boolean;
     counterfactualValueHuberDelta: number;
@@ -1141,6 +1145,7 @@ export function trainPolicyGradientFromRollouts(
           learningRate: options.learningRate,
           updateEpochs: options.updateEpochs,
           minReturnGap: options.counterfactualMinReturnGap,
+          preferenceScope: options.counterfactualPreferenceScope,
           valueTargetScale: options.counterfactualValueTargetScale,
           valueCenterTargets: options.counterfactualValueCenterTargets,
           valueHuberDelta: options.counterfactualValueHuberDelta,
@@ -1272,6 +1277,7 @@ function trainCounterfactualSupervisedBatch(
     learningRate: number;
     updateEpochs: number;
     minReturnGap: number;
+    preferenceScope: "all" | "behavior";
     valueTargetScale: number;
     valueCenterTargets: boolean;
     valueHuberDelta: number;
@@ -1302,7 +1308,7 @@ function trainCounterfactualSupervisedBatch(
           learningRate: options.learningRate,
           minReturnGap: options.minReturnGap,
           maxPairsPerExample: 1,
-          preferenceScope: "all",
+          preferenceScope: options.preferenceScope,
           shuffleSeed: options.shuffleSeed,
         });
 
