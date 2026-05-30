@@ -247,6 +247,29 @@ assert.ok(
   "anchored value mode should include value and anchor updates"
 );
 
+const connectorAnchoredValue = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:connector-anchored-value",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+  rlCounterfactualConnectorAnchorWeight: 0.05,
+  rlCounterfactualConnectorAnchorMaxExamples: 8,
+});
+assertCounterfactualWork(connectorAnchoredValue, "value");
+assert.ok(
+  connectorAnchoredValue.reinforcement
+    .counterfactualConnectorAnchorExamples > 0,
+  "connector-anchored value mode should collect connector-vs-cycle anchor examples"
+);
+assert.ok(
+  connectorAnchoredValue.reinforcement
+    .counterfactualConnectorAnchorUpdates > 0,
+  "connector-anchored value mode should train connector-vs-cycle anchor updates"
+);
+
 const scoreGapFiltered = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:score-gap-filtered",
@@ -323,6 +346,7 @@ console.log(
       broadValue: summarize(broadValue),
       greedyStateValue: summarize(greedyStateValue),
       anchoredValue: summarize(anchoredValue),
+      connectorAnchoredValue: summarize(connectorAnchoredValue),
       scoreGapFiltered: summarize(scoreGapFiltered),
       confidenceFiltered: summarize(confidenceFiltered),
       policyMarginFiltered: summarize(policyMarginFiltered),
@@ -366,6 +390,10 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.counterfactualAnchorExamples,
     counterfactualAnchorUpdates:
       result.reinforcement.counterfactualAnchorUpdates,
+    counterfactualConnectorAnchorExamples:
+      result.reinforcement.counterfactualConnectorAnchorExamples,
+    counterfactualConnectorAnchorUpdates:
+      result.reinforcement.counterfactualConnectorAnchorUpdates,
     averagePolicyUpdates: result.reinforcement.averagePolicyUpdates,
     averageGradientUpdates: result.reinforcement.averageGradientUpdates,
     averageRawAdvantage: result.reinforcement.averageRawAdvantage,

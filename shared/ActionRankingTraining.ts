@@ -64,6 +64,10 @@ export type NeuralTrainingOptions = {
   rlCounterfactualAnchorWeight?: number;
   rlCounterfactualAnchorMaxExamples?: number;
   rlCounterfactualAnchorTemperature?: number;
+  rlCounterfactualConnectorAnchorWeight?: number;
+  rlCounterfactualConnectorAnchorMaxExamples?: number;
+  rlCounterfactualConnectorAnchorMargin?: number;
+  rlCounterfactualConnectorAnchorMaxPolicyMargin?: number;
   rlCounterfactualValueTargetScale?: number;
   rlCounterfactualValueCenterTargets?: boolean;
   rlCounterfactualValueTargetMode?: "absolute" | "residual";
@@ -154,6 +158,8 @@ export type NeuralTrainingResult = {
     counterfactualScoreGapSkippedCount: number;
     counterfactualAnchorExamples: number;
     counterfactualAnchorUpdates: number;
+    counterfactualConnectorAnchorExamples: number;
+    counterfactualConnectorAnchorUpdates: number;
     averagePolicyUpdates: number;
     averageGradientUpdates: number;
     averageRawAdvantage: number;
@@ -455,6 +461,14 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualAnchorMaxExamples ?? 512,
     counterfactualAnchorTemperature:
       options.rlCounterfactualAnchorTemperature ?? 1,
+    counterfactualConnectorAnchorWeight:
+      options.rlCounterfactualConnectorAnchorWeight ?? 0,
+    counterfactualConnectorAnchorMaxExamples:
+      options.rlCounterfactualConnectorAnchorMaxExamples ?? 512,
+    counterfactualConnectorAnchorMargin:
+      options.rlCounterfactualConnectorAnchorMargin ?? 0.05,
+    counterfactualConnectorAnchorMaxPolicyMargin:
+      options.rlCounterfactualConnectorAnchorMaxPolicyMargin ?? 0,
     counterfactualValueTargetScale:
       options.rlCounterfactualValueTargetScale ?? 4,
     counterfactualValueCenterTargets:
@@ -1430,6 +1444,10 @@ export function trainPolicyGradientFromRollouts(
     counterfactualAnchorWeight: number;
     counterfactualAnchorMaxExamples: number;
     counterfactualAnchorTemperature: number;
+    counterfactualConnectorAnchorWeight: number;
+    counterfactualConnectorAnchorMaxExamples: number;
+    counterfactualConnectorAnchorMargin: number;
+    counterfactualConnectorAnchorMaxPolicyMargin: number;
     counterfactualValueTargetScale: number;
     counterfactualValueCenterTargets: boolean;
     counterfactualValueTargetMode: "absolute" | "residual";
@@ -1535,7 +1553,8 @@ export function trainPolicyGradientFromRollouts(
     rollout.transitions.forEach((transition, transitionIndex) => {
       if (
         creditMode === "counterfactual" &&
-        options.counterfactualAnchorWeight > 0 &&
+        (options.counterfactualAnchorWeight > 0 ||
+          options.counterfactualConnectorAnchorWeight > 0) &&
         transition.candidates.length > 1
       ) {
         counterfactualAnchorExamples.push(
@@ -1687,6 +1706,13 @@ export function trainPolicyGradientFromRollouts(
           anchorWeight: options.counterfactualAnchorWeight,
           anchorMaxExamples: options.counterfactualAnchorMaxExamples,
           anchorTemperature: options.counterfactualAnchorTemperature,
+          connectorAnchorWeight: options.counterfactualConnectorAnchorWeight,
+          connectorAnchorMaxExamples:
+            options.counterfactualConnectorAnchorMaxExamples,
+          connectorAnchorMargin:
+            options.counterfactualConnectorAnchorMargin,
+          connectorAnchorMaxPolicyMargin:
+            options.counterfactualConnectorAnchorMaxPolicyMargin,
           valueTargetScale: options.counterfactualValueTargetScale,
           valueCenterTargets: options.counterfactualValueCenterTargets,
           valueTargetMode: options.counterfactualValueTargetMode,
@@ -1752,6 +1778,10 @@ export function trainPolicyGradientFromRollouts(
     counterfactualScoreGapSkippedCount,
     counterfactualAnchorExamples: advantageStats.anchorExamples,
     counterfactualAnchorUpdates: advantageStats.anchorUpdates,
+    counterfactualConnectorAnchorExamples:
+      advantageStats.connectorAnchorExamples,
+    counterfactualConnectorAnchorUpdates:
+      advantageStats.connectorAnchorUpdates,
     averagePolicyUpdates:
       options.episodes === 0 ? 0 : updates.length / options.episodes,
     averageGradientUpdates:
@@ -2013,7 +2043,15 @@ function applyPolicyGradientBatch(
     });
   }
 
-  return { mean, stdDev, appliedUpdates, anchorExamples: 0, anchorUpdates: 0 };
+  return {
+    mean,
+    stdDev,
+    appliedUpdates,
+    anchorExamples: 0,
+    anchorUpdates: 0,
+    connectorAnchorExamples: 0,
+    connectorAnchorUpdates: 0,
+  };
 }
 
 function trainCounterfactualSupervisedBatch(
@@ -2030,6 +2068,10 @@ function trainCounterfactualSupervisedBatch(
     anchorWeight: number;
     anchorMaxExamples: number;
     anchorTemperature: number;
+    connectorAnchorWeight: number;
+    connectorAnchorMaxExamples: number;
+    connectorAnchorMargin: number;
+    connectorAnchorMaxPolicyMargin: number;
     valueTargetScale: number;
     valueCenterTargets: boolean;
     valueTargetMode: "absolute" | "residual";
@@ -2039,7 +2081,8 @@ function trainCounterfactualSupervisedBatch(
   }
 ) {
   const anchorPolicy =
-    options.anchorWeight > 0 && options.anchorExamples.length > 0
+    (options.anchorWeight > 0 || options.connectorAnchorWeight > 0) &&
+    options.anchorExamples.length > 0
       ? new NeuralActionRankingPolicy(policy.getModel())
       : null;
   const signedGaps = examples.map((example) => {
@@ -2074,7 +2117,7 @@ function trainCounterfactualSupervisedBatch(
           shuffleSeed: options.shuffleSeed,
         });
   const anchorExamples =
-    anchorPolicy == null
+    anchorPolicy == null || options.anchorWeight <= 0
       ? []
       : createCounterfactualAnchorTargets(
           options.anchorExamples,
@@ -2092,13 +2135,41 @@ function trainCounterfactualSupervisedBatch(
           trainableLayers: options.trainableLayers,
           shuffleSeed: `${options.shuffleSeed}:anchor`,
         });
+  const connectorAnchorExamples =
+    anchorPolicy == null || options.connectorAnchorWeight <= 0
+      ? []
+      : createConnectorCycleAnchorTargets(
+          options.anchorExamples,
+          anchorPolicy,
+          options.connectorAnchorMaxExamples,
+          options.connectorAnchorMaxPolicyMargin,
+          `${options.shuffleSeed}:connector-anchor-select`
+        );
+  const connectorAnchorStats =
+    connectorAnchorExamples.length === 0
+      ? emptyTrainingStats(0)
+      : policy.trainPairwisePreferences(connectorAnchorExamples, {
+          epochs: options.updateEpochs,
+          learningRate: options.learningRate * options.connectorAnchorWeight,
+          minReturnGap: 0,
+          maxPairsPerExample: 1,
+          preferenceScope: "behavior",
+          targetMargin: options.connectorAnchorMargin,
+          trainableLayers: options.trainableLayers,
+          shuffleSeed: `${options.shuffleSeed}:connector-anchor`,
+        });
 
   return {
     mean: stats.mean,
     stdDev: stats.stdDev,
-    appliedUpdates: trainingStats.updates + anchorStats.updates,
+    appliedUpdates:
+      trainingStats.updates +
+      anchorStats.updates +
+      connectorAnchorStats.updates,
     anchorExamples: anchorExamples.length,
     anchorUpdates: anchorStats.updates,
+    connectorAnchorExamples: connectorAnchorExamples.length,
+    connectorAnchorUpdates: connectorAnchorStats.updates,
   };
 }
 
@@ -2137,6 +2208,90 @@ function createCounterfactualAnchorTargets(
       })),
     };
   });
+}
+
+function createConnectorCycleAnchorTargets(
+  examples: ActionRankingImitationExample[],
+  anchorPolicy: NeuralActionRankingPolicy,
+  maxExamples: number,
+  maxPolicyMargin: number,
+  seed: string
+): ActionRankingImitationExample[] {
+  const connectorExamples = examples.flatMap((example) => {
+    const anchorScores = example.candidates.map((candidate) =>
+      anchorPolicy.scoreFeatures(candidate.features)
+    );
+    const connectorIndex = getBestCandidateIndexByMoveType(
+      example,
+      anchorScores,
+      "c2s"
+    );
+    const cycleIndex = getBestCandidateIndexByMoveType(
+      example,
+      anchorScores,
+      "cycle"
+    );
+    if (connectorIndex < 0 || cycleIndex < 0) {
+      return [];
+    }
+
+    const policyMargin = anchorScores[connectorIndex] - anchorScores[cycleIndex];
+    if (
+      policyMargin <= 0 ||
+      (maxPolicyMargin > 0 && policyMargin > maxPolicyMargin)
+    ) {
+      return [];
+    }
+
+    const connector = example.candidates[connectorIndex];
+    const cycle = example.candidates[cycleIndex];
+    return [
+      {
+        ...example,
+        finalPlayerPoints: null,
+        finalPointDifferential: null,
+        pointDifferentialReturn: null,
+        behaviorActionKey: cycle.key,
+        selectedActionKey: connector.key,
+        selectedCandidateIndex: 0,
+        candidates: [
+          {
+            ...connector,
+            label: 1 as const,
+            rolloutPointDifferentialReturn: anchorScores[connectorIndex],
+          },
+          {
+            ...cycle,
+            label: 0 as const,
+            rolloutPointDifferentialReturn: anchorScores[cycleIndex],
+          },
+        ],
+      },
+    ];
+  });
+
+  return maxExamples > 0 && connectorExamples.length > maxExamples
+    ? shuffleCopy(connectorExamples, createSeededRandom(seed)).slice(
+        0,
+        maxExamples
+      )
+    : connectorExamples;
+}
+
+function getBestCandidateIndexByMoveType(
+  example: ActionRankingImitationExample,
+  scores: readonly number[],
+  moveType: Move["type"]
+): number {
+  return example.candidates.reduce((bestIndex, candidate, candidateIndex) => {
+    if (candidate.move.type !== moveType) {
+      return bestIndex;
+    }
+    if (bestIndex < 0 || scores[candidateIndex] > scores[bestIndex]) {
+      return candidateIndex;
+    }
+    return bestIndex;
+  }, -1);
 }
 
 function getCounterfactualBestVsGreedyScoreGap(

@@ -194,6 +194,22 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       "RL_COUNTERFACTUAL_ANCHOR_TEMPERATURE",
       1
     ),
+    rlCounterfactualConnectorAnchorWeight: readNumberEnv(
+      "RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_WEIGHT",
+      0
+    ),
+    rlCounterfactualConnectorAnchorMaxExamples: readIntegerEnv(
+      "RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_EXAMPLES",
+      512
+    ),
+    rlCounterfactualConnectorAnchorMargin: readNumberEnv(
+      "RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MARGIN",
+      0.05
+    ),
+    rlCounterfactualConnectorAnchorMaxPolicyMargin: readNumberEnv(
+      "RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MAX_POLICY_MARGIN",
+      0
+    ),
     rlCounterfactualValueTargetScale: readNumberEnv(
       "RL_COUNTERFACTUAL_VALUE_SCALE",
       4
