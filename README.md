@@ -80,6 +80,19 @@ teacher diagnostic found `99.7%` top-action agreement, with the new
 `cycle.lookaheadCanPlaySoonReach` showing up in the few cycle-vs-deck-solitaire
 divergences. This is not a promotion, but it confirms the lookahead inputs can
 be introduced without destabilizing the current policy.
+A first reliability-gated RL probe from that lookahead warmup accepted 8
+behavior-changing pairwise labels after 61 greedy-state scan episodes
+(`RL_COUNTERFACTUAL_ROLLOUTS=2`,
+`RL_COUNTERFACTUAL_MIN_BEHAVIOR_WIN_RATE=1`,
+`RL_COUNTERFACTUAL_MAX_SCORE_GAP=0.5`), with average score gap `0.110` and
+average pair weight `0.781`. It looked mildly positive against the warmup on one
+384-game comparison (`+0.057 +/- 0.035`) and traced only 7 first divergences in
+384 games, with `cycle>c2s` divergences usually helping on that trace seed.
+Against the original behavior-scope checkpoint on the same comparison seed,
+however, the candidate measured `-0.102 +/- 0.016`, so it is not promotable.
+The useful lesson is narrower: lookahead features make some cycle-over-connector
+corrections legible, but the warmup/RL stack still needs a stronger promotion
+gate and better calibration before replacing the behavior-scope checkpoint.
 The global visible-pressure inputs count own and opponent pounce/deck/solitaire
 cards that are playable on center now, plus pounce cards close to center play;
 those are intended to help reward training learn tempo and opponent-help costs
@@ -485,11 +498,12 @@ failure mode where a small counterfactual batch teaches broad `cycle > c2s`
 changes against live connector moves. It is disabled by default.
 `RL_COUNTERFACTUAL_SKIP_SOLITAIRE_OVER_USEFUL_CYCLE=true` skips the mirror
 failure mode: supervised labels where the rollout winner is a solitaire move
-while an evaluated cycle action would reveal a useful stock card. A cycle reveal
-counts as useful when the revealed card can play center immediately, or can play
-soon while also connecting to the player's pounce/solitaire shape. This is
-disabled by default and is intended for self-play recipes that otherwise
-over-learn `c2s > cycle` from a tiny accepted label batch.
+while an evaluated cycle action would reveal, reset toward, or look ahead to a
+useful stock card. A cycle counts as useful when that card can play center
+immediately, or can play soon while also connecting to the player's
+pounce/solitaire shape. This is disabled by default and is intended for
+self-play recipes that otherwise over-learn `c2s > cycle` from a tiny accepted
+label batch.
 `RL_COUNTERFACTUAL_ANCHOR_WEIGHT` enables conservative policy anchoring for
 supervised counterfactual modes: after applying the RL labels, it distills the
 pre-update policy over sampled decision states so narrow counterfactual lessons

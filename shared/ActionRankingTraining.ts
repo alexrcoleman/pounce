@@ -2959,29 +2959,53 @@ function isUsefulCycleRevealCandidate(
   if (candidate.move.type !== "cycle") {
     return false;
   }
-  if (getCandidateFeature(candidate, "cycle.revealsCard") <= 0) {
-    return false;
-  }
 
   const centerPlayable =
-    getCandidateFeature(candidate, "cycle.revealedCenterPlayable") > 0;
+    getCandidateFeature(candidate, "cycle.revealedCenterPlayable") > 0 ||
+    getCandidateFeature(candidate, "cycle.resetRevealedCenterPlayable") > 0 ||
+    getCandidateFeature(candidate, "cycle.lookaheadCenterPlayableReach") > 0;
   const soonPlayable =
-    getCandidateFeature(candidate, "cycle.revealedCanPlaySoon") > 0;
+    getCandidateFeature(candidate, "cycle.revealedCanPlaySoon") > 0 ||
+    getCandidateFeature(candidate, "cycle.resetRevealedCanPlaySoon") > 0 ||
+    getCandidateFeature(candidate, "cycle.lookaheadCanPlaySoonReach") > 0;
   const solitaireDestination =
     getCandidateFeature(
       candidate,
       "cycle.revealedOwnSolitaireDestinationCount"
+    ) > 0 ||
+    getCandidateFeature(
+      candidate,
+      "cycle.resetRevealedOwnSolitaireDestinationCount"
+    ) > 0 ||
+    getCandidateFeature(
+      candidate,
+      "cycle.lookaheadOwnSolitaireDestinationReach"
     ) > 0;
   const pounceConnector =
     getCandidateFeature(
       candidate,
       "cycle.revealedOwnSolitaireConnectorForPounce"
+    ) > 0 ||
+    getCandidateFeature(
+      candidate,
+      "cycle.resetRevealedOwnSolitaireConnectorForPounce"
+    ) > 0 ||
+    getCandidateFeature(
+      candidate,
+      "cycle.lookaheadOwnSolitaireConnectorForPounceReach"
     ) > 0;
   const parityMatch =
-    getCandidateFeature(candidate, "cycle.revealedMatchesPounceParity") > 0;
+    getCandidateFeature(candidate, "cycle.revealedMatchesPounceParity") > 0 ||
+    getCandidateFeature(candidate, "cycle.resetRevealedMatchesPounceParity") >
+      0;
   const pounceCloseness =
     getCandidateFeature(candidate, "cycle.revealedPounceConnectorCloseness") >
-    0;
+      0 ||
+    getCandidateFeature(
+      candidate,
+      "cycle.resetRevealedPounceConnectorCloseness"
+    ) > 0 ||
+    getCandidateFeature(candidate, "cycle.lookaheadPounceConnectorReach") > 0;
   return (
     centerPlayable ||
     (soonPlayable &&
