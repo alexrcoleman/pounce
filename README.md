@@ -897,6 +897,24 @@ with that guard skipped 2 useful-cycle labels plus 1 connector/cycle label, but
 still regressed (`-0.226 +/- 0.062` over 192 paired heuristic-seat games) and
 still produced `c2s>cycle` disagreements. The guard is useful instrumentation;
 this self-play pairwise recipe is still too aggressive.
+First champion-mode probes with the 97-input reset-memory/visible-pressure
+feature set were encouraging but still too weak to promote. A
+`champion-greedy-residual-value-pressure` recipe scanned 48 greedy-state
+episodes against frozen neural opponents, accepted 1,565 counterfactual value
+labels, and applied 4,916 value-gradient updates. The 192-game search comparison
+measured only `+0.0017 +/- 0.0017`, but a larger 1,536-game paired comparison
+measured `+0.0195 +/- 0.0176`; swapped-seat neural self-play measured
+`+0.0095 +/- 0.0175` over 768 games. Tracing found only 5 first divergences in
+1,536 games: three `cycle>c2s`, one `c2s>c2s`, and one same-type center split,
+with mixed outcomes. A guarded champion pairwise-pressure recipe accepted 31
+labels, skipped 2 connector/cycle and 4 useful-cycle labels, added 512 anchor
+updates, and produced zero deployed greedy differences over 192 games. Stronger
+residual-value variants (`lr=0.00006` and `2` update epochs at `lr=0.00004`)
+regressed (`-0.026 +/- 0.026` and `-0.057 +/- 0.057` over 192 games) while still
+showing full top-action agreement in small diagnostics. The current best clue is
+therefore not "turn the same recipe up"; it is targeted low-margin/deployed-state
+mining or feature-specific filtering that finds more useful top-action flips
+without amplifying broad cycle-vs-solitaire drift.
 
 ## Deploying
 
