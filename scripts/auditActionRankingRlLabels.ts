@@ -141,6 +141,10 @@ const options = {
     "RL_COUNTERFACTUAL_SCORE_GAP_BUDGET",
     0
   ),
+  counterfactualStopAfterLabels: readIntegerEnv(
+    "RL_COUNTERFACTUAL_STOP_AFTER_LABELS",
+    0
+  ),
   counterfactualScoreRewardWeight: readNumberEnv(
     "RL_COUNTERFACTUAL_SCORE_WEIGHT",
     0
@@ -182,6 +186,8 @@ console.log(
           (sum, example) => sum + example.candidates.length,
           0
         ),
+        counterfactualScannedEpisodes: audit.counterfactualScannedEpisodes,
+        stoppedAfterLabelTarget: audit.stoppedAfterLabelTarget,
         sampledDecisionCount: audit.sampledDecisionCount,
         exploratoryDecisionCount: audit.exploratoryDecisionCount,
         noResultSkippedCount: audit.noResultSkippedCount,

@@ -187,6 +187,10 @@ const options = {
     "RL_COUNTERFACTUAL_SCORE_GAP_BUDGET",
     0
   ),
+  rlCounterfactualStopAfterLabels: readIntegerEnv(
+    "RL_COUNTERFACTUAL_STOP_AFTER_LABELS",
+    0
+  ),
   rlCounterfactualScoreRewardWeight: readNumberEnv(
     "RL_COUNTERFACTUAL_SCORE_WEIGHT",
     0

@@ -539,6 +539,50 @@ assert.ok(
   "score-gap budget filtering should keep only the closest deployable labels"
 );
 
+const cappedScoreGapBudgetFiltered = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:capped-score-gap-budget-filtered",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualStateSource: "greedy",
+  rlUpdateScope: "all",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualMinReturnGap: 0,
+  rlCounterfactualRequirePolicyChange: true,
+  rlCounterfactualMaxScoreGap: 0.05,
+  rlCounterfactualScoreGapBudget: 4,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.ok(
+  cappedScoreGapBudgetFiltered.reinforcement
+    .counterfactualScoreGapSkippedCount > 0 &&
+    cappedScoreGapBudgetFiltered.reinforcement.counterfactualUpdateCount <= 4,
+  "score-gap cap should still filter labels before score-gap budgeting"
+);
+
+const labelTargetStopped = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:label-target-stopped",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualStateSource: "greedy",
+  rlCounterfactualScanEpisodes: 12,
+  rlUpdateScope: "all",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualMinReturnGap: 0,
+  rlCounterfactualRequirePolicyChange: true,
+  rlCounterfactualScoreGapBudget: 4,
+  rlCounterfactualStopAfterLabels: 4,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.ok(
+  labelTargetStopped.reinforcement.counterfactualStoppedAfterLabelTarget &&
+    labelTargetStopped.reinforcement.counterfactualScannedEpisodes < 12,
+  "counterfactual label-target stopping should end broad scans early"
+);
+
 const maxReturnGapFiltered = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:max-return-gap-filtered",
@@ -586,6 +630,8 @@ console.log(
       policyChangeFiltered: summarize(policyChangeFiltered),
       behaviorCorrectionValue: summarize(behaviorCorrectionValue),
       scoreGapBudgetFiltered: summarize(scoreGapBudgetFiltered),
+      cappedScoreGapBudgetFiltered: summarize(cappedScoreGapBudgetFiltered),
+      labelTargetStopped: summarize(labelTargetStopped),
       maxReturnGapFiltered: summarize(maxReturnGapFiltered),
     },
     null,
@@ -615,6 +661,8 @@ function summarize(result: NeuralTrainingResult) {
     counterfactualUpdateCount: result.reinforcement.counterfactualUpdateCount,
     counterfactualScannedEpisodes:
       result.reinforcement.counterfactualScannedEpisodes,
+    counterfactualStoppedAfterLabelTarget:
+      result.reinforcement.counterfactualStoppedAfterLabelTarget,
     averageCounterfactualCandidateCount:
       result.reinforcement.averageCounterfactualCandidateCount,
     averageCounterfactualScannedDecisionCount:

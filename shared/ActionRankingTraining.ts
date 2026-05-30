@@ -71,6 +71,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualPairwiseMaxWeight?: number;
   rlCounterfactualMaxScoreGap?: number;
   rlCounterfactualScoreGapBudget?: number;
+  rlCounterfactualStopAfterLabels?: number;
   rlCounterfactualScoreRewardWeight?: number;
   rlCounterfactualPounceRewardWeight?: number;
   rlCounterfactualSkipCycleOverConnector?: boolean;
@@ -160,6 +161,7 @@ export type NeuralTrainingResult = {
     averageTrainingPlayerCount: number;
     episodes: number;
     counterfactualScannedEpisodes: number;
+    counterfactualStoppedAfterLabelTarget: boolean;
     averageFinalPointDifferential: number;
     averageTeacherBaselinePointDifferential: number;
     averageGreedyBaselinePointDifferential: number;
@@ -258,6 +260,8 @@ export type SelfPlayComparisonOptions = {
 
 export type CounterfactualRlLabelAudit = {
   examples: ActionRankingImitationExample[];
+  counterfactualScannedEpisodes: number;
+  stoppedAfterLabelTarget: boolean;
   sampledDecisionCount: number;
   exploratoryDecisionCount: number;
   noResultSkippedCount: number;
@@ -542,6 +546,8 @@ export function trainNeuralActionRankingPolicy(
     counterfactualMaxScoreGap: options.rlCounterfactualMaxScoreGap ?? 0,
     counterfactualScoreGapBudget:
       options.rlCounterfactualScoreGapBudget ?? 0,
+    counterfactualStopAfterLabels:
+      options.rlCounterfactualStopAfterLabels ?? 0,
     counterfactualScoreRewardWeight:
       options.rlCounterfactualScoreRewardWeight ?? 0,
     counterfactualPounceRewardWeight:
@@ -1550,6 +1556,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualPairwiseMaxWeight: number;
     counterfactualMaxScoreGap: number;
     counterfactualScoreGapBudget: number;
+    counterfactualStopAfterLabels: number;
     counterfactualScoreRewardWeight: number;
     counterfactualPounceRewardWeight: number;
     counterfactualSkipCycleOverConnector: boolean;
@@ -1628,6 +1635,8 @@ export function trainPolicyGradientFromRollouts(
             : options.episodes
         )
       : options.episodes;
+  let completedCounterfactualScanEpisodes = 0;
+  let counterfactualStoppedAfterLabelTarget = false;
 
   for (let episode = 0; episode < counterfactualScannedEpisodes; episode++) {
     const includeEpisodeMetrics = episode < options.episodes;
@@ -1891,12 +1900,8 @@ export function trainPolicyGradientFromRollouts(
           result,
           policy
         );
-        const useScoreGapBudget =
-          options.counterfactualTrainingMode !== "policy_gradient" &&
-          options.counterfactualScoreGapBudget > 0;
         if (
           options.counterfactualTrainingMode !== "policy_gradient" &&
-          !useScoreGapBudget &&
           options.counterfactualMaxScoreGap > 0 &&
           scoreGap != null &&
           scoreGap > options.counterfactualMaxScoreGap
@@ -1956,6 +1961,19 @@ export function trainPolicyGradientFromRollouts(
       baselinePointDifferentialTotal += baselineDifferential;
       baselineAdjustedReturnTotal += baselineAdjustedReturn;
       sampleMinusGreedyReturnTotal += sampleMinusGreedyReturn;
+    }
+
+    completedCounterfactualScanEpisodes += 1;
+    if (
+      shouldStopAfterCounterfactualLabels(
+        counterfactualSupervisedLabels.length,
+        options.counterfactualStopAfterLabels,
+        options.counterfactualTrainingMode
+      ) &&
+      episode + 1 >= options.episodes
+    ) {
+      counterfactualStoppedAfterLabelTarget = true;
+      break;
     }
   }
 
@@ -2035,7 +2053,8 @@ export function trainPolicyGradientFromRollouts(
     averageTrainingPlayerCount:
       options.episodes === 0 ? 0 : trainingPlayerCountTotal / options.episodes,
     episodes: options.episodes,
-    counterfactualScannedEpisodes,
+    counterfactualScannedEpisodes: completedCounterfactualScanEpisodes,
+    counterfactualStoppedAfterLabelTarget,
     averageFinalPointDifferential:
       options.episodes === 0
         ? 0
@@ -2063,10 +2082,10 @@ export function trainPolicyGradientFromRollouts(
     averageSampledDecisionCount:
       options.episodes === 0 ? 0 : sampledDecisionCountTotal / options.episodes,
     averageCounterfactualScannedDecisionCount:
-      counterfactualScannedEpisodes === 0
+      completedCounterfactualScanEpisodes === 0
         ? 0
         : counterfactualScannedDecisionCountTotal /
-          counterfactualScannedEpisodes,
+          completedCounterfactualScanEpisodes,
     averageExploratoryDecisionCount:
       options.episodes === 0
         ? 0
@@ -2143,6 +2162,7 @@ export function collectCounterfactualRlLabelAudit(
     counterfactualRequirePolicyChange: boolean;
     counterfactualMaxScoreGap: number;
     counterfactualScoreGapBudget: number;
+    counterfactualStopAfterLabels: number;
     counterfactualScoreRewardWeight: number;
     counterfactualPounceRewardWeight: number;
     counterfactualSkipCycleOverConnector: boolean;
@@ -2173,6 +2193,8 @@ export function collectCounterfactualRlLabelAudit(
   let counterfactualBehaviorWinRateTotal = 0;
   let counterfactualScoreGapTotal = 0;
   let counterfactualScoreGapCount = 0;
+  let counterfactualScannedEpisodes = 0;
+  let stoppedAfterLabelTarget = false;
   const useGreedyCounterfactualStates =
     options.counterfactualStateSource === "greedy" &&
     options.counterfactualTrainingMode !== "policy_gradient";
@@ -2344,12 +2366,8 @@ export function collectCounterfactualRlLabelAudit(
         result,
         policy
       );
-      const useScoreGapBudget =
-        options.counterfactualTrainingMode !== "policy_gradient" &&
-        options.counterfactualScoreGapBudget > 0;
       if (
         options.counterfactualTrainingMode !== "policy_gradient" &&
-        !useScoreGapBudget &&
         options.counterfactualMaxScoreGap > 0 &&
         scoreGap != null &&
         scoreGap > options.counterfactualMaxScoreGap
@@ -2371,6 +2389,18 @@ export function collectCounterfactualRlLabelAudit(
         scoreGap,
       });
     });
+
+    counterfactualScannedEpisodes += 1;
+    if (
+      shouldStopAfterCounterfactualLabels(
+        counterfactualSupervisedLabels.length,
+        options.counterfactualStopAfterLabels,
+        options.counterfactualTrainingMode
+      )
+    ) {
+      stoppedAfterLabelTarget = true;
+      break;
+    }
   }
 
   const selectedCounterfactualLabels = selectCounterfactualSupervisedLabels(
@@ -2397,6 +2427,8 @@ export function collectCounterfactualRlLabelAudit(
 
   return {
     examples,
+    counterfactualScannedEpisodes,
+    stoppedAfterLabelTarget,
     sampledDecisionCount,
     exploratoryDecisionCount,
     noResultSkippedCount,
@@ -2836,6 +2868,18 @@ function getSortableCounterfactualScoreGap(
   return label.scoreGap == null
     ? Number.POSITIVE_INFINITY
     : Math.max(0, label.scoreGap);
+}
+
+function shouldStopAfterCounterfactualLabels(
+  labelCount: number,
+  stopAfterLabels: number,
+  trainingMode: CounterfactualTrainingMode
+): boolean {
+  return (
+    trainingMode !== "policy_gradient" &&
+    Math.floor(stopAfterLabels) > 0 &&
+    labelCount >= Math.floor(stopAfterLabels)
+  );
 }
 
 function isCounterfactualBestGreedy(
