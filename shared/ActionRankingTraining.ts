@@ -51,6 +51,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualRolloutMoves?: number;
   rlCounterfactualCandidateLimit?: number;
   rlCounterfactualMinReturnGap?: number;
+  rlCounterfactualMaxReturnGap?: number;
   rlCounterfactualStateSource?: "sampled" | "greedy";
   rlCounterfactualTrainingMode?: "policy_gradient" | "pairwise" | "value";
   rlCounterfactualGapStandardErrorMultiplier?: number;
@@ -146,6 +147,7 @@ export type NeuralTrainingResult = {
     averageCounterfactualCandidateCount: number;
     counterfactualTrainingUpdates: number;
     counterfactualUpdateCount: number;
+    counterfactualMaxReturnGapSkippedCount: number;
     counterfactualPolicyMarginSkippedCount: number;
     counterfactualConfidenceSkippedCount: number;
     counterfactualScoreGapSkippedCount: number;
@@ -217,6 +219,7 @@ export type CounterfactualRlLabelAudit = {
   policyMarginSkippedCount: number;
   confidenceSkippedCount: number;
   scoreGapSkippedCount: number;
+  maxReturnGapSkippedCount: number;
   averageCounterfactualReturnGap: number;
   averageCounterfactualCandidateCount: number;
 };
@@ -428,6 +431,7 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualRolloutMoves ?? Math.min(450, maxMovesPerGame),
     counterfactualCandidateLimit: options.rlCounterfactualCandidateLimit ?? 2,
     counterfactualMinReturnGap: options.rlCounterfactualMinReturnGap ?? 1,
+    counterfactualMaxReturnGap: options.rlCounterfactualMaxReturnGap ?? 0,
     counterfactualStateSource:
       options.rlCounterfactualStateSource ?? "sampled",
     counterfactualTrainingMode:
@@ -1411,6 +1415,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualRolloutMoves: number;
     counterfactualCandidateLimit: number;
     counterfactualMinReturnGap: number;
+    counterfactualMaxReturnGap: number;
     counterfactualStateSource: CounterfactualStateSource;
     counterfactualTrainingMode: CounterfactualTrainingMode;
     counterfactualGapStandardErrorMultiplier: number;
@@ -1445,6 +1450,7 @@ export function trainPolicyGradientFromRollouts(
   let counterfactualReturnGapTotal = 0;
   let counterfactualCandidateCountTotal = 0;
   let counterfactualUpdateCount = 0;
+  let counterfactualMaxReturnGapSkippedCount = 0;
   let counterfactualPolicyMarginSkippedCount = 0;
   let counterfactualConfidenceSkippedCount = 0;
   let counterfactualScoreGapSkippedCount = 0;
@@ -1603,6 +1609,13 @@ export function trainPolicyGradientFromRollouts(
           counterfactualConfidenceSkippedCount += 1;
           return;
         }
+        if (
+          options.counterfactualMaxReturnGap > 0 &&
+          Math.abs(counterfactualGap) > options.counterfactualMaxReturnGap
+        ) {
+          counterfactualMaxReturnGapSkippedCount += 1;
+          return;
+        }
         const scoreGap = getCounterfactualBestVsGreedyScoreGap(
           transition,
           result,
@@ -1728,6 +1741,7 @@ export function trainPolicyGradientFromRollouts(
         : counterfactualCandidateCountTotal / counterfactualUpdateCount,
     counterfactualTrainingUpdates: advantageStats.appliedUpdates,
     counterfactualUpdateCount,
+    counterfactualMaxReturnGapSkippedCount,
     counterfactualPolicyMarginSkippedCount,
     counterfactualConfidenceSkippedCount,
     counterfactualScoreGapSkippedCount,
@@ -1756,6 +1770,7 @@ export function collectCounterfactualRlLabelAudit(
     counterfactualRolloutMoves: number;
     counterfactualCandidateLimit: number;
     counterfactualMinReturnGap: number;
+    counterfactualMaxReturnGap: number;
     counterfactualStateSource: CounterfactualStateSource;
     counterfactualTrainingMode: CounterfactualTrainingMode;
     counterfactualGapStandardErrorMultiplier: number;
@@ -1775,6 +1790,7 @@ export function collectCounterfactualRlLabelAudit(
   let policyGradientGreedySkippedCount = 0;
   let policyMarginSkippedCount = 0;
   let confidenceSkippedCount = 0;
+  let maxReturnGapSkippedCount = 0;
   let scoreGapSkippedCount = 0;
   let counterfactualReturnGapTotal = 0;
   let counterfactualCandidateCountTotal = 0;
@@ -1880,6 +1896,13 @@ export function collectCounterfactualRlLabelAudit(
         confidenceSkippedCount += 1;
         return;
       }
+      if (
+        options.counterfactualMaxReturnGap > 0 &&
+        Math.abs(counterfactualGap) > options.counterfactualMaxReturnGap
+      ) {
+        maxReturnGapSkippedCount += 1;
+        return;
+      }
 
       const scoreGap = getCounterfactualBestVsGreedyScoreGap(
         transition,
@@ -1919,6 +1942,7 @@ export function collectCounterfactualRlLabelAudit(
     policyMarginSkippedCount,
     confidenceSkippedCount,
     scoreGapSkippedCount,
+    maxReturnGapSkippedCount,
     averageCounterfactualReturnGap:
       examples.length === 0 ? 0 : counterfactualReturnGapTotal / examples.length,
     averageCounterfactualCandidateCount:

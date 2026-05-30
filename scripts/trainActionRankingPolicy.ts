@@ -112,6 +112,10 @@ const options = {
     "RL_COUNTERFACTUAL_MIN_RETURN_GAP",
     1
   ),
+  rlCounterfactualMaxReturnGap: readNumberEnv(
+    "RL_COUNTERFACTUAL_MAX_RETURN_GAP",
+    0
+  ),
   rlCounterfactualStateSource: readRlCounterfactualStateSourceEnv(
     "RL_COUNTERFACTUAL_STATE_SOURCE",
     "sampled"

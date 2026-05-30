@@ -264,6 +264,21 @@ assert.ok(
   "policy-margin filtering should skip settled high-margin decision states"
 );
 
+const maxReturnGapFiltered = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:max-return-gap-filtered",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualMaxReturnGap: 0.001,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.ok(
+  maxReturnGapFiltered.reinforcement.counterfactualMaxReturnGapSkippedCount > 0,
+  "max-return-gap filtering should skip extreme counterfactual labels"
+);
+
 console.log(
   JSON.stringify(
     {
@@ -279,6 +294,7 @@ console.log(
       scoreGapFiltered: summarize(scoreGapFiltered),
       confidenceFiltered: summarize(confidenceFiltered),
       policyMarginFiltered: summarize(policyMarginFiltered),
+      maxReturnGapFiltered: summarize(maxReturnGapFiltered),
     },
     null,
     2
@@ -306,6 +322,8 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.averageCounterfactualCandidateCount,
     counterfactualTrainingUpdates:
       result.reinforcement.counterfactualTrainingUpdates,
+    counterfactualMaxReturnGapSkippedCount:
+      result.reinforcement.counterfactualMaxReturnGapSkippedCount,
     counterfactualPolicyMarginSkippedCount:
       result.reinforcement.counterfactualPolicyMarginSkippedCount,
     counterfactualConfidenceSkippedCount:
