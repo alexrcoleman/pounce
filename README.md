@@ -24,6 +24,7 @@ Useful training knobs:
 - `MODEL_IN=...\model.json npm run action-ranking:train` to fine-tune saved weights
 - `MODEL_IN=...\model.json npm run action-ranking:evaluate` to evaluate saved weights
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare` to compare two models on paired deals/seats
+- `MODEL_IN=...\best.json npm run action-ranking:tune` to iterate reward fine-tunes and promote only paired-comparison improvements
 - `EVAL_RUNS=4` or `EVAL_SEEDS=seedA,seedB` to evaluate saved weights across multiple seeds
 - `POUNCE_NEURAL_AI_MODEL=...\model.json npm run dev` to run Socket.IO bots with saved weights
 
@@ -95,6 +96,12 @@ that pairwise fine-tune directly against its imitation checkpoint measured
 differential in `95.6%` of games. That means the reward fine-tune is not yet a
 proven replacement for the imitation checkpoint; use `action-ranking:compare`
 before promoting a candidate model.
+
+For iterative improvement, `action-ranking:tune` repeatedly trains from the
+current best model, runs paired comparison against that current best, and only
+promotes when `averagePointDifferentialDelta - PROMOTE_SE_MULTIPLIER * standardError`
+is greater than `PROMOTE_MIN_DELTA`. Defaults are intentionally conservative:
+`PROMOTE_MIN_DELTA=0`, `PROMOTE_SE_MULTIPLIER=1`.
 
 `IMPROVEMENT_STATES` enables the counterfactual rollout pass: it samples
 teacher-game states, tries several legal actions, lets the teacher finish from
