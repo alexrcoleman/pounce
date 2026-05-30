@@ -310,19 +310,17 @@ const CardContentMemo = observer(function CardContent({
       onClick={canClick ? handleClick : undefined}
       ref={drag}
     >
-      <div className={styles.rotator}>
-        <div className={joinClasses(styles.body, faceUp && styles.bodyFaceUp)}>
-          <div
-            className={styles.back}
-            style={
-              {
-                "--hr": colors[color] ?? "0deg",
-              } as any
-            }
-          />
-          <div className={styles.front}>
-            <CardFace suit={suit} value={value} />
-          </div>
+      <div className={joinClasses(styles.body, faceUp && styles.bodyFaceUp)}>
+        <div
+          className={styles.back}
+          style={
+            {
+              "--hr": colors[color] ?? "0deg",
+            } as any
+          }
+        />
+        <div className={styles.front}>
+          <CardFace suit={suit} value={value} />
         </div>
       </div>
     </div>

@@ -2,22 +2,20 @@
   position: absolute;
   height: 77px;
   width: 55px;
-  transition: transform 0.5s ease-in-out, opacity 0.25s ease-in-out;
+  transition: transform 0.5s ease-in-out, opacity 0.25s ease-in-out, outline 0.1s ease-in-out;
   user-select: none;
   contain: layout style;
   transform-origin: 0% 0%;
-  transform: translate(var(--x), var(--y)) scale(var(--s), var(--s));
-}
-.rotator {
-  width: 100%;
-  height: 100%;
+  transform:
+    translate(var(--x), var(--y))
+    scale(var(--s), var(--s))
+    translate(27.5px, 38.5px)
+    rotate(var(--r))
+    translate(-27.5px, -38.5px);
+  will-change: transform, opacity;
   border-radius: 3px;
-  overflow: hidden;
   perspective: 1000px;
   box-shadow: 1px 1px 2px 0px rgba(0, 0, 0, 0.1);
-  transform-origin: 50% 50%;
-  transform: rotate(var(--r));
-  transition: transform 0.5s ease-in-out, outline 0.1s ease-in-out;
   outline: 2px solid #ffe63f00;
 }
 .clickable {
@@ -33,17 +31,19 @@
   .root:not([data-is-dragging-this-card="true"]) {
   pointer-events: none;
 }
-.clickable:hover .rotator,
-.draggable:hover .rotator {
+.clickable:hover,
+.draggable:hover {
   outline: 2px solid #ffe63f;
 }
 .body {
   width: 100%;
   height: 100%;
+  border-radius: inherit;
   text-align: center;
   transition: transform 0.25s;
   background-color: #eee;
   transform-style: preserve-3d;
+  will-change: transform;
 }
 .bodyFaceUp {
   transform: rotateY(180deg);
@@ -54,8 +54,12 @@
   position: absolute;
   width: 100%;
   height: 100%;
+  border-radius: inherit;
   -webkit-backface-visibility: hidden;
   backface-visibility: hidden;
+}
+.front > * {
+  border-radius: inherit;
 }
 .front {
   transform: rotateY(-180deg);
