@@ -16,7 +16,7 @@ npm run action-ranking:train
 Useful training knobs:
 
 - `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`
-- `IMPROVEMENT_STATES`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
+- `IMPROVEMENT_STATES`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
 - `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `HIDDEN_LAYERS`, `MAX_MOVES`, `SEED`
 - `HIDDEN` and `HIDDEN_LAYERS` accept comma-separated layer sizes, for example `HIDDEN=192,96`
@@ -69,24 +69,28 @@ $env:IMITATION_DEALS='0'
 $env:IMPROVEMENT_STATES='80'
 $env:IMPROVEMENT_CANDIDATES='8'
 $env:IMPROVEMENT_ROLLOUT_MOVES='450'
+$env:IMPROVEMENT_ROLLOUT_COUNT='1'
+$env:IMPROVEMENT_COMMON_RANDOM='true'
 $env:IMPROVEMENT_EPOCHS='1'
 $env:IMPROVEMENT_LR='0.001'
 $env:IMPROVEMENT_TEMPERATURE='8'
 $env:RL_EPISODES='0'
-$env:MODEL_OUT='.\node_modules\pounce-action-ranking-soft-improvement-80-lr1-model.json'
+$env:MODEL_OUT='.\node_modules\pounce-action-ranking-common-random-80-model.json'
 npm run action-ranking:train
 ```
 
 On the same 768-game / 8-seed evaluation, that fine-tuned checkpoint measured
-`+0.053 +/- 0.325` baseline-adjusted point differential, with raw score `7.14`
+`+0.056 +/- 0.326` baseline-adjusted point differential, with raw score `7.15`
 vs `6.93` and a `25.4%` solo win rate. Treat that as directionally interesting,
 not proven: the error bars still overlap zero.
 
 `IMPROVEMENT_STATES` enables the counterfactual rollout pass: it samples
 teacher-game states, tries several legal actions, lets the teacher finish from
-each candidate, and trains from the resulting soft reward targets. Larger or
-more aggressive improvement passes have overcorrected in early tests. RL
-fine-tuning is wired in with batch-normalized, clipped advantages and optional
+each candidate, and trains from the resulting soft reward targets. By default,
+candidate actions in the same state now share continuation randomness; increasing
+`IMPROVEMENT_ROLLOUT_COUNT` averages multiple continuations per candidate.
+Larger or more aggressive improvement passes have overcorrected in early tests.
+RL fine-tuning is wired in with batch-normalized, clipped advantages and optional
 discounted local reward-to-go, but conservative runs tested so far have mostly
 preserved the imitation checkpoint rather than clearly improving it.
 

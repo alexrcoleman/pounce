@@ -49,6 +49,8 @@ export type NeuralTrainingOptions = {
   improvementStates?: number;
   improvementCandidateLimit?: number;
   improvementRolloutMoves?: number;
+  improvementRolloutCount?: number;
+  improvementCommonRandom?: boolean;
   improvementEpochs?: number;
   improvementLearningRate?: number;
   improvementTargetTemperature?: number;
@@ -70,6 +72,7 @@ export type NeuralTrainingResult = {
     averageTeacherReturn: number;
     averageBestReturn: number;
     averageImprovement: number;
+    averageCandidateReturnStdDev: number;
     stats: ImitationTrainingStats;
   };
   reinforcement: {
@@ -138,6 +141,7 @@ type RewardImprovementCollection = {
   averageTeacherReturn: number;
   averageBestReturn: number;
   averageImprovement: number;
+  averageCandidateReturnStdDev: number;
 };
 
 const SUITS: Suits[] = ["hearts", "spades", "diamonds", "clubs"];
@@ -190,6 +194,8 @@ export function trainNeuralActionRankingPolicy(
     maxStates: improvementStates,
     candidateLimit: options.improvementCandidateLimit ?? 6,
     rolloutMoves: options.improvementRolloutMoves ?? 450,
+    rolloutCount: options.improvementRolloutCount ?? 1,
+    commonRandom: options.improvementCommonRandom ?? true,
     seed: `${seed}:improvement`,
     maxMovesPerGame,
   });
@@ -246,6 +252,7 @@ export function trainNeuralActionRankingPolicy(
       averageTeacherReturn: improvement.averageTeacherReturn,
       averageBestReturn: improvement.averageBestReturn,
       averageImprovement: improvement.averageImprovement,
+      averageCandidateReturnStdDev: improvement.averageCandidateReturnStdDev,
       stats: improvementStats,
     },
     reinforcement,
@@ -263,6 +270,8 @@ export function collectRewardImprovementExamples(options: {
   maxStates: number;
   candidateLimit: number;
   rolloutMoves: number;
+  rolloutCount: number;
+  commonRandom: boolean;
   seed: string;
   maxMovesPerGame: number;
 }): RewardImprovementCollection {
@@ -272,12 +281,14 @@ export function collectRewardImprovementExamples(options: {
       averageTeacherReturn: 0,
       averageBestReturn: 0,
       averageImprovement: 0,
+      averageCandidateReturnStdDev: 0,
     };
   }
 
   const examples: ActionRankingImitationExample[] = [];
   let teacherReturnTotal = 0;
   let bestReturnTotal = 0;
+  let candidateReturnStdDevTotal = 0;
   let dealIndex = 0;
 
   while (examples.length < options.maxStates) {
@@ -323,11 +334,14 @@ export function collectRewardImprovementExamples(options: {
           selectedCandidates,
           teacherMove,
           `${options.seed}:rollout:${dealIndex}:${stepIndex}`,
-          options.rolloutMoves
+          options.rolloutMoves,
+          options.rolloutCount,
+          options.commonRandom
         );
         if (example) {
           teacherReturnTotal += getTeacherReturn(example);
           bestReturnTotal += example.pointDifferentialReturn ?? 0;
+          candidateReturnStdDevTotal += getCandidateReturnStdDev(example);
           examples.push(example);
         }
       }
@@ -350,6 +364,8 @@ export function collectRewardImprovementExamples(options: {
     averageTeacherReturn,
     averageBestReturn,
     averageImprovement: averageBestReturn - averageTeacherReturn,
+    averageCandidateReturnStdDev:
+      examples.length === 0 ? 0 : candidateReturnStdDevTotal / examples.length,
   };
 }
 
@@ -362,7 +378,9 @@ function createRewardImprovementExample(
   candidates: ActionRankingCandidate[],
   teacherMove: Move,
   seed: string,
-  rolloutMoves: number
+  rolloutMoves: number,
+  rolloutCount: number,
+  commonRandom: boolean
 ): ActionRankingImitationExample | null {
   const pointDifferentialBefore = getPointDifferential(board, playerIndex);
   const teacherKey = getActionRankingMoveKey(teacherMove);
@@ -372,7 +390,7 @@ function createRewardImprovementExample(
         board,
         playerIndex,
         candidate.move,
-        `${seed}:candidate:${candidateIndex}`,
+        getCounterfactualSeeds(seed, candidateIndex, rolloutCount, commonRandom),
         rolloutMoves
       );
       return {
@@ -429,13 +447,31 @@ function getCounterfactualPointDifferential(
   board: BoardState,
   playerIndex: number,
   move: Move,
-  seed: string,
+  seeds: readonly string[],
   maxMoves: number
 ): number {
-  const nextBoard = deepClone(board);
-  executeMove(nextBoard, playerIndex, move);
-  runTeacherContinuation(nextBoard, seed, maxMoves);
-  return getPointDifferential(nextBoard, playerIndex);
+  const safeSeeds = seeds.length > 0 ? seeds : ["counterfactual"];
+  const total = safeSeeds.reduce((sum, seed) => {
+    const nextBoard = deepClone(board);
+    executeMove(nextBoard, playerIndex, move);
+    runTeacherContinuation(nextBoard, seed, maxMoves);
+    return sum + getPointDifferential(nextBoard, playerIndex);
+  }, 0);
+  return total / safeSeeds.length;
+}
+
+function getCounterfactualSeeds(
+  seed: string,
+  candidateIndex: number,
+  rolloutCount: number,
+  commonRandom: boolean
+): string[] {
+  const count = Math.max(1, Math.floor(rolloutCount));
+  return Array.from({ length: count }, (_, rolloutIndex) =>
+    commonRandom
+      ? `${seed}:common:${rolloutIndex}`
+      : `${seed}:candidate:${candidateIndex}:rollout:${rolloutIndex}`
+  );
 }
 
 function selectImprovementCandidates(
@@ -486,6 +522,23 @@ function selectImprovementCandidates(
 
 function getTeacherReturn(example: ActionRankingImitationExample): number {
   return example.teacherPointDifferentialReturn ?? 0;
+}
+
+function getCandidateReturnStdDev(example: ActionRankingImitationExample): number {
+  const returns = example.candidates
+    .map((candidate) => candidate.rolloutPointDifferentialReturn)
+    .filter((value): value is number => value != null);
+  if (returns.length <= 1) {
+    return 0;
+  }
+  const mean = returns.reduce((sum, value) => sum + value, 0) / returns.length;
+  const variance =
+    returns.reduce((sum, value) => {
+      const delta = value - mean;
+      return sum + delta * delta;
+    }, 0) /
+    (returns.length - 1);
+  return Math.sqrt(variance);
 }
 
 function runTeacherContinuation(

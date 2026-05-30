@@ -22,6 +22,8 @@ const options = {
   improvementStates: readIntegerEnv("IMPROVEMENT_STATES", 0),
   improvementCandidateLimit: readIntegerEnv("IMPROVEMENT_CANDIDATES", 6),
   improvementRolloutMoves: readIntegerEnv("IMPROVEMENT_ROLLOUT_MOVES", 450),
+  improvementRolloutCount: readIntegerEnv("IMPROVEMENT_ROLLOUT_COUNT", 1),
+  improvementCommonRandom: readBooleanEnv("IMPROVEMENT_COMMON_RANDOM", true),
   improvementEpochs: readIntegerEnv("IMPROVEMENT_EPOCHS", 3),
   improvementLearningRate: readNumberEnv("IMPROVEMENT_LR", 0.01),
   improvementTargetTemperature: readNumberEnv("IMPROVEMENT_TEMPERATURE", 4),
