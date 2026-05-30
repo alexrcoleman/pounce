@@ -293,6 +293,10 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
       "RL_COUNTERFACTUAL_STATE_SOURCE",
       "sampled"
     ),
+    rlCounterfactualGapStandardErrorMultiplier: readNumberEnv(
+      "RL_COUNTERFACTUAL_GAP_SE_MULTIPLIER",
+      0
+    ),
     rlCounterfactualPairwiseTargetMargin: readNumberEnv(
       "RL_COUNTERFACTUAL_PAIRWISE_MARGIN",
       0

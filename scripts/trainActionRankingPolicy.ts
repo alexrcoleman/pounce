@@ -120,6 +120,10 @@ const options = {
     "RL_COUNTERFACTUAL_MODE",
     "policy_gradient"
   ),
+  rlCounterfactualGapStandardErrorMultiplier: readNumberEnv(
+    "RL_COUNTERFACTUAL_GAP_SE_MULTIPLIER",
+    0
+  ),
   rlCounterfactualPreferenceScope: readImprovementPreferenceScopeEnv(
     "RL_COUNTERFACTUAL_PREFERENCE_SCOPE",
     "all"

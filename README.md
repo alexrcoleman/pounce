@@ -17,7 +17,7 @@ Useful training knobs:
 
 - `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`
 - `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_MAX_SCORE_GAP`, `IMPROVEMENT_MAX_WINNER_SCORE_GAP`, `IMPROVEMENT_MAX_CANDIDATE_SCORE_GAP`, `IMPROVEMENT_POLICY_CANDIDATES`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_CONTINUATION`, `IMPROVEMENT_SCORE_WEIGHT`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_PAIRWISE_MARGIN`, `IMPROVEMENT_VALUE_SCALE`, `IMPROVEMENT_VALUE_CENTER`, `IMPROVEMENT_VALUE_TARGET_MODE`, `IMPROVEMENT_VALUE_HUBER`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_BEHAVIOR_GAP_SE_MULTIPLIER`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
-- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_CANDIDATES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_STATE_SOURCE`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_PREFERENCE_SCOPE`, `RL_COUNTERFACTUAL_PAIRWISE_MARGIN`, `RL_COUNTERFACTUAL_MAX_SCORE_GAP`, `RL_COUNTERFACTUAL_SCORE_WEIGHT`, `RL_COUNTERFACTUAL_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_ANCHOR_TEMPERATURE`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_TARGET_MODE`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
+- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_CANDIDATES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_STATE_SOURCE`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_GAP_SE_MULTIPLIER`, `RL_COUNTERFACTUAL_PREFERENCE_SCOPE`, `RL_COUNTERFACTUAL_PAIRWISE_MARGIN`, `RL_COUNTERFACTUAL_MAX_SCORE_GAP`, `RL_COUNTERFACTUAL_SCORE_WEIGHT`, `RL_COUNTERFACTUAL_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_ANCHOR_TEMPERATURE`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_TARGET_MODE`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `HIDDEN_LAYERS`, `MAX_MOVES`, `SEED`
 - `HIDDEN` and `HIDDEN_LAYERS` accept comma-separated layer sizes, for example `HIDDEN=192,96`
 - `MODEL_OUT=C:\tmp\pounce-action-ranking-model.json` to save model weights
@@ -291,6 +291,12 @@ reached by the deployed greedy policy, bypassing `RL_UPDATE_SCOPE=exploratory`
 for those labels. The default `sampled` keeps the older behavior. Policy-gradient
 counterfactual updates still use sampled decisions because their advantage is
 defined as sampled action return minus greedy action return.
+`RL_COUNTERFACTUAL_GAP_SE_MULTIPLIER` makes counterfactual gap filtering
+confidence-aware when `RL_COUNTERFACTUAL_ROLLOUTS` is above `1`: the accepted
+gap is the mean selected-vs-greedy gap for policy-gradient mode, or the mean
+best-vs-worst candidate gap for supervised modes, minus this multiplier times
+the paired standard error across rollout seeds. The default `0` preserves the
+older mean-gap behavior.
 `RL_COUNTERFACTUAL_PREFERENCE_SCOPE=behavior` narrows pairwise labels to the
 best rollout candidate versus the current greedy behavior action; the default
 `all` trains the clearest candidate pair in each state.
@@ -447,6 +453,16 @@ by score gap, applied 2,560 anchor updates, and measured `-0.095 +/- 0.020`.
 The greedy-state source is a useful diagnostic because it greatly densifies
 labels on deployed states, but the first tested recipes still point slightly
 away from the current best policy.
+Counterfactual gap confidence filtering is now available with
+`RL_COUNTERFACTUAL_GAP_SE_MULTIPLIER`. A 48-episode greedy-state residual-value
+run with `RL_COUNTERFACTUAL_ROLLOUTS=3`,
+`RL_COUNTERFACTUAL_GAP_SE_MULTIPLIER=1`, and `RL_LR=0.0001` accepted 604
+labels, skipped 497 unstable gaps, and applied 1,990 value updates. It measured
+`-0.008 +/- 0.018` point differential and `-0.012` raw score over 768 paired
+games, with zero top-action disagreements across 3,406 deployed-policy
+diagnostic states. That is not an improved checkpoint, but it is the cleanest
+greedy-state RL result so far and suggests variance-aware filtering is worth
+keeping for larger or more targeted runs.
 
 Uncertainty-targeted improvement collection is also wired in. With
 `IMPROVEMENT_MAX_SCORE_GAP` and `IMPROVEMENT_POLICY_CANDIDATES`, the collector

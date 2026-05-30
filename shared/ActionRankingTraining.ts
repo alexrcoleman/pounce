@@ -53,6 +53,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualMinReturnGap?: number;
   rlCounterfactualStateSource?: "sampled" | "greedy";
   rlCounterfactualTrainingMode?: "policy_gradient" | "pairwise" | "value";
+  rlCounterfactualGapStandardErrorMultiplier?: number;
   rlCounterfactualPreferenceScope?: "all" | "behavior";
   rlCounterfactualPairwiseTargetMargin?: number;
   rlCounterfactualMaxScoreGap?: number;
@@ -143,6 +144,7 @@ export type NeuralTrainingResult = {
     averageCounterfactualCandidateCount: number;
     counterfactualTrainingUpdates: number;
     counterfactualUpdateCount: number;
+    counterfactualConfidenceSkippedCount: number;
     counterfactualScoreGapSkippedCount: number;
     counterfactualAnchorExamples: number;
     counterfactualAnchorUpdates: number;
@@ -239,6 +241,7 @@ type CounterfactualCandidateReturn = {
   rolloutPointDifferentialReturn: number;
   rolloutScoreReturn: number;
   rolloutObjectiveReturn: number;
+  rolloutObjectiveReturns: number[];
 };
 
 type CounterfactualTransitionResult = {
@@ -248,7 +251,9 @@ type CounterfactualTransitionResult = {
   selectedPointDifferentialReturn: number;
   greedyPointDifferentialReturn: number;
   returnGap: number;
+  returnGapStandardError: number;
   trainingGap: number;
+  trainingGapStandardError: number;
 };
 
 type CounterfactualOutcome = {
@@ -407,6 +412,8 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualStateSource ?? "sampled",
     counterfactualTrainingMode:
       options.rlCounterfactualTrainingMode ?? "policy_gradient",
+    counterfactualGapStandardErrorMultiplier:
+      options.rlCounterfactualGapStandardErrorMultiplier ?? 0,
     counterfactualPreferenceScope:
       options.rlCounterfactualPreferenceScope ?? "all",
     counterfactualPairwiseTargetMargin:
@@ -1381,6 +1388,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualMinReturnGap: number;
     counterfactualStateSource: CounterfactualStateSource;
     counterfactualTrainingMode: CounterfactualTrainingMode;
+    counterfactualGapStandardErrorMultiplier: number;
     counterfactualPreferenceScope: "all" | "behavior";
     counterfactualPairwiseTargetMargin: number;
     counterfactualMaxScoreGap: number;
@@ -1410,6 +1418,7 @@ export function trainPolicyGradientFromRollouts(
   let counterfactualReturnGapTotal = 0;
   let counterfactualCandidateCountTotal = 0;
   let counterfactualUpdateCount = 0;
+  let counterfactualConfidenceSkippedCount = 0;
   let counterfactualScoreGapSkippedCount = 0;
   const updates: PolicyGradientUpdate[] = [];
   const counterfactualExamples: ActionRankingImitationExample[] = [];
@@ -1527,6 +1536,16 @@ export function trainPolicyGradientFromRollouts(
           options.counterfactualTrainingMode === "policy_gradient"
             ? result?.returnGap
             : result?.trainingGap;
+        const counterfactualGapStandardError =
+          options.counterfactualTrainingMode === "policy_gradient"
+            ? result?.returnGapStandardError
+            : result?.trainingGapStandardError;
+        const counterfactualGapLowerBound =
+          counterfactualGap == null
+            ? null
+            : Math.abs(counterfactualGap) -
+              Math.max(0, options.counterfactualGapStandardErrorMultiplier) *
+                (counterfactualGapStandardError ?? 0);
         if (
           !result ||
           counterfactualGap == null ||
@@ -1534,6 +1553,13 @@ export function trainPolicyGradientFromRollouts(
             !isExploratoryDecision) ||
           Math.abs(counterfactualGap) < options.counterfactualMinReturnGap
         ) {
+          return;
+        }
+        if (
+          counterfactualGapLowerBound == null ||
+          counterfactualGapLowerBound < options.counterfactualMinReturnGap
+        ) {
+          counterfactualConfidenceSkippedCount += 1;
           return;
         }
         const scoreGap = getCounterfactualBestVsGreedyScoreGap(
@@ -1661,6 +1687,7 @@ export function trainPolicyGradientFromRollouts(
         : counterfactualCandidateCountTotal / counterfactualUpdateCount,
     counterfactualTrainingUpdates: advantageStats.appliedUpdates,
     counterfactualUpdateCount,
+    counterfactualConfidenceSkippedCount,
     counterfactualScoreGapSkippedCount,
     counterfactualAnchorExamples: advantageStats.anchorExamples,
     counterfactualAnchorUpdates: advantageStats.anchorUpdates,
@@ -2058,36 +2085,34 @@ function getCounterfactualTransitionResult(
       rolloutPointDifferentialReturn,
       rolloutScoreReturn,
       rolloutObjectiveReturn,
+      rolloutObjectiveReturns: objectiveReturns,
     };
   });
-  const selectedReturn =
-    candidates.find(
-      (candidate) =>
-        candidate.candidateIndex === transition.selectedCandidateIndex
-    )?.rolloutObjectiveReturn ?? 0;
-  const greedyReturn =
-    candidates.find(
-      (candidate) => candidate.candidateIndex === transition.greedyCandidateIndex
-    )?.rolloutObjectiveReturn ?? 0;
+  const selectedCandidate = candidates.find(
+    (candidate) => candidate.candidateIndex === transition.selectedCandidateIndex
+  );
+  const greedyCandidate = candidates.find(
+    (candidate) => candidate.candidateIndex === transition.greedyCandidateIndex
+  );
+  const bestCandidate = candidates.reduce((best, candidate) =>
+    candidate.rolloutObjectiveReturn > best.rolloutObjectiveReturn
+      ? candidate
+      : best
+  );
+  const worstCandidate = candidates.reduce((worst, candidate) =>
+    candidate.rolloutObjectiveReturn < worst.rolloutObjectiveReturn
+      ? candidate
+      : worst
+  );
+  const selectedReturn = selectedCandidate?.rolloutObjectiveReturn ?? 0;
+  const greedyReturn = greedyCandidate?.rolloutObjectiveReturn ?? 0;
   const selectedPointDifferentialReturn =
-    candidates.find(
-      (candidate) =>
-        candidate.candidateIndex === transition.selectedCandidateIndex
-    )?.rolloutPointDifferentialReturn ?? 0;
+    selectedCandidate?.rolloutPointDifferentialReturn ?? 0;
   const greedyPointDifferentialReturn =
-    candidates.find(
-      (candidate) => candidate.candidateIndex === transition.greedyCandidateIndex
-    )?.rolloutPointDifferentialReturn ?? 0;
-  const bestReturn = candidates.reduce(
-    (best, candidate) =>
-      Math.max(best, candidate.rolloutObjectiveReturn),
-    Number.NEGATIVE_INFINITY
-  );
-  const worstReturn = candidates.reduce(
-    (worst, candidate) =>
-      Math.min(worst, candidate.rolloutObjectiveReturn),
-    Number.POSITIVE_INFINITY
-  );
+    greedyCandidate?.rolloutPointDifferentialReturn ?? 0;
+  const returnGap = selectedReturn - greedyReturn;
+  const trainingGap =
+    bestCandidate.rolloutObjectiveReturn - worstCandidate.rolloutObjectiveReturn;
 
   return {
     candidates,
@@ -2095,9 +2120,40 @@ function getCounterfactualTransitionResult(
     greedyReturn,
     selectedPointDifferentialReturn,
     greedyPointDifferentialReturn,
-    returnGap: selectedReturn - greedyReturn,
-    trainingGap: bestReturn - worstReturn,
+    returnGap,
+    returnGapStandardError:
+      selectedCandidate && greedyCandidate
+        ? getCounterfactualReturnGapStandardError(
+            selectedCandidate,
+            greedyCandidate
+          )
+        : 0,
+    trainingGap,
+    trainingGapStandardError: getCounterfactualReturnGapStandardError(
+      bestCandidate,
+      worstCandidate
+    ),
   };
+}
+
+function getCounterfactualReturnGapStandardError(
+  winner: CounterfactualCandidateReturn,
+  loser: CounterfactualCandidateReturn
+): number {
+  const count = Math.min(
+    winner.rolloutObjectiveReturns.length,
+    loser.rolloutObjectiveReturns.length
+  );
+  if (count <= 1) {
+    return 0;
+  }
+  const gaps = Array.from(
+    { length: count },
+    (_, index) =>
+      winner.rolloutObjectiveReturns[index] -
+      loser.rolloutObjectiveReturns[index]
+  );
+  return getSampleStandardDeviation(gaps) / Math.sqrt(count);
 }
 
 function getCounterfactualCandidateIndices(

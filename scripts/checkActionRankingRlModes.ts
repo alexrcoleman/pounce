@@ -215,6 +215,24 @@ assert.ok(
   "score-gap filtering should skip labels that fight a large policy score gap"
 );
 
+const confidenceFiltered = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:confidence-filtered",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualRolloutCount: 3,
+  rlCounterfactualRolloutMoves: 40,
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualMinReturnGap: 0,
+  rlCounterfactualGapStandardErrorMultiplier: 100,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.ok(
+  confidenceFiltered.reinforcement.counterfactualConfidenceSkippedCount > 0,
+  "confidence filtering should skip labels with unstable rollout gaps"
+);
+
 console.log(
   JSON.stringify(
     {
@@ -227,6 +245,7 @@ console.log(
       greedyStateValue: summarize(greedyStateValue),
       anchoredValue: summarize(anchoredValue),
       scoreGapFiltered: summarize(scoreGapFiltered),
+      confidenceFiltered: summarize(confidenceFiltered),
     },
     null,
     2
@@ -254,6 +273,8 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.averageCounterfactualCandidateCount,
     counterfactualTrainingUpdates:
       result.reinforcement.counterfactualTrainingUpdates,
+    counterfactualConfidenceSkippedCount:
+      result.reinforcement.counterfactualConfidenceSkippedCount,
     counterfactualScoreGapSkippedCount:
       result.reinforcement.counterfactualScoreGapSkippedCount,
     counterfactualAnchorExamples:
