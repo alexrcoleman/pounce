@@ -46,6 +46,9 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "player.botIndex",
   "board.playerCount",
   "card.canPlaySoon",
+  "card.centerPlayableDestinationCount",
+  "card.ownSolitaireDestinationCount",
+  "card.ownSolitaireConnectorForPounce",
   "center.ownCanFollowSoonAfter",
   "center.opponentsCanFollowSoonAfter",
   "solitaire.isTuck",
@@ -307,6 +310,12 @@ function buildActionRankingFeatures(
   const card = getMoveCard(board, playerIndex, move);
   const dest = getMoveDestination(board, player, move);
   const centerFollow = getCenterFollowFeatures(board, playerIndex, move, card);
+  const cardAlternatives = getCardAlternativeFeatures(
+    board,
+    player,
+    move,
+    card
+  );
   const strategyFeatures = getStrategyFeatures(
     board,
     playerIndex,
@@ -362,6 +371,12 @@ function buildActionRankingFeatures(
     normalize(botIndex, Math.max(1, board.players.length - 1)),
     normalize(board.players.length, 6),
     bool(card != null && getCanPlaySoon(card, board, 4)),
+    normalize(
+      cardAlternatives.centerPlayableDestinationCount,
+      Math.max(1, board.piles.length)
+    ),
+    normalize(cardAlternatives.ownSolitaireDestinationCount, 4),
+    bool(cardAlternatives.ownSolitaireConnectorForPounce),
     normalize(strategyFeatures.ownCanFollowSoonAfter, 6),
     normalize(strategyFeatures.opponentsCanFollowSoonAfter, 24),
     bool(strategyFeatures.solitaireTuck),
@@ -372,6 +387,81 @@ function buildActionRankingFeatures(
     bool(strategyFeatures.exposesCanPlaySoon),
     bool(strategyFeatures.movesFullStack),
   ];
+}
+
+function getCardAlternativeFeatures(
+  board: BoardState,
+  player: PlayerState | undefined,
+  move: Move,
+  card: CardState | undefined
+) {
+  if (!player || !card) {
+    return {
+      centerPlayableDestinationCount: 0,
+      ownSolitaireDestinationCount: 0,
+      ownSolitaireConnectorForPounce: false,
+    };
+  }
+
+  const solitaireDestinations = getOwnSolitaireDestinations(player, move, card);
+  const cardToSolitaireSource = getCardToSolitaireSource(move);
+
+  return {
+    centerPlayableDestinationCount: board.piles.filter((pile) =>
+      canPlayOnCenterPile(pile, card)
+    ).length,
+    ownSolitaireDestinationCount: solitaireDestinations.length,
+    ownSolitaireConnectorForPounce:
+      cardToSolitaireSource != null &&
+      solitaireDestinations.some((dest) =>
+        getMakesPouncePlayable(
+          player,
+          { type: "c2s", source: cardToSolitaireSource, dest },
+          card
+        )
+      ),
+  };
+}
+
+function getOwnSolitaireDestinations(
+  player: PlayerState,
+  move: Move,
+  card: CardState
+): number[] {
+  const sourceStackIndex = getSolitaireSourceIndex(move);
+  if (getCardToSolitaireSource(move) != null) {
+    return player.stacks.flatMap((_, dest) =>
+      canMoveCardToSolitaireStack(player, card, dest) ? [dest] : []
+    );
+  }
+
+  if (sourceStackIndex == null) {
+    return [];
+  }
+
+  return player.stacks.flatMap((stack, dest) =>
+    dest !== sourceStackIndex && canMoveToSolitairePile(card, stack) ? [dest] : []
+  );
+}
+
+function getCardToSolitaireSource(
+  move: Move
+): Extract<Move, { type: "c2s" }>["source"] | undefined {
+  if (move.type === "c2s") {
+    return move.source;
+  }
+  if (move.type === "c2c" && move.source.type !== "solitaire") {
+    return move.source.type;
+  }
+}
+
+function getSolitaireSourceIndex(move: Move): number | undefined {
+  if (move.type === "s2s") {
+    return move.source;
+  }
+  if (move.type === "c2c" && move.source.type === "solitaire") {
+    return move.source.index;
+  }
 }
 
 function getStrategyFeatures(

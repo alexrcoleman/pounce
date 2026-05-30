@@ -85,6 +85,51 @@ function summarizeEvaluations(evaluations: ReturnType<typeof evaluateNeuralModel
     neuralWinRate: weightedMean(evaluations, "neuralWinRate"),
     averageNeuralScore: weightedMean(evaluations, "averageNeuralScore"),
     averageTeacherScore: weightedMean(evaluations, "averageTeacherScore"),
+    averageNeuralDecisionCount: weightedMean(
+      evaluations,
+      "averageNeuralDecisionCount"
+    ),
+    averageTeacherBaselineDecisionCount: weightedMean(
+      evaluations,
+      "averageTeacherBaselineDecisionCount"
+    ),
+    averageNeuralCenterMoveRate: weightedMean(
+      evaluations,
+      "averageNeuralCenterMoveRate"
+    ),
+    averageTeacherBaselineCenterMoveRate: weightedMean(
+      evaluations,
+      "averageTeacherBaselineCenterMoveRate"
+    ),
+    averageNeuralSolitaireMoveRate: weightedMean(
+      evaluations,
+      "averageNeuralSolitaireMoveRate"
+    ),
+    averageTeacherBaselineSolitaireMoveRate: weightedMean(
+      evaluations,
+      "averageTeacherBaselineSolitaireMoveRate"
+    ),
+    averageNeuralCycleMoveRate: weightedMean(
+      evaluations,
+      "averageNeuralCycleMoveRate"
+    ),
+    averageTeacherBaselineCycleMoveRate: weightedMean(
+      evaluations,
+      "averageTeacherBaselineCycleMoveRate"
+    ),
+    averageNeuralPounceRemaining: weightedMean(
+      evaluations,
+      "averageNeuralPounceRemaining"
+    ),
+    averageTeacherBaselinePounceRemaining: weightedMean(
+      evaluations,
+      "averageTeacherBaselinePounceRemaining"
+    ),
+    neuralPounceOutRate: weightedMean(evaluations, "neuralPounceOutRate"),
+    teacherBaselinePounceOutRate: weightedMean(
+      evaluations,
+      "teacherBaselinePounceOutRate"
+    ),
   };
 }
 

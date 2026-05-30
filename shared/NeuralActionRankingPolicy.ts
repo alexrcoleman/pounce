@@ -2,12 +2,13 @@ import {
   ACTION_RANKING_FEATURE_NAMES,
   enumerateActionRankingCandidates,
   type ActionRankingCandidate,
+  type ActionRankingFeatureName,
 } from "./ActionRankingPolicy";
 import type { BoardState } from "./GameUtils";
 import type { Move } from "./MoveHandler";
 import type { ActionRankingImitationExample } from "./ActionRankingImitation";
 
-export type NeuralActionRankingModel = {
+export type NeuralActionRankingModelV1 = {
   version: 1;
   featureNames: string[];
   inputSize: number;
@@ -17,6 +18,21 @@ export type NeuralActionRankingModel = {
   hiddenToOutput: number[];
   outputBias: number;
 };
+
+export type NeuralActionRankingModelV2 = {
+  version: 2;
+  featureNames: string[];
+  inputSize: number;
+  hiddenLayerSizes: number[];
+  layerWeights: number[][][];
+  layerBiases: number[][];
+  outputWeights: number[];
+  outputBias: number;
+};
+
+export type NeuralActionRankingModel =
+  | NeuralActionRankingModelV1
+  | NeuralActionRankingModelV2;
 
 export type ActionRankingPrediction = {
   candidate: ActionRankingCandidate;
@@ -45,25 +61,36 @@ export type RewardTargetTrainingOptions = ImitationTrainingOptions & {
 };
 
 type ForwardPass = {
-  hiddenRaw: number[];
-  hidden: number[];
+  layerInputs: number[][];
+  activations: number[][];
   score: number;
 };
 
-const DEFAULT_HIDDEN_SIZE = 48;
+const DEFAULT_HIDDEN_LAYER_SIZES = [48];
 const DEFAULT_LEARNING_RATE = 0.02;
 
 export class NeuralActionRankingPolicy {
-  private model: NeuralActionRankingModel;
+  private model: NeuralActionRankingModelV2;
+  private featureInputIndices: number[];
 
   constructor(model?: NeuralActionRankingModel) {
-    this.model = model ? cloneModel(model) : createNeuralActionRankingModel();
+    this.model = model ? toV2Model(model) : createNeuralActionRankingModel();
     assertModelShape(this.model);
+    this.featureInputIndices = getFeatureInputIndices(this.model.featureNames);
   }
 
-  static create(options: { hiddenSize?: number; seed?: string } = {}) {
+  static create(
+    options: {
+      hiddenSize?: number;
+      hiddenLayerSizes?: readonly number[];
+      seed?: string;
+    } = {}
+  ) {
     return new NeuralActionRankingPolicy(
-      createNeuralActionRankingModel(options.hiddenSize, options.seed)
+      createNeuralActionRankingModel(
+        options.hiddenLayerSizes ?? options.hiddenSize,
+        options.seed
+      )
     );
   }
 
@@ -122,7 +149,7 @@ export class NeuralActionRankingPolicy {
   }
 
   scoreFeatures(features: readonly number[]): number {
-    return this.forward(features).score;
+    return this.forward(this.prepareFeatures(features)).score;
   }
 
   trainImitation(
@@ -335,28 +362,88 @@ export class NeuralActionRankingPolicy {
     learningRate: number,
     l2: number
   ): void {
-    const forward = this.forward(features);
-    const oldHiddenToOutput = this.model.hiddenToOutput.slice();
+    const modelFeatures = this.prepareFeatures(features);
+    const forward = this.forward(modelFeatures);
+    const lastActivation = forward.activations[forward.activations.length - 1];
+    const oldOutputWeights = this.model.outputWeights.slice();
+    const oldLayerWeights = this.model.layerWeights.map((layer) =>
+      layer.map((weights) => weights.slice())
+    );
 
-    for (let hiddenIndex = 0; hiddenIndex < this.model.hiddenSize; hiddenIndex++) {
-      const hidden = forward.hidden[hiddenIndex];
-      const outputGrad = dScore * hidden + l2 * this.model.hiddenToOutput[hiddenIndex];
-      this.model.hiddenToOutput[hiddenIndex] -= learningRate * outputGrad;
+    for (
+      let outputIndex = 0;
+      outputIndex < this.model.outputWeights.length;
+      outputIndex++
+    ) {
+      const outputGrad =
+        dScore * lastActivation[outputIndex] +
+        l2 * this.model.outputWeights[outputIndex];
+      this.model.outputWeights[outputIndex] -= learningRate * outputGrad;
     }
     this.model.outputBias -= learningRate * dScore;
 
-    for (let hiddenIndex = 0; hiddenIndex < this.model.hiddenSize; hiddenIndex++) {
-      const hidden = forward.hidden[hiddenIndex];
-      const dHiddenRaw =
-        dScore * oldHiddenToOutput[hiddenIndex] * (1 - hidden * hidden);
-      for (let inputIndex = 0; inputIndex < this.model.inputSize; inputIndex++) {
-        const inputGrad =
-          dHiddenRaw * features[inputIndex] +
-          l2 * this.model.inputToHidden[hiddenIndex][inputIndex];
-        this.model.inputToHidden[hiddenIndex][inputIndex] -=
-          learningRate * inputGrad;
+    const deltas = this.model.hiddenLayerSizes.map((size) =>
+      Array.from({ length: size }, () => 0)
+    );
+    const lastLayerIndex = this.model.hiddenLayerSizes.length - 1;
+    for (
+      let hiddenIndex = 0;
+      hiddenIndex < this.model.hiddenLayerSizes[lastLayerIndex];
+      hiddenIndex++
+    ) {
+      const activation = forward.activations[lastLayerIndex][hiddenIndex];
+      deltas[lastLayerIndex][hiddenIndex] =
+        dScore * oldOutputWeights[hiddenIndex] * (1 - activation * activation);
+    }
+
+    for (let layerIndex = lastLayerIndex - 1; layerIndex >= 0; layerIndex--) {
+      for (
+        let hiddenIndex = 0;
+        hiddenIndex < this.model.hiddenLayerSizes[layerIndex];
+        hiddenIndex++
+      ) {
+        const downstream = deltas[layerIndex + 1].reduce(
+          (sum, downstreamDelta, downstreamIndex) => {
+            return (
+              sum +
+              downstreamDelta *
+                oldLayerWeights[layerIndex + 1][downstreamIndex][hiddenIndex]
+            );
+          },
+          0
+        );
+        const activation = forward.activations[layerIndex][hiddenIndex];
+        deltas[layerIndex][hiddenIndex] =
+          downstream * (1 - activation * activation);
       }
-      this.model.hiddenBias[hiddenIndex] -= learningRate * dHiddenRaw;
+    }
+
+    for (
+      let layerIndex = 0;
+      layerIndex < this.model.hiddenLayerSizes.length;
+      layerIndex++
+    ) {
+      const previousActivation =
+        layerIndex === 0 ? modelFeatures : forward.activations[layerIndex - 1];
+      for (
+        let hiddenIndex = 0;
+        hiddenIndex < this.model.hiddenLayerSizes[layerIndex];
+        hiddenIndex++
+      ) {
+        const delta = deltas[layerIndex][hiddenIndex];
+        for (
+          let inputIndex = 0;
+          inputIndex < previousActivation.length;
+          inputIndex++
+        ) {
+          const inputGrad =
+            delta * previousActivation[inputIndex] +
+            l2 * this.model.layerWeights[layerIndex][hiddenIndex][inputIndex];
+          this.model.layerWeights[layerIndex][hiddenIndex][inputIndex] -=
+            learningRate * inputGrad;
+        }
+        this.model.layerBiases[layerIndex][hiddenIndex] -= learningRate * delta;
+      }
     }
   }
 
@@ -367,22 +454,42 @@ export class NeuralActionRankingPolicy {
       );
     }
 
-    const hiddenRaw = this.model.inputToHidden.map((weights, hiddenIndex) => {
-      return (
-        this.model.hiddenBias[hiddenIndex] +
-        weights.reduce((sum, weight, inputIndex) => {
-          return sum + weight * features[inputIndex];
-        }, 0)
-      );
+    const layerInputs: number[][] = [];
+    const activations: number[][] = [];
+    let previousActivation = features;
+
+    this.model.layerWeights.forEach((weightsForLayer, layerIndex) => {
+      const raw = weightsForLayer.map((weights, hiddenIndex) => {
+        return (
+          this.model.layerBiases[layerIndex][hiddenIndex] +
+          weights.reduce((sum, weight, inputIndex) => {
+            return sum + weight * previousActivation[inputIndex];
+          }, 0)
+        );
+      });
+      const activation = raw.map((value) => Math.tanh(value));
+      layerInputs.push(raw);
+      activations.push(activation);
+      previousActivation = activation;
     });
-    const hidden = hiddenRaw.map((value) => Math.tanh(value));
+
+    const lastActivation = activations[activations.length - 1];
     const score =
       this.model.outputBias +
-      hidden.reduce((sum, value, hiddenIndex) => {
-        return sum + value * this.model.hiddenToOutput[hiddenIndex];
+      lastActivation.reduce((sum, value, hiddenIndex) => {
+        return sum + value * this.model.outputWeights[hiddenIndex];
       }, 0);
 
-    return { hiddenRaw, hidden, score };
+    return { layerInputs, activations, score };
+  }
+
+  private prepareFeatures(features: readonly number[]): number[] {
+    if (features.length !== ACTION_RANKING_FEATURE_NAMES.length) {
+      throw new Error(
+        `Expected ${ACTION_RANKING_FEATURE_NAMES.length} features, received ${features.length}`
+      );
+    }
+    return this.featureInputIndices.map((featureIndex) => features[featureIndex]);
   }
 }
 
@@ -424,69 +531,152 @@ function isImitationPredictionCorrect(
 }
 
 export function createNeuralActionRankingModel(
-  hiddenSize = DEFAULT_HIDDEN_SIZE,
+  hiddenLayerInput: number | readonly number[] = DEFAULT_HIDDEN_LAYER_SIZES,
   seed = "neural-action-ranking"
-): NeuralActionRankingModel {
+): NeuralActionRankingModelV2 {
   const inputSize = ACTION_RANKING_FEATURE_NAMES.length;
+  const hiddenLayerSizes = normalizeHiddenLayerSizes(hiddenLayerInput);
   const random = createSeededRandom(seed);
-  const inputScale = Math.sqrt(2 / (inputSize + hiddenSize));
-  const outputScale = Math.sqrt(2 / hiddenSize);
+  const layerWeights = hiddenLayerSizes.map((layerSize, layerIndex) => {
+    const previousSize =
+      layerIndex === 0 ? inputSize : hiddenLayerSizes[layerIndex - 1];
+    const inputScale = Math.sqrt(2 / (previousSize + layerSize));
+    return Array.from({ length: layerSize }, () =>
+      Array.from(
+        { length: previousSize },
+        () => randomCentered(random) * inputScale
+      )
+    );
+  });
+  const outputScale = Math.sqrt(2 / hiddenLayerSizes[hiddenLayerSizes.length - 1]);
 
   return {
-    version: 1,
+    version: 2,
     featureNames: ACTION_RANKING_FEATURE_NAMES.slice(),
     inputSize,
-    hiddenSize,
-    inputToHidden: Array.from({ length: hiddenSize }, () =>
-      Array.from({ length: inputSize }, () => randomCentered(random) * inputScale)
+    hiddenLayerSizes,
+    layerWeights,
+    layerBiases: hiddenLayerSizes.map((layerSize) =>
+      Array.from({ length: layerSize }, () => 0)
     ),
-    hiddenBias: Array.from({ length: hiddenSize }, () => 0),
-    hiddenToOutput: Array.from(
-      { length: hiddenSize },
+    outputWeights: Array.from(
+      { length: hiddenLayerSizes[hiddenLayerSizes.length - 1] },
       () => randomCentered(random) * outputScale
     ),
     outputBias: 0,
   };
 }
 
-function assertModelShape(model: NeuralActionRankingModel): void {
-  if (model.version !== 1) {
+function assertModelShape(model: NeuralActionRankingModelV2): void {
+  if (model.version !== 2) {
     throw new Error(`Unsupported neural action ranking model: ${model.version}`);
   }
-  if (model.inputSize !== ACTION_RANKING_FEATURE_NAMES.length) {
+  if (model.inputSize !== model.featureNames.length) {
     throw new Error(
-      `Model input size ${model.inputSize} does not match feature count ${ACTION_RANKING_FEATURE_NAMES.length}`
+      `Model input size ${model.inputSize} does not match feature count ${model.featureNames.length}`
     );
   }
-  if (
-    model.featureNames.length !== ACTION_RANKING_FEATURE_NAMES.length ||
-    model.featureNames.some(
-      (name, index) => name !== ACTION_RANKING_FEATURE_NAMES[index]
-    )
-  ) {
-    throw new Error("Model feature names do not match this build.");
+  const featureSet = new Set<string>(ACTION_RANKING_FEATURE_NAMES);
+  if (model.featureNames.some((name) => !featureSet.has(name))) {
+    throw new Error("Model uses feature names that do not exist in this build.");
+  }
+  if (model.hiddenLayerSizes.length === 0) {
+    throw new Error("Model must have at least one hidden layer.");
   }
   if (
-    model.inputToHidden.length !== model.hiddenSize ||
-    model.hiddenBias.length !== model.hiddenSize ||
-    model.hiddenToOutput.length !== model.hiddenSize ||
-    model.inputToHidden.some((weights) => weights.length !== model.inputSize)
+    model.layerWeights.length !== model.hiddenLayerSizes.length ||
+    model.layerBiases.length !== model.hiddenLayerSizes.length ||
+    model.outputWeights.length !==
+      model.hiddenLayerSizes[model.hiddenLayerSizes.length - 1]
   ) {
     throw new Error("Model weight matrix shape is invalid.");
   }
+  model.hiddenLayerSizes.forEach((layerSize, layerIndex) => {
+    const previousSize =
+      layerIndex === 0 ? model.inputSize : model.hiddenLayerSizes[layerIndex - 1];
+    if (
+      layerSize <= 0 ||
+      model.layerWeights[layerIndex].length !== layerSize ||
+      model.layerBiases[layerIndex].length !== layerSize ||
+      model.layerWeights[layerIndex].some(
+        (weights) => weights.length !== previousSize
+      )
+    ) {
+      throw new Error("Model weight matrix shape is invalid.");
+    }
+  });
+}
+
+function getFeatureInputIndices(modelFeatureNames: readonly string[]): number[] {
+  const currentIndexByName = new Map(
+    ACTION_RANKING_FEATURE_NAMES.map((name, index) => [name, index])
+  );
+  return modelFeatureNames.map((name) => {
+    const index = currentIndexByName.get(name as ActionRankingFeatureName);
+    if (index == null) {
+      throw new Error(`Model feature ${name} does not exist in this build.`);
+    }
+    return index;
+  });
 }
 
 function cloneModel(model: NeuralActionRankingModel): NeuralActionRankingModel {
+  if (model.version === 1) {
+    return {
+      version: model.version,
+      featureNames: model.featureNames.slice(),
+      inputSize: model.inputSize,
+      hiddenSize: model.hiddenSize,
+      inputToHidden: model.inputToHidden.map((weights) => weights.slice()),
+      hiddenBias: model.hiddenBias.slice(),
+      hiddenToOutput: model.hiddenToOutput.slice(),
+      outputBias: model.outputBias,
+    };
+  }
   return {
     version: model.version,
     featureNames: model.featureNames.slice(),
     inputSize: model.inputSize,
-    hiddenSize: model.hiddenSize,
-    inputToHidden: model.inputToHidden.map((weights) => weights.slice()),
-    hiddenBias: model.hiddenBias.slice(),
-    hiddenToOutput: model.hiddenToOutput.slice(),
+    hiddenLayerSizes: model.hiddenLayerSizes.slice(),
+    layerWeights: model.layerWeights.map((layer) =>
+      layer.map((weights) => weights.slice())
+    ),
+    layerBiases: model.layerBiases.map((biases) => biases.slice()),
+    outputWeights: model.outputWeights.slice(),
     outputBias: model.outputBias,
   };
+}
+
+function toV2Model(model: NeuralActionRankingModel): NeuralActionRankingModelV2 {
+  if (model.version === 2) {
+    return cloneModel(model) as NeuralActionRankingModelV2;
+  }
+
+  return {
+    version: 2,
+    featureNames: model.featureNames.slice(),
+    inputSize: model.inputSize,
+    hiddenLayerSizes: [model.hiddenSize],
+    layerWeights: [model.inputToHidden.map((weights) => weights.slice())],
+    layerBiases: [model.hiddenBias.slice()],
+    outputWeights: model.hiddenToOutput.slice(),
+    outputBias: model.outputBias,
+  };
+}
+
+function normalizeHiddenLayerSizes(
+  hiddenLayerInput: number | readonly number[]
+): number[] {
+  const sizes =
+    typeof hiddenLayerInput === "number"
+      ? [hiddenLayerInput]
+      : hiddenLayerInput.slice();
+  const normalized = sizes
+    .map((size) => Math.max(0, Math.floor(size)))
+    .filter((size) => size > 0);
+  return normalized.length > 0
+    ? normalized
+    : DEFAULT_HIDDEN_LAYER_SIZES.slice();
 }
 
 function softmax(scores: readonly number[], temperature = 1): number[] {

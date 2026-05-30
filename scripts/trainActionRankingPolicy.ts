@@ -1,9 +1,19 @@
 import fs from "fs";
 import { trainNeuralActionRankingPolicy } from "../shared/ActionRankingTraining";
+import type { NeuralActionRankingModel } from "../shared/NeuralActionRankingPolicy";
+
+const modelIn = process.env.MODEL_IN;
+const initialModel = modelIn
+  ? (JSON.parse(fs.readFileSync(modelIn, "utf8")) as NeuralActionRankingModel)
+  : undefined;
+const hiddenLayerSizes =
+  initialModel == null
+    ? readIntegerListEnv("HIDDEN_LAYERS", readIntegerListEnv("HIDDEN", [48]))
+    : getModelHiddenLayerSizes(initialModel);
 
 const options = {
   playerCount: readIntegerEnv("PLAYERS", 4),
-  hiddenSize: readIntegerEnv("HIDDEN", 48),
+  hiddenLayerSizes,
   seed: process.env.SEED ?? "action-ranking-training",
   imitationDeals: readIntegerEnv("IMITATION_DEALS", 24),
   imitationEpochs: readIntegerEnv("IMITATION_EPOCHS", 4),
@@ -19,12 +29,13 @@ const options = {
   rlLearningRate: readNumberEnv("RL_LR", 0.001),
   rlTemperature: readNumberEnv("RL_TEMPERATURE", 0.85),
   rlLocalRewardWeight: readNumberEnv("RL_LOCAL_REWARD_WEIGHT", 0.15),
+  rlLocalRewardDiscount: readNumberEnv("RL_LOCAL_REWARD_DISCOUNT", 0),
   rlNormalizeAdvantages: readBooleanEnv("RL_NORMALIZE_ADVANTAGES", true),
   rlAdvantageClip: readNumberEnv("RL_ADVANTAGE_CLIP", 3),
   maxMovesPerGame: readIntegerEnv("MAX_MOVES", 1800),
 };
 
-const result = trainNeuralActionRankingPolicy(options);
+const result = trainNeuralActionRankingPolicy({ ...options, initialModel });
 const modelOut = process.env.MODEL_OUT;
 
 if (modelOut) {
@@ -39,6 +50,7 @@ console.log(
       improvement: result.improvement,
       reinforcement: result.reinforcement,
       evaluation: result.evaluation,
+      modelIn: modelIn ?? null,
       modelOut: modelOut ?? null,
     },
     null,
@@ -53,6 +65,20 @@ function readIntegerEnv(name: string, fallback: number): number {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : fallback;
+}
+
+function readIntegerListEnv(name: string, fallback: number[]): number[] {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  const parsed = value
+    .split(",")
+    .map((item) => Number(item.trim()))
+    .filter((item) => Number.isFinite(item))
+    .map((item) => Math.max(0, Math.floor(item)))
+    .filter((item) => item > 0);
+  return parsed.length > 0 ? parsed : fallback;
 }
 
 function readNumberEnv(name: string, fallback: number): number {
@@ -76,4 +102,8 @@ function readBooleanEnv(name: string, fallback: boolean): boolean {
     return false;
   }
   return fallback;
+}
+
+function getModelHiddenLayerSizes(model: NeuralActionRankingModel): number[] {
+  return model.version === 1 ? [model.hiddenSize] : model.hiddenLayerSizes.slice();
 }

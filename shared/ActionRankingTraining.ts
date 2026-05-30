@@ -32,6 +32,8 @@ import {
 export type NeuralTrainingOptions = {
   playerCount?: number;
   hiddenSize?: number;
+  hiddenLayerSizes?: number[];
+  initialModel?: NeuralActionRankingModel;
   seed?: string;
   imitationDeals?: number;
   imitationEpochs?: number;
@@ -41,6 +43,7 @@ export type NeuralTrainingOptions = {
   rlLearningRate?: number;
   rlTemperature?: number;
   rlLocalRewardWeight?: number;
+  rlLocalRewardDiscount?: number;
   rlNormalizeAdvantages?: boolean;
   rlAdvantageClip?: number;
   improvementStates?: number;
@@ -89,6 +92,18 @@ export type PolicyEvaluationResult = {
   neuralWinRate: number;
   averageNeuralScore: number;
   averageTeacherScore: number;
+  averageNeuralDecisionCount: number;
+  averageTeacherBaselineDecisionCount: number;
+  averageNeuralCenterMoveRate: number;
+  averageTeacherBaselineCenterMoveRate: number;
+  averageNeuralSolitaireMoveRate: number;
+  averageTeacherBaselineSolitaireMoveRate: number;
+  averageNeuralCycleMoveRate: number;
+  averageTeacherBaselineCycleMoveRate: number;
+  averageNeuralPounceRemaining: number;
+  averageTeacherBaselinePounceRemaining: number;
+  neuralPounceOutRate: number;
+  teacherBaselinePounceOutRate: number;
 };
 
 type RolloutTransition = {
@@ -102,6 +117,8 @@ type RolloutTransition = {
 type RolloutResult = {
   finalScores: number[];
   finalPointDifferentials: number[];
+  finalPounceCounts: number[];
+  moveTypeCountsByPlayer: MoveTypeCounts[];
   transitions: RolloutTransition[];
 };
 
@@ -126,6 +143,16 @@ type RewardImprovementCollection = {
 const SUITS: Suits[] = ["hearts", "spades", "diamonds", "clubs"];
 const VALUES: Values[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
 const DEFAULT_MAX_MOVES_PER_GAME = 1800;
+const MOVE_TYPES: Move["type"][] = [
+  "c2c",
+  "c2s",
+  "s2s",
+  "cycle",
+  "flip_deck",
+  "move_field_stack",
+];
+
+type MoveTypeCounts = Record<Move["type"], number>;
 
 export function trainNeuralActionRankingPolicy(
   options: NeuralTrainingOptions = {}
@@ -137,10 +164,13 @@ export function trainNeuralActionRankingPolicy(
   const rlEpisodes = options.rlEpisodes ?? 32;
   const improvementStates = options.improvementStates ?? 0;
   const maxMovesPerGame = options.maxMovesPerGame ?? DEFAULT_MAX_MOVES_PER_GAME;
-  const policy = NeuralActionRankingPolicy.create({
-    hiddenSize: options.hiddenSize,
-    seed,
-  });
+  const policy = options.initialModel
+    ? new NeuralActionRankingPolicy(options.initialModel)
+    : NeuralActionRankingPolicy.create({
+        hiddenSize: options.hiddenSize,
+        hiddenLayerSizes: options.hiddenLayerSizes,
+        seed,
+      });
 
   const imitationExamples = collectImitationExamplesFromDeals({
     playerCount,
@@ -180,6 +210,7 @@ export function trainNeuralActionRankingPolicy(
     learningRate: options.rlLearningRate ?? 0.001,
     temperature: options.rlTemperature ?? 0.85,
     localRewardWeight: options.rlLocalRewardWeight ?? 0.15,
+    localRewardDiscount: options.rlLocalRewardDiscount ?? 0,
     normalizeAdvantages: options.rlNormalizeAdvantages ?? true,
     advantageClip: options.rlAdvantageClip ?? 3,
     maxMovesPerGame,
@@ -553,6 +584,7 @@ export function trainPolicyGradientFromRollouts(
     learningRate: number;
     temperature: number;
     localRewardWeight: number;
+    localRewardDiscount: number;
     normalizeAdvantages: boolean;
     advantageClip: number;
     maxMovesPerGame: number;
@@ -592,13 +624,17 @@ export function trainPolicyGradientFromRollouts(
     const baselineAdjustedReturn =
       finalDifferential - teacherBaselineDifferential;
 
-    rollout.transitions.forEach((transition) => {
+    const localRewardReturns = getDiscountedLocalRewardReturns(
+      rollout.transitions,
+      options.localRewardDiscount
+    );
+    rollout.transitions.forEach((transition, transitionIndex) => {
       updates.push({
         candidates: transition.candidates,
         selectedCandidateIndex: transition.selectedCandidateIndex,
         rawAdvantage:
           baselineAdjustedReturn +
-          options.localRewardWeight * transition.localReward,
+          options.localRewardWeight * localRewardReturns[transitionIndex],
       });
     });
 
@@ -683,6 +719,22 @@ function applyPolicyGradientBatch(
   return { mean, stdDev };
 }
 
+function getDiscountedLocalRewardReturns(
+  transitions: readonly RolloutTransition[],
+  discount: number
+): number[] {
+  const safeDiscount = Math.max(0, Math.min(1, discount));
+  const returns = Array.from({ length: transitions.length }, () => 0);
+  let runningReturn = 0;
+
+  for (let index = transitions.length - 1; index >= 0; index--) {
+    runningReturn = transitions[index].localReward + safeDiscount * runningReturn;
+    returns[index] = runningReturn;
+  }
+
+  return returns;
+}
+
 export function evaluateNeuralPolicy(
   policy: NeuralActionRankingPolicy,
   options: {
@@ -702,6 +754,18 @@ export function evaluateNeuralPolicy(
   let neuralWins = 0;
   let neuralScoreTotal = 0;
   let teacherScoreTotal = 0;
+  let neuralDecisionCountTotal = 0;
+  let teacherBaselineDecisionCountTotal = 0;
+  let neuralCenterMoveRateTotal = 0;
+  let teacherBaselineCenterMoveRateTotal = 0;
+  let neuralSolitaireMoveRateTotal = 0;
+  let teacherBaselineSolitaireMoveRateTotal = 0;
+  let neuralCycleMoveRateTotal = 0;
+  let teacherBaselineCycleMoveRateTotal = 0;
+  let neuralPounceRemainingTotal = 0;
+  let teacherBaselinePounceRemainingTotal = 0;
+  let neuralPounceOuts = 0;
+  let teacherBaselinePounceOuts = 0;
 
   for (let gameIndex = 0; gameIndex < games; gameIndex++) {
     const neuralPlayerIndex = gameIndex % playerCount;
@@ -734,12 +798,56 @@ export function evaluateNeuralPolicy(
       rollout.finalPointDifferentials[neuralPlayerIndex] ?? 0;
     const teacherBaselineDifferential =
       teacherBaseline.finalPointDifferentials[neuralPlayerIndex] ?? 0;
+    const neuralMoveCounts =
+      rollout.moveTypeCountsByPlayer[neuralPlayerIndex] ?? createMoveTypeCounts();
+    const teacherBaselineMoveCounts =
+      teacherBaseline.moveTypeCountsByPlayer[neuralPlayerIndex] ??
+      createMoveTypeCounts();
+    const neuralDecisionCount = getTotalMoveCount(neuralMoveCounts);
+    const teacherBaselineDecisionCount = getTotalMoveCount(
+      teacherBaselineMoveCounts
+    );
+    const neuralPounceRemaining =
+      rollout.finalPounceCounts[neuralPlayerIndex] ?? 0;
+    const teacherBaselinePounceRemaining =
+      teacherBaseline.finalPounceCounts[neuralPlayerIndex] ?? 0;
     neuralDifferentialTotal += neuralDifferential;
     teacherBaselineDifferentialTotal += teacherBaselineDifferential;
     baselineAdjustedDifferentialTotal +=
       neuralDifferential - teacherBaselineDifferential;
     neuralScoreTotal += neuralScore;
     teacherScoreTotal += averageTeacherScore;
+    neuralDecisionCountTotal += neuralDecisionCount;
+    teacherBaselineDecisionCountTotal += teacherBaselineDecisionCount;
+    neuralCenterMoveRateTotal += getMoveRate(neuralMoveCounts, ["c2c"]);
+    teacherBaselineCenterMoveRateTotal += getMoveRate(
+      teacherBaselineMoveCounts,
+      ["c2c"]
+    );
+    neuralSolitaireMoveRateTotal += getMoveRate(neuralMoveCounts, [
+      "c2s",
+      "s2s",
+    ]);
+    teacherBaselineSolitaireMoveRateTotal += getMoveRate(
+      teacherBaselineMoveCounts,
+      ["c2s", "s2s"]
+    );
+    neuralCycleMoveRateTotal += getMoveRate(neuralMoveCounts, [
+      "cycle",
+      "flip_deck",
+    ]);
+    teacherBaselineCycleMoveRateTotal += getMoveRate(
+      teacherBaselineMoveCounts,
+      ["cycle", "flip_deck"]
+    );
+    neuralPounceRemainingTotal += neuralPounceRemaining;
+    teacherBaselinePounceRemainingTotal += teacherBaselinePounceRemaining;
+    if (neuralPounceRemaining === 0) {
+      neuralPounceOuts += 1;
+    }
+    if (teacherBaselinePounceRemaining === 0) {
+      teacherBaselinePounceOuts += 1;
+    }
     if (neuralScore > Math.max(...teacherScores)) {
       neuralWins += 1;
     }
@@ -756,6 +864,29 @@ export function evaluateNeuralPolicy(
     neuralWinRate: games === 0 ? 0 : neuralWins / games,
     averageNeuralScore: games === 0 ? 0 : neuralScoreTotal / games,
     averageTeacherScore: games === 0 ? 0 : teacherScoreTotal / games,
+    averageNeuralDecisionCount:
+      games === 0 ? 0 : neuralDecisionCountTotal / games,
+    averageTeacherBaselineDecisionCount:
+      games === 0 ? 0 : teacherBaselineDecisionCountTotal / games,
+    averageNeuralCenterMoveRate:
+      games === 0 ? 0 : neuralCenterMoveRateTotal / games,
+    averageTeacherBaselineCenterMoveRate:
+      games === 0 ? 0 : teacherBaselineCenterMoveRateTotal / games,
+    averageNeuralSolitaireMoveRate:
+      games === 0 ? 0 : neuralSolitaireMoveRateTotal / games,
+    averageTeacherBaselineSolitaireMoveRate:
+      games === 0 ? 0 : teacherBaselineSolitaireMoveRateTotal / games,
+    averageNeuralCycleMoveRate:
+      games === 0 ? 0 : neuralCycleMoveRateTotal / games,
+    averageTeacherBaselineCycleMoveRate:
+      games === 0 ? 0 : teacherBaselineCycleMoveRateTotal / games,
+    averageNeuralPounceRemaining:
+      games === 0 ? 0 : neuralPounceRemainingTotal / games,
+    averageTeacherBaselinePounceRemaining:
+      games === 0 ? 0 : teacherBaselinePounceRemainingTotal / games,
+    neuralPounceOutRate: games === 0 ? 0 : neuralPounceOuts / games,
+    teacherBaselinePounceOutRate:
+      games === 0 ? 0 : teacherBaselinePounceOuts / games,
   };
 }
 
@@ -819,6 +950,7 @@ function runPolicyRollout(
       : Number.POSITIVE_INFINITY
   );
   const transitions: RolloutTransition[] = [];
+  const moveTypeCountsByPlayer = board.players.map(() => createMoveTypeCounts());
 
   board.isActive = true;
   board.isDealt = true;
@@ -846,6 +978,7 @@ function runPolicyRollout(
 
     if (move) {
       executeMove(board, playerIndex, move);
+      moveTypeCountsByPlayer[playerIndex][move.type] += 1;
     }
     cooldowns[playerIndex] += getMoveDelay(move?.type, options.random);
   }
@@ -854,7 +987,16 @@ function runPolicyRollout(
   const finalPointDifferentials = board.players.map((_, playerIndex) =>
     getPointDifferential(board, playerIndex)
   );
-  return { finalScores, finalPointDifferentials, transitions };
+  const finalPounceCounts = board.players.map(
+    (player) => player.pounceDeck.length
+  );
+  return {
+    finalScores,
+    finalPointDifferentials,
+    finalPounceCounts,
+    moveTypeCountsByPlayer,
+    transitions,
+  };
 }
 
 function chooseNeuralMove(
@@ -961,4 +1103,26 @@ function getMoveDelay(
     return 0.62 * jitter;
   }
   return 1.1 * jitter;
+}
+
+function createMoveTypeCounts(): MoveTypeCounts {
+  return MOVE_TYPES.reduce((counts, type) => {
+    counts[type] = 0;
+    return counts;
+  }, {} as MoveTypeCounts);
+}
+
+function getTotalMoveCount(counts: MoveTypeCounts): number {
+  return MOVE_TYPES.reduce((sum, type) => sum + counts[type], 0);
+}
+
+function getMoveRate(
+  counts: MoveTypeCounts,
+  moveTypes: readonly Move["type"][]
+): number {
+  const total = getTotalMoveCount(counts);
+  if (total === 0) {
+    return 0;
+  }
+  return moveTypes.reduce((sum, type) => sum + counts[type], 0) / total;
 }
