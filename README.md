@@ -25,14 +25,17 @@ Useful training knobs:
 - `MODEL_IN=...\model.json npm run action-ranking:evaluate` to evaluate saved weights
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare` to compare two models on paired deals/seats
 - `MODEL_IN=...\best.json npm run action-ranking:tune` to iterate reward fine-tunes and promote only paired-comparison improvements
-- `npm run action-ranking:check-rl-modes` to smoke-test that counterfactual RL training modes route to the intended update path
+- `npm run action-ranking:check-rl-modes` to smoke-test legacy feature expansion and counterfactual RL training mode routing
 - `EVAL_RUNS=4` or `EVAL_SEEDS=seedA,seedB` to evaluate saved weights across multiple seeds
 - `POUNCE_NEURAL_AI_MODEL=...\model.json npm run dev` to run Socket.IO bots with saved weights
 
 Evaluation output includes same-seat teacher baseline metrics plus behavior
 diagnostics such as decision count, center/solitaire/cycle move rates, pounce
 remaining, and pounce-out rate. The model loader accepts both the original
-single-hidden-layer checkpoint format and the newer multi-layer format.
+single-hidden-layer checkpoint format and the newer multi-layer format. It also
+expands older checkpoints onto the current action-feature list with zero weights
+for new inputs, preserving existing scores while allowing future fine-tunes to
+train newly added tactical features.
 
 Current useful baseline recipe:
 
@@ -231,6 +234,13 @@ The same value pass on top of the current behavior-scope checkpoint measured
 `-0.036 +/- 0.036`. The main open RL problem is now collecting enough stable
 per-decision counterfactual labels and calibrating action-value targets without
 washing out the useful imitation and behavior-gap rankings.
+
+Legacy model feature expansion is now enabled before fine-tuning. Re-running the
+240-state behavior-scope recipe from the capacity checkpoint produced a 48-input
+checkpoint and trained small nonzero weights on the newer connector/alternative
+features, but its greedy behavior was identical to the prior 45-input
+behavior-scope checkpoint over 384 paired games. That makes feature expansion
+safe infrastructure, not a standalone policy improvement yet.
 
 ## Deploying
 

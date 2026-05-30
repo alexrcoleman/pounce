@@ -89,7 +89,9 @@ export class NeuralActionRankingPolicy {
   private featureInputIndices: number[];
 
   constructor(model?: NeuralActionRankingModel) {
-    this.model = model ? toV2Model(model) : createNeuralActionRankingModel();
+    this.model = model
+      ? alignModelToCurrentFeatures(toV2Model(model))
+      : createNeuralActionRankingModel();
     assertModelShape(this.model);
     this.featureInputIndices = getFeatureInputIndices(this.model.featureNames);
   }
@@ -914,6 +916,48 @@ function cloneModel(model: NeuralActionRankingModel): NeuralActionRankingModel {
   };
 }
 
+function alignModelToCurrentFeatures(
+  model: NeuralActionRankingModelV2
+): NeuralActionRankingModelV2 {
+  if (arraysEqual(model.featureNames, ACTION_RANKING_FEATURE_NAMES)) {
+    return cloneModel(model) as NeuralActionRankingModelV2;
+  }
+
+  const currentFeatureIndex = new Map(
+    ACTION_RANKING_FEATURE_NAMES.map((name, index) => [name, index])
+  );
+  const expandedInputWeights = model.layerWeights[0].map((weights) => {
+    const expanded = Array.from(
+      { length: ACTION_RANKING_FEATURE_NAMES.length },
+      () => 0
+    );
+    model.featureNames.forEach((name, oldIndex) => {
+      const newIndex = currentFeatureIndex.get(name as ActionRankingFeatureName);
+      if (newIndex == null) {
+        throw new Error(`Model feature ${name} does not exist in this build.`);
+      }
+      expanded[newIndex] = weights[oldIndex] ?? 0;
+    });
+    return expanded;
+  });
+
+  return {
+    version: 2,
+    featureNames: ACTION_RANKING_FEATURE_NAMES.slice(),
+    inputSize: ACTION_RANKING_FEATURE_NAMES.length,
+    hiddenLayerSizes: model.hiddenLayerSizes.slice(),
+    layerWeights: [
+      expandedInputWeights,
+      ...model.layerWeights
+        .slice(1)
+        .map((layer) => layer.map((weights) => weights.slice())),
+    ],
+    layerBiases: model.layerBiases.map((biases) => biases.slice()),
+    outputWeights: model.outputWeights.slice(),
+    outputBias: model.outputBias,
+  };
+}
+
 function toV2Model(model: NeuralActionRankingModel): NeuralActionRankingModelV2 {
   if (model.version === 2) {
     return cloneModel(model) as NeuralActionRankingModelV2;
@@ -929,6 +973,16 @@ function toV2Model(model: NeuralActionRankingModel): NeuralActionRankingModelV2 
     outputWeights: model.hiddenToOutput.slice(),
     outputBias: model.outputBias,
   };
+}
+
+function arraysEqual(
+  left: readonly unknown[],
+  right: readonly unknown[]
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((value, index) => value === right[index])
+  );
 }
 
 function normalizeHiddenLayerSizes(
