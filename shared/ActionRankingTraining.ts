@@ -71,6 +71,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualScoreRewardWeight?: number;
   rlCounterfactualPounceRewardWeight?: number;
   rlCounterfactualSkipCycleOverConnector?: boolean;
+  rlCounterfactualSkipSolitaireOverUsefulCycle?: boolean;
   rlCounterfactualAnchorWeight?: number;
   rlCounterfactualAnchorMaxExamples?: number;
   rlCounterfactualAnchorTemperature?: number;
@@ -175,6 +176,7 @@ export type NeuralTrainingResult = {
     counterfactualConfidenceSkippedCount: number;
     counterfactualScoreGapSkippedCount: number;
     counterfactualConnectorCycleSkippedCount: number;
+    counterfactualUsefulCycleSkippedCount: number;
     averageCounterfactualBehaviorWinRate: number;
     counterfactualAveragePairWeight: number;
     counterfactualAnchorExamples: number;
@@ -259,6 +261,7 @@ export type CounterfactualRlLabelAudit = {
   confidenceSkippedCount: number;
   scoreGapSkippedCount: number;
   connectorCycleSkippedCount: number;
+  usefulCycleSkippedCount: number;
   maxReturnGapSkippedCount: number;
   averageCounterfactualReturnGap: number;
   averageCounterfactualCandidateCount: number;
@@ -518,6 +521,8 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualPounceRewardWeight ?? 0,
     counterfactualSkipCycleOverConnector:
       options.rlCounterfactualSkipCycleOverConnector ?? false,
+    counterfactualSkipSolitaireOverUsefulCycle:
+      options.rlCounterfactualSkipSolitaireOverUsefulCycle ?? false,
     counterfactualAnchorWeight: options.rlCounterfactualAnchorWeight ?? 0,
     counterfactualAnchorMaxExamples:
       options.rlCounterfactualAnchorMaxExamples ?? 512,
@@ -1514,6 +1519,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualScoreRewardWeight: number;
     counterfactualPounceRewardWeight: number;
     counterfactualSkipCycleOverConnector: boolean;
+    counterfactualSkipSolitaireOverUsefulCycle: boolean;
     counterfactualAnchorWeight: number;
     counterfactualAnchorMaxExamples: number;
     counterfactualAnchorTemperature: number;
@@ -1555,6 +1561,7 @@ export function trainPolicyGradientFromRollouts(
   let counterfactualConfidenceSkippedCount = 0;
   let counterfactualScoreGapSkippedCount = 0;
   let counterfactualConnectorCycleSkippedCount = 0;
+  let counterfactualUsefulCycleSkippedCount = 0;
   let counterfactualBehaviorWinRateTotal = 0;
   const updates: PolicyGradientUpdate[] = [];
   const counterfactualExamples: ActionRankingImitationExample[] = [];
@@ -1797,6 +1804,14 @@ export function trainPolicyGradientFromRollouts(
           counterfactualConnectorCycleSkippedCount += 1;
           return;
         }
+        if (
+          options.counterfactualTrainingMode !== "policy_gradient" &&
+          options.counterfactualSkipSolitaireOverUsefulCycle &&
+          shouldSkipSolitaireOverUsefulCycleLabel(result)
+        ) {
+          counterfactualUsefulCycleSkippedCount += 1;
+          return;
+        }
         const scoreGap = getCounterfactualBestVsGreedyScoreGap(
           transition,
           result,
@@ -1959,6 +1974,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualConfidenceSkippedCount,
     counterfactualScoreGapSkippedCount,
     counterfactualConnectorCycleSkippedCount,
+    counterfactualUsefulCycleSkippedCount,
     averageCounterfactualBehaviorWinRate:
       counterfactualUpdateCount === 0
         ? 0
@@ -2005,6 +2021,7 @@ export function collectCounterfactualRlLabelAudit(
     counterfactualScoreRewardWeight: number;
     counterfactualPounceRewardWeight: number;
     counterfactualSkipCycleOverConnector: boolean;
+    counterfactualSkipSolitaireOverUsefulCycle: boolean;
     updateScope: PolicyGradientUpdateScope;
     maxMovesPerGame: number;
   }
@@ -2023,6 +2040,7 @@ export function collectCounterfactualRlLabelAudit(
   let maxReturnGapSkippedCount = 0;
   let scoreGapSkippedCount = 0;
   let connectorCycleSkippedCount = 0;
+  let usefulCycleSkippedCount = 0;
   let counterfactualReturnGapTotal = 0;
   let counterfactualCandidateCountTotal = 0;
   let counterfactualBehaviorWinRateTotal = 0;
@@ -2175,6 +2193,14 @@ export function collectCounterfactualRlLabelAudit(
         connectorCycleSkippedCount += 1;
         return;
       }
+      if (
+        options.counterfactualTrainingMode !== "policy_gradient" &&
+        options.counterfactualSkipSolitaireOverUsefulCycle &&
+        shouldSkipSolitaireOverUsefulCycleLabel(result)
+      ) {
+        usefulCycleSkippedCount += 1;
+        return;
+      }
 
       const scoreGap = getCounterfactualBestVsGreedyScoreGap(
         transition,
@@ -2219,6 +2245,7 @@ export function collectCounterfactualRlLabelAudit(
     confidenceSkippedCount,
     scoreGapSkippedCount,
     connectorCycleSkippedCount,
+    usefulCycleSkippedCount,
     maxReturnGapSkippedCount,
     averageCounterfactualReturnGap:
       examples.length === 0 ? 0 : counterfactualReturnGapTotal / examples.length,
@@ -2612,6 +2639,28 @@ function shouldSkipCycleOverConnectorLabel(
   );
 }
 
+function shouldSkipSolitaireOverUsefulCycleLabel(
+  result: CounterfactualTransitionResult
+): boolean {
+  const best = result.candidates.reduce((winner, candidate) =>
+    candidate.rolloutObjectiveReturn > winner.rolloutObjectiveReturn
+      ? candidate
+      : winner
+  );
+  if (
+    best.candidate.move.type !== "c2s" &&
+    best.candidate.move.type !== "s2s"
+  ) {
+    return false;
+  }
+
+  return result.candidates.some(
+    (candidate) =>
+      candidate.candidate.key !== best.candidate.key &&
+      isUsefulCycleRevealCandidate(candidate.candidate)
+  );
+}
+
 function isSupportedConnectorCandidate(
   candidate: ActionRankingCandidate
 ): boolean {
@@ -2623,6 +2672,42 @@ function isSupportedConnectorCandidate(
     getCandidateFeature(candidate, "solitaire.postTopConnectorCloseness") > 0 ||
     getCandidateFeature(candidate, "solitaire.postTopConnectsPounce") > 0 ||
     getCandidateFeature(candidate, "solitaire.postTopConnectsStackRoot") > 0
+  );
+}
+
+function isUsefulCycleRevealCandidate(
+  candidate: ActionRankingCandidate
+): boolean {
+  if (candidate.move.type !== "cycle") {
+    return false;
+  }
+  if (getCandidateFeature(candidate, "cycle.revealsCard") <= 0) {
+    return false;
+  }
+
+  const centerPlayable =
+    getCandidateFeature(candidate, "cycle.revealedCenterPlayable") > 0;
+  const soonPlayable =
+    getCandidateFeature(candidate, "cycle.revealedCanPlaySoon") > 0;
+  const solitaireDestination =
+    getCandidateFeature(
+      candidate,
+      "cycle.revealedOwnSolitaireDestinationCount"
+    ) > 0;
+  const pounceConnector =
+    getCandidateFeature(
+      candidate,
+      "cycle.revealedOwnSolitaireConnectorForPounce"
+    ) > 0;
+  const parityMatch =
+    getCandidateFeature(candidate, "cycle.revealedMatchesPounceParity") > 0;
+  const pounceCloseness =
+    getCandidateFeature(candidate, "cycle.revealedPounceConnectorCloseness") >
+    0;
+  return (
+    centerPlayable ||
+    (soonPlayable &&
+      (solitaireDestination || pounceConnector || parityMatch || pounceCloseness))
   );
 }
 

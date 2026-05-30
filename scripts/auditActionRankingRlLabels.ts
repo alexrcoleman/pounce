@@ -145,6 +145,10 @@ const options = {
     "RL_COUNTERFACTUAL_SKIP_CYCLE_OVER_CONNECTOR",
     false
   ),
+  counterfactualSkipSolitaireOverUsefulCycle: readBooleanEnv(
+    "RL_COUNTERFACTUAL_SKIP_SOLITAIRE_OVER_USEFUL_CYCLE",
+    false
+  ),
   updateScope: readUpdateScopeEnv("RL_UPDATE_SCOPE", "exploratory"),
   maxMovesPerGame,
 };
@@ -184,6 +188,7 @@ console.log(
         confidenceSkippedCount: audit.confidenceSkippedCount,
         scoreGapSkippedCount: audit.scoreGapSkippedCount,
         connectorCycleSkippedCount: audit.connectorCycleSkippedCount,
+        usefulCycleSkippedCount: audit.usefulCycleSkippedCount,
         maxReturnGapSkippedCount: audit.maxReturnGapSkippedCount,
         averageCounterfactualReturnGap:
           audit.averageCounterfactualReturnGap,

@@ -486,6 +486,10 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
       "RL_COUNTERFACTUAL_SKIP_CYCLE_OVER_CONNECTOR",
       false
     ),
+    rlCounterfactualSkipSolitaireOverUsefulCycle: readBooleanEnv(
+      "RL_COUNTERFACTUAL_SKIP_SOLITAIRE_OVER_USEFUL_CYCLE",
+      false
+    ),
     rlCounterfactualAnchorWeight: readNumberEnv(
       "RL_COUNTERFACTUAL_ANCHOR_WEIGHT",
       0
