@@ -176,13 +176,17 @@ pairwise with `all` scope, and exploratory broad value regression. Use
 `RL_TUNE_RECIPES` as a JSON array of `{ "name": string, "options": { ... } }`
 to sweep custom recipe knobs while inheriting conservative RL defaults.
 `RL_TUNE_ROUNDS`, `RL_TUNE_OUT_DIR`, `COMPARE_GAMES`, and `COMPARE_RUNS` control
-the search budget and verification strength. Set `CONFIRM_GAMES` above `0` to
-run a held-out confirmation comparison for search-passing candidates and
-near-misses whose search lower bound is at least `CONFIRM_TRIGGER_MIN_DELTA`;
-`CONFIRM_RUNS`, `CONFIRM_MIN_DELTA`, and `CONFIRM_SE_MULTIPLIER` control that
-second gate. As with the manual comparisons below, this is still a search tool;
-a promoted model still needs a larger final paired comparison before replacing
-the current best checkpoint.
+the search budget and verification strength. Set `RL_TUNE_DIAG_GAMES` above `0`
+to include compact policy-state divergence diagnostics for each recipe; this
+reports whether the candidate changes deployed greedy decisions on modelA/modelB
+trajectories, not just held-out teacher states. `RL_TUNE_DIAG_MAX_EXAMPLES`
+caps that diagnostic sample. Set `CONFIRM_GAMES` above `0` to run a held-out
+confirmation comparison for search-passing candidates and near-misses whose
+search lower bound is at least `CONFIRM_TRIGGER_MIN_DELTA`; `CONFIRM_RUNS`,
+`CONFIRM_MIN_DELTA`, and `CONFIRM_SE_MULTIPLIER` control that second gate. As
+with the manual comparisons below, this is still a search tool; a promoted model
+still needs a larger final paired comparison before replacing the current best
+checkpoint.
 
 `IMPROVEMENT_STATES` enables the counterfactual rollout pass: it samples
 teacher-game states, tries several legal actions, lets the teacher finish from

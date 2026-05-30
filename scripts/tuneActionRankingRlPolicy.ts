@@ -1,13 +1,23 @@
 import fs from "fs";
 import path from "path";
+import { enumerateActionRankingCandidates } from "../shared/ActionRankingPolicy";
 import {
   compareNeuralModels,
+  createTrainingBoard,
   trainNeuralActionRankingPolicy,
   type NeuralTrainingOptions,
 } from "../shared/ActionRankingTraining";
-import type { NeuralActionRankingModel } from "../shared/NeuralActionRankingPolicy";
+import { getBasicAIMove } from "../shared/ComputerV1";
+import { isGameOver, type BoardState } from "../shared/GameUtils";
+import {
+  createSeededRandom,
+  NeuralActionRankingPolicy,
+  type NeuralActionRankingModel,
+} from "../shared/NeuralActionRankingPolicy";
+import { executeMove, type Move } from "../shared/MoveHandler";
 
 type ModelComparisonResult = ReturnType<typeof compareNeuralModels>;
+type MoveTypeCounts = Record<Move["type"], number>;
 
 type RlTuneRecipe = {
   name: string;
@@ -34,6 +44,8 @@ const playerCount = readIntegerEnv("PLAYERS", 4);
 const maxMovesPerGame = readIntegerEnv("MAX_MOVES", 1800);
 const compareGames = readIntegerEnv("COMPARE_GAMES", 48);
 const compareRuns = readIntegerEnv("COMPARE_RUNS", 2);
+const diagnosticGames = readIntegerEnv("RL_TUNE_DIAG_GAMES", 0);
+const diagnosticMaxExamples = readIntegerEnv("RL_TUNE_DIAG_MAX_EXAMPLES", 2000);
 const confirmGames = readIntegerEnv("CONFIRM_GAMES", 0);
 const confirmRuns = readIntegerEnv(
   "CONFIRM_RUNS",
@@ -86,6 +98,16 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       maxMovesPerGame,
     });
     const comparison = comparisonBatch.comparison;
+    const policyStateDiagnostics =
+      diagnosticGames > 0
+        ? diagnosePolicyStateDivergence(candidateModel, bestModel, {
+            playerCount,
+            games: diagnosticGames,
+            maxExamples: diagnosticMaxExamples,
+            seed: `${seed}:diagnose:${roundNumber}:${recipe.name}`,
+            maxMovesPerGame,
+          })
+        : null;
     const lowerBound = getPromotionLowerBound(
       comparison,
       promoteStandardErrorMultiplier
@@ -137,6 +159,7 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       },
       comparison,
       perCompareRun: comparisonBatch.perCompareRun,
+      policyStateDiagnostics,
       confirmation: confirmationBatch
         ? {
             lowerBound: confirmationLowerBound,
@@ -174,6 +197,10 @@ console.log(
         confirmMinDelta,
         confirmStandardErrorMultiplier,
         confirmTriggerMinDelta,
+      },
+      diagnostics: {
+        diagnosticGames,
+        diagnosticMaxExamples,
       },
       roundResults,
     },
@@ -363,6 +390,317 @@ function readValueTargetModeEnv(
 
 function sanitizeFilePart(value: string): string {
   return value.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "");
+}
+
+function diagnosePolicyStateDivergence(
+  modelA: NeuralActionRankingModel,
+  modelB: NeuralActionRankingModel,
+  options: {
+    playerCount: number;
+    games: number;
+    maxExamples: number;
+    seed: string;
+    maxMovesPerGame: number;
+  }
+) {
+  const policyA = new NeuralActionRankingPolicy(modelA);
+  const policyB = new NeuralActionRankingPolicy(modelB);
+  return {
+    modelAStates: diagnosePolicyStates(policyA, policyA, policyB, {
+      ...options,
+      sourceLabel: "modelA",
+    }),
+    modelBStates: diagnosePolicyStates(policyB, policyA, policyB, {
+      ...options,
+      sourceLabel: "modelB",
+    }),
+  };
+}
+
+function diagnosePolicyStates(
+  sourcePolicy: NeuralActionRankingPolicy,
+  policyA: NeuralActionRankingPolicy,
+  policyB: NeuralActionRankingPolicy,
+  options: {
+    playerCount: number;
+    games: number;
+    maxExamples: number;
+    seed: string;
+    maxMovesPerGame: number;
+    sourceLabel: "modelA" | "modelB";
+  }
+) {
+  const modelAMoveCounts = createMoveTypeCounts();
+  const modelBMoveCounts = createMoveTypeCounts();
+  const disagreementPairs = new Map<string, number>();
+  let examples = 0;
+  let candidates = 0;
+  let topActionAgreementCount = 0;
+  let topEquivalenceAgreementCount = 0;
+  let referenceAgreementA = 0;
+  let referenceAgreementB = 0;
+  let candidateScoreDeltaTotal = 0;
+  let candidateScoreDeltaAbsTotal = 0;
+  let maxCandidateScoreDeltaAbs = 0;
+
+  for (
+    let gameIndex = 0;
+    gameIndex < options.games && examples < options.maxExamples;
+    gameIndex++
+  ) {
+    const neuralPlayerIndex = gameIndex % options.playerCount;
+    const board = createTrainingBoard(
+      options.playerCount,
+      `${options.seed}:deal:${gameIndex}`
+    );
+    const activePlayerIndices = getActivePlayerIndices(board);
+    const random = createSeededRandom(
+      `${options.seed}:${options.sourceLabel}:timing:${gameIndex}`
+    );
+    const cooldowns = board.players.map((_, playerIndex) =>
+      activePlayerIndices.includes(playerIndex)
+        ? random()
+        : Number.POSITIVE_INFINITY
+    );
+    prepareBoardForSimulation(board, activePlayerIndices);
+
+    for (
+      let moveIndex = 0;
+      !isGameOver(board) &&
+      moveIndex < options.maxMovesPerGame &&
+      examples < options.maxExamples;
+      moveIndex++
+    ) {
+      const playerIndex = getNextPlayerIndex(cooldowns, activePlayerIndices);
+      if (playerIndex < 0) {
+        break;
+      }
+
+      const move =
+        playerIndex === neuralPlayerIndex
+          ? diagnoseAndChoosePolicyMove(
+              board,
+              playerIndex,
+              sourcePolicy,
+              policyA,
+              policyB,
+              (summary) => {
+                examples += 1;
+                candidates += summary.candidateCount;
+                candidateScoreDeltaTotal += summary.candidateScoreDeltaTotal;
+                candidateScoreDeltaAbsTotal +=
+                  summary.candidateScoreDeltaAbsTotal;
+                maxCandidateScoreDeltaAbs = Math.max(
+                  maxCandidateScoreDeltaAbs,
+                  summary.maxCandidateScoreDeltaAbs
+                );
+                modelAMoveCounts[summary.modelAMoveType] += 1;
+                modelBMoveCounts[summary.modelBMoveType] += 1;
+                if (summary.topActionAgreement) {
+                  topActionAgreementCount += 1;
+                }
+                if (summary.topEquivalenceAgreement) {
+                  topEquivalenceAgreementCount += 1;
+                }
+                if (summary.modelAReferenceAgreement) {
+                  referenceAgreementA += 1;
+                }
+                if (summary.modelBReferenceAgreement) {
+                  referenceAgreementB += 1;
+                }
+                if (!summary.topActionAgreement) {
+                  const pair = `${summary.modelAMoveType}>${summary.modelBMoveType}`;
+                  disagreementPairs.set(
+                    pair,
+                    (disagreementPairs.get(pair) ?? 0) + 1
+                  );
+                }
+              }
+            )
+          : getBasicAIMove(board, playerIndex, {});
+      if (move) {
+        executeMove(board, playerIndex, move);
+      }
+      cooldowns[playerIndex] += getMoveDelay(move?.type, random);
+    }
+  }
+
+  return {
+    examples,
+    candidates,
+    averageCandidatesPerExample: examples === 0 ? 0 : candidates / examples,
+    averageCandidateScoreDelta:
+      candidates === 0 ? 0 : candidateScoreDeltaTotal / candidates,
+    averageAbsoluteCandidateScoreDelta:
+      candidates === 0 ? 0 : candidateScoreDeltaAbsTotal / candidates,
+    maxAbsoluteCandidateScoreDelta: maxCandidateScoreDeltaAbs,
+    topActionAgreementRate:
+      examples === 0 ? 0 : topActionAgreementCount / examples,
+    topEquivalenceAgreementRate:
+      examples === 0 ? 0 : topEquivalenceAgreementCount / examples,
+    disagreementCount: examples - topActionAgreementCount,
+    modelAReferenceAgreementRate:
+      examples === 0 ? 0 : referenceAgreementA / examples,
+    modelBReferenceAgreementRate:
+      examples === 0 ? 0 : referenceAgreementB / examples,
+    modelATopMoveRates: normalizeMoveCounts(modelAMoveCounts, examples),
+    modelBTopMoveRates: normalizeMoveCounts(modelBMoveCounts, examples),
+    disagreementMoveTypePairs: Array.from(disagreementPairs.entries())
+      .map(([pair, count]) => ({
+        pair,
+        count,
+        rate: examples === 0 ? 0 : count / examples,
+      }))
+      .sort((left, right) => right.count - left.count),
+  };
+}
+
+function diagnoseAndChoosePolicyMove(
+  board: BoardState,
+  playerIndex: number,
+  sourcePolicy: NeuralActionRankingPolicy,
+  policyA: NeuralActionRankingPolicy,
+  policyB: NeuralActionRankingPolicy,
+  addSummary: (summary: {
+    candidateCount: number;
+    candidateScoreDeltaTotal: number;
+    candidateScoreDeltaAbsTotal: number;
+    maxCandidateScoreDeltaAbs: number;
+    modelAMoveType: Move["type"];
+    modelBMoveType: Move["type"];
+    topActionAgreement: boolean;
+    topEquivalenceAgreement: boolean;
+    modelAReferenceAgreement: boolean;
+    modelBReferenceAgreement: boolean;
+  }) => void
+): Move | undefined {
+  const candidates = enumerateActionRankingCandidates(board, playerIndex);
+  const rankingA = policyA.rankCandidates(candidates);
+  const rankingB = policyB.rankCandidates(candidates);
+  const selected = sourcePolicy.chooseCandidate(candidates, {
+    temperature: 1,
+    sample: false,
+  });
+  const topA = rankingA[0];
+  const topB = rankingB[0];
+  if (selected && topA && topB) {
+    const scoreAByKey = getScoreMap(rankingA);
+    const scoreBByKey = getScoreMap(rankingB);
+    let candidateScoreDeltaTotal = 0;
+    let candidateScoreDeltaAbsTotal = 0;
+    let maxCandidateScoreDeltaAbs = 0;
+    candidates.forEach((candidate) => {
+      const scoreDelta =
+        (scoreAByKey.get(candidate.key) ?? 0) -
+        (scoreBByKey.get(candidate.key) ?? 0);
+      const scoreDeltaAbs = Math.abs(scoreDelta);
+      candidateScoreDeltaTotal += scoreDelta;
+      candidateScoreDeltaAbsTotal += scoreDeltaAbs;
+      maxCandidateScoreDeltaAbs = Math.max(
+        maxCandidateScoreDeltaAbs,
+        scoreDeltaAbs
+      );
+    });
+    addSummary({
+      candidateCount: candidates.length,
+      candidateScoreDeltaTotal,
+      candidateScoreDeltaAbsTotal,
+      maxCandidateScoreDeltaAbs,
+      modelAMoveType: topA.candidate.move.type,
+      modelBMoveType: topB.candidate.move.type,
+      topActionAgreement: topA.candidate.key === topB.candidate.key,
+      topEquivalenceAgreement:
+        topA.candidate.equivalenceKey === topB.candidate.equivalenceKey,
+      modelAReferenceAgreement: topA.candidate.key === selected.key,
+      modelBReferenceAgreement: topB.candidate.key === selected.key,
+    });
+  }
+  return selected?.move;
+}
+
+function getScoreMap(
+  predictions: ReturnType<NeuralActionRankingPolicy["rankCandidates"]>
+) {
+  return new Map(
+    predictions.map((prediction) => [
+      prediction.candidate.key,
+      prediction.score,
+    ])
+  );
+}
+
+function prepareBoardForSimulation(
+  board: BoardState,
+  activePlayerIndices: readonly number[]
+): void {
+  board.isActive = true;
+  board.isDealt = true;
+  board.isPaused = false;
+  board.roundStartsAt = undefined;
+  board.players.forEach((player, playerIndex) => {
+    if (activePlayerIndices.includes(playerIndex)) {
+      player.socketId = null;
+    }
+  });
+}
+
+function getActivePlayerIndices(board: BoardState): number[] {
+  return board.players
+    .map((player, playerIndex) => ({ player, playerIndex }))
+    .filter(({ player }) => !player.isSpectating)
+    .map(({ playerIndex }) => playerIndex);
+}
+
+function getNextPlayerIndex(
+  cooldowns: number[],
+  activePlayerIndices: readonly number[]
+): number {
+  return activePlayerIndices.reduce((bestIndex, playerIndex) => {
+    if (bestIndex < 0 || cooldowns[playerIndex] < cooldowns[bestIndex]) {
+      return playerIndex;
+    }
+    return bestIndex;
+  }, -1);
+}
+
+function getMoveDelay(
+  moveType: Move["type"] | undefined,
+  random: () => number
+): number {
+  const jitter = 0.72 + random() * 0.56;
+  if (moveType === "cycle" || moveType === "flip_deck") {
+    return 0.34 * jitter;
+  }
+  if (moveType === "s2s") {
+    return 0.88 * jitter;
+  }
+  if (moveType === "c2s") {
+    return 0.76 * jitter;
+  }
+  if (moveType === "c2c") {
+    return 0.62 * jitter;
+  }
+  return 1.1 * jitter;
+}
+
+function createMoveTypeCounts(): MoveTypeCounts {
+  return {
+    c2c: 0,
+    c2s: 0,
+    s2s: 0,
+    cycle: 0,
+    flip_deck: 0,
+    move_field_stack: 0,
+  };
+}
+
+function normalizeMoveCounts(counts: MoveTypeCounts, total: number) {
+  return Object.fromEntries(
+    Object.entries(counts).map(([moveType, count]) => [
+      moveType,
+      total === 0 ? 0 : count / total,
+    ])
+  );
 }
 
 function compareModelBatch(
