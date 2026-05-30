@@ -51,6 +51,11 @@ new exposed stack top, how close the best connector is, whether that connector
 is the pounce card or a stack root, and the stock-vs-waste fraction for
 deck-sourced solitaire moves. These are intended to make connector-vs-cycle
 updates less dependent on broad move-type priors.
+The feature set now also exposes more of the tactical shape a human uses:
+source-stack height/bottom/exposed-card information, whether exposed cards can
+play or match the pounce card's stack-compatibility parity, destination bottom
+value, card parity and pounce-connector closeness, and opponent follow pressure
+split by pounce/deck/solitaire visible cards after center plays.
 
 Current useful baseline recipe:
 

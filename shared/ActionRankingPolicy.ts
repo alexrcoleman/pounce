@@ -19,14 +19,26 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "source.pounce",
   "source.deck",
   "source.solitaire",
+  "source.stackHeight",
+  "source.bottomValue",
+  "source.exposesCard",
+  "source.exposedValue",
+  "source.exposedCenterPlayable",
+  "source.exposedCanPlaySoon",
+  "source.exposedMatchesPounceParity",
+  "source.exposedPounceConnectorCloseness",
   "dest.center",
   "dest.solitaire",
   "card.value",
   "card.isRed",
+  "card.stackParity",
+  "card.matchesPounceParity",
+  "card.pounceConnectorCloseness",
   "card.isAce",
   "card.isFace",
   "dest.isEmpty",
   "dest.topValue",
+  "dest.bottomValue",
   "dest.stackHeight",
   "dest.centerHeight",
   "move.cardCount",
@@ -43,6 +55,10 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "center.ownCanFollowAfter",
   "center.opponentsCanFollowAfter",
   "center.opponentsCanPlaySameNow",
+  "center.opponentPounceCanFollowAfter",
+  "center.opponentDeckCanFollowAfter",
+  "center.opponentStackCanFollowAfter",
+  "center.opponentPounceCanPlaySameNow",
   "player.index",
   "player.botIndex",
   "board.playerCount",
@@ -315,6 +331,8 @@ function buildActionRankingFeatures(
   const player = board.players[playerIndex];
   const card = getMoveCard(board, playerIndex, move);
   const dest = getMoveDestination(board, player, move);
+  const cardShape = getCardShapeFeatures(player, card);
+  const sourceShape = getSourceShapeFeatures(board, player, move, card);
   const centerFollow = getCenterFollowFeatures(board, playerIndex, move, card);
   const cardAlternatives = getCardAlternativeFeatures(
     board,
@@ -344,14 +362,26 @@ function buildActionRankingFeatures(
     bool(isPounceSource(move)),
     bool(isDeckSource(move)),
     bool(isSolitaireSource(move)),
+    normalize(sourceShape.stackHeight, 13),
+    normalizeCardValue(sourceShape.bottomCard),
+    bool(sourceShape.exposedCard != null),
+    normalizeCardValue(sourceShape.exposedCard),
+    bool(sourceShape.exposedCenterPlayable),
+    bool(sourceShape.exposedCanPlaySoon),
+    bool(sourceShape.exposedMatchesPounceParity),
+    normalize(sourceShape.exposedPounceConnectorCloseness, 1),
     bool(move.type === "c2c"),
     bool(move.type === "c2s" || move.type === "s2s"),
     normalizeCardValue(card),
     bool(card != null && RED_SUITS.includes(card.suit)),
+    bool(cardShape.stackParity),
+    bool(cardShape.matchesPounceParity),
+    normalize(cardShape.pounceConnectorCloseness, 1),
     bool(card?.value === 1),
     bool(card != null && card.value >= 11),
     bool(dest?.isEmpty),
     normalizeCardValue(dest?.topCard),
+    normalizeCardValue(dest?.bottomCard),
     normalize(dest?.stackHeight, 13),
     normalize(dest?.centerHeight, 13),
     normalize(getMoveCardCount(move), 13),
@@ -377,6 +407,10 @@ function buildActionRankingFeatures(
     normalize(centerFollow.ownCanFollowAfter, 6),
     normalize(centerFollow.opponentsCanFollowAfter, 24),
     normalize(centerFollow.opponentsCanPlaySameNow, 24),
+    normalize(centerFollow.opponentPounceCanFollowAfter, 6),
+    normalize(centerFollow.opponentDeckCanFollowAfter, 6),
+    normalize(centerFollow.opponentStackCanFollowAfter, 12),
+    normalize(centerFollow.opponentPounceCanPlaySameNow, 6),
     normalize(playerIndex, Math.max(1, board.players.length - 1)),
     normalize(botIndex, Math.max(1, board.players.length - 1)),
     normalize(board.players.length, 6),
@@ -435,6 +469,73 @@ function getCardAlternativeFeatures(
           card
         )
       ),
+  };
+}
+
+function getCardShapeFeatures(
+  player: PlayerState | undefined,
+  card: CardState | undefined
+) {
+  const pounceCard = player ? peek(player.pounceDeck) : undefined;
+  return {
+    stackParity: card ? getStackCompatibilityParity(card) === 1 : false,
+    matchesPounceParity:
+      card != null &&
+      pounceCard != null &&
+      getStackCompatibilityParity(card) ===
+        getStackCompatibilityParity(pounceCard),
+    pounceConnectorCloseness:
+      card && pounceCard ? getConnectorCloseness(card, pounceCard) : 0,
+  };
+}
+
+function getSourceShapeFeatures(
+  board: BoardState,
+  player: PlayerState | undefined,
+  move: Move,
+  card: CardState | undefined
+) {
+  const emptyFeatures = {
+    stackHeight: 0,
+    bottomCard: undefined as CardState | undefined,
+    exposedCard: undefined as CardState | undefined,
+    exposedCenterPlayable: false,
+    exposedCanPlaySoon: false,
+    exposedMatchesPounceParity: false,
+    exposedPounceConnectorCloseness: 0,
+  };
+  if (!player) {
+    return emptyFeatures;
+  }
+
+  const sourceIndex = getSolitaireSourceIndex(move);
+  if (sourceIndex == null) {
+    return emptyFeatures;
+  }
+
+  const sourceStack = player.stacks[sourceIndex];
+  const exposedCard = getExposedSourceCard(player, move);
+  const pounceCard = peek(player.pounceDeck);
+  const centerPiles = getCenterPilesAfterCenterMove(board, move, card);
+  return {
+    stackHeight: sourceStack.length,
+    bottomCard: sourceStack[0],
+    exposedCard,
+    exposedCenterPlayable:
+      exposedCard != null &&
+      centerPiles.some((pile) => canPlayOnCenterPile(pile, exposedCard)),
+    exposedCanPlaySoon:
+      exposedCard != null &&
+      getCanPlaySoonOnCenterPiles(exposedCard, centerPiles, 4),
+    exposedMatchesPounceParity:
+      exposedCard != null &&
+      pounceCard != null &&
+      getStackCompatibilityParity(exposedCard) ===
+        getStackCompatibilityParity(pounceCard),
+    exposedPounceConnectorCloseness:
+      exposedCard && pounceCard
+        ? getConnectorCloseness(exposedCard, pounceCard)
+        : 0,
   };
 }
 
@@ -696,6 +797,7 @@ function getMoveDestination(
   | {
       isEmpty: boolean;
       topCard: CardState | undefined;
+      bottomCard: CardState | undefined;
       stackHeight: number;
       centerHeight: number;
     }
@@ -705,6 +807,7 @@ function getMoveDestination(
     return {
       isEmpty: pile.length === 0,
       topCard: peek(pile),
+      bottomCard: undefined,
       stackHeight: 0,
       centerHeight: pile.length,
     };
@@ -714,6 +817,7 @@ function getMoveDestination(
     return {
       isEmpty: stack.length === 0,
       topCard: peek(stack),
+      bottomCard: stack[0],
       stackHeight: stack.length,
       centerHeight: 0,
     };
@@ -731,6 +835,10 @@ function getCenterFollowFeatures(
       ownCanFollowAfter: 0,
       opponentsCanFollowAfter: 0,
       opponentsCanPlaySameNow: 0,
+      opponentPounceCanFollowAfter: 0,
+      opponentDeckCanFollowAfter: 0,
+      opponentStackCanFollowAfter: 0,
+      opponentPounceCanPlaySameNow: 0,
     };
   }
 
@@ -743,20 +851,30 @@ function getCenterFollowFeatures(
   const canFollowAfter = (visibleCard: CardState) =>
     visibleCard.suit === card.suit && visibleCard.value === card.value + 1;
 
-  return getVisibleCards(board).reduce(
-    (result, visibleCard) => {
-      if (visibleCard.player === playerIndex) {
-        if (!cardEquals(visibleCard, card) && canFollowAfter(visibleCard)) {
+  return getVisibleCardSources(board).reduce(
+    (result, visible) => {
+      if (visible.player === playerIndex) {
+        if (!cardEquals(visible.card, card) && canFollowAfter(visible.card)) {
           result.ownCanFollowAfter += 1;
         }
         return result;
       }
 
-      if (canFollowAfter(visibleCard)) {
+      if (canFollowAfter(visible.card)) {
         result.opponentsCanFollowAfter += 1;
+        if (visible.location === "pounce") {
+          result.opponentPounceCanFollowAfter += 1;
+        } else if (visible.location === "deck") {
+          result.opponentDeckCanFollowAfter += 1;
+        } else {
+          result.opponentStackCanFollowAfter += 1;
+        }
       }
-      if (canPlaySameNow(visibleCard)) {
+      if (canPlaySameNow(visible.card)) {
         result.opponentsCanPlaySameNow += 1;
+        if (visible.location === "pounce") {
+          result.opponentPounceCanPlaySameNow += 1;
+        }
       }
       return result;
     },
@@ -764,8 +882,65 @@ function getCenterFollowFeatures(
       ownCanFollowAfter: 0,
       opponentsCanFollowAfter: 0,
       opponentsCanPlaySameNow: 0,
+      opponentPounceCanFollowAfter: 0,
+      opponentDeckCanFollowAfter: 0,
+      opponentStackCanFollowAfter: 0,
+      opponentPounceCanPlaySameNow: 0,
     }
   );
+}
+
+function getCenterPilesAfterCenterMove(
+  board: BoardState,
+  move: Move,
+  card: CardState | undefined
+): BoardState["piles"] {
+  if (move.type !== "c2c" || !card) {
+    return board.piles;
+  }
+
+  return board.piles.map((pile, index) =>
+    index === move.dest ? [...pile, card] : pile
+  );
+}
+
+function getVisibleCardSources(board: BoardState): {
+  card: CardState;
+  player: number;
+  location: "pounce" | "deck" | "solitaire";
+}[] {
+  return board.players
+    .flatMap((player, playerIndex) => {
+      if (player.isSpectating) {
+        return [];
+      }
+      return [
+        {
+          card: peek(player.pounceDeck),
+          player: playerIndex,
+          location: "pounce" as const,
+        },
+        {
+          card: peek(player.flippedDeck),
+          player: playerIndex,
+          location: "deck" as const,
+        },
+        ...player.stacks.map((stack) => ({
+          card: peek(stack),
+          player: playerIndex,
+          location: "solitaire" as const,
+        })),
+      ];
+    })
+    .filter(
+      (
+        source
+      ): source is {
+        card: CardState;
+        player: number;
+        location: "pounce" | "deck" | "solitaire";
+      } => source.card != null
+    );
 }
 
 function getVisibleCards(board: BoardState): CardState[] {
@@ -806,6 +981,41 @@ function getMoveCard(
     const source = player.stacks[move.source];
     return source[source.length - move.count];
   }
+}
+
+function getExposedSourceCard(
+  player: PlayerState,
+  move: Move
+): CardState | undefined {
+  if (move.type === "c2c" && move.source.type === "solitaire") {
+    const sourceStack = player.stacks[move.source.index];
+    return sourceStack[sourceStack.length - 2];
+  }
+  if (move.type === "s2s") {
+    const sourceStack = player.stacks[move.source];
+    return sourceStack[sourceStack.length - move.count - 1];
+  }
+}
+
+function getStackCompatibilityParity(card: CardState): 0 | 1 {
+  const isBlack = !RED_SUITS.includes(card.suit);
+  return ((card.value % 2) ^ (isBlack ? 1 : 0)) as 0 | 1;
+}
+
+function getConnectorCloseness(
+  card: CardState,
+  target: CardState,
+  threshold = 5
+): number {
+  if (getStackCompatibilityParity(card) !== getStackCompatibilityParity(target)) {
+    return 0;
+  }
+
+  const gap = Math.abs(card.value - target.value);
+  if (gap < 1 || gap > threshold) {
+    return 0;
+  }
+  return (threshold + 1 - gap) / threshold;
 }
 
 function canMoveCardToSolitaireStack(
@@ -929,10 +1139,18 @@ function getCanPlaySoon(
   sourceBoard: BoardState,
   threshold: number
 ): boolean {
+  return getCanPlaySoonOnCenterPiles(target, sourceBoard.piles, threshold);
+}
+
+function getCanPlaySoonOnCenterPiles(
+  target: CardState,
+  piles: BoardState["piles"],
+  threshold: number
+): boolean {
   if (target.value <= 2) {
     return true;
   }
-  return sourceBoard.piles.some((pile) => {
+  return piles.some((pile) => {
     const topCard = peek(pile);
     return topCard != null && canPlayOnSoon(topCard, target, threshold);
   });
