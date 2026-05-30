@@ -772,6 +772,16 @@ post-move connector count/closeness, pounce-vs-stack-root connector flags, and
 a deck stock fraction feature active on deck-to-solitaire moves. Old checkpoints
 expand with zero weights for these inputs, preserving behavior until a fresh
 train or all-layer fine-tune learns from them.
+First all-layer probe from `pounce-action-ranking-behavior-scope-240-lr1` using
+those inputs (`pounce-rl-connector-features-all-pairwise-64-scan128`) accepted
+1,029 behavior-gap counterfactual pairwise updates from 128 scanned episodes.
+The new connector input weights moved in all 192 hidden units, but weakly
+(largest absolute first-layer weight about `0.00043`). A 384-game / 8-seed
+paired comparison against the behavior-scope checkpoint measured
+`-0.0104 +/- 0.0104` point differential, with 383 tied games and one
+baseline-favored split. Tracing found that split was `c2c>c2c`, not
+connector-vs-cycle, so this recipe is instrumentation progress rather than a
+promotion candidate.
 
 ## Deploying
 
