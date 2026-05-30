@@ -983,6 +983,24 @@ high-gap labels, and tied the baseline exactly over 384 paired games. A
 so `RL_COUNTERFACTUAL_STOP_AFTER_LABELS` was added to make high-ceiling
 low-margin scans practical: use a large scan ceiling with a cap and stop once
 the desired number of accepted labels has been mined.
+With that early stop, a capped audit targeting 8 labels
+(`RL_COUNTERFACTUAL_MAX_SCORE_GAP=0.5`,
+`RL_COUNTERFACTUAL_SCORE_GAP_BUDGET=8`,
+`RL_COUNTERFACTUAL_STOP_AFTER_LABELS=8`) stopped after 34 scanned episodes,
+accepted labels with average score gap `0.208`, and showed a cycle-heavy label
+mix: 4 of 8 winners were `cycle > c2s`. Training those labels with a stronger
+behavior-scoped pairwise update moved only 2 of 3,759 diagnosed decisions and
+measured `-0.103 +/- 0.161` over 384 paired games. Adding
+`RL_COUNTERFACTUAL_SKIP_CYCLE_OVER_CONNECTOR=true` produced a cleaner label mix
+after 56 scanned audit episodes, skipping 89 connector/cycle labels; the
+corresponding pairwise run stopped after 22 scanned training episodes and tied
+the baseline at `-0.0017 +/- 0.0087` over 384 paired games. That is the best
+shape so far: capped low-margin, connector-guarded labels avoid the clear
+regressions, but single-rollout labels still do not pull ahead. The next
+candidate should spend rollout budget on reliability, for example
+`RL_COUNTERFACTUAL_ROLLOUTS=3`,
+`RL_COUNTERFACTUAL_MIN_BEHAVIOR_WIN_RATE=1`, and a modest stop-after-label
+target.
 
 ## Deploying
 
