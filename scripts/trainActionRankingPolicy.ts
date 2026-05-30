@@ -155,6 +155,10 @@ const options = {
     "RL_COUNTERFACTUAL_MAX_POLICY_MARGIN",
     0
   ),
+  rlCounterfactualRequirePolicyChange: readBooleanEnv(
+    "RL_COUNTERFACTUAL_REQUIRE_POLICY_CHANGE",
+    false
+  ),
   rlCounterfactualPreferenceScope: readImprovementPreferenceScopeEnv(
     "RL_COUNTERFACTUAL_PREFERENCE_SCOPE",
     "all"

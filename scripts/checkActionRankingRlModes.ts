@@ -479,6 +479,24 @@ assert.ok(
   "policy-margin filtering should skip settled high-margin decision states"
 );
 
+const policyChangeFiltered = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:policy-change-filtered",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualStateSource: "greedy",
+  rlUpdateScope: "all",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualMinReturnGap: 0,
+  rlCounterfactualRequirePolicyChange: true,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.ok(
+  policyChangeFiltered.reinforcement.counterfactualPolicyChangeSkippedCount > 0,
+  "policy-change filtering should skip labels whose rollout winner is already greedy"
+);
+
 const maxReturnGapFiltered = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:max-return-gap-filtered",
@@ -523,6 +541,7 @@ console.log(
       confidenceFiltered: summarize(confidenceFiltered),
       behaviorWinRateFiltered: summarize(behaviorWinRateFiltered),
       policyMarginFiltered: summarize(policyMarginFiltered),
+      policyChangeFiltered: summarize(policyChangeFiltered),
       maxReturnGapFiltered: summarize(maxReturnGapFiltered),
     },
     null,
@@ -562,6 +581,8 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.counterfactualMaxReturnGapSkippedCount,
     counterfactualPolicyMarginSkippedCount:
       result.reinforcement.counterfactualPolicyMarginSkippedCount,
+    counterfactualPolicyChangeSkippedCount:
+      result.reinforcement.counterfactualPolicyChangeSkippedCount,
     counterfactualBehaviorGapSkippedCount:
       result.reinforcement.counterfactualBehaviorGapSkippedCount,
     counterfactualBehaviorConfidenceSkippedCount:

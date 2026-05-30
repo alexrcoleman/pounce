@@ -457,6 +457,10 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
       "RL_COUNTERFACTUAL_MAX_POLICY_MARGIN",
       0
     ),
+    rlCounterfactualRequirePolicyChange: readBooleanEnv(
+      "RL_COUNTERFACTUAL_REQUIRE_POLICY_CHANGE",
+      false
+    ),
     rlCounterfactualPairwiseTargetMargin: readNumberEnv(
       "RL_COUNTERFACTUAL_PAIRWISE_MARGIN",
       0

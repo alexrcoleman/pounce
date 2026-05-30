@@ -129,6 +129,10 @@ const options = {
     "RL_COUNTERFACTUAL_MAX_POLICY_MARGIN",
     0
   ),
+  counterfactualRequirePolicyChange: readBooleanEnv(
+    "RL_COUNTERFACTUAL_REQUIRE_POLICY_CHANGE",
+    false
+  ),
   counterfactualMaxScoreGap: readNumberEnv(
     "RL_COUNTERFACTUAL_MAX_SCORE_GAP",
     0
@@ -181,6 +185,7 @@ console.log(
         policyGradientGreedySkippedCount:
           audit.policyGradientGreedySkippedCount,
         policyMarginSkippedCount: audit.policyMarginSkippedCount,
+        policyChangeSkippedCount: audit.policyChangeSkippedCount,
         behaviorGapSkippedCount: audit.behaviorGapSkippedCount,
         behaviorConfidenceSkippedCount:
           audit.behaviorConfidenceSkippedCount,
