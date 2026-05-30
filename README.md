@@ -2,6 +2,24 @@
 
 This is a project to simulate the game Nertz / Pounce. It includes some online multiplayer logic to allow for competitive play with friends, as well as some Bots for local or online practice. There is also a "Simulation Mode" to rapidly simulate Bots playing against each other to analyze various strategies.
 
+## Neural action-ranking training
+
+The action-ranking prototype trains a small neural network to score the legal
+moves generated from each board state. It first imitates the existing heuristic
+bot, then optionally fine-tunes with rollout reward against teacher bots.
+
+```powershell
+npm run action-ranking:examples
+npm run action-ranking:train
+```
+
+Useful training knobs:
+
+- `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`
+- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`
+- `PLAYERS`, `HIDDEN`, `MAX_MOVES`, `SEED`
+- `MODEL_OUT=C:\tmp\pounce-action-ranking-model.json` to save model weights
+
 ## Deploying
 
 The production app runs on Google Cloud Run:
