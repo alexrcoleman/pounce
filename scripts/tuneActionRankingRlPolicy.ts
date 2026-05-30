@@ -4,10 +4,15 @@ import { enumerateActionRankingCandidates } from "../shared/ActionRankingPolicy"
 import {
   compareNeuralModels,
   createTrainingBoard,
+  evaluateNeuralModelAgainstBasicStyle,
   trainNeuralActionRankingPolicy,
   type NeuralTrainingOptions,
+  type PolicyEvaluationResult,
 } from "../shared/ActionRankingTraining";
-import { getBasicAIMove } from "../shared/ComputerV1";
+import {
+  getBasicAIMove,
+  getBasicAIStyleNames,
+} from "../shared/ComputerV1";
 import { isGameOver, type BoardState } from "../shared/GameUtils";
 import {
   createSeededRandom,
@@ -18,6 +23,24 @@ import { executeMove, type Move } from "../shared/MoveHandler";
 
 type ModelComparisonResult = ReturnType<typeof compareNeuralModels>;
 type MoveTypeCounts = Record<Move["type"], number>;
+
+type StyleSeedComparison = {
+  style: string;
+  seed: string;
+  games: number;
+  modelABaselineAdjustedPointDifferential: number;
+  modelBBaselineAdjustedPointDifferential: number;
+  baselineAdjustedPointDifferentialDelta: number;
+  modelAPointDifferential: number;
+  modelBPointDifferential: number;
+  pointDifferentialDelta: number;
+  modelAScore: number;
+  modelBScore: number;
+  scoreDelta: number;
+  modelAPounceOutRate: number;
+  modelBPounceOutRate: number;
+  pounceOutRateDelta: number;
+};
 
 type RlTuneRecipe = {
   name: string;
@@ -59,6 +82,23 @@ const confirmStandardErrorMultiplier = readNumberEnv(
 const confirmTriggerMinDelta = readNumberEnv(
   "CONFIRM_TRIGGER_MIN_DELTA",
   promoteMinDelta
+);
+const styleGateGames = readIntegerEnv("RL_TUNE_STYLE_GAMES", 0);
+const styleGateRuns = readIntegerEnv(
+  "RL_TUNE_STYLE_RUNS",
+  Math.max(1, compareRuns)
+);
+const styleGateMaxRegression = readNumberEnv(
+  "RL_TUNE_STYLE_MAX_REGRESSION",
+  0
+);
+const styleGateStandardErrorMultiplier = readNumberEnv(
+  "RL_TUNE_STYLE_SE_MULTIPLIER",
+  promoteStandardErrorMultiplier
+);
+const styleGateStyles = readStyleListEnv(
+  "RL_TUNE_STYLES",
+  getBasicAIStyleNames()
 );
 const recipes = readRecipes();
 
@@ -131,9 +171,30 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
           confirmStandardErrorMultiplier
         )
       : null;
-    const promoted = confirmationBatch
+    const modelGatePassed = confirmationBatch
       ? confirmationLowerBound! > confirmMinDelta
       : searchPassed;
+    const shouldRunStyleGate = styleGateGames > 0 && modelGatePassed;
+    const styleGateBatch = shouldRunStyleGate
+      ? compareModelBatchByStyle(candidateModel, bestModel, {
+          playerCount,
+          games: styleGateGames,
+          runs: styleGateRuns,
+          seed: `${seed}:style-gate:${roundNumber}:${recipe.name}`,
+          maxMovesPerGame,
+          styles: styleGateStyles,
+        })
+      : null;
+    const styleGateLowerBound = styleGateBatch
+      ? getStylePromotionLowerBound(
+          styleGateBatch.comparison,
+          styleGateStandardErrorMultiplier
+        )
+      : null;
+    const styleGatePassed = styleGateBatch
+      ? styleGateLowerBound! >= -styleGateMaxRegression
+      : true;
+    const promoted = modelGatePassed && styleGatePassed;
 
     if (promoted) {
       bestModel = candidateModel;
@@ -167,6 +228,14 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
             perCompareRun: confirmationBatch.perCompareRun,
           }
         : null,
+      styleGate: styleGateBatch
+        ? {
+            passed: styleGatePassed,
+            lowerBound: styleGateLowerBound,
+            comparison: styleGateBatch.comparison,
+            byStyle: styleGateBatch.byStyle,
+          }
+        : null,
     });
   }
 
@@ -197,6 +266,14 @@ console.log(
         confirmMinDelta,
         confirmStandardErrorMultiplier,
         confirmTriggerMinDelta,
+      },
+      styleGateRule: {
+        enabled: styleGateGames > 0,
+        styleGateGames,
+        styleGateRuns,
+        styleGateStyles,
+        styleGateMaxRegression,
+        styleGateStandardErrorMultiplier,
       },
       diagnostics: {
         diagnosticGames,
@@ -499,6 +576,36 @@ function readTrainableLayersEnv(
     return fallback;
   }
   return value.toLowerCase() === "output" ? "output" : fallback;
+}
+
+function readStyleListEnv(name: string, fallback: string[]): string[] {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  if (value.trim().toLowerCase() === "all") {
+    return fallback;
+  }
+
+  const styleByLowerName = new Map(
+    getBasicAIStyleNames().map((style) => [style.toLowerCase(), style])
+  );
+  const styles = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((style) => {
+      const knownStyle = styleByLowerName.get(style.toLowerCase());
+      if (!knownStyle) {
+        throw new Error(
+          `Unknown AI style "${style}". Known styles: ${getBasicAIStyleNames().join(
+            ", "
+          )}`
+        );
+      }
+      return knownStyle;
+    });
+  return styles.length === 0 ? fallback : styles;
 }
 
 function sanitizeFilePart(value: string): string {
@@ -845,6 +952,179 @@ function compareModelBatch(
   };
 }
 
+function compareModelBatchByStyle(
+  modelA: NeuralActionRankingModel,
+  modelB: NeuralActionRankingModel,
+  options: {
+    playerCount: number;
+    games: number;
+    runs: number;
+    seed: string;
+    maxMovesPerGame: number;
+    styles: string[];
+  }
+) {
+  const runCount = Math.max(1, options.runs);
+  const allComparisons: StyleSeedComparison[] = [];
+  const byStyle = options.styles.map((style) => {
+    const perSeed = Array.from({ length: runCount }, (_, index) => {
+      const styleSeed =
+        runCount === 1
+          ? `${options.seed}:${style}`
+          : `${options.seed}:${style}:${index}`;
+      return compareModelsAgainstStyle(modelA, modelB, style, styleSeed, {
+        playerCount: options.playerCount,
+        games: options.games,
+        maxMovesPerGame: options.maxMovesPerGame,
+      });
+    });
+    allComparisons.push(...perSeed);
+    return {
+      style,
+      summary: summarizeStyleComparisons(perSeed),
+      perSeed: perSeed.length === 1 ? undefined : perSeed,
+    };
+  });
+  return {
+    comparison: summarizeStyleComparisons(allComparisons),
+    byStyle,
+  };
+}
+
+function compareModelsAgainstStyle(
+  modelA: NeuralActionRankingModel,
+  modelB: NeuralActionRankingModel,
+  style: string,
+  seed: string,
+  options: {
+    playerCount: number;
+    games: number;
+    maxMovesPerGame: number;
+  }
+): StyleSeedComparison {
+  const evaluationA = evaluateNeuralModelAgainstBasicStyle(modelA, style, {
+    playerCount: options.playerCount,
+    games: options.games,
+    seed,
+    maxMovesPerGame: options.maxMovesPerGame,
+  });
+  const evaluationB = evaluateNeuralModelAgainstBasicStyle(modelB, style, {
+    playerCount: options.playerCount,
+    games: options.games,
+    seed,
+    maxMovesPerGame: options.maxMovesPerGame,
+  });
+  return createStyleSeedComparison(style, seed, evaluationA, evaluationB);
+}
+
+function createStyleSeedComparison(
+  style: string,
+  seed: string,
+  evaluationA: PolicyEvaluationResult,
+  evaluationB: PolicyEvaluationResult
+): StyleSeedComparison {
+  return {
+    style,
+    seed,
+    games: evaluationA.games,
+    modelABaselineAdjustedPointDifferential:
+      evaluationA.averageBaselineAdjustedPointDifferential,
+    modelBBaselineAdjustedPointDifferential:
+      evaluationB.averageBaselineAdjustedPointDifferential,
+    baselineAdjustedPointDifferentialDelta:
+      evaluationA.averageBaselineAdjustedPointDifferential -
+      evaluationB.averageBaselineAdjustedPointDifferential,
+    modelAPointDifferential: evaluationA.averageNeuralPointDifferential,
+    modelBPointDifferential: evaluationB.averageNeuralPointDifferential,
+    pointDifferentialDelta:
+      evaluationA.averageNeuralPointDifferential -
+      evaluationB.averageNeuralPointDifferential,
+    modelAScore: evaluationA.averageNeuralScore,
+    modelBScore: evaluationB.averageNeuralScore,
+    scoreDelta: evaluationA.averageNeuralScore - evaluationB.averageNeuralScore,
+    modelAPounceOutRate: evaluationA.neuralPounceOutRate,
+    modelBPounceOutRate: evaluationB.neuralPounceOutRate,
+    pounceOutRateDelta:
+      evaluationA.neuralPounceOutRate - evaluationB.neuralPounceOutRate,
+  };
+}
+
+function summarizeStyleComparisons(comparisons: StyleSeedComparison[]) {
+  const games = comparisons.reduce((sum, item) => sum + item.games, 0);
+  const comparisonCount = comparisons.length;
+  const baselineAdjustedDeltas = comparisons.map(
+    (item) => item.baselineAdjustedPointDifferentialDelta
+  );
+  const pointDifferentialDeltas = comparisons.map(
+    (item) => item.pointDifferentialDelta
+  );
+  return {
+    games,
+    comparisonCount,
+    averageModelABaselineAdjustedPointDifferential: weightedMean(
+      comparisons,
+      "modelABaselineAdjustedPointDifferential"
+    ),
+    averageModelBBaselineAdjustedPointDifferential: weightedMean(
+      comparisons,
+      "modelBBaselineAdjustedPointDifferential"
+    ),
+    averageBaselineAdjustedPointDifferentialDelta: weightedMean(
+      comparisons,
+      "baselineAdjustedPointDifferentialDelta"
+    ),
+    baselineAdjustedPointDifferentialDeltaStandardError: standardError(
+      baselineAdjustedDeltas
+    ),
+    averageModelAPointDifferential: weightedMean(
+      comparisons,
+      "modelAPointDifferential"
+    ),
+    averageModelBPointDifferential: weightedMean(
+      comparisons,
+      "modelBPointDifferential"
+    ),
+    averagePointDifferentialDelta: weightedMean(
+      comparisons,
+      "pointDifferentialDelta"
+    ),
+    pointDifferentialDeltaStandardError: standardError(pointDifferentialDeltas),
+    modelABetterRate:
+      comparisonCount === 0
+        ? 0
+        : comparisons.filter(
+            (item) => item.baselineAdjustedPointDifferentialDelta > 0
+          ).length / comparisonCount,
+    modelBBetterRate:
+      comparisonCount === 0
+        ? 0
+        : comparisons.filter(
+            (item) => item.baselineAdjustedPointDifferentialDelta < 0
+          ).length / comparisonCount,
+    tiedRate:
+      comparisonCount === 0
+        ? 0
+        : comparisons.filter(
+            (item) => item.baselineAdjustedPointDifferentialDelta === 0
+          ).length / comparisonCount,
+    averageModelAScore: weightedMean(comparisons, "modelAScore"),
+    averageModelBScore: weightedMean(comparisons, "modelBScore"),
+    averageScoreDelta: weightedMean(comparisons, "scoreDelta"),
+    averageModelAPounceOutRate: weightedMean(
+      comparisons,
+      "modelAPounceOutRate"
+    ),
+    averageModelBPounceOutRate: weightedMean(
+      comparisons,
+      "modelBPounceOutRate"
+    ),
+    averagePounceOutRateDelta: weightedMean(
+      comparisons,
+      "pounceOutRateDelta"
+    ),
+  };
+}
+
 function getPromotionLowerBound(
   comparison: ModelComparisonResult,
   standardErrorMultiplier: number
@@ -852,6 +1132,17 @@ function getPromotionLowerBound(
   return (
     comparison.averagePointDifferentialDelta -
     standardErrorMultiplier * comparison.pointDifferentialDeltaStandardError
+  );
+}
+
+function getStylePromotionLowerBound(
+  comparison: ReturnType<typeof summarizeStyleComparisons>,
+  standardErrorMultiplier: number
+): number {
+  return (
+    comparison.averageBaselineAdjustedPointDifferentialDelta -
+    standardErrorMultiplier *
+      comparison.baselineAdjustedPointDifferentialDeltaStandardError
   );
 }
 

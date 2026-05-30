@@ -220,9 +220,15 @@ caps that diagnostic sample. Set `CONFIRM_GAMES` above `0` to run a held-out
 confirmation comparison for search-passing candidates and near-misses whose
 search lower bound is at least `CONFIRM_TRIGGER_MIN_DELTA`; `CONFIRM_RUNS`,
 `CONFIRM_MIN_DELTA`, and `CONFIRM_SE_MULTIPLIER` control that second gate. As
-with the manual comparisons below, this is still a search tool; a promoted model
-still needs a larger final paired comparison before replacing the current best
-checkpoint.
+an optional fixed-style safety gate, set `RL_TUNE_STYLE_GAMES` above `0`; passing
+candidates are then compared against the current best on the fixed heuristic
+styles using shared seeds. Promotion also requires the style lower bound
+`averageBaselineAdjustedPointDifferentialDelta - seMultiplier * standardError`
+to be at least `-RL_TUNE_STYLE_MAX_REGRESSION`, where `seMultiplier` comes from
+`RL_TUNE_STYLE_SE_MULTIPLIER`. `RL_TUNE_STYLES` can narrow the gate to a
+comma-separated subset such as `Alex 1.0`. As with the manual comparisons below,
+this is still a search tool; a promoted model still needs a larger final paired
+comparison before replacing the current best checkpoint.
 
 `IMPROVEMENT_STATES` enables the counterfactual rollout pass: it samples
 teacher-game states, tries several legal actions, lets the teacher finish from
