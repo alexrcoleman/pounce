@@ -6,6 +6,12 @@ const modelIn = process.env.MODEL_IN;
 const initialModel = modelIn
   ? (JSON.parse(fs.readFileSync(modelIn, "utf8")) as NeuralActionRankingModel)
   : undefined;
+const opponentModelPath = process.env.RL_OPPONENT_MODEL;
+const opponentModel = opponentModelPath
+  ? (JSON.parse(
+      fs.readFileSync(opponentModelPath, "utf8")
+    ) as NeuralActionRankingModel)
+  : undefined;
 const hiddenLayerSizes =
   initialModel == null
     ? readIntegerListEnv("HIDDEN_LAYERS", readIntegerListEnv("HIDDEN", [48]))
@@ -245,7 +251,12 @@ const options = {
   maxMovesPerGame: readIntegerEnv("MAX_MOVES", 1800),
 };
 
-const result = trainNeuralActionRankingPolicy({ ...options, initialModel });
+const result = trainNeuralActionRankingPolicy({
+  ...options,
+  initialModel,
+  rlOpponentModel:
+    opponentModel ?? (options.rlOpponentMode === "champion" ? initialModel : undefined),
+});
 const modelOut = process.env.MODEL_OUT;
 
 if (modelOut) {
@@ -261,6 +272,9 @@ console.log(
       reinforcement: result.reinforcement,
       evaluation: result.evaluation,
       modelIn: modelIn ?? null,
+      rlOpponentModel:
+        opponentModelPath ??
+        (options.rlOpponentMode === "champion" ? modelIn ?? null : null),
       modelOut: modelOut ?? null,
     },
     null,
@@ -386,13 +400,17 @@ function readRlBaselineModeEnv(
 
 function readRlOpponentModeEnv(
   name: string,
-  fallback: "teacher" | "self"
-): "teacher" | "self" {
+  fallback: "teacher" | "self" | "champion"
+): "teacher" | "self" | "champion" {
   const value = process.env[name];
   if (value == null || value.trim() === "") {
     return fallback;
   }
-  return value.toLowerCase() === "self" ? "self" : fallback;
+  const normalized = value.toLowerCase();
+  if (normalized === "self" || normalized === "champion") {
+    return normalized;
+  }
+  return fallback;
 }
 
 function readRlCreditModeEnv(

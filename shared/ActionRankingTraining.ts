@@ -35,6 +35,7 @@ export type NeuralTrainingOptions = {
   hiddenSize?: number;
   hiddenLayerSizes?: number[];
   initialModel?: NeuralActionRankingModel;
+  rlOpponentModel?: NeuralActionRankingModel;
   seed?: string;
   imitationDeals?: number;
   imitationEpochs?: number;
@@ -45,7 +46,7 @@ export type NeuralTrainingOptions = {
   rlTemperature?: number;
   rlLocalRewardWeight?: number;
   rlLocalRewardDiscount?: number;
-  rlOpponentMode?: "teacher" | "self";
+  rlOpponentMode?: "teacher" | "self" | "champion";
   rlBaselineMode?: "teacher" | "greedy";
   rlCommonRandom?: boolean;
   rlCreditMode?: "episode" | "counterfactual";
@@ -151,7 +152,7 @@ export type NeuralTrainingResult = {
     stats: ImitationTrainingStats;
   };
   reinforcement: {
-    opponentMode: "teacher" | "self";
+    opponentMode: "teacher" | "self" | "champion";
     averageTrainingPlayerCount: number;
     episodes: number;
     counterfactualScannedEpisodes: number;
@@ -299,7 +300,7 @@ type PolicyGradientUpdate = {
   rawAdvantage: number;
 };
 
-type PolicyGradientOpponentMode = "teacher" | "self";
+type PolicyGradientOpponentMode = "teacher" | "self" | "champion";
 type PolicyGradientBaselineMode = "teacher" | "greedy";
 type PolicyGradientCreditMode = "episode" | "counterfactual";
 type CounterfactualTrainingMode = "policy_gradient" | "pairwise" | "value";
@@ -477,6 +478,9 @@ export function trainNeuralActionRankingPolicy(
     localRewardWeight: options.rlLocalRewardWeight ?? 0.15,
     localRewardDiscount: options.rlLocalRewardDiscount ?? 0,
     opponentMode: options.rlOpponentMode ?? "teacher",
+    opponentPolicy: options.rlOpponentModel
+      ? new NeuralActionRankingPolicy(options.rlOpponentModel)
+      : undefined,
     baselineMode: options.rlBaselineMode ?? "teacher",
     commonRandom: options.rlCommonRandom ?? true,
     creditMode: options.rlCreditMode ?? "episode",
@@ -1494,6 +1498,7 @@ export function trainPolicyGradientFromRollouts(
     localRewardWeight: number;
     localRewardDiscount: number;
     opponentMode: PolicyGradientOpponentMode;
+    opponentPolicy?: NeuralActionRankingPolicy;
     baselineMode: PolicyGradientBaselineMode;
     commonRandom: boolean;
     creditMode: PolicyGradientCreditMode;
@@ -1568,6 +1573,10 @@ export function trainPolicyGradientFromRollouts(
   const counterfactualAnchorExamples: ActionRankingImitationExample[] = [];
   const baselineMode = options.baselineMode;
   const useSelfPlayOpponents = options.opponentMode === "self";
+  const useChampionOpponents = options.opponentMode === "champion";
+  if (useChampionOpponents && !options.opponentPolicy) {
+    throw new Error("Champion opponent mode requires a frozen opponent policy.");
+  }
   const updateScope = options.updateScope;
   const creditMode = options.creditMode;
   const useGreedyCounterfactualStates =
@@ -1588,9 +1597,26 @@ export function trainPolicyGradientFromRollouts(
   for (let episode = 0; episode < counterfactualScannedEpisodes; episode++) {
     const includeEpisodeMetrics = episode < options.episodes;
     const neuralPlayerIndex = episode % options.playerCount;
+    const activePlayerIndices = Array.from(
+      { length: options.playerCount },
+      (_, index) => index
+    );
     const learningPlayerIndices = useSelfPlayOpponents
-      ? Array.from({ length: options.playerCount }, (_, index) => index)
+      ? activePlayerIndices
       : [neuralPlayerIndex];
+    const learningPlayerSet = new Set(learningPlayerIndices);
+    const policyByPlayer = useChampionOpponents
+      ? (playerIndex: number) =>
+          learningPlayerSet.has(playerIndex)
+            ? policy
+            : options.opponentPolicy
+      : undefined;
+    const rolloutNeuralPlayerIndices = useChampionOpponents
+      ? activePlayerIndices
+      : learningPlayerIndices;
+    const samplePlayerIndices = useChampionOpponents
+      ? learningPlayerIndices
+      : undefined;
     const board = createTrainingBoard(
       options.playerCount,
       `${options.seed}:deal:${episode}`
@@ -1627,7 +1653,8 @@ export function trainPolicyGradientFromRollouts(
           temperature: 1,
           sample: false,
           maxMovesPerGame: options.maxMovesPerGame,
-          neuralPlayerIndices: learningPlayerIndices,
+          neuralPlayerIndices: rolloutNeuralPlayerIndices,
+          policyByPlayer,
         })
       : null;
     const greedyBaselineDifferential = getMeanPlayerPointDifferential(
@@ -1641,7 +1668,10 @@ export function trainPolicyGradientFromRollouts(
       temperature: useGreedyCounterfactualStates ? 1 : options.temperature,
       sample: !useGreedyCounterfactualStates,
       maxMovesPerGame: options.maxMovesPerGame,
-      neuralPlayerIndices: learningPlayerIndices,
+      neuralPlayerIndices: rolloutNeuralPlayerIndices,
+      policyByPlayer,
+      samplePlayerIndices,
+      capturePlayerIndices: learningPlayerIndices,
       captureTransitions: useGreedyCounterfactualStates,
       captureTransitionBoards: creditMode === "counterfactual",
     });
@@ -1721,9 +1751,10 @@ export function trainPolicyGradientFromRollouts(
             : options.counterfactualCandidateLimit,
           options.counterfactualScoreRewardWeight,
           options.counterfactualPounceRewardWeight,
-          useSelfPlayOpponents
+          useSelfPlayOpponents || useChampionOpponents
             ? learningPlayerIndices
-            : [transition.playerIndex]
+            : [transition.playerIndex],
+          useChampionOpponents ? options.opponentPolicy : undefined
         );
         const counterfactualGap =
           options.counterfactualTrainingMode === "policy_gradient"
@@ -2853,7 +2884,8 @@ function getCounterfactualTransitionResult(
   candidateLimit: number,
   scoreRewardWeight: number,
   pounceRewardWeight: number,
-  continuationNeuralPlayerIndices: readonly number[] = [transition.playerIndex]
+  continuationNeuralPlayerIndices: readonly number[] = [transition.playerIndex],
+  opponentPolicy?: NeuralActionRankingPolicy
 ): CounterfactualTransitionResult | null {
   if (
     !transition.board ||
@@ -2889,7 +2921,8 @@ function getCounterfactualTransitionResult(
       getCounterfactualSeeds(seed, index, rolloutCount, commonRandom),
       maxMoves,
       policy,
-      continuationNeuralPlayerIndices
+      continuationNeuralPlayerIndices,
+      opponentPolicy
     );
     const pointDifferentialReturns = outcomes.map(
       (outcome) => outcome.pointDifferential - transition.pointDifferentialBefore
@@ -3076,7 +3109,8 @@ function getCounterfactualPolicyPointDifferential(
   seeds: readonly string[],
   maxMoves: number,
   policy: NeuralActionRankingPolicy,
-  continuationNeuralPlayerIndices: readonly number[] = [playerIndex]
+  continuationNeuralPlayerIndices: readonly number[] = [playerIndex],
+  opponentPolicy?: NeuralActionRankingPolicy
 ): number {
   return meanNumbers(
     getCounterfactualPolicyOutcomes(
@@ -3086,7 +3120,8 @@ function getCounterfactualPolicyPointDifferential(
       seeds,
       maxMoves,
       policy,
-      continuationNeuralPlayerIndices
+      continuationNeuralPlayerIndices,
+      opponentPolicy
     ).map((outcome) => outcome.pointDifferential)
   );
 }
@@ -3098,7 +3133,8 @@ function getCounterfactualPolicyOutcomes(
   seeds: readonly string[],
   maxMoves: number,
   policy: NeuralActionRankingPolicy,
-  continuationNeuralPlayerIndices: readonly number[] = [playerIndex]
+  continuationNeuralPlayerIndices: readonly number[] = [playerIndex],
+  opponentPolicy?: NeuralActionRankingPolicy
 ): CounterfactualOutcome[] {
   const safeSeeds = seeds.length > 0 ? seeds : ["policy-counterfactual"];
   return safeSeeds.map((seed) =>
@@ -3109,7 +3145,8 @@ function getCounterfactualPolicyOutcomes(
       seed,
       maxMoves,
       policy,
-      continuationNeuralPlayerIndices
+      continuationNeuralPlayerIndices,
+      opponentPolicy
     )
   );
 }
@@ -3121,10 +3158,12 @@ function getCounterfactualPolicyOutcome(
   seed: string,
   maxMoves: number,
   policy: NeuralActionRankingPolicy,
-  continuationNeuralPlayerIndices: readonly number[] = [playerIndex]
+  continuationNeuralPlayerIndices: readonly number[] = [playerIndex],
+  opponentPolicy?: NeuralActionRankingPolicy
 ): CounterfactualOutcome {
   const nextBoard = deepClone(board);
   executeMove(nextBoard, playerIndex, move);
+  const continuationPlayerSet = new Set(continuationNeuralPlayerIndices);
   const rollout = runPolicyRollout(nextBoard, {
     policy,
     random: createSeededRandom(seed),
@@ -3132,7 +3171,15 @@ function getCounterfactualPolicyOutcome(
     temperature: 1,
     sample: false,
     maxMovesPerGame: maxMoves,
-    neuralPlayerIndices: continuationNeuralPlayerIndices,
+    neuralPlayerIndices: opponentPolicy
+      ? nextBoard.players.map((_, index) => index)
+      : continuationNeuralPlayerIndices,
+    policyByPlayer: opponentPolicy
+      ? (continuationPlayerIndex) =>
+          continuationPlayerSet.has(continuationPlayerIndex)
+            ? policy
+            : opponentPolicy
+      : undefined,
   });
   return {
     pointDifferential: rollout.finalPointDifferentials[playerIndex] ?? 0,
@@ -3713,6 +3760,8 @@ function runPolicyRollout(
     sample: boolean;
     maxMovesPerGame: number;
     neuralPlayerIndices?: readonly number[];
+    samplePlayerIndices?: readonly number[];
+    capturePlayerIndices?: readonly number[];
     policyByPlayer?: (
       playerIndex: number
     ) => NeuralActionRankingPolicy | undefined;
@@ -3729,6 +3778,14 @@ function runPolicyRollout(
   const neuralPlayers = new Set(
     options.neuralPlayerIndices ?? activePlayerIndices
   );
+  const samplePlayers =
+    options.samplePlayerIndices == null
+      ? null
+      : new Set(options.samplePlayerIndices);
+  const capturePlayers =
+    options.capturePlayerIndices == null
+      ? null
+      : new Set(options.capturePlayerIndices);
   const cooldowns = board.players.map((_, playerIndex) =>
     activePlayerIndices.includes(playerIndex)
       ? options.random()
@@ -3760,11 +3817,20 @@ function runPolicyRollout(
     const playerPolicy =
       options.policyByPlayer?.(playerIndex) ??
       (neuralPlayers.has(playerIndex) ? options.policy : undefined);
+    const shouldSample =
+      options.sample && (samplePlayers == null || samplePlayers.has(playerIndex));
+    const shouldCapture =
+      capturePlayers == null || capturePlayers.has(playerIndex);
     const move = playerPolicy
       ? chooseNeuralMove(
           board,
           playerIndex,
-          { ...options, policy: playerPolicy },
+          {
+            ...options,
+            policy: playerPolicy,
+            sample: shouldSample,
+            captureTransition: shouldCapture,
+          },
           transitions
         )
       : options.basicMoveProvider
@@ -3805,6 +3871,7 @@ function chooseNeuralMove(
     sample: boolean;
     captureTransitions?: boolean;
     captureTransitionBoards?: boolean;
+    captureTransition?: boolean;
   },
   transitions: RolloutTransition[]
 ): Move | undefined {
@@ -3839,6 +3906,7 @@ function chooseNeuralMove(
     : selectedCandidateIndex;
   if (
     selectedCandidateIndex >= 0 &&
+    options.captureTransition !== false &&
     (options.sample || options.captureTransitions)
   ) {
     transitions.push({

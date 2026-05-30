@@ -137,6 +137,9 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       maxMovesPerGame,
       ...recipe.options,
       initialModel: bestModel,
+      rlOpponentModel:
+        recipe.options.rlOpponentModel ??
+        (recipe.options.rlOpponentMode === "champion" ? bestModel : undefined),
       seed: `${seed}:round:${roundNumber}:recipe:${recipe.name}`,
     });
     const candidateModel = candidateResult.model;
@@ -589,13 +592,17 @@ function readBooleanEnv(name: string, fallback: boolean): boolean {
 
 function readRlOpponentModeEnv(
   name: string,
-  fallback: "teacher" | "self"
-): "teacher" | "self" {
+  fallback: "teacher" | "self" | "champion"
+): "teacher" | "self" | "champion" {
   const value = process.env[name];
   if (value == null || value.trim() === "") {
     return fallback;
   }
-  return value.toLowerCase() === "self" ? "self" : fallback;
+  const normalized = value.toLowerCase();
+  if (normalized === "self" || normalized === "champion") {
+    return normalized;
+  }
+  return fallback;
 }
 
 function readValueTargetModeEnv(

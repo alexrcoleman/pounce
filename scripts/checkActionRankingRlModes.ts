@@ -80,6 +80,36 @@ assert.ok(
   "self-play episode RL should collect policy updates"
 );
 
+const championOpponentModel = createNeuralActionRankingModel(
+  [16],
+  "action-ranking-rl-mode-check:champion-opponent-model"
+);
+const championOpponentPolicyGradient = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  initialModel: championOpponentModel,
+  rlOpponentModel: championOpponentModel,
+  seed: "action-ranking-rl-mode-check:champion-opponent-policy-gradient",
+  rlOpponentMode: "champion",
+  rlCreditMode: "episode",
+  rlEpisodes: 2,
+  rlCounterfactualScanEpisodes: 2,
+  rlUpdateScope: "all",
+});
+assert.equal(
+  championOpponentPolicyGradient.reinforcement.opponentMode,
+  "champion",
+  "champion-opponent RL should report champion opponent mode"
+);
+assert.equal(
+  championOpponentPolicyGradient.reinforcement.averageTrainingPlayerCount,
+  1,
+  "champion-opponent RL should train only the rotating learner seat"
+);
+assert.ok(
+  championOpponentPolicyGradient.reinforcement.averagePolicyUpdates > 0,
+  "champion-opponent episode RL should collect learner-seat policy updates"
+);
+
 const value = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:value",
@@ -465,6 +495,9 @@ console.log(
       featureExpansion,
       policyGradient: summarize(policyGradient),
       selfPlayEpisodePolicyGradient: summarize(selfPlayEpisodePolicyGradient),
+      championOpponentPolicyGradient: summarize(
+        championOpponentPolicyGradient
+      ),
       value: summarize(value),
       weightedPairwise: summarize(weightedPairwise),
       outputOnlyValue: summarize(outputOnlyValue),
