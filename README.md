@@ -435,8 +435,11 @@ letting near-threshold rollout gaps move the deployed policy as hard as clear
 wins.
 `RL_COUNTERFACTUAL_MAX_SCORE_GAP` can skip supervised counterfactual labels when
 the rollout winner is currently below the greedy action by more than that score
-gap. This targets uncertain decisions first and avoids asking a small batch of
-rollout labels to overturn strong existing priors.
+gap. For supervised counterfactual modes, the same cap is also applied before
+rollout candidate evaluation, so far-off-policy alternatives do not spend
+rollout budget just to be rejected later. This targets uncertain decisions first
+and avoids asking a small batch of rollout labels to overturn strong existing
+priors.
 `RL_COUNTERFACTUAL_SCORE_GAP_BUDGET` adds a closest-label budget for supervised
 counterfactual modes: when set above `0`, labels that pass the other filters are
 sorted by the rollout winner's current score gap behind greedy, then only the
@@ -1001,6 +1004,21 @@ candidate should spend rollout budget on reliability, for example
 `RL_COUNTERFACTUAL_ROLLOUTS=3`,
 `RL_COUNTERFACTUAL_MIN_BEHAVIOR_WIN_RATE=1`, and a modest stop-after-label
 target.
+The capped low-margin path now prefilters by `RL_COUNTERFACTUAL_MAX_SCORE_GAP`
+before rollout, which makes reliability probes much cheaper. A two-label audit
+with `RL_COUNTERFACTUAL_ROLLOUTS=2`,
+`RL_COUNTERFACTUAL_MIN_BEHAVIOR_WIN_RATE=1`,
+`RL_COUNTERFACTUAL_MAX_SCORE_GAP=0.5`,
+`RL_COUNTERFACTUAL_SCORE_GAP_BUDGET=2`,
+`RL_COUNTERFACTUAL_STOP_AFTER_LABELS=2`, and
+`RL_COUNTERFACTUAL_SKIP_CYCLE_OVER_CONNECTOR=true` reached the label target
+after one scanned episode instead of the earlier 16-episode, roughly one-minute
+scan. The matching four-label behavior-scoped pairwise training run reached its
+target after 31 scanned episodes, accepted average score gap `0.241`, and
+applied four weighted updates, but measured `-0.515 +/- 0.082` over 384 paired
+games against the behavior-scope checkpoint. The runtime bottleneck is improved;
+label quality and update calibration are still the blocker before this path can
+promote a stronger policy.
 
 ## Deploying
 

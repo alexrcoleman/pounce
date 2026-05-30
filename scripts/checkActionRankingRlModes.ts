@@ -396,7 +396,7 @@ assert.ok(
   "symmetric connector-anchored value mode should train policy-ordered connector-vs-cycle anchor updates"
 );
 
-const scoreGapFiltered = trainNeuralActionRankingPolicy({
+const scoreGapPrefiltered = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:score-gap-filtered",
   rlCounterfactualTrainingMode: "value",
@@ -406,9 +406,15 @@ const scoreGapFiltered = trainNeuralActionRankingPolicy({
   rlCounterfactualValueCenterTargets: true,
   rlCounterfactualValueHuberDelta: 0,
 });
-assert.ok(
-  scoreGapFiltered.reinforcement.counterfactualScoreGapSkippedCount > 0,
-  "score-gap filtering should skip labels that fight a large policy score gap"
+assert.equal(
+  scoreGapPrefiltered.reinforcement.counterfactualUpdateCount,
+  0,
+  "strict score-gap filtering should prefilter large-gap candidates before training labels"
+);
+assert.equal(
+  scoreGapPrefiltered.reinforcement.counterfactualScoreGapSkippedCount,
+  0,
+  "strict score-gap prefiltering should not spend rollouts on labels that will be skipped by score gap"
 );
 
 const behaviorGapFiltered = trainNeuralActionRankingPolicy({
@@ -555,10 +561,14 @@ const cappedScoreGapBudgetFiltered = trainNeuralActionRankingPolicy({
   rlCounterfactualValueHuberDelta: 0,
 });
 assert.ok(
-  cappedScoreGapBudgetFiltered.reinforcement
-    .counterfactualScoreGapSkippedCount > 0 &&
-    cappedScoreGapBudgetFiltered.reinforcement.counterfactualUpdateCount <= 4,
-  "score-gap cap should still filter labels before score-gap budgeting"
+  cappedScoreGapBudgetFiltered.reinforcement.counterfactualUpdateCount <= 4 &&
+    cappedScoreGapBudgetFiltered.reinforcement
+      .counterfactualScoreGapBudgetSkippedCount > 0 &&
+    cappedScoreGapBudgetFiltered.reinforcement
+      .counterfactualScoreGapSkippedCount === 0 &&
+    cappedScoreGapBudgetFiltered.reinforcement.averageCounterfactualScoreGap <=
+      0.05,
+  "score-gap cap should prefilter candidates before score-gap budgeting"
 );
 
 const labelTargetStopped = trainNeuralActionRankingPolicy({
@@ -622,7 +632,7 @@ console.log(
       symmetricConnectorAnchoredValue: summarize(
         symmetricConnectorAnchoredValue
       ),
-      scoreGapFiltered: summarize(scoreGapFiltered),
+      scoreGapPrefiltered: summarize(scoreGapPrefiltered),
       behaviorGapFiltered: summarize(behaviorGapFiltered),
       confidenceFiltered: summarize(confidenceFiltered),
       behaviorWinRateFiltered: summarize(behaviorWinRateFiltered),

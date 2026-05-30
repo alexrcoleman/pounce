@@ -1793,6 +1793,9 @@ export function trainPolicyGradientFromRollouts(
           options.counterfactualTrainingMode === "policy_gradient"
             ? 2
             : options.counterfactualCandidateLimit,
+          options.counterfactualTrainingMode === "policy_gradient"
+            ? 0
+            : options.counterfactualMaxScoreGap,
           options.counterfactualScoreRewardWeight,
           options.counterfactualPounceRewardWeight,
           useSelfPlayOpponents || useChampionOpponents
@@ -2257,6 +2260,9 @@ export function collectCounterfactualRlLabelAudit(
         options.counterfactualTrainingMode === "policy_gradient"
           ? 2
           : options.counterfactualCandidateLimit,
+        options.counterfactualTrainingMode === "policy_gradient"
+          ? 0
+          : options.counterfactualMaxScoreGap,
         options.counterfactualScoreRewardWeight,
         options.counterfactualPounceRewardWeight
       );
@@ -3123,6 +3129,7 @@ function getCounterfactualTransitionResult(
   commonRandom: boolean,
   maxMoves: number,
   candidateLimit: number,
+  maxScoreGap: number,
   scoreRewardWeight: number,
   pounceRewardWeight: number,
   continuationNeuralPlayerIndices: readonly number[] = [transition.playerIndex],
@@ -3141,7 +3148,8 @@ function getCounterfactualTransitionResult(
   const candidateIndices = getCounterfactualCandidateIndices(
     transition,
     policy,
-    candidateLimit
+    candidateLimit,
+    maxScoreGap
   );
   if (candidateIndices.length < 2) {
     return null;
@@ -3309,14 +3317,32 @@ function getCounterfactualReturnGapStandardError(
 function getCounterfactualCandidateIndices(
   transition: RolloutTransition,
   policy: NeuralActionRankingPolicy,
-  candidateLimit: number
+  candidateLimit: number,
+  maxScoreGap: number
 ): number[] {
   const safeLimit = Math.max(2, Math.floor(candidateLimit));
+  const scoreByIndex = transition.candidates.map((candidate) =>
+    policy.scoreFeatures(candidate.features)
+  );
+  const greedyScore =
+    transition.greedyCandidateIndex >= 0 &&
+    transition.greedyCandidateIndex < scoreByIndex.length
+      ? scoreByIndex[transition.greedyCandidateIndex]
+      : null;
+  const safeMaxScoreGap =
+    Number.isFinite(maxScoreGap) && maxScoreGap > 0 ? maxScoreGap : 0;
   const indices: number[] = [];
   const addIndex = (candidateIndex: number) => {
     if (
       candidateIndex >= 0 &&
       candidateIndex < transition.candidates.length &&
+      isCounterfactualCandidateWithinScoreGap(
+        candidateIndex,
+        transition.greedyCandidateIndex,
+        scoreByIndex,
+        greedyScore,
+        safeMaxScoreGap
+      ) &&
       !indices.includes(candidateIndex)
     ) {
       indices.push(candidateIndex);
@@ -3328,9 +3354,9 @@ function getCounterfactualCandidateIndices(
 
   if (indices.length < safeLimit) {
     transition.candidates
-      .map((candidate, candidateIndex) => ({
+      .map((_candidate, candidateIndex) => ({
         candidateIndex,
-        score: policy.scoreFeatures(candidate.features),
+        score: scoreByIndex[candidateIndex] ?? Number.NEGATIVE_INFINITY,
       }))
       .sort((left, right) => right.score - left.score)
       .forEach(({ candidateIndex }) => {
@@ -3341,6 +3367,26 @@ function getCounterfactualCandidateIndices(
   }
 
   return indices.slice(0, safeLimit);
+}
+
+function isCounterfactualCandidateWithinScoreGap(
+  candidateIndex: number,
+  greedyCandidateIndex: number,
+  scoreByIndex: readonly number[],
+  greedyScore: number | null,
+  maxScoreGap: number
+): boolean {
+  if (maxScoreGap <= 0 || candidateIndex === greedyCandidateIndex) {
+    return true;
+  }
+  if (greedyScore == null) {
+    return true;
+  }
+  const candidateScore = scoreByIndex[candidateIndex];
+  if (candidateScore == null) {
+    return false;
+  }
+  return greedyScore - candidateScore <= maxScoreGap;
 }
 
 function getCounterfactualPolicyPointDifferential(
