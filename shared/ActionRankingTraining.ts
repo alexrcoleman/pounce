@@ -51,6 +51,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualRolloutMoves?: number;
   rlCounterfactualCandidateLimit?: number;
   rlCounterfactualMinReturnGap?: number;
+  rlCounterfactualStateSource?: "sampled" | "greedy";
   rlCounterfactualTrainingMode?: "policy_gradient" | "pairwise" | "value";
   rlCounterfactualPreferenceScope?: "all" | "behavior";
   rlCounterfactualPairwiseTargetMargin?: number;
@@ -229,6 +230,7 @@ type PolicyGradientUpdate = {
 type PolicyGradientBaselineMode = "teacher" | "greedy";
 type PolicyGradientCreditMode = "episode" | "counterfactual";
 type CounterfactualTrainingMode = "policy_gradient" | "pairwise" | "value";
+type CounterfactualStateSource = "sampled" | "greedy";
 type PolicyGradientUpdateScope = "all" | "exploratory";
 
 type CounterfactualCandidateReturn = {
@@ -401,6 +403,8 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualRolloutMoves ?? Math.min(450, maxMovesPerGame),
     counterfactualCandidateLimit: options.rlCounterfactualCandidateLimit ?? 2,
     counterfactualMinReturnGap: options.rlCounterfactualMinReturnGap ?? 1,
+    counterfactualStateSource:
+      options.rlCounterfactualStateSource ?? "sampled",
     counterfactualTrainingMode:
       options.rlCounterfactualTrainingMode ?? "policy_gradient",
     counterfactualPreferenceScope:
@@ -1375,6 +1379,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualRolloutMoves: number;
     counterfactualCandidateLimit: number;
     counterfactualMinReturnGap: number;
+    counterfactualStateSource: CounterfactualStateSource;
     counterfactualTrainingMode: CounterfactualTrainingMode;
     counterfactualPreferenceScope: "all" | "behavior";
     counterfactualPairwiseTargetMargin: number;
@@ -1412,6 +1417,10 @@ export function trainPolicyGradientFromRollouts(
   const baselineMode = options.baselineMode;
   const updateScope = options.updateScope;
   const creditMode = options.creditMode;
+  const useGreedyCounterfactualStates =
+    creditMode === "counterfactual" &&
+    options.counterfactualStateSource === "greedy" &&
+    options.counterfactualTrainingMode !== "policy_gradient";
 
   for (let episode = 0; episode < options.episodes; episode++) {
     const neuralPlayerIndex = episode % options.playerCount;
@@ -1454,10 +1463,11 @@ export function trainPolicyGradientFromRollouts(
       policy,
       random: createSeededRandom(sampleTimingSeed),
       decisionRandom: createSeededRandom(`${options.seed}:sample:${episode}`),
-      temperature: options.temperature,
-      sample: true,
+      temperature: useGreedyCounterfactualStates ? 1 : options.temperature,
+      sample: !useGreedyCounterfactualStates,
       maxMovesPerGame: options.maxMovesPerGame,
       neuralPlayerIndices: [neuralPlayerIndex],
+      captureTransitions: useGreedyCounterfactualStates,
       captureTransitionBoards: creditMode === "counterfactual",
     });
     const finalDifferential =
@@ -1495,7 +1505,9 @@ export function trainPolicyGradientFromRollouts(
       if (isExploratoryDecision) {
         exploratoryDecisionCountTotal += 1;
       }
-      if (updateScope === "exploratory" && !isExploratoryDecision) {
+      const applyExploratoryFilter =
+        updateScope === "exploratory" && !useGreedyCounterfactualStates;
+      if (applyExploratoryFilter && !isExploratoryDecision) {
         return;
       }
       if (creditMode === "counterfactual") {
@@ -2545,6 +2557,7 @@ function runPolicyRollout(
     sample: boolean;
     maxMovesPerGame: number;
     neuralPlayerIndices?: number[];
+    captureTransitions?: boolean;
     captureTransitionBoards?: boolean;
   }
 ): RolloutResult {
@@ -2620,6 +2633,7 @@ function chooseNeuralMove(
     decisionRandom?: () => number;
     temperature: number;
     sample: boolean;
+    captureTransitions?: boolean;
     captureTransitionBoards?: boolean;
   },
   transitions: RolloutTransition[]
@@ -2651,7 +2665,10 @@ function chooseNeuralMove(
   const greedyCandidateIndex = greedy
     ? candidates.findIndex((candidate) => candidate.key === greedy.key)
     : selectedCandidateIndex;
-  if (selectedCandidateIndex >= 0 && options.sample) {
+  if (
+    selectedCandidateIndex >= 0 &&
+    (options.sample || options.captureTransitions)
+  ) {
     transitions.push({
       playerIndex,
       pointDifferentialBefore,

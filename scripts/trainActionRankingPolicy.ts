@@ -112,6 +112,10 @@ const options = {
     "RL_COUNTERFACTUAL_MIN_RETURN_GAP",
     1
   ),
+  rlCounterfactualStateSource: readRlCounterfactualStateSourceEnv(
+    "RL_COUNTERFACTUAL_STATE_SOURCE",
+    "sampled"
+  ),
   rlCounterfactualTrainingMode: readRlCounterfactualTrainingModeEnv(
     "RL_COUNTERFACTUAL_MODE",
     "policy_gradient"
@@ -332,6 +336,17 @@ function readRlCounterfactualTrainingModeEnv(
     return normalized;
   }
   return fallback;
+}
+
+function readRlCounterfactualStateSourceEnv(
+  name: string,
+  fallback: "sampled" | "greedy"
+): "sampled" | "greedy" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  return value.toLowerCase() === "greedy" ? "greedy" : fallback;
 }
 
 function readRlUpdateScopeEnv(

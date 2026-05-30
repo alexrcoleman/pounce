@@ -148,6 +148,33 @@ assert.equal(
   "broad value mode should not fall back to policy-gradient updates"
 );
 
+const greedyStateValue = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:greedy-state-value",
+  rlCounterfactualStateSource: "greedy",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assertCounterfactualWork(greedyStateValue, "value");
+assert.equal(
+  greedyStateValue.reinforcement.averageExploratoryDecisionCount,
+  0,
+  "greedy-state value mode should collect non-exploratory policy states"
+);
+assert.ok(
+  greedyStateValue.reinforcement.counterfactualUpdateCount >
+    greedyStateValue.reinforcement.averageExploratoryDecisionCount,
+  "greedy-state value mode should bypass exploratory filtering for supervised counterfactual labels"
+);
+assert.equal(
+  greedyStateValue.reinforcement.averagePolicyUpdates,
+  0,
+  "greedy-state value mode should not fall back to policy-gradient updates"
+);
+
 const anchoredValue = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:anchored-value",
@@ -197,6 +224,7 @@ console.log(
       scoreWeightedValue: summarize(scoreWeightedValue),
       residualValue: summarize(residualValue),
       broadValue: summarize(broadValue),
+      greedyStateValue: summarize(greedyStateValue),
       anchoredValue: summarize(anchoredValue),
       scoreGapFiltered: summarize(scoreGapFiltered),
     },
