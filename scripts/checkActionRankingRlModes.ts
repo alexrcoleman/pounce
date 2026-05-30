@@ -105,6 +105,46 @@ assert.equal(
   "broad value mode should not fall back to policy-gradient updates"
 );
 
+const anchoredValue = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:anchored-value",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+  rlCounterfactualAnchorWeight: 0.05,
+  rlCounterfactualAnchorMaxExamples: 8,
+});
+assertCounterfactualWork(anchoredValue, "value");
+assert.ok(
+  anchoredValue.reinforcement.counterfactualAnchorExamples > 0,
+  "anchored value mode should collect anchor examples"
+);
+assert.ok(
+  anchoredValue.reinforcement.counterfactualAnchorUpdates > 0,
+  "anchored value mode should train anchor updates"
+);
+assert.ok(
+  anchoredValue.reinforcement.counterfactualTrainingUpdates >
+    anchoredValue.reinforcement.counterfactualUpdateCount * 2,
+  "anchored value mode should include value and anchor updates"
+);
+
+const scoreGapFiltered = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:score-gap-filtered",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualMaxScoreGap: 0.001,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.ok(
+  scoreGapFiltered.reinforcement.counterfactualScoreGapSkippedCount > 0,
+  "score-gap filtering should skip labels that fight a large policy score gap"
+);
+
 console.log(
   JSON.stringify(
     {
@@ -112,6 +152,8 @@ console.log(
       policyGradient: summarize(policyGradient),
       value: summarize(value),
       broadValue: summarize(broadValue),
+      anchoredValue: summarize(anchoredValue),
+      scoreGapFiltered: summarize(scoreGapFiltered),
     },
     null,
     2
@@ -139,6 +181,12 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.averageCounterfactualCandidateCount,
     counterfactualTrainingUpdates:
       result.reinforcement.counterfactualTrainingUpdates,
+    counterfactualScoreGapSkippedCount:
+      result.reinforcement.counterfactualScoreGapSkippedCount,
+    counterfactualAnchorExamples:
+      result.reinforcement.counterfactualAnchorExamples,
+    counterfactualAnchorUpdates:
+      result.reinforcement.counterfactualAnchorUpdates,
     averagePolicyUpdates: result.reinforcement.averagePolicyUpdates,
     averageGradientUpdates: result.reinforcement.averageGradientUpdates,
     averageRawAdvantage: result.reinforcement.averageRawAdvantage,
