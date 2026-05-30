@@ -109,8 +109,11 @@ on the same sampled teacher-game decision states and reports top-action
 agreement, teacher-action agreement, score drift, top-score margins, move-type
 deltas, feature deltas, and a few concrete disagreements. `DIAG_DEALS`,
 `DIAG_MAX_EXAMPLES`, `DIAG_MAX_DISAGREEMENTS`, and `DIAG_TOP_FEATURES` control
-the sample size and output detail. This is useful for seeing whether a candidate
-is actually changing center-vs-solitaire choices, pounce-card urgency, connector
+the sample size and output detail. `DIAG_STATE_SOURCE=teacher` is the default;
+`modelA` or `modelB` instead samples states reached by that checkpoint's greedy
+trajectory, which is useful when paired comparison changes occur outside the
+teacher state distribution. This is useful for seeing whether a candidate is
+actually changing center-vs-solitaire choices, pounce-card urgency, connector
 behavior, or opponent-helping center plays before spending time on a large
 paired rollout.
 
@@ -395,7 +398,12 @@ differential with `-0.055` raw score over 384 paired games. Switching the same
 recipe to `RL_COUNTERFACTUAL_VALUE_TARGET_MODE=residual` kept the update almost
 perfectly anchored, tied raw score, and measured `-0.0069 +/- 0.0069`. That
 makes score-weighted counterfactual returns usable, but still not sufficient to
-produce a better deployed greedy policy at this budget.
+produce a better deployed greedy policy at this budget. The policy-state
+diagnostic explains the tiny residual comparison drift: on the same compare seed,
+`DIAG_STATE_SOURCE=modelA` found one near-tie `cycle>c2s` flip among 11,123
+sampled decisions, while `modelB` states had zero flips. The non-residual value
+run showed 5-6 flips over the same policy-state diagnostic, matching its larger
+paired-play regression.
 
 Uncertainty-targeted improvement collection is also wired in. With
 `IMPROVEMENT_MAX_SCORE_GAP` and `IMPROVEMENT_POLICY_CANDIDATES`, the collector

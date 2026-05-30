@@ -2,16 +2,20 @@ import fs from "fs";
 import { collectActionRankingImitationDataset } from "../shared/ActionRankingImitation";
 import {
   ACTION_RANKING_FEATURE_NAMES,
+  enumerateActionRankingCandidates,
   type ActionRankingCandidate,
   type ActionRankingFeatureName,
 } from "../shared/ActionRankingPolicy";
+import { getBasicAIMove } from "../shared/ComputerV1";
 import { createTrainingBoard } from "../shared/ActionRankingTraining";
+import { isGameOver, type BoardState } from "../shared/GameUtils";
 import {
+  createSeededRandom,
   NeuralActionRankingPolicy,
   type ActionRankingPrediction,
   type NeuralActionRankingModel,
 } from "../shared/NeuralActionRankingPolicy";
-import type { Move } from "../shared/MoveHandler";
+import { executeMove, type Move } from "../shared/MoveHandler";
 
 type SampledExample = {
   dealIndex: number;
@@ -22,6 +26,7 @@ type SampledExample = {
 };
 
 type MoveTypeCounts = Record<Move["type"], number>;
+type StateSource = "teacher" | "modelA" | "modelB";
 
 const modelAPath = process.env.MODEL_A;
 const modelBPath = process.env.MODEL_B;
@@ -39,6 +44,7 @@ const maxMovesPerDeal = readIntegerEnv("DIAG_MAX_MOVES", 1800);
 const maxExamples = readIntegerEnv("DIAG_MAX_EXAMPLES", 2000);
 const maxDisagreements = readIntegerEnv("DIAG_MAX_DISAGREEMENTS", 12);
 const topFeatureCount = readIntegerEnv("DIAG_TOP_FEATURES", 10);
+const stateSource = readStateSourceEnv("DIAG_STATE_SOURCE", "teacher");
 const seed = process.env.SEED ?? "action-ranking-diagnose";
 
 const examples = collectExamples();
@@ -62,6 +68,7 @@ console.log(
         maxExamples,
         maxDisagreements,
         topFeatureCount,
+        stateSource,
         seed,
       },
       diagnostics,
@@ -72,6 +79,16 @@ console.log(
 );
 
 function collectExamples(): SampledExample[] {
+  if (stateSource === "modelA") {
+    return collectPolicyExamples(policyA);
+  }
+  if (stateSource === "modelB") {
+    return collectPolicyExamples(policyB);
+  }
+  return collectTeacherExamples();
+}
+
+function collectTeacherExamples(): SampledExample[] {
   const sampledExamples: SampledExample[] = [];
 
   for (
@@ -103,6 +120,87 @@ function collectExamples(): SampledExample[] {
   }
 
   return sampledExamples;
+}
+
+function collectPolicyExamples(
+  sourcePolicy: NeuralActionRankingPolicy
+): SampledExample[] {
+  const sampledExamples: SampledExample[] = [];
+
+  for (
+    let dealIndex = 0;
+    dealIndex < dealCount && sampledExamples.length < maxExamples;
+    dealIndex++
+  ) {
+    const board = createTrainingBoard(playerCount, `${seed}:deal:${dealIndex}`);
+    const activePlayerIndices = getActivePlayerIndices(board);
+    const neuralPlayerIndex = dealIndex % playerCount;
+    const timingRandom = createSeededRandom(
+      `${seed}:${stateSource}:timing:${dealIndex}`
+    );
+    const cooldowns = board.players.map((_, playerIndex) =>
+      activePlayerIndices.includes(playerIndex)
+        ? timingRandom()
+        : Number.POSITIVE_INFINITY
+    );
+    prepareBoardForSimulation(board, activePlayerIndices);
+
+    for (
+      let moveIndex = 0;
+      !isGameOver(board) &&
+      moveIndex < maxMovesPerDeal &&
+      sampledExamples.length < maxExamples;
+      moveIndex++
+    ) {
+      const playerIndex = getNextPlayerIndex(cooldowns, activePlayerIndices);
+      if (playerIndex < 0) {
+        break;
+      }
+
+      const move =
+        playerIndex === neuralPlayerIndex
+          ? collectPolicyDecisionExample(
+              board,
+              dealIndex,
+              moveIndex,
+              playerIndex,
+              sourcePolicy,
+              sampledExamples
+            )
+          : getBasicAIMove(board, playerIndex, {});
+      if (move) {
+        executeMove(board, playerIndex, move);
+      }
+      cooldowns[playerIndex] += getMoveDelay(move?.type, timingRandom);
+    }
+  }
+
+  return sampledExamples;
+}
+
+function collectPolicyDecisionExample(
+  board: BoardState,
+  dealIndex: number,
+  stepIndex: number,
+  playerIndex: number,
+  sourcePolicy: NeuralActionRankingPolicy,
+  sampledExamples: SampledExample[]
+): Move | undefined {
+  const candidates = enumerateActionRankingCandidates(board, playerIndex);
+  const selected = sourcePolicy.chooseCandidate(candidates, {
+    temperature: 1,
+    sample: false,
+  });
+  if (candidates.length > 0 && selected) {
+    sampledExamples.push({
+      dealIndex,
+      stepIndex,
+      playerIndex,
+      selectedActionKey: selected.key,
+      candidates,
+    });
+  }
+  return selected?.move;
 }
 
 function diagnoseExamples(examples: readonly SampledExample[]) {
@@ -242,10 +340,23 @@ function diagnoseExamples(examples: readonly SampledExample[]) {
         ? 0
         : topEquivalenceAgreementCount / examples.length,
     disagreementCount,
-    modelATeacherAgreementRate:
+    referenceActionLabel: stateSource,
+    modelAReferenceAgreementRate:
       examples.length === 0 ? 0 : modelATeacherAgreementCount / examples.length,
-    modelBTeacherAgreementRate:
+    modelBReferenceAgreementRate:
       examples.length === 0 ? 0 : modelBTeacherAgreementCount / examples.length,
+    modelATeacherAgreementRate:
+      stateSource === "teacher"
+        ? examples.length === 0
+          ? 0
+          : modelATeacherAgreementCount / examples.length
+        : null,
+    modelBTeacherAgreementRate:
+      stateSource === "teacher"
+        ? examples.length === 0
+          ? 0
+          : modelBTeacherAgreementCount / examples.length
+        : null,
     modelATopMoveRates: normalizeMoveCounts(modelAMoveCounts, examples.length),
     modelBTopMoveRates: normalizeMoveCounts(modelBMoveCounts, examples.length),
     disagreementMoveTypePairs: Array.from(disagreementPairs.entries())
@@ -278,7 +389,8 @@ function describeDisagreement(
     dealIndex: example.dealIndex,
     stepIndex: example.stepIndex,
     playerIndex: example.playerIndex,
-    teacherActionKey: example.selectedActionKey,
+    referenceActionKey: example.selectedActionKey,
+    teacherActionKey: stateSource === "teacher" ? example.selectedActionKey : null,
     modelA: describePrediction(
       topA,
       scoreAByKey.get(topB.candidate.key) ?? null
@@ -387,6 +499,60 @@ function createMoveTypeCounts(): MoveTypeCounts {
   };
 }
 
+function prepareBoardForSimulation(
+  board: BoardState,
+  activePlayerIndices: readonly number[]
+): void {
+  board.isActive = true;
+  board.isDealt = true;
+  board.isPaused = false;
+  board.roundStartsAt = undefined;
+  board.players.forEach((player, playerIndex) => {
+    if (activePlayerIndices.includes(playerIndex)) {
+      player.socketId = null;
+    }
+  });
+}
+
+function getActivePlayerIndices(board: BoardState): number[] {
+  return board.players
+    .map((player, playerIndex) => ({ player, playerIndex }))
+    .filter(({ player }) => !player.isSpectating)
+    .map(({ playerIndex }) => playerIndex);
+}
+
+function getNextPlayerIndex(
+  cooldowns: number[],
+  activePlayerIndices: readonly number[]
+): number {
+  return activePlayerIndices.reduce((bestIndex, playerIndex) => {
+    if (bestIndex < 0 || cooldowns[playerIndex] < cooldowns[bestIndex]) {
+      return playerIndex;
+    }
+    return bestIndex;
+  }, -1);
+}
+
+function getMoveDelay(
+  moveType: Move["type"] | undefined,
+  random: () => number
+): number {
+  const jitter = 0.72 + random() * 0.56;
+  if (moveType === "cycle" || moveType === "flip_deck") {
+    return 0.34 * jitter;
+  }
+  if (moveType === "s2s") {
+    return 0.88 * jitter;
+  }
+  if (moveType === "c2s") {
+    return 0.76 * jitter;
+  }
+  if (moveType === "c2c") {
+    return 0.62 * jitter;
+  }
+  return 1.1 * jitter;
+}
+
 function describeMove(move: Move): string {
   if (move.type === "c2c") {
     const source =
@@ -409,6 +575,14 @@ function describeMove(move: Move): string {
 
 function readModel(filePath: string): NeuralActionRankingModel {
   return JSON.parse(fs.readFileSync(filePath, "utf8")) as NeuralActionRankingModel;
+}
+
+function readStateSourceEnv(name: string, fallback: StateSource): StateSource {
+  const value = process.env[name];
+  if (value === "modelA" || value === "modelB" || value === "teacher") {
+    return value;
+  }
+  return fallback;
 }
 
 function readIntegerEnv(name: string, fallback: number): number {
