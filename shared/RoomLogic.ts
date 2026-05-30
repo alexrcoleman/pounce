@@ -26,7 +26,11 @@ import {
   isProductiveMove,
   type Move,
 } from "./MoveHandler";
-import { getApproximateCardLocation } from "./CardLocations";
+import {
+  FIELD_PILE_AREA_SIZE,
+  getApproximateCardLocation,
+  getPlayerStackLocation,
+} from "./CardLocations";
 import { getBasicAIMove, getCurrentAIDragMove } from "./ComputerV1";
 import deepClone from "./deepClone";
 import { cardEquals, peek } from "./CardUtils";
@@ -57,7 +61,9 @@ export const DISCONNECTED_PLAYER_TIMEOUT_MS = 5 * 60 * 1000;
 export const STUCK_BOARD_ROTATION_TICKS = 100;
 const AI_PILE_KNOWLEDGE_MIN_DURATION_MS = 3000;
 const AI_PILE_KNOWLEDGE_REACTION_MULTIPLIER = 2;
-const AI_OBSOLETE_TARGET_RECONSIDER_DELAY_MS = 180;
+const AI_OBSOLETE_TARGET_RECONSIDER_DELAY_RATIO = 0.45;
+const AI_OBSOLETE_TARGET_RECONSIDER_MIN_DELAY_MS = 120;
+const AI_OBSOLETE_TARGET_RECONSIDER_MAX_DELAY_MS = 650;
 const MIN_ROUND_READY_PLAYERS = 2;
 export const PLAYER_CENTER_CURSOR_RESET_DELAY_MS = 1000;
 
@@ -151,21 +157,23 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       };
       if (moveResult?.cursorMove) {
         const hand = room.hands[index];
-        const currentPos =
-          hand.location && isCardCursorLocation(hand.location)
-          ? getApproximateCardLocation(board, hand.location)
+        const currentPos = hand.location
+          ? getApproximateCursorLocation(board, hand.location)
           : null;
         hand.location = moveResult.cursorMove;
-        hand.item = moveResult.cursorMoveItem ?? hand.item;
-        hand.items = moveResult.cursorMoveItem
-          ? [moveResult.cursorMoveItem]
-          : undefined;
+        hand.item =
+          moveResult.cursorMoveItem ??
+          moveResult.cursorMoveItems?.[0] ??
+          hand.item;
+        hand.items =
+          moveResult.cursorMoveItems ??
+          (moveResult.cursorMoveItem ? [moveResult.cursorMoveItem] : undefined);
         markRoomHandUpdated(room, index);
         hasHandUpdate = true;
 
         let cost = 1500;
         if (currentPos) {
-          const targetPos = getApproximateCardLocation(
+          const targetPos = getApproximateCursorLocation(
             board,
             moveResult.cursorMove
           );
@@ -271,6 +279,22 @@ function getVisibleBoard(
   });
 
   return visibleBoard;
+}
+
+function getApproximateCursorLocation(
+  board: BoardState,
+  location: CursorLocation
+): [number, number] {
+  if (isCardCursorLocation(location)) {
+    return getApproximateCardLocation(board, location);
+  }
+  if (location.type === "solitaire_slot") {
+    return getPlayerStackLocation(location.player, location.pileIndex, 0);
+  }
+  return [
+    550 + location.position[0] * FIELD_PILE_AREA_SIZE,
+    50 + location.position[1] * FIELD_PILE_AREA_SIZE,
+  ];
 }
 
 export function getRoomHands(room: RoomState): CursorState[] {
@@ -511,7 +535,18 @@ function getAIPileKnowledgeDuration(room: RoomState): number {
 }
 
 function getAIRetargetDelay(room: RoomState): number {
-  return AI_OBSOLETE_TARGET_RECONSIDER_DELAY_MS / room.timescale;
+  const rawReactionDelay = 2500 / room.aiSpeed + 100;
+  const minDelay = room.settings.simulationMode
+    ? 0
+    : AI_OBSOLETE_TARGET_RECONSIDER_MIN_DELAY_MS;
+  const delay = Math.min(
+    AI_OBSOLETE_TARGET_RECONSIDER_MAX_DELAY_MS,
+    Math.max(
+      minDelay,
+      rawReactionDelay * AI_OBSOLETE_TARGET_RECONSIDER_DELAY_RATIO
+    )
+  );
+  return delay / room.timescale;
 }
 
 function getAIPileKnowledge(

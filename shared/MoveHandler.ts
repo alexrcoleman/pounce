@@ -1,6 +1,7 @@
 import {
   BoardState,
   CardState,
+  CursorLocation,
   CursorState,
   PlayerState,
   fixBoardPiles,
@@ -37,8 +38,9 @@ export type Move =
   | { type: "flip_deck" }
   | { type: "move_field_stack"; index: number; position: [number, number] };
 type MoveResult = {
-  cursorMove?: CardState;
+  cursorMove?: CursorLocation;
   cursorMoveItem?: CardState;
+  cursorMoveItems?: CardState[];
   clearCursor?: boolean;
   clearCursorLocation?: CardState | null;
   boardChanged?: boolean;
@@ -282,18 +284,15 @@ function cardToSolitaire(
   if (topCard == null) {
     throw new Error("No card to play from that pile");
   }
-  if (
-    aiCursor &&
-    !cursorLocationEqualsCard(aiCursor.location, topCard) &&
-    !isHoldingCardOverSolitairePile(
-      aiCursor,
-      boardState,
-      playerIndex,
-      solitairePile,
-      topCard
-    )
-  ) {
-    return { cursorMove: topCard };
+  const dragStep = getCardToSolitaireDragStep(
+    aiCursor,
+    topCard,
+    boardState,
+    playerIndex,
+    solitairePile
+  );
+  if (dragStep) {
+    return dragStep;
   }
   if (
     destStack.length >= 1 &&
@@ -306,7 +305,7 @@ function cardToSolitaire(
     }
     sourceStack.pop();
     destStack.unshift(topCard);
-    return {};
+    return { clearCursor: true };
   } else if (!canMoveToSolitairePile(topCard, destStack)) {
     throw new Error("Tried to move stack to stack of invalid value/color");
   }
@@ -332,18 +331,16 @@ function solitaireToSolitaire(
     throw new Error("Tried to move too many cards from solitaire stack");
   }
 
-  if (
-    aiCursor &&
-    !cursorLocationEqualsCard(aiCursor.location, topCard) &&
-    !isHoldingCardOverSolitairePile(
-      aiCursor,
-      boardState,
-      playerIndex,
-      toPile,
-      topCard
-    )
-  ) {
-    return { cursorMove: topCard };
+  const dragStep = getCardToSolitaireDragStep(
+    aiCursor,
+    topCard,
+    boardState,
+    playerIndex,
+    toPile,
+    source.slice(source.length - count)
+  );
+  if (dragStep) {
+    return dragStep;
   }
   if (!canMoveToSolitairePile(topCard, dest)) {
     throw new Error(
@@ -352,7 +349,7 @@ function solitaireToSolitaire(
   }
   const movingStack = source.splice(source.length - count, count);
   dest.push(...movingStack);
-  return {};
+  return { clearCursor: true };
 }
 
 function cycleDeck(
@@ -411,6 +408,67 @@ function isHoldingCardOverSolitairePile(
 
   const stack = boardState.players[playerIndex].stacks[pileIndex];
   return stack.some((stackCard) => cardEquals(stackCard, location));
+}
+
+function getCardToSolitaireDragStep(
+  aiCursor: AICursorData,
+  card: CardState,
+  boardState: BoardState,
+  playerIndex: number,
+  solitairePile: number,
+  movingCards: CardState[] = [card]
+): MoveResult | null {
+  if (!aiCursor) {
+    return null;
+  }
+  if (!cardEquals(aiCursor.item, card)) {
+    if (cursorLocationEqualsCard(aiCursor.location, card)) {
+      return {
+        cursorMove: getSolitaireDropCursorLocation(
+          boardState,
+          playerIndex,
+          solitairePile
+        ),
+        cursorMoveItem: card,
+        cursorMoveItems: movingCards,
+      };
+    }
+    return { cursorMove: card };
+  }
+  if (
+    !isHoldingCardOverSolitairePile(
+      aiCursor,
+      boardState,
+      playerIndex,
+      solitairePile,
+      card
+    )
+  ) {
+    return {
+      cursorMove: getSolitaireDropCursorLocation(
+        boardState,
+        playerIndex,
+        solitairePile
+      ),
+      cursorMoveItem: card,
+      cursorMoveItems: movingCards,
+    };
+  }
+  return null;
+}
+
+function getSolitaireDropCursorLocation(
+  boardState: BoardState,
+  playerIndex: number,
+  solitairePile: number
+): CursorLocation {
+  return (
+    peek(boardState.players[playerIndex].stacks[solitairePile]) ?? {
+      type: "solitaire_slot",
+      player: playerIndex,
+      pileIndex: solitairePile,
+    }
+  );
 }
 
 export function getDistance(
