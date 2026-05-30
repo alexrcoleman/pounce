@@ -218,6 +218,10 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       "RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MAX_POLICY_MARGIN",
       0
     ),
+    rlCounterfactualConnectorAnchorMode: readConnectorAnchorModeEnv(
+      "RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MODE",
+      "connector"
+    ),
     rlCounterfactualValueTargetScale: readNumberEnv(
       "RL_COUNTERFACTUAL_VALUE_SCALE",
       4
@@ -472,6 +476,17 @@ function readRlUpdateScopeEnv(
     return fallback;
   }
   return value.toLowerCase() === "exploratory" ? "exploratory" : fallback;
+}
+
+function readConnectorAnchorModeEnv(
+  name: string,
+  fallback: "connector" | "symmetric"
+): "connector" | "symmetric" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  return value.toLowerCase() === "symmetric" ? "symmetric" : fallback;
 }
 
 function readTrainableLayersEnv(

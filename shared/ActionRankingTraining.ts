@@ -70,6 +70,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualConnectorAnchorMaxExamples?: number;
   rlCounterfactualConnectorAnchorMargin?: number;
   rlCounterfactualConnectorAnchorMaxPolicyMargin?: number;
+  rlCounterfactualConnectorAnchorMode?: "connector" | "symmetric";
   rlCounterfactualValueTargetScale?: number;
   rlCounterfactualValueCenterTargets?: boolean;
   rlCounterfactualValueTargetMode?: "absolute" | "residual";
@@ -483,6 +484,8 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualConnectorAnchorMargin ?? 0.05,
     counterfactualConnectorAnchorMaxPolicyMargin:
       options.rlCounterfactualConnectorAnchorMaxPolicyMargin ?? 0,
+    counterfactualConnectorAnchorMode:
+      options.rlCounterfactualConnectorAnchorMode ?? "connector",
     counterfactualValueTargetScale:
       options.rlCounterfactualValueTargetScale ?? 4,
     counterfactualValueCenterTargets:
@@ -1464,6 +1467,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualConnectorAnchorMaxExamples: number;
     counterfactualConnectorAnchorMargin: number;
     counterfactualConnectorAnchorMaxPolicyMargin: number;
+    counterfactualConnectorAnchorMode: "connector" | "symmetric";
     counterfactualValueTargetScale: number;
     counterfactualValueCenterTargets: boolean;
     counterfactualValueTargetMode: "absolute" | "residual";
@@ -1755,6 +1759,7 @@ export function trainPolicyGradientFromRollouts(
             options.counterfactualConnectorAnchorMargin,
           connectorAnchorMaxPolicyMargin:
             options.counterfactualConnectorAnchorMaxPolicyMargin,
+          connectorAnchorMode: options.counterfactualConnectorAnchorMode,
           valueTargetScale: options.counterfactualValueTargetScale,
           valueCenterTargets: options.counterfactualValueCenterTargets,
           valueTargetMode: options.counterfactualValueTargetMode,
@@ -2145,6 +2150,7 @@ function trainCounterfactualSupervisedBatch(
     connectorAnchorMaxExamples: number;
     connectorAnchorMargin: number;
     connectorAnchorMaxPolicyMargin: number;
+    connectorAnchorMode: "connector" | "symmetric";
     valueTargetScale: number;
     valueCenterTargets: boolean;
     valueTargetMode: "absolute" | "residual";
@@ -2216,6 +2222,7 @@ function trainCounterfactualSupervisedBatch(
           anchorPolicy,
           options.connectorAnchorMaxExamples,
           options.connectorAnchorMaxPolicyMargin,
+          options.connectorAnchorMode,
           `${options.shuffleSeed}:connector-anchor-select`
         );
   const connectorAnchorStats =
@@ -2288,6 +2295,7 @@ function createConnectorCycleAnchorTargets(
   anchorPolicy: NeuralActionRankingPolicy,
   maxExamples: number,
   maxPolicyMargin: number,
+  mode: "connector" | "symmetric",
   seed: string
 ): ActionRankingImitationExample[] {
   const connectorExamples = examples.flatMap((example) => {
@@ -2309,34 +2317,53 @@ function createConnectorCycleAnchorTargets(
     }
 
     const policyMargin = anchorScores[connectorIndex] - anchorScores[cycleIndex];
+    const absolutePolicyMargin = Math.abs(policyMargin);
+    if (policyMargin === 0) {
+      return [];
+    }
+    if (mode === "connector" && policyMargin < 0) {
+      return [];
+    }
+
+    const connectorIsWinner =
+      mode === "connector" ? true : policyMargin > 0;
     if (
-      policyMargin <= 0 ||
-      (maxPolicyMargin > 0 && policyMargin > maxPolicyMargin)
+      maxPolicyMargin > 0 &&
+      (mode === "symmetric" ? absolutePolicyMargin : policyMargin) >
+        maxPolicyMargin
     ) {
       return [];
     }
 
     const connector = example.candidates[connectorIndex];
     const cycle = example.candidates[cycleIndex];
+    const winner = connectorIsWinner ? connector : cycle;
+    const loser = connectorIsWinner ? cycle : connector;
+    const winnerScore = connectorIsWinner
+      ? anchorScores[connectorIndex]
+      : anchorScores[cycleIndex];
+    const loserScore = connectorIsWinner
+      ? anchorScores[cycleIndex]
+      : anchorScores[connectorIndex];
     return [
       {
         ...example,
         finalPlayerPoints: null,
         finalPointDifferential: null,
         pointDifferentialReturn: null,
-        behaviorActionKey: cycle.key,
-        selectedActionKey: connector.key,
+        behaviorActionKey: loser.key,
+        selectedActionKey: winner.key,
         selectedCandidateIndex: 0,
         candidates: [
           {
-            ...connector,
+            ...winner,
             label: 1 as const,
-            rolloutPointDifferentialReturn: anchorScores[connectorIndex],
+            rolloutPointDifferentialReturn: winnerScore,
           },
           {
-            ...cycle,
+            ...loser,
             label: 0 as const,
-            rolloutPointDifferentialReturn: anchorScores[cycleIndex],
+            rolloutPointDifferentialReturn: loserScore,
           },
         ],
       },

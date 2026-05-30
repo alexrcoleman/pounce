@@ -270,6 +270,30 @@ assert.ok(
   "connector-anchored value mode should train connector-vs-cycle anchor updates"
 );
 
+const symmetricConnectorAnchoredValue = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:symmetric-connector-anchored-value",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+  rlCounterfactualConnectorAnchorWeight: 0.05,
+  rlCounterfactualConnectorAnchorMaxExamples: 8,
+  rlCounterfactualConnectorAnchorMode: "symmetric",
+});
+assertCounterfactualWork(symmetricConnectorAnchoredValue, "value");
+assert.ok(
+  symmetricConnectorAnchoredValue.reinforcement
+    .counterfactualConnectorAnchorExamples > 0,
+  "symmetric connector-anchored value mode should collect policy-ordered connector-vs-cycle anchor examples"
+);
+assert.ok(
+  symmetricConnectorAnchoredValue.reinforcement
+    .counterfactualConnectorAnchorUpdates > 0,
+  "symmetric connector-anchored value mode should train policy-ordered connector-vs-cycle anchor updates"
+);
+
 const scoreGapFiltered = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:score-gap-filtered",
@@ -363,6 +387,9 @@ console.log(
       greedyStateValue: summarize(greedyStateValue),
       anchoredValue: summarize(anchoredValue),
       connectorAnchoredValue: summarize(connectorAnchoredValue),
+      symmetricConnectorAnchoredValue: summarize(
+        symmetricConnectorAnchoredValue
+      ),
       scoreGapFiltered: summarize(scoreGapFiltered),
       behaviorGapFiltered: summarize(behaviorGapFiltered),
       confidenceFiltered: summarize(confidenceFiltered),
