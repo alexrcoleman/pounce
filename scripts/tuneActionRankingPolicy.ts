@@ -56,10 +56,19 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       0.9
     ),
     improvementStateSample: readBooleanEnv("IMPROVEMENT_STATE_SAMPLE", true),
+    improvementMaxPolicyScoreGap: readNumberEnv("IMPROVEMENT_MAX_SCORE_GAP", 0),
+    improvementPolicyCandidateLimit: readIntegerEnv(
+      "IMPROVEMENT_POLICY_CANDIDATES",
+      0
+    ),
     improvementCandidateLimit: readIntegerEnv("IMPROVEMENT_CANDIDATES", 8),
     improvementRolloutMoves: readIntegerEnv("IMPROVEMENT_ROLLOUT_MOVES", 450),
     improvementRolloutCount: readIntegerEnv("IMPROVEMENT_ROLLOUT_COUNT", 1),
     improvementCommonRandom: readBooleanEnv("IMPROVEMENT_COMMON_RANDOM", true),
+    improvementContinuationMode: readImprovementContinuationModeEnv(
+      "IMPROVEMENT_CONTINUATION",
+      "teacher"
+    ),
     improvementTrainingMode: readImprovementTrainingModeEnv(
       "IMPROVEMENT_MODE",
       "pairwise"
@@ -310,6 +319,17 @@ function readImprovementPreferenceScopeEnv(
     return fallback;
   }
   return value.toLowerCase() === "behavior" ? "behavior" : fallback;
+}
+
+function readImprovementContinuationModeEnv(
+  name: string,
+  fallback: "teacher" | "policy"
+): "teacher" | "policy" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  return value.toLowerCase() === "policy" ? "policy" : fallback;
 }
 
 function readRlBaselineModeEnv(

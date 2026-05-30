@@ -16,7 +16,7 @@ npm run action-ranking:train
 Useful training knobs:
 
 - `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`
-- `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_PAIRWISE_MARGIN`, `IMPROVEMENT_VALUE_SCALE`, `IMPROVEMENT_VALUE_CENTER`, `IMPROVEMENT_VALUE_HUBER`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
+- `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_MAX_SCORE_GAP`, `IMPROVEMENT_POLICY_CANDIDATES`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_CONTINUATION`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_PAIRWISE_MARGIN`, `IMPROVEMENT_VALUE_SCALE`, `IMPROVEMENT_VALUE_CENTER`, `IMPROVEMENT_VALUE_HUBER`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
 - `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_CANDIDATES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_PREFERENCE_SCOPE`, `RL_COUNTERFACTUAL_PAIRWISE_MARGIN`, `RL_COUNTERFACTUAL_MAX_SCORE_GAP`, `RL_COUNTERFACTUAL_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_ANCHOR_TEMPERATURE`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `HIDDEN_LAYERS`, `MAX_MOVES`, `SEED`
 - `HIDDEN` and `HIDDEN_LAYERS` accept comma-separated layer sizes, for example `HIDDEN=192,96`
@@ -172,6 +172,10 @@ teacher-game states, tries several legal actions, lets the teacher finish from
 each candidate, and trains from the resulting soft reward targets. By default,
 candidate actions in the same state now share continuation randomness; increasing
 `IMPROVEMENT_ROLLOUT_COUNT` averages multiple continuations per candidate.
+`IMPROVEMENT_CONTINUATION=policy` uses the current neural policy for the active
+player after the initial counterfactual move, while teachers continue to play
+the other seats; the default `teacher` continuation is useful for learning from
+teacher-completed rollouts but can mismatch the deployed policy.
 `IMPROVEMENT_STATE_SOURCE=policy` instead collects examples only from states
 reached by the current neural policy in one rotating seat while teacher bots play
 the other seats, which is useful for fine-tuning where the model actually acts.
@@ -181,6 +185,11 @@ counterfactual action beats the behavior action by at least
 most useful with policy-sourced states because it avoids training on decisions
 where the current greedy or sampled behavior is already tied with the best
 rollout candidate.
+`IMPROVEMENT_MAX_SCORE_GAP` filters policy-sourced states to decisions where the
+current model's top two candidate scores are close enough to plausibly move, and
+`IMPROVEMENT_POLICY_CANDIDATES` forces the top-ranked policy alternatives into
+the counterfactual candidate set. Together these mine labels from the decisions
+the model is actually choosing between instead of mostly random alternatives.
 Early 80-state policy-source pairwise runs changed more relevant decisions but
 still did not beat the imitation checkpoint in paired comparison.
 `IMPROVEMENT_MODE=pairwise` trains only clear rollout-return preferences, using
@@ -331,6 +340,20 @@ original learning rate; raising `RL_LR` to `0.005` produced 2 changed decisions,
 both deck-to-solitaire over cycle, but still measured `-0.026 +/- 0.055`.
 These controls reduce harmful generalization, but they have not found a better
 checkpoint yet.
+
+Uncertainty-targeted improvement collection is also wired in. With
+`IMPROVEMENT_MAX_SCORE_GAP` and `IMPROVEMENT_POLICY_CANDIDATES`, the collector
+can mine rollout labels only from low-margin policy decisions while forcing the
+policy's top alternatives into the candidate set. On the behavior-scope
+checkpoint, 120-state policy-sourced runs with score-gap caps of `0.5` and `1`
+found 76-84 high-return behavior-gap examples after scanning 2,400 policy
+states, but the resulting greedy changes were still tiny and mostly
+cycle-over-connector; they measured `-0.058 +/- 0.058` and
+`-0.041 +/- 0.046` over 384 paired games. Re-scoring the same style of labels
+with `IMPROVEMENT_CONTINUATION=policy` eliminated sampled-state top-action
+changes in the diagnostic, but still measured `-0.016 +/- 0.038`. Policy
+continuation is better aligned with deployed play, but uncertainty mining alone
+has not produced an improved checkpoint.
 
 Legacy model feature expansion is now enabled before fine-tuning. Re-running the
 240-state behavior-scope recipe from the capacity checkpoint produced a 48-input
