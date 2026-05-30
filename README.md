@@ -17,7 +17,7 @@ Useful training knobs:
 
 - `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`
 - `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
-- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
+- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `HIDDEN_LAYERS`, `MAX_MOVES`, `SEED`
 - `HIDDEN` and `HIDDEN_LAYERS` accept comma-separated layer sizes, for example `HIDDEN=192,96`
 - `MODEL_OUT=C:\tmp\pounce-action-ranking-model.json` to save model weights
@@ -158,10 +158,34 @@ candidate differences. `IMPROVEMENT_PREFERENCE_SCOPE=behavior` narrows pairwise
 updates to the best rollout action versus the recorded behavior action, which is
 useful when policy-state examples are meant to correct the model's own decisions
 instead of reshaping every candidate comparison in the state. Larger or more
-aggressive improvement passes have overcorrected in early tests. RL fine-tuning
-is wired in with batch-normalized, clipped advantages and optional discounted
-local reward-to-go, but conservative runs tested so far have mostly preserved the
-imitation checkpoint rather than clearly improving it.
+aggressive improvement passes have overcorrected in early tests.
+
+RL fine-tuning is wired in with batch-normalized, clipped advantages and optional
+discounted local reward-to-go. `RL_BASELINE_MODE=teacher` compares sampled policy
+rollouts against a same-seat teacher-only rollout. `RL_BASELINE_MODE=greedy`
+instead compares against the current greedy neural policy on the same deal/seat,
+which is usually the better signal when fine-tuning an already useful checkpoint.
+`RL_COMMON_RANDOM=true` shares timing randomness between baseline and sampled
+rollouts while keeping policy sampling on a separate random stream; that reduces
+variance from turn-order jitter. `RL_UPDATE_EPOCHS` can replay the sampled policy
+gradient batch, but values above `1` should be treated carefully because the
+updates are off-policy after the first pass. `RL_UPDATE_SCOPE=exploratory`
+updates only sampled decisions that differed from the current greedy action at
+that state, which is usually cleaner with `RL_BASELINE_MODE=greedy` because it
+targets the exploration choices that made the sampled rollout differ from the
+deployed policy. In a 128-episode exploratory run from the current best
+behavior-scope checkpoint, only about `3.8` of `53.4` sampled decisions per game
+were exploratory updates, which is a useful diagnostic for whether RL is
+actually moving the deployed greedy policy.
+
+RL runs tested so far have not beaten the reward-tuned checkpoint. A small
+64-episode greedy-baseline run with `RL_LR=0.00005` preserved the greedy policy
+exactly in paired comparison. A stronger all-decision run
+(`RL_LR=0.0005`, `RL_UPDATE_EPOCHS=2`) changed behavior but measured
+`-0.017 +/- 0.053` against the behavior-scope checkpoint over 384 paired games.
+A stronger exploratory-only run (`RL_LR=0.005`, `RL_UPDATE_EPOCHS=2`) changed
+more decisions but measured `-0.068 +/- 0.076` over 384 paired games. The next
+RL work should improve credit assignment, not merely increase learning rate.
 
 ## Deploying
 

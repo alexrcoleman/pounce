@@ -60,6 +60,10 @@ const options = {
   rlTemperature: readNumberEnv("RL_TEMPERATURE", 0.85),
   rlLocalRewardWeight: readNumberEnv("RL_LOCAL_REWARD_WEIGHT", 0.15),
   rlLocalRewardDiscount: readNumberEnv("RL_LOCAL_REWARD_DISCOUNT", 0),
+  rlBaselineMode: readRlBaselineModeEnv("RL_BASELINE_MODE", "teacher"),
+  rlCommonRandom: readBooleanEnv("RL_COMMON_RANDOM", true),
+  rlUpdateEpochs: readIntegerEnv("RL_UPDATE_EPOCHS", 1),
+  rlUpdateScope: readRlUpdateScopeEnv("RL_UPDATE_SCOPE", "all"),
   rlNormalizeAdvantages: readBooleanEnv("RL_NORMALIZE_ADVANTAGES", true),
   rlAdvantageClip: readNumberEnv("RL_ADVANTAGE_CLIP", 3),
   maxMovesPerGame: readIntegerEnv("MAX_MOVES", 1800),
@@ -165,6 +169,28 @@ function readImprovementPreferenceScopeEnv(
     return fallback;
   }
   return value.toLowerCase() === "behavior" ? "behavior" : fallback;
+}
+
+function readRlBaselineModeEnv(
+  name: string,
+  fallback: "teacher" | "greedy"
+): "teacher" | "greedy" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  return value.toLowerCase() === "greedy" ? "greedy" : fallback;
+}
+
+function readRlUpdateScopeEnv(
+  name: string,
+  fallback: "all" | "exploratory"
+): "all" | "exploratory" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  return value.toLowerCase() === "exploratory" ? "exploratory" : fallback;
 }
 
 function getModelHiddenLayerSizes(model: NeuralActionRankingModel): number[] {

@@ -44,6 +44,10 @@ export type NeuralTrainingOptions = {
   rlTemperature?: number;
   rlLocalRewardWeight?: number;
   rlLocalRewardDiscount?: number;
+  rlBaselineMode?: "teacher" | "greedy";
+  rlCommonRandom?: boolean;
+  rlUpdateEpochs?: number;
+  rlUpdateScope?: "all" | "exploratory";
   rlNormalizeAdvantages?: boolean;
   rlAdvantageClip?: number;
   improvementStates?: number;
@@ -93,8 +97,14 @@ export type NeuralTrainingResult = {
     episodes: number;
     averageFinalPointDifferential: number;
     averageTeacherBaselinePointDifferential: number;
+    averageGreedyBaselinePointDifferential: number;
+    averageBaselinePointDifferential: number;
     averageBaselineAdjustedReturn: number;
+    averageSampleMinusGreedyReturn: number;
+    averageSampledDecisionCount: number;
+    averageExploratoryDecisionCount: number;
     averagePolicyUpdates: number;
+    averageGradientUpdates: number;
     averageRawAdvantage: number;
     rawAdvantageStdDev: number;
   };
@@ -154,6 +164,7 @@ type RolloutTransition = {
   pointDifferentialBefore: number;
   candidates: ActionRankingCandidate[];
   selectedCandidateIndex: number;
+  greedyCandidateIndex: number;
   localReward: number;
 };
 
@@ -170,6 +181,9 @@ type PolicyGradientUpdate = {
   selectedCandidateIndex: number;
   rawAdvantage: number;
 };
+
+type PolicyGradientBaselineMode = "teacher" | "greedy";
+type PolicyGradientUpdateScope = "all" | "exploratory";
 
 type RewardImprovementCandidate = ActionRankingCandidate & {
   rolloutPointDifferential: number;
@@ -287,6 +301,10 @@ export function trainNeuralActionRankingPolicy(
     temperature: options.rlTemperature ?? 0.85,
     localRewardWeight: options.rlLocalRewardWeight ?? 0.15,
     localRewardDiscount: options.rlLocalRewardDiscount ?? 0,
+    baselineMode: options.rlBaselineMode ?? "teacher",
+    commonRandom: options.rlCommonRandom ?? true,
+    updateEpochs: options.rlUpdateEpochs ?? 1,
+    updateScope: options.rlUpdateScope ?? "all",
     normalizeAdvantages: options.rlNormalizeAdvantages ?? true,
     advantageClip: options.rlAdvantageClip ?? 3,
     maxMovesPerGame,
@@ -849,6 +867,10 @@ export function trainPolicyGradientFromRollouts(
     temperature: number;
     localRewardWeight: number;
     localRewardDiscount: number;
+    baselineMode: PolicyGradientBaselineMode;
+    commonRandom: boolean;
+    updateEpochs: number;
+    updateScope: PolicyGradientUpdateScope;
     normalizeAdvantages: boolean;
     advantageClip: number;
     maxMovesPerGame: number;
@@ -856,8 +878,15 @@ export function trainPolicyGradientFromRollouts(
 ) {
   let finalPointDifferentialTotal = 0;
   let teacherBaselinePointDifferentialTotal = 0;
+  let greedyBaselinePointDifferentialTotal = 0;
+  let baselinePointDifferentialTotal = 0;
   let baselineAdjustedReturnTotal = 0;
+  let sampleMinusGreedyReturnTotal = 0;
+  let sampledDecisionCountTotal = 0;
+  let exploratoryDecisionCountTotal = 0;
   const updates: PolicyGradientUpdate[] = [];
+  const baselineMode = options.baselineMode;
+  const updateScope = options.updateScope;
 
   for (let episode = 0; episode < options.episodes; episode++) {
     const neuralPlayerIndex = episode % options.playerCount;
@@ -865,9 +894,19 @@ export function trainPolicyGradientFromRollouts(
       options.playerCount,
       `${options.seed}:deal:${episode}`
     );
+    const sharedTimingSeed = `${options.seed}:timing:${episode}`;
+    const teacherTimingSeed = options.commonRandom
+      ? sharedTimingSeed
+      : `${options.seed}:teacher-timing:${episode}`;
+    const greedyTimingSeed = options.commonRandom
+      ? sharedTimingSeed
+      : `${options.seed}:greedy-timing:${episode}`;
+    const sampleTimingSeed = options.commonRandom
+      ? sharedTimingSeed
+      : `${options.seed}:sample-timing:${episode}`;
     const teacherBaseline = runPolicyRollout(board, {
       policy,
-      random: createSeededRandom(`${options.seed}:baseline:${episode}`),
+      random: createSeededRandom(teacherTimingSeed),
       temperature: 1,
       sample: false,
       maxMovesPerGame: options.maxMovesPerGame,
@@ -875,9 +914,21 @@ export function trainPolicyGradientFromRollouts(
     });
     const teacherBaselineDifferential =
       teacherBaseline.finalPointDifferentials[neuralPlayerIndex] ?? 0;
+    const greedyBaseline = runPolicyRollout(board, {
+      policy,
+      random: createSeededRandom(greedyTimingSeed),
+      decisionRandom: createSeededRandom(`${options.seed}:greedy:${episode}`),
+      temperature: 1,
+      sample: false,
+      maxMovesPerGame: options.maxMovesPerGame,
+      neuralPlayerIndices: [neuralPlayerIndex],
+    });
+    const greedyBaselineDifferential =
+      greedyBaseline.finalPointDifferentials[neuralPlayerIndex] ?? 0;
     const rollout = runPolicyRollout(board, {
       policy,
-      random: createSeededRandom(`${options.seed}:sample:${episode}`),
+      random: createSeededRandom(sampleTimingSeed),
+      decisionRandom: createSeededRandom(`${options.seed}:sample:${episode}`),
       temperature: options.temperature,
       sample: true,
       maxMovesPerGame: options.maxMovesPerGame,
@@ -885,14 +936,29 @@ export function trainPolicyGradientFromRollouts(
     });
     const finalDifferential =
       rollout.finalPointDifferentials[neuralPlayerIndex] ?? 0;
+    const baselineDifferential =
+      baselineMode === "greedy"
+        ? greedyBaselineDifferential
+        : teacherBaselineDifferential;
     const baselineAdjustedReturn =
-      finalDifferential - teacherBaselineDifferential;
+      finalDifferential - baselineDifferential;
+    const sampleMinusGreedyReturn =
+      finalDifferential - greedyBaselineDifferential;
 
     const localRewardReturns = getDiscountedLocalRewardReturns(
       rollout.transitions,
       options.localRewardDiscount
     );
+    sampledDecisionCountTotal += rollout.transitions.length;
     rollout.transitions.forEach((transition, transitionIndex) => {
+      const isExploratoryDecision =
+        transition.selectedCandidateIndex !== transition.greedyCandidateIndex;
+      if (isExploratoryDecision) {
+        exploratoryDecisionCountTotal += 1;
+      }
+      if (updateScope === "exploratory" && !isExploratoryDecision) {
+        return;
+      }
       updates.push({
         candidates: transition.candidates,
         selectedCandidateIndex: transition.selectedCandidateIndex,
@@ -904,12 +970,17 @@ export function trainPolicyGradientFromRollouts(
 
     finalPointDifferentialTotal += finalDifferential;
     teacherBaselinePointDifferentialTotal += teacherBaselineDifferential;
+    greedyBaselinePointDifferentialTotal += greedyBaselineDifferential;
+    baselinePointDifferentialTotal += baselineDifferential;
     baselineAdjustedReturnTotal += baselineAdjustedReturn;
+    sampleMinusGreedyReturnTotal += sampleMinusGreedyReturn;
   }
 
   const advantageStats = applyPolicyGradientBatch(policy, updates, {
     learningRate: options.learningRate,
     temperature: options.temperature,
+    updateEpochs: options.updateEpochs,
+    shuffleSeed: `${options.seed}:update-shuffle`,
     normalizeAdvantages: options.normalizeAdvantages,
     advantageClip: options.advantageClip,
   });
@@ -924,12 +995,34 @@ export function trainPolicyGradientFromRollouts(
       options.episodes === 0
         ? 0
         : teacherBaselinePointDifferentialTotal / options.episodes,
+    averageGreedyBaselinePointDifferential:
+      options.episodes === 0
+        ? 0
+        : greedyBaselinePointDifferentialTotal / options.episodes,
+    averageBaselinePointDifferential:
+      options.episodes === 0
+        ? 0
+        : baselinePointDifferentialTotal / options.episodes,
     averageBaselineAdjustedReturn:
       options.episodes === 0
         ? 0
         : baselineAdjustedReturnTotal / options.episodes,
+    averageSampleMinusGreedyReturn:
+      options.episodes === 0
+        ? 0
+        : sampleMinusGreedyReturnTotal / options.episodes,
+    averageSampledDecisionCount:
+      options.episodes === 0 ? 0 : sampledDecisionCountTotal / options.episodes,
+    averageExploratoryDecisionCount:
+      options.episodes === 0
+        ? 0
+        : exploratoryDecisionCountTotal / options.episodes,
     averagePolicyUpdates:
       options.episodes === 0 ? 0 : updates.length / options.episodes,
+    averageGradientUpdates:
+      options.episodes === 0
+        ? 0
+        : advantageStats.appliedUpdates / options.episodes,
     averageRawAdvantage: advantageStats.mean,
     rawAdvantageStdDev: advantageStats.stdDev,
   };
@@ -941,6 +1034,8 @@ function applyPolicyGradientBatch(
   options: {
     learningRate: number;
     temperature: number;
+    updateEpochs: number;
+    shuffleSeed: string;
     normalizeAdvantages: boolean;
     advantageClip: number;
   }
@@ -963,24 +1058,30 @@ function applyPolicyGradientBatch(
     ? Math.max(1e-6, stdDev)
     : 20;
   const clip = Math.max(0, options.advantageClip);
+  const updateEpochs = Math.max(1, Math.floor(options.updateEpochs));
+  const random = createSeededRandom(options.shuffleSeed);
+  let appliedUpdates = 0;
 
-  updates.forEach((update) => {
-    const centered = options.normalizeAdvantages
-      ? update.rawAdvantage - mean
-      : update.rawAdvantage;
-    const normalized = centered / scale;
-    const advantage =
-      clip > 0 ? Math.max(-clip, Math.min(clip, normalized)) : normalized;
-    policy.trainPolicyGradient(
-      update.candidates,
-      update.selectedCandidateIndex,
-      advantage,
-      options.learningRate,
-      options.temperature
-    );
-  });
+  for (let epoch = 0; epoch < updateEpochs; epoch++) {
+    shuffleCopy(updates, random).forEach((update) => {
+      const centered = options.normalizeAdvantages
+        ? update.rawAdvantage - mean
+        : update.rawAdvantage;
+      const normalized = centered / scale;
+      const advantage =
+        clip > 0 ? Math.max(-clip, Math.min(clip, normalized)) : normalized;
+      policy.trainPolicyGradient(
+        update.candidates,
+        update.selectedCandidateIndex,
+        advantage,
+        options.learningRate,
+        options.temperature
+      );
+      appliedUpdates += 1;
+    });
+  }
 
-  return { mean, stdDev };
+  return { mean, stdDev, appliedUpdates };
 }
 
 function getDiscountedLocalRewardReturns(
@@ -1037,11 +1138,11 @@ export function evaluateNeuralPolicy(
     const teacherBaseline = runPolicyRollout(board, {
       policy,
       random: createSeededRandom(`${seed}:baseline:${gameIndex}`),
-      temperature: 1,
-      sample: false,
-      maxMovesPerGame,
-      neuralPlayerIndices: [],
-    });
+    temperature: 1,
+    sample: false,
+    maxMovesPerGame,
+    neuralPlayerIndices: [],
+  });
     const random = createSeededRandom(`${seed}:sample:${gameIndex}`);
     const rollout = runPolicyRollout(board, {
       policy,
@@ -1332,6 +1433,7 @@ function runPolicyRollout(
   options: {
     policy: NeuralActionRankingPolicy;
     random: () => number;
+    decisionRandom?: () => number;
     temperature: number;
     sample: boolean;
     maxMovesPerGame: number;
@@ -1407,6 +1509,7 @@ function chooseNeuralMove(
   options: {
     policy: NeuralActionRankingPolicy;
     random: () => number;
+    decisionRandom?: () => number;
     temperature: number;
     sample: boolean;
   },
@@ -1418,9 +1521,14 @@ function chooseNeuralMove(
   }
 
   const pointDifferentialBefore = getPointDifferential(board, playerIndex);
+  const greedy = options.policy.chooseCandidate(candidates, {
+    temperature: 1,
+    random: options.decisionRandom ?? options.random,
+    sample: false,
+  });
   const selected = options.policy.chooseCandidate(candidates, {
     temperature: options.temperature,
-    random: options.random,
+    random: options.decisionRandom ?? options.random,
     sample: options.sample,
   });
   if (!selected) {
@@ -1430,12 +1538,16 @@ function chooseNeuralMove(
   const selectedCandidateIndex = candidates.findIndex(
     (candidate) => candidate.key === selected.key
   );
+  const greedyCandidateIndex = greedy
+    ? candidates.findIndex((candidate) => candidate.key === greedy.key)
+    : selectedCandidateIndex;
   if (selectedCandidateIndex >= 0 && options.sample) {
     transitions.push({
       playerIndex,
       pointDifferentialBefore,
       candidates,
       selectedCandidateIndex,
+      greedyCandidateIndex,
       localReward: selected.immediatePointDifferentialDelta,
     });
   }
