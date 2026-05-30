@@ -22,6 +22,22 @@ Useful training knobs:
 - `MODEL_IN=...\model.json npm run action-ranking:evaluate` to evaluate saved weights
 - `POUNCE_NEURAL_AI_MODEL=...\model.json npm run dev` to run Socket.IO bots with saved weights
 
+Current useful baseline recipe:
+
+```powershell
+$env:HIDDEN='96'
+$env:IMITATION_DEALS='240'
+$env:IMITATION_EPOCHS='8'
+$env:RL_EPISODES='0'
+$env:MODEL_OUT='.\node_modules\pounce-action-ranking-model.json'
+npm run action-ranking:train
+```
+
+On a 96-game held-out evaluation seed, that setup has been roughly even with
+the same-seat heuristic baseline by point differential. RL fine-tuning is wired
+in, but the conservative runs tested so far have not clearly beaten that
+imitation checkpoint.
+
 ## Deploying
 
 The production app runs on Google Cloud Run:

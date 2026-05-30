@@ -64,6 +64,8 @@ export type NeuralTrainingResult = {
 export type PolicyEvaluationResult = {
   games: number;
   averageNeuralPointDifferential: number;
+  averageTeacherBaselinePointDifferential: number;
+  averageBaselineAdjustedPointDifferential: number;
   neuralWinRate: number;
   averageNeuralScore: number;
   averageTeacherScore: number;
@@ -275,12 +277,23 @@ export function evaluateNeuralPolicy(
   const seed = options.seed ?? "action-ranking-eval";
   const maxMovesPerGame = options.maxMovesPerGame ?? DEFAULT_MAX_MOVES_PER_GAME;
   let neuralDifferentialTotal = 0;
+  let teacherBaselineDifferentialTotal = 0;
+  let baselineAdjustedDifferentialTotal = 0;
   let neuralWins = 0;
   let neuralScoreTotal = 0;
   let teacherScoreTotal = 0;
 
   for (let gameIndex = 0; gameIndex < games; gameIndex++) {
+    const neuralPlayerIndex = gameIndex % playerCount;
     const board = createTrainingBoard(playerCount, `${seed}:deal:${gameIndex}`);
+    const teacherBaseline = runPolicyRollout(board, {
+      policy,
+      random: createSeededRandom(`${seed}:baseline:${gameIndex}`),
+      temperature: 1,
+      sample: false,
+      maxMovesPerGame,
+      neuralPlayerIndices: [],
+    });
     const random = createSeededRandom(`${seed}:sample:${gameIndex}`);
     const rollout = runPolicyRollout(board, {
       policy,
@@ -288,14 +301,23 @@ export function evaluateNeuralPolicy(
       temperature: 1,
       sample: false,
       maxMovesPerGame,
-      neuralPlayerIndices: [0],
+      neuralPlayerIndices: [neuralPlayerIndex],
     });
-    const neuralScore = rollout.finalScores[0] ?? 0;
-    const teacherScores = rollout.finalScores.slice(1);
+    const neuralScore = rollout.finalScores[neuralPlayerIndex] ?? 0;
+    const teacherScores = rollout.finalScores.filter(
+      (_, playerIndex) => playerIndex !== neuralPlayerIndex
+    );
     const averageTeacherScore =
       teacherScores.reduce((sum, value) => sum + value, 0) /
       Math.max(1, teacherScores.length);
-    neuralDifferentialTotal += rollout.finalPointDifferentials[0] ?? 0;
+    const neuralDifferential =
+      rollout.finalPointDifferentials[neuralPlayerIndex] ?? 0;
+    const teacherBaselineDifferential =
+      teacherBaseline.finalPointDifferentials[neuralPlayerIndex] ?? 0;
+    neuralDifferentialTotal += neuralDifferential;
+    teacherBaselineDifferentialTotal += teacherBaselineDifferential;
+    baselineAdjustedDifferentialTotal +=
+      neuralDifferential - teacherBaselineDifferential;
     neuralScoreTotal += neuralScore;
     teacherScoreTotal += averageTeacherScore;
     if (neuralScore > Math.max(...teacherScores)) {
@@ -307,6 +329,10 @@ export function evaluateNeuralPolicy(
     games,
     averageNeuralPointDifferential:
       games === 0 ? 0 : neuralDifferentialTotal / games,
+    averageTeacherBaselinePointDifferential:
+      games === 0 ? 0 : teacherBaselineDifferentialTotal / games,
+    averageBaselineAdjustedPointDifferential:
+      games === 0 ? 0 : baselineAdjustedDifferentialTotal / games,
     neuralWinRate: games === 0 ? 0 : neuralWins / games,
     averageNeuralScore: games === 0 ? 0 : neuralScoreTotal / games,
     averageTeacherScore: games === 0 ? 0 : teacherScoreTotal / games,
