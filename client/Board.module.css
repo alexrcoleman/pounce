@@ -22,8 +22,16 @@
       rgba(255, 250, 232, 0.08),
       rgba(115, 69, 25, 0.04) 62%,
       rgba(77, 44, 15, 0.1)
-    );
+  );
   position: relative;
+}
+
+.root[data-layout-ready="false"] .rootInside {
+  visibility: hidden;
+}
+
+.root[data-layout-transitions="settling"] * {
+  transition: none !important;
 }
 
 .pileSectionPattern {

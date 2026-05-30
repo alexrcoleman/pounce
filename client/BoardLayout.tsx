@@ -2,7 +2,6 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -14,6 +13,7 @@ import {
   PLAYER_BOARD_HEIGHT,
   getPlayerLocation,
 } from "../shared/CardLocations";
+import useIsomorphicLayoutEffect from "./useIsomorphicLayoutEffect";
 
 export const FIELD_LEFT = 550;
 export const FIELD_TOP = 50;
@@ -114,13 +114,19 @@ export function useResponsiveBoardLayout({
     setNode(element);
   }, []);
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (!node) {
       return;
     }
     const updateViewport = () => {
       const rect = node.getBoundingClientRect();
-      setViewport({ width: rect.width, height: rect.height });
+      const nextViewport = { width: rect.width, height: rect.height };
+      setViewport((current) =>
+        current.width === nextViewport.width &&
+        current.height === nextViewport.height
+          ? current
+          : nextViewport
+      );
     };
 
     updateViewport();
@@ -137,6 +143,8 @@ export function useResponsiveBoardLayout({
       resizeObserver?.disconnect();
     };
   }, [node]);
+
+  const isReady = viewport.width > 0 && viewport.height > 0;
 
   const playerCount = board.players.length;
   const layout = useMemo(
@@ -162,7 +170,7 @@ export function useResponsiveBoardLayout({
     ]
   );
 
-  return { layout, ref };
+  return { isReady, layout, ref };
 }
 
 function createBoardLayout(

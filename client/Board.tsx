@@ -36,6 +36,7 @@ import ReactionBubbles from "./ReactionBubbles";
 import RoomShare from "./RoomShare";
 import { useClientContext } from "./ClientContext";
 import { Button, Modal } from "antd";
+import useIsomorphicLayoutEffect from "./useIsomorphicLayoutEffect";
 import {
   BoardLayoutProvider,
   FIELD_LEFT,
@@ -157,8 +158,13 @@ export default observer(function Board({
     null
   );
   const [useTouch, setUseTouch] = useState<boolean | null>(null);
+  const [allowLayoutTransitions, setAllowLayoutTransitions] = useState(false);
   const boardRootRef = useRef<HTMLDivElement | null>(null);
-  const { layout, ref } = useResponsiveBoardLayout({
+  const {
+    isReady: isLayoutReady,
+    layout,
+    ref,
+  } = useResponsiveBoardLayout({
     activePlayerIndex,
     board,
     focusedPlayerIndex,
@@ -167,9 +173,20 @@ export default observer(function Board({
     zoom,
   });
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     setUseTouch(isTouchDevice());
   }, []);
+  useEffect(() => {
+    if (!isLayoutReady) {
+      setAllowLayoutTransitions(false);
+      return;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      setAllowLayoutTransitions(true);
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [isLayoutReady]);
   useEffect(() => {
     setFocusedPlayerIndex((current) =>
       current != null &&
@@ -229,7 +246,11 @@ export default observer(function Board({
       <div
         className={styles.root}
         data-card-readability={easyReadCards ? "easy" : "standard"}
+        data-layout-ready={isLayoutReady ? "true" : "false"}
         data-layout-mode={layout.mode}
+        data-layout-transitions={
+          allowLayoutTransitions ? "ready" : "settling"
+        }
         ref={boardRootRef}
       >
         <BoardLayoutProvider value={layout}>
