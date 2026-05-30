@@ -3,6 +3,7 @@ import path from "path";
 import { enumerateActionRankingCandidates } from "../shared/ActionRankingPolicy";
 import {
   compareNeuralModels,
+  compareNeuralModelsSelfPlay,
   createTrainingBoard,
   evaluateNeuralModelAgainstBasicStyle,
   trainNeuralActionRankingPolicy,
@@ -100,6 +101,23 @@ const styleGateStyles = readStyleListEnv(
   "RL_TUNE_STYLES",
   getBasicAIStyleNames()
 );
+const selfPlayGateGames = readIntegerEnv("RL_TUNE_SELF_PLAY_GAMES", 0);
+const selfPlayGateRuns = readIntegerEnv(
+  "RL_TUNE_SELF_PLAY_RUNS",
+  Math.max(1, compareRuns)
+);
+const selfPlayGateMaxRegression = readNumberEnv(
+  "RL_TUNE_SELF_PLAY_MAX_REGRESSION",
+  0
+);
+const selfPlayGateStandardErrorMultiplier = readNumberEnv(
+  "RL_TUNE_SELF_PLAY_SE_MULTIPLIER",
+  promoteStandardErrorMultiplier
+);
+const selfPlayGateSwapSeats = readBooleanEnv(
+  "RL_TUNE_SELF_PLAY_SWAP_SEATS",
+  true
+);
 const recipes = readRecipes();
 
 fs.mkdirSync(outputDir, { recursive: true });
@@ -194,7 +212,28 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
     const styleGatePassed = styleGateBatch
       ? styleGateLowerBound! >= -styleGateMaxRegression
       : true;
-    const promoted = modelGatePassed && styleGatePassed;
+    const shouldRunSelfPlayGate =
+      selfPlayGateGames > 0 && modelGatePassed && styleGatePassed;
+    const selfPlayGateBatch = shouldRunSelfPlayGate
+      ? compareModelBatchSelfPlay(candidateModel, bestModel, {
+          playerCount,
+          games: selfPlayGateGames,
+          runs: selfPlayGateRuns,
+          seed: `${seed}:self-play-gate:${roundNumber}:${recipe.name}`,
+          maxMovesPerGame,
+          swapSeats: selfPlayGateSwapSeats,
+        })
+      : null;
+    const selfPlayGateLowerBound = selfPlayGateBatch
+      ? getPromotionLowerBound(
+          selfPlayGateBatch.comparison,
+          selfPlayGateStandardErrorMultiplier
+        )
+      : null;
+    const selfPlayGatePassed = selfPlayGateBatch
+      ? selfPlayGateLowerBound! >= -selfPlayGateMaxRegression
+      : true;
+    const promoted = modelGatePassed && styleGatePassed && selfPlayGatePassed;
 
     if (promoted) {
       bestModel = candidateModel;
@@ -236,6 +275,14 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
             byStyle: styleGateBatch.byStyle,
           }
         : null,
+      selfPlayGate: selfPlayGateBatch
+        ? {
+            passed: selfPlayGatePassed,
+            lowerBound: selfPlayGateLowerBound,
+            comparison: selfPlayGateBatch.comparison,
+            perCompareRun: selfPlayGateBatch.perCompareRun,
+          }
+        : null,
     });
   }
 
@@ -274,6 +321,14 @@ console.log(
         styleGateStyles,
         styleGateMaxRegression,
         styleGateStandardErrorMultiplier,
+      },
+      selfPlayGateRule: {
+        enabled: selfPlayGateGames > 0,
+        selfPlayGateGames,
+        selfPlayGateRuns,
+        selfPlayGateMaxRegression,
+        selfPlayGateStandardErrorMultiplier,
+        selfPlayGateSwapSeats,
       },
       diagnostics: {
         diagnosticGames,
@@ -945,6 +1000,37 @@ function compareModelBatch(
       games: options.games,
       seed: runCount === 1 ? options.seed : `${options.seed}:${index}`,
       maxMovesPerGame: options.maxMovesPerGame,
+    })
+  );
+  return {
+    comparison:
+      comparisons.length === 1
+        ? comparisons[0]
+        : summarizeComparisons(comparisons),
+    perCompareRun: comparisons.length === 1 ? undefined : comparisons,
+  };
+}
+
+function compareModelBatchSelfPlay(
+  modelA: NeuralActionRankingModel,
+  modelB: NeuralActionRankingModel,
+  options: {
+    playerCount: number;
+    games: number;
+    runs: number;
+    seed: string;
+    maxMovesPerGame: number;
+    swapSeats: boolean;
+  }
+) {
+  const runCount = Math.max(1, options.runs);
+  const comparisons = Array.from({ length: runCount }, (_, index) =>
+    compareNeuralModelsSelfPlay(modelA, modelB, {
+      playerCount: options.playerCount,
+      games: options.games,
+      seed: runCount === 1 ? options.seed : `${options.seed}:${index}`,
+      maxMovesPerGame: options.maxMovesPerGame,
+      swapSeats: options.swapSeats,
     })
   );
   return {

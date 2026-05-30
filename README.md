@@ -25,6 +25,7 @@ Useful training knobs:
 - `MODEL_IN=...\model.json npm run action-ranking:evaluate` to evaluate saved weights
 - `MODEL_IN=...\model.json npm run action-ranking:evaluate-by-style` to evaluate saved weights against each fixed heuristic AI style
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare` to compare two models on paired deals/seats
+- `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare-self-play` to compare two models sharing the same self-play table
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:diagnose` to compare top-ranked actions on sampled teacher states
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:trace-divergences` to inspect the first policy-action divergence in paired games
 - `MODEL_IN=...\best.json npm run action-ranking:audit-labels` to audit rollout labels before training on them
@@ -62,6 +63,10 @@ to the pounce card, whether the action only resets the waste pile, and the
 remaining stock fraction after the cycle. These inputs are meant to let reward
 labels explain when cycling is good because a remembered stock card is useful,
 rather than pushing every cycle action up globally.
+`action-ranking:compare-self-play` now fills the table with the candidate and
+champion models directly instead of using heuristic opponents. By default it
+splits seats by parity and replays each deal with the assignments swapped, so a
+candidate can be checked for actual neural-vs-neural strength before promotion.
 
 Current useful baseline recipe:
 
@@ -232,9 +237,15 @@ styles using shared seeds. Promotion also requires the style lower bound
 `averageBaselineAdjustedPointDifferentialDelta - seMultiplier * standardError`
 to be at least `-RL_TUNE_STYLE_MAX_REGRESSION`, where `seMultiplier` comes from
 `RL_TUNE_STYLE_SE_MULTIPLIER`. `RL_TUNE_STYLES` can narrow the gate to a
-comma-separated subset such as `Alex 1.0`. As with the manual comparisons below,
-this is still a search tool; a promoted model still needs a larger final paired
-comparison before replacing the current best checkpoint.
+comma-separated subset such as `Alex 1.0`. Set `RL_TUNE_SELF_PLAY_GAMES` above
+`0` to add a champion self-play gate. That
+gate puts the candidate and current best at the same table, swaps seat parity by
+default, and requires the lower-bound point-differential delta to stay above
+`-RL_TUNE_SELF_PLAY_MAX_REGRESSION`. `RL_TUNE_SELF_PLAY_RUNS`,
+`RL_TUNE_SELF_PLAY_SE_MULTIPLIER`, and `RL_TUNE_SELF_PLAY_SWAP_SEATS` tune the
+self-play gate budget and strictness. This is still a search tool; a promoted
+model still needs a larger final paired comparison before replacing the current
+best checkpoint.
 
 `IMPROVEMENT_STATES` enables the counterfactual rollout pass: it samples
 teacher-game states, tries several legal actions, lets the teacher finish from

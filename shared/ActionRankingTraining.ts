@@ -234,6 +234,14 @@ export type PolicyComparisonResult = {
   modelBPounceOutRate: number;
 };
 
+export type SelfPlayComparisonOptions = {
+  playerCount?: number;
+  games?: number;
+  seed?: string;
+  maxMovesPerGame?: number;
+  swapSeats?: boolean;
+};
+
 export type CounterfactualRlLabelAudit = {
   examples: ActionRankingImitationExample[];
   sampledDecisionCount: number;
@@ -3393,6 +3401,157 @@ export function compareNeuralModels(
   };
 }
 
+export function compareNeuralModelsSelfPlay(
+  modelA: NeuralActionRankingModel,
+  modelB: NeuralActionRankingModel,
+  options: SelfPlayComparisonOptions = {}
+): PolicyComparisonResult {
+  const policyA = new NeuralActionRankingPolicy(modelA);
+  const policyB = new NeuralActionRankingPolicy(modelB);
+  const playerCount = options.playerCount ?? 4;
+  if (playerCount < 2) {
+    throw new Error("Self-play comparison requires at least two players.");
+  }
+  const games = options.games ?? 12;
+  const seed = options.seed ?? "action-ranking-self-play";
+  const maxMovesPerGame = options.maxMovesPerGame ?? DEFAULT_MAX_MOVES_PER_GAME;
+  const swapSeats = options.swapSeats ?? true;
+  const pointDifferentialDeltas: number[] = [];
+  let modelADifferentialTotal = 0;
+  let modelBDifferentialTotal = 0;
+  let modelAScoreTotal = 0;
+  let modelBScoreTotal = 0;
+  let modelABetterCount = 0;
+  let modelBBetterCount = 0;
+  let tiedDifferentialCount = 0;
+  let modelADecisionCountTotal = 0;
+  let modelBDecisionCountTotal = 0;
+  let modelACenterMoveRateTotal = 0;
+  let modelBCenterMoveRateTotal = 0;
+  let modelASolitaireMoveRateTotal = 0;
+  let modelBSolitaireMoveRateTotal = 0;
+  let modelACycleMoveRateTotal = 0;
+  let modelBCycleMoveRateTotal = 0;
+  let modelAPounceRemainingTotal = 0;
+  let modelBPounceRemainingTotal = 0;
+  let modelAPounceOuts = 0;
+  let modelBPounceOuts = 0;
+  let rolloutCount = 0;
+
+  for (let gameIndex = 0; gameIndex < games; gameIndex++) {
+    const board = createTrainingBoard(playerCount, `${seed}:deal:${gameIndex}`);
+    const seatPasses = swapSeats ? [false, true] : [false];
+    const dealPointDifferentialDeltas: number[] = [];
+    seatPasses.forEach((swapped) => {
+      const modelASeats = getSelfPlayModelASeats(
+        playerCount,
+        gameIndex,
+        swapped
+      );
+      const modelBSeats = Array.from({ length: playerCount }, (_, index) => index)
+        .filter((playerIndex) => !modelASeats.has(playerIndex));
+      const rollout = runPolicyRollout(board, {
+        policy: policyA,
+        random: createSeededRandom(`${seed}:rollout:${gameIndex}`),
+        temperature: 1,
+        sample: false,
+        maxMovesPerGame,
+        policyByPlayer: (playerIndex) =>
+          modelASeats.has(playerIndex) ? policyA : policyB,
+      });
+      const metricsA = getRolloutGroupMetrics(rollout, Array.from(modelASeats));
+      const metricsB = getRolloutGroupMetrics(rollout, modelBSeats);
+      const pointDifferentialDelta =
+        metricsA.pointDifferential - metricsB.pointDifferential;
+
+      rolloutCount += 1;
+      dealPointDifferentialDeltas.push(pointDifferentialDelta);
+      modelADifferentialTotal += metricsA.pointDifferential;
+      modelBDifferentialTotal += metricsB.pointDifferential;
+      modelAScoreTotal += metricsA.score;
+      modelBScoreTotal += metricsB.score;
+      modelADecisionCountTotal += metricsA.decisionCount;
+      modelBDecisionCountTotal += metricsB.decisionCount;
+      modelACenterMoveRateTotal += metricsA.centerMoveRate;
+      modelBCenterMoveRateTotal += metricsB.centerMoveRate;
+      modelASolitaireMoveRateTotal += metricsA.solitaireMoveRate;
+      modelBSolitaireMoveRateTotal += metricsB.solitaireMoveRate;
+      modelACycleMoveRateTotal += metricsA.cycleMoveRate;
+      modelBCycleMoveRateTotal += metricsB.cycleMoveRate;
+      modelAPounceRemainingTotal += metricsA.pounceRemaining;
+      modelBPounceRemainingTotal += metricsB.pounceRemaining;
+
+      if (metricsA.pounceRemaining === 0) {
+        modelAPounceOuts += 1;
+      }
+      if (metricsB.pounceRemaining === 0) {
+        modelBPounceOuts += 1;
+      }
+    });
+    const dealPointDifferentialDelta = meanNumbers(
+      dealPointDifferentialDeltas
+    );
+    pointDifferentialDeltas.push(dealPointDifferentialDelta);
+    if (dealPointDifferentialDelta > 0) {
+      modelABetterCount += 1;
+    } else if (dealPointDifferentialDelta < 0) {
+      modelBBetterCount += 1;
+    } else {
+      tiedDifferentialCount += 1;
+    }
+  }
+
+  const comparisonCount = pointDifferentialDeltas.length;
+  return {
+    games: comparisonCount,
+    averageModelAPointDifferential:
+      rolloutCount === 0 ? 0 : modelADifferentialTotal / rolloutCount,
+    averageModelBPointDifferential:
+      rolloutCount === 0 ? 0 : modelBDifferentialTotal / rolloutCount,
+    averagePointDifferentialDelta:
+      comparisonCount === 0
+        ? 0
+        : pointDifferentialDeltas.reduce((sum, value) => sum + value, 0) /
+          comparisonCount,
+    pointDifferentialDeltaStandardError:
+      standardError(pointDifferentialDeltas),
+    modelABetterRate:
+      comparisonCount === 0 ? 0 : modelABetterCount / comparisonCount,
+    modelBBetterRate:
+      comparisonCount === 0 ? 0 : modelBBetterCount / comparisonCount,
+    tiedPointDifferentialRate:
+      comparisonCount === 0 ? 0 : tiedDifferentialCount / comparisonCount,
+    averageModelAScore: rolloutCount === 0 ? 0 : modelAScoreTotal / rolloutCount,
+    averageModelBScore: rolloutCount === 0 ? 0 : modelBScoreTotal / rolloutCount,
+    averageScoreDelta:
+      rolloutCount === 0 ? 0 : (modelAScoreTotal - modelBScoreTotal) / rolloutCount,
+    averageModelADecisionCount:
+      rolloutCount === 0 ? 0 : modelADecisionCountTotal / rolloutCount,
+    averageModelBDecisionCount:
+      rolloutCount === 0 ? 0 : modelBDecisionCountTotal / rolloutCount,
+    averageModelACenterMoveRate:
+      rolloutCount === 0 ? 0 : modelACenterMoveRateTotal / rolloutCount,
+    averageModelBCenterMoveRate:
+      rolloutCount === 0 ? 0 : modelBCenterMoveRateTotal / rolloutCount,
+    averageModelASolitaireMoveRate:
+      rolloutCount === 0 ? 0 : modelASolitaireMoveRateTotal / rolloutCount,
+    averageModelBSolitaireMoveRate:
+      rolloutCount === 0 ? 0 : modelBSolitaireMoveRateTotal / rolloutCount,
+    averageModelACycleMoveRate:
+      rolloutCount === 0 ? 0 : modelACycleMoveRateTotal / rolloutCount,
+    averageModelBCycleMoveRate:
+      rolloutCount === 0 ? 0 : modelBCycleMoveRateTotal / rolloutCount,
+    averageModelAPounceRemaining:
+      rolloutCount === 0 ? 0 : modelAPounceRemainingTotal / rolloutCount,
+    averageModelBPounceRemaining:
+      rolloutCount === 0 ? 0 : modelBPounceRemainingTotal / rolloutCount,
+    modelAPounceOutRate:
+      rolloutCount === 0 ? 0 : modelAPounceOuts / rolloutCount,
+    modelBPounceOutRate:
+      rolloutCount === 0 ? 0 : modelBPounceOuts / rolloutCount,
+  };
+}
+
 function runPolicyRollout(
   startBoard: BoardState,
   options: {
@@ -3403,6 +3562,9 @@ function runPolicyRollout(
     sample: boolean;
     maxMovesPerGame: number;
     neuralPlayerIndices?: number[];
+    policyByPlayer?: (
+      playerIndex: number
+    ) => NeuralActionRankingPolicy | undefined;
     captureTransitions?: boolean;
     captureTransitionBoards?: boolean;
     basicMoveProvider?: BasicMoveProvider;
@@ -3444,8 +3606,16 @@ function runPolicyRollout(
       break;
     }
 
-    const move = neuralPlayers.has(playerIndex)
-      ? chooseNeuralMove(board, playerIndex, options, transitions)
+    const playerPolicy =
+      options.policyByPlayer?.(playerIndex) ??
+      (neuralPlayers.has(playerIndex) ? options.policy : undefined);
+    const move = playerPolicy
+      ? chooseNeuralMove(
+          board,
+          playerIndex,
+          { ...options, policy: playerPolicy },
+          transitions
+        )
       : options.basicMoveProvider
         ? options.basicMoveProvider(board, playerIndex)
         : getBasicAIMove(board, playerIndex, {});
@@ -3547,6 +3717,63 @@ function getRolloutPlayerMetrics(rollout: RolloutResult, playerIndex: number) {
     solitaireMoveRate: getMoveRate(moveCounts, ["c2s", "s2s"]),
     cycleMoveRate: getMoveRate(moveCounts, ["cycle", "flip_deck"]),
   };
+}
+
+function getRolloutGroupMetrics(
+  rollout: RolloutResult,
+  playerIndices: readonly number[]
+) {
+  const safePlayerIndices = playerIndices.filter(
+    (playerIndex) =>
+      playerIndex >= 0 && playerIndex < rollout.finalScores.length
+  );
+  const playerCount = Math.max(1, safePlayerIndices.length);
+  const moveCounts = createMoveTypeCounts();
+  safePlayerIndices.forEach((playerIndex) => {
+    const playerMoveCounts =
+      rollout.moveTypeCountsByPlayer[playerIndex] ?? createMoveTypeCounts();
+    MOVE_TYPES.forEach((moveType) => {
+      moveCounts[moveType] += playerMoveCounts[moveType];
+    });
+  });
+  return {
+    score:
+      safePlayerIndices.reduce(
+        (sum, playerIndex) => sum + (rollout.finalScores[playerIndex] ?? 0),
+        0
+      ) / playerCount,
+    pointDifferential:
+      safePlayerIndices.reduce(
+        (sum, playerIndex) =>
+          sum + (rollout.finalPointDifferentials[playerIndex] ?? 0),
+        0
+      ) / playerCount,
+    pounceRemaining:
+      safePlayerIndices.reduce(
+        (sum, playerIndex) =>
+          sum + (rollout.finalPounceCounts[playerIndex] ?? 0),
+        0
+      ) / playerCount,
+    decisionCount: getTotalMoveCount(moveCounts) / playerCount,
+    centerMoveRate: getMoveRate(moveCounts, ["c2c"]),
+    solitaireMoveRate: getMoveRate(moveCounts, ["c2s", "s2s"]),
+    cycleMoveRate: getMoveRate(moveCounts, ["cycle", "flip_deck"]),
+  };
+}
+
+function getSelfPlayModelASeats(
+  playerCount: number,
+  gameIndex: number,
+  swapped: boolean
+): Set<number> {
+  const modelASeats = new Set<number>();
+  const targetParity = (gameIndex + (swapped ? 1 : 0)) % 2;
+  for (let playerIndex = 0; playerIndex < playerCount; playerIndex++) {
+    if (playerIndex % 2 === targetParity) {
+      modelASeats.add(playerIndex);
+    }
+  }
+  return modelASeats;
 }
 
 function createShuffledDeck(player: number, seed: string): CardState[] {
