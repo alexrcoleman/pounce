@@ -285,8 +285,10 @@ candidate. The default 64-episode recipe set did not beat the current
 behavior-scope checkpoint. A custom low-LR behavior-scope pairwise sweep had one
 near-miss at `+0.149 +/- 0.149` over 96 search games, but a larger 768-game
 held-out paired comparison was an exact tie on point differential, score, and
-behavior metrics. Treat that as noise or an update too small to affect greedy
-play, not as an RL improvement.
+behavior metrics. A follow-up diagnostic over 2,000 sampled teacher-state
+decisions found 100% top-action agreement between that candidate and the
+behavior-scope checkpoint, so treat the search bump as noise or an update too
+small to affect greedy play, not as an RL improvement.
 
 Legacy model feature expansion is now enabled before fine-tuning. Re-running the
 240-state behavior-scope recipe from the capacity checkpoint produced a 48-input
