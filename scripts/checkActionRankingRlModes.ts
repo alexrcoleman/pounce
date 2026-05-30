@@ -242,6 +242,29 @@ assert.equal(
   "greedy-state value mode should not fall back to policy-gradient updates"
 );
 
+const scanBudgetValue = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:scan-budget-value",
+  rlEpisodes: 2,
+  rlCounterfactualScanEpisodes: 4,
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualStateSource: "greedy",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.equal(
+  scanBudgetValue.reinforcement.counterfactualScannedEpisodes,
+  4,
+  "supervised counterfactual scan budget should collect labels beyond RL episode metrics"
+);
+assert.ok(
+  scanBudgetValue.reinforcement.counterfactualUpdateCount >
+    scanBudgetValue.reinforcement.episodes,
+  "supervised counterfactual scan budget should add accepted label opportunities"
+);
+
 const anchoredValue = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:anchored-value",
@@ -406,6 +429,7 @@ console.log(
       residualValue: summarize(residualValue),
       broadValue: summarize(broadValue),
       greedyStateValue: summarize(greedyStateValue),
+      scanBudgetValue: summarize(scanBudgetValue),
       anchoredValue: summarize(anchoredValue),
       connectorAnchoredValue: summarize(connectorAnchoredValue),
       symmetricConnectorAnchoredValue: summarize(
@@ -439,8 +463,12 @@ function assertCounterfactualWork(
 function summarize(result: NeuralTrainingResult) {
   return {
     counterfactualUpdateCount: result.reinforcement.counterfactualUpdateCount,
+    counterfactualScannedEpisodes:
+      result.reinforcement.counterfactualScannedEpisodes,
     averageCounterfactualCandidateCount:
       result.reinforcement.averageCounterfactualCandidateCount,
+    averageCounterfactualScannedDecisionCount:
+      result.reinforcement.averageCounterfactualScannedDecisionCount,
     counterfactualTrainingUpdates:
       result.reinforcement.counterfactualTrainingUpdates,
     counterfactualMaxReturnGapSkippedCount:

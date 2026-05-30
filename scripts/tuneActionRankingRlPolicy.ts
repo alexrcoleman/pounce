@@ -280,6 +280,10 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
     rlBaselineMode: "greedy",
     rlCommonRandom: true,
     rlCreditMode: "counterfactual",
+    rlCounterfactualScanEpisodes: readIntegerEnv(
+      "RL_COUNTERFACTUAL_SCAN_EPISODES",
+      readIntegerEnv("RL_EPISODES", 64)
+    ),
     rlCounterfactualRolloutCount: readIntegerEnv("RL_COUNTERFACTUAL_ROLLOUTS", 1),
     rlCounterfactualRolloutMoves: readIntegerEnv(
       "RL_COUNTERFACTUAL_ROLLOUT_MOVES",

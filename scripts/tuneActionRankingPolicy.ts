@@ -129,6 +129,10 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
     rlBaselineMode: readRlBaselineModeEnv("RL_BASELINE_MODE", "teacher"),
     rlCommonRandom: readBooleanEnv("RL_COMMON_RANDOM", true),
     rlCreditMode: readRlCreditModeEnv("RL_CREDIT_MODE", "episode"),
+    rlCounterfactualScanEpisodes: readIntegerEnv(
+      "RL_COUNTERFACTUAL_SCAN_EPISODES",
+      readIntegerEnv("RL_EPISODES", 32)
+    ),
     rlCounterfactualRolloutCount: readIntegerEnv("RL_COUNTERFACTUAL_ROLLOUTS", 1),
     rlCounterfactualRolloutMoves: readIntegerEnv(
       "RL_COUNTERFACTUAL_ROLLOUT_MOVES",
