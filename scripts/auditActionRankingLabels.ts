@@ -47,6 +47,10 @@ const stateTemperature = readNumberEnv("LABEL_STATE_TEMPERATURE", 1);
 const stateSample = readBooleanEnv("LABEL_STATE_SAMPLE", false);
 const maxPolicyScoreGap = readNumberEnv("LABEL_MAX_SCORE_GAP", 0);
 const maxWinnerPolicyScoreGap = readNumberEnv("LABEL_MAX_WINNER_SCORE_GAP", 0);
+const maxCandidatePolicyScoreGap = readNumberEnv(
+  "LABEL_MAX_CANDIDATE_SCORE_GAP",
+  0
+);
 const policyCandidateLimit = readIntegerEnv("LABEL_POLICY_CANDIDATES", 0);
 const candidateLimit = readIntegerEnv("LABEL_CANDIDATES", 8);
 const rolloutMoves = readIntegerEnv("LABEL_ROLLOUT_MOVES", 450);
@@ -78,6 +82,7 @@ if (
     continuationMode === "policy" ||
     maxPolicyScoreGap > 0 ||
     maxWinnerPolicyScoreGap > 0 ||
+    maxCandidatePolicyScoreGap > 0 ||
     policyCandidateLimit > 0)
 ) {
   throw new Error(
@@ -94,6 +99,7 @@ const collection = collectRewardImprovementExamples({
   stateSample,
   maxPolicyScoreGap,
   maxWinnerPolicyScoreGap,
+  maxCandidatePolicyScoreGap,
   policyCandidateLimit,
   candidateLimit,
   rolloutMoves,
@@ -123,6 +129,7 @@ console.log(
         stateSample,
         maxPolicyScoreGap,
         maxWinnerPolicyScoreGap,
+        maxCandidatePolicyScoreGap,
         policyCandidateLimit,
         candidateLimit,
         rolloutMoves,
@@ -151,6 +158,9 @@ console.log(
         skippedPolicyScoreGap: collection.skippedPolicyScoreGapCount,
         skippedPolicyWinnerScoreGap:
           collection.skippedPolicyWinnerScoreGapCount,
+        skippedPolicyCandidateSupport:
+          collection.skippedPolicyCandidateSupportCount,
+        filteredPolicyCandidates: collection.filteredPolicyCandidateCount,
         averageTeacherReturn: collection.averageTeacherReturn,
         averageBehaviorReturn: collection.averageBehaviorReturn,
         averageBestReturn: collection.averageBestReturn,

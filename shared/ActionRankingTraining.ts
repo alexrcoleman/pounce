@@ -72,6 +72,7 @@ export type NeuralTrainingOptions = {
   improvementStateSample?: boolean;
   improvementMaxPolicyScoreGap?: number;
   improvementMaxWinnerPolicyScoreGap?: number;
+  improvementMaxCandidatePolicyScoreGap?: number;
   improvementPolicyCandidateLimit?: number;
   improvementCandidateLimit?: number;
   improvementRolloutMoves?: number;
@@ -120,6 +121,8 @@ export type NeuralTrainingResult = {
     skippedBehaviorConfidenceCount: number;
     skippedPolicyScoreGapCount: number;
     skippedPolicyWinnerScoreGapCount: number;
+    skippedPolicyCandidateSupportCount: number;
+    filteredPolicyCandidateCount: number;
     scannedStateCount: number;
     stats: ImitationTrainingStats;
   };
@@ -258,6 +261,8 @@ type RewardImprovementCollection = {
   skippedBehaviorConfidenceCount: number;
   skippedPolicyScoreGapCount: number;
   skippedPolicyWinnerScoreGapCount: number;
+  skippedPolicyCandidateSupportCount: number;
+  filteredPolicyCandidateCount: number;
   scannedStateCount: number;
 };
 
@@ -327,6 +332,8 @@ export function trainNeuralActionRankingPolicy(
     stateSample: options.improvementStateSample ?? false,
     maxPolicyScoreGap: options.improvementMaxPolicyScoreGap ?? 0,
     maxWinnerPolicyScoreGap: options.improvementMaxWinnerPolicyScoreGap ?? 0,
+    maxCandidatePolicyScoreGap:
+      options.improvementMaxCandidatePolicyScoreGap ?? 0,
     policyCandidateLimit: options.improvementPolicyCandidateLimit ?? 0,
     candidateLimit: options.improvementCandidateLimit ?? 6,
     rolloutMoves: options.improvementRolloutMoves ?? 450,
@@ -446,6 +453,9 @@ export function trainNeuralActionRankingPolicy(
       skippedPolicyScoreGapCount: improvement.skippedPolicyScoreGapCount,
       skippedPolicyWinnerScoreGapCount:
         improvement.skippedPolicyWinnerScoreGapCount,
+      skippedPolicyCandidateSupportCount:
+        improvement.skippedPolicyCandidateSupportCount,
+      filteredPolicyCandidateCount: improvement.filteredPolicyCandidateCount,
       scannedStateCount: improvement.scannedStateCount,
       stats: improvementStats,
     },
@@ -468,6 +478,7 @@ export function collectRewardImprovementExamples(options: {
   stateSample: boolean;
   maxPolicyScoreGap: number;
   maxWinnerPolicyScoreGap: number;
+  maxCandidatePolicyScoreGap: number;
   policyCandidateLimit: number;
   candidateLimit: number;
   rolloutMoves: number;
@@ -495,6 +506,8 @@ export function collectRewardImprovementExamples(options: {
       skippedBehaviorConfidenceCount: 0,
       skippedPolicyScoreGapCount: 0,
       skippedPolicyWinnerScoreGapCount: 0,
+      skippedPolicyCandidateSupportCount: 0,
+      filteredPolicyCandidateCount: 0,
       scannedStateCount: 0,
     };
   }
@@ -510,6 +523,8 @@ export function collectRewardImprovementExamples(options: {
   let skippedBehaviorConfidenceCount = 0;
   let skippedPolicyScoreGapCount = 0;
   let skippedPolicyWinnerScoreGapCount = 0;
+  let skippedPolicyCandidateSupportCount = 0;
+  let filteredPolicyCandidateCount = 0;
   let scannedStateCount = 0;
   let dealIndex = 0;
   const maxScannedStateCount = options.requireBehaviorGap
@@ -577,16 +592,28 @@ export function collectRewardImprovementExamples(options: {
           const teacherKey = teacherMove
             ? getActionRankingMoveKey(teacherMove)
             : null;
+          const requiredKeys = [behaviorKey, teacherKey].filter(
+            (key): key is string => key != null
+          );
           const policyKeys = getPolicyCandidateKeys(
             candidates,
             options.statePolicy,
             options.policyCandidateLimit
           );
-          const selectedCandidates = selectImprovementCandidates(
+          const candidatePool = filterPolicySupportedCandidates(
             candidates,
-            [behaviorKey, teacherKey, ...policyKeys].filter(
-              (key): key is string => key != null
-            ),
+            options.statePolicy,
+            options.maxCandidatePolicyScoreGap,
+            requiredKeys
+          );
+          filteredPolicyCandidateCount += candidates.length - candidatePool.length;
+          if (candidatePool.length <= 1) {
+            skippedPolicyCandidateSupportCount += 1;
+            continue;
+          }
+          const selectedCandidates = selectImprovementCandidates(
+            candidatePool,
+            [...requiredKeys, ...policyKeys],
             options.candidateLimit,
             random
           );
@@ -673,6 +700,8 @@ export function collectRewardImprovementExamples(options: {
     skippedBehaviorConfidenceCount,
     skippedPolicyScoreGapCount,
     skippedPolicyWinnerScoreGapCount,
+    skippedPolicyCandidateSupportCount,
+    filteredPolicyCandidateCount,
     scannedStateCount,
   };
 }
@@ -1068,6 +1097,33 @@ function getPolicyCandidateKeys(
     .rankCandidates(candidates)
     .slice(0, Math.max(0, Math.floor(limit)))
     .map((prediction) => prediction.candidate.key);
+}
+
+function filterPolicySupportedCandidates(
+  candidates: ActionRankingCandidate[],
+  policy: NeuralActionRankingPolicy | undefined,
+  maxScoreGap: number,
+  requiredKeys: readonly string[]
+): ActionRankingCandidate[] {
+  if (!policy || maxScoreGap <= 0 || candidates.length <= 1) {
+    return candidates;
+  }
+  const requiredKeySet = new Set(requiredKeys);
+  const ranked = policy.rankCandidates(candidates);
+  const topScore = ranked[0]?.score;
+  if (topScore == null) {
+    return candidates;
+  }
+  const allowedKeys = new Set(
+    ranked
+      .filter(
+        (prediction) =>
+          requiredKeySet.has(prediction.candidate.key) ||
+          topScore - prediction.score <= maxScoreGap
+      )
+      .map((prediction) => prediction.candidate.key)
+  );
+  return candidates.filter((candidate) => allowedKeys.has(candidate.key));
 }
 
 function selectImprovementCandidates(

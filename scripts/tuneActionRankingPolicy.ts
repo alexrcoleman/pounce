@@ -61,6 +61,10 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       "IMPROVEMENT_MAX_WINNER_SCORE_GAP",
       0
     ),
+    improvementMaxCandidatePolicyScoreGap: readNumberEnv(
+      "IMPROVEMENT_MAX_CANDIDATE_SCORE_GAP",
+      0
+    ),
     improvementPolicyCandidateLimit: readIntegerEnv(
       "IMPROVEMENT_POLICY_CANDIDATES",
       0
