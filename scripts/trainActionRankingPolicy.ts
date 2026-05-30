@@ -27,6 +27,10 @@ const options = {
   improvementStateTemperature: readNumberEnv("IMPROVEMENT_STATE_TEMPERATURE", 1),
   improvementStateSample: readBooleanEnv("IMPROVEMENT_STATE_SAMPLE", false),
   improvementMaxPolicyScoreGap: readNumberEnv("IMPROVEMENT_MAX_SCORE_GAP", 0),
+  improvementMaxWinnerPolicyScoreGap: readNumberEnv(
+    "IMPROVEMENT_MAX_WINNER_SCORE_GAP",
+    0
+  ),
   improvementPolicyCandidateLimit: readIntegerEnv(
     "IMPROVEMENT_POLICY_CANDIDATES",
     0

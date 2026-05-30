@@ -16,7 +16,7 @@ npm run action-ranking:train
 Useful training knobs:
 
 - `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`
-- `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_MAX_SCORE_GAP`, `IMPROVEMENT_POLICY_CANDIDATES`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_CONTINUATION`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_PAIRWISE_MARGIN`, `IMPROVEMENT_VALUE_SCALE`, `IMPROVEMENT_VALUE_CENTER`, `IMPROVEMENT_VALUE_HUBER`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
+- `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_MAX_SCORE_GAP`, `IMPROVEMENT_MAX_WINNER_SCORE_GAP`, `IMPROVEMENT_POLICY_CANDIDATES`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_CONTINUATION`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_PAIRWISE_MARGIN`, `IMPROVEMENT_VALUE_SCALE`, `IMPROVEMENT_VALUE_CENTER`, `IMPROVEMENT_VALUE_HUBER`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
 - `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_CANDIDATES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_PREFERENCE_SCOPE`, `RL_COUNTERFACTUAL_PAIRWISE_MARGIN`, `RL_COUNTERFACTUAL_MAX_SCORE_GAP`, `RL_COUNTERFACTUAL_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_ANCHOR_TEMPERATURE`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `HIDDEN_LAYERS`, `MAX_MOVES`, `SEED`
 - `HIDDEN` and `HIDDEN_LAYERS` accept comma-separated layer sizes, for example `HIDDEN=192,96`
@@ -25,6 +25,7 @@ Useful training knobs:
 - `MODEL_IN=...\model.json npm run action-ranking:evaluate` to evaluate saved weights
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare` to compare two models on paired deals/seats
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:diagnose` to compare top-ranked actions on sampled teacher states
+- `MODEL_IN=...\best.json npm run action-ranking:audit-labels` to audit rollout labels before training on them
 - `MODEL_IN=...\best.json npm run action-ranking:tune` to iterate reward fine-tunes and promote only paired-comparison improvements
 - `MODEL_IN=...\best.json npm run action-ranking:tune-rl` to sweep counterfactual RL recipes and promote only paired-comparison improvements
 - `npm run action-ranking:check-rl-modes` to smoke-test legacy feature expansion and counterfactual RL training mode routing
@@ -113,6 +114,17 @@ is actually changing center-vs-solitaire choices, pounce-card urgency, connector
 behavior, or opponent-helping center plays before spending time on a large
 paired rollout.
 
+`action-ranking:audit-labels` runs the same reward-improvement label collector
+without updating the model. It reports which move-type pairs the rollouts prefer,
+how often the rollout winner matches the current policy, teacher, or behavior
+move, how large the return gaps are, and where immediate point reward disagrees
+with the longer rollout value. The audit uses `LABEL_*` equivalents of the
+improvement rollout knobs: `LABEL_STATES`, `LABEL_STATE_SOURCE`,
+`LABEL_MAX_SCORE_GAP`, `LABEL_MAX_WINNER_SCORE_GAP`,
+`LABEL_POLICY_CANDIDATES`, `LABEL_CANDIDATES`, `LABEL_ROLLOUT_MOVES`,
+`LABEL_ROLLOUT_COUNT`, `LABEL_CONTINUATION`, `LABEL_REQUIRE_BEHAVIOR_GAP`,
+`LABEL_MIN_BEHAVIOR_IMPROVEMENT`, and `LABEL_MIN_RETURN_GAP`.
+
 The best policy-state reward candidate so far uses targeted behavior-gap
 examples and a behavior-only pairwise update:
 
@@ -190,6 +202,9 @@ current model's top two candidate scores are close enough to plausibly move, and
 `IMPROVEMENT_POLICY_CANDIDATES` forces the top-ranked policy alternatives into
 the counterfactual candidate set. Together these mine labels from the decisions
 the model is actually choosing between instead of mostly random alternatives.
+`IMPROVEMENT_MAX_WINNER_SCORE_GAP` adds a stricter post-rollout filter: if the
+rollout winner is still too far below the current policy top action, the label is
+skipped instead of forcing a large reversal from a single noisy counterfactual.
 Early 80-state policy-source pairwise runs changed more relevant decisions but
 still did not beat the imitation checkpoint in paired comparison.
 `IMPROVEMENT_MODE=pairwise` trains only clear rollout-return preferences, using
@@ -354,6 +369,18 @@ with `IMPROVEMENT_CONTINUATION=policy` eliminated sampled-state top-action
 changes in the diagnostic, but still measured `-0.016 +/- 0.038`. Policy
 continuation is better aligned with deployed play, but uncertainty mining alone
 has not produced an improved checkpoint.
+The label audit explains why: on an 80-state policy-continuation audit with
+`LABEL_MAX_SCORE_GAP=1`, `LABEL_POLICY_CANDIDATES=5`, and behavior-gap
+filtering, 65 accepted labels still picked cycle as the rollout winner in
+`70.8%` of states, with the current policy's top action averaging about `14.9`
+score units above that winner. Adding `IMPROVEMENT_MAX_WINNER_SCORE_GAP=1`
+kept only 8-9 near-surface labels after 1,600 scanned states and removed the
+worst immediate-reward conflicts, but the resulting small pairwise update had
+100% top-action agreement with the starting checkpoint over 2,000 sampled
+teacher states and measured `-0.030 +/- 0.030` over 384 paired games. That makes
+the winner-score filter useful for avoiding bad labels, but it also shows that
+we need either more label volume or a value-style update that can use weak
+near-policy signals without erasing the existing policy.
 
 Legacy model feature expansion is now enabled before fine-tuning. Re-running the
 240-state behavior-scope recipe from the capacity checkpoint produced a 48-input

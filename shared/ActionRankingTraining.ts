@@ -70,6 +70,7 @@ export type NeuralTrainingOptions = {
   improvementStateTemperature?: number;
   improvementStateSample?: boolean;
   improvementMaxPolicyScoreGap?: number;
+  improvementMaxWinnerPolicyScoreGap?: number;
   improvementPolicyCandidateLimit?: number;
   improvementCandidateLimit?: number;
   improvementRolloutMoves?: number;
@@ -113,6 +114,7 @@ export type NeuralTrainingResult = {
     averageCandidateReturnStdDev: number;
     skippedBehaviorGapCount: number;
     skippedPolicyScoreGapCount: number;
+    skippedPolicyWinnerScoreGapCount: number;
     scannedStateCount: number;
     stats: ImitationTrainingStats;
   };
@@ -247,6 +249,7 @@ type RewardImprovementCollection = {
   averageCandidateReturnStdDev: number;
   skippedBehaviorGapCount: number;
   skippedPolicyScoreGapCount: number;
+  skippedPolicyWinnerScoreGapCount: number;
   scannedStateCount: number;
 };
 
@@ -313,6 +316,7 @@ export function trainNeuralActionRankingPolicy(
     stateTemperature: options.improvementStateTemperature ?? 1,
     stateSample: options.improvementStateSample ?? false,
     maxPolicyScoreGap: options.improvementMaxPolicyScoreGap ?? 0,
+    maxWinnerPolicyScoreGap: options.improvementMaxWinnerPolicyScoreGap ?? 0,
     policyCandidateLimit: options.improvementPolicyCandidateLimit ?? 0,
     candidateLimit: options.improvementCandidateLimit ?? 6,
     rolloutMoves: options.improvementRolloutMoves ?? 450,
@@ -421,6 +425,8 @@ export function trainNeuralActionRankingPolicy(
       averageCandidateReturnStdDev: improvement.averageCandidateReturnStdDev,
       skippedBehaviorGapCount: improvement.skippedBehaviorGapCount,
       skippedPolicyScoreGapCount: improvement.skippedPolicyScoreGapCount,
+      skippedPolicyWinnerScoreGapCount:
+        improvement.skippedPolicyWinnerScoreGapCount,
       scannedStateCount: improvement.scannedStateCount,
       stats: improvementStats,
     },
@@ -442,6 +448,7 @@ export function collectRewardImprovementExamples(options: {
   stateTemperature: number;
   stateSample: boolean;
   maxPolicyScoreGap: number;
+  maxWinnerPolicyScoreGap: number;
   policyCandidateLimit: number;
   candidateLimit: number;
   rolloutMoves: number;
@@ -465,6 +472,7 @@ export function collectRewardImprovementExamples(options: {
       averageCandidateReturnStdDev: 0,
       skippedBehaviorGapCount: 0,
       skippedPolicyScoreGapCount: 0,
+      skippedPolicyWinnerScoreGapCount: 0,
       scannedStateCount: 0,
     };
   }
@@ -477,6 +485,7 @@ export function collectRewardImprovementExamples(options: {
   let candidateReturnStdDevTotal = 0;
   let skippedBehaviorGapCount = 0;
   let skippedPolicyScoreGapCount = 0;
+  let skippedPolicyWinnerScoreGapCount = 0;
   let scannedStateCount = 0;
   let dealIndex = 0;
   const maxScannedStateCount = options.requireBehaviorGap
@@ -566,24 +575,36 @@ export function collectRewardImprovementExamples(options: {
             behaviorMove,
             teacherMove,
             `${options.seed}:rollout:${dealIndex}:${stepIndex}`,
-          options.rolloutMoves,
-          options.rolloutCount,
-          options.commonRandom,
-          options.continuationMode,
-          options.continuationPolicy,
-          options.requireBehaviorGap,
+            options.rolloutMoves,
+            options.rolloutCount,
+            options.commonRandom,
+            options.continuationMode,
+            options.continuationPolicy,
+            options.requireBehaviorGap,
             options.minBehaviorImprovement
           );
           if (result.skippedForBehaviorGap) {
             skippedBehaviorGapCount += 1;
           }
           if (result.example) {
-            teacherReturnTotal += result.teacherReturn ?? 0;
-            behaviorReturnTotal += result.behaviorReturn ?? 0;
-            bestReturnTotal += result.bestReturn ?? 0;
-            bestBehaviorImprovementTotal += result.bestBehaviorImprovement;
-            candidateReturnStdDevTotal += result.candidateReturnStdDev;
-            examples.push(result.example);
+            const winnerScoreGap = getPolicyWinnerScoreGap(
+              result.example,
+              options.statePolicy
+            );
+            if (
+              options.maxWinnerPolicyScoreGap > 0 &&
+              winnerScoreGap != null &&
+              winnerScoreGap > options.maxWinnerPolicyScoreGap
+            ) {
+              skippedPolicyWinnerScoreGapCount += 1;
+            } else {
+              teacherReturnTotal += result.teacherReturn ?? 0;
+              behaviorReturnTotal += result.behaviorReturn ?? 0;
+              bestReturnTotal += result.bestReturn ?? 0;
+              bestBehaviorImprovementTotal += result.bestBehaviorImprovement;
+              candidateReturnStdDevTotal += result.candidateReturnStdDev;
+              examples.push(result.example);
+            }
           }
         }
       }
@@ -616,6 +637,7 @@ export function collectRewardImprovementExamples(options: {
       examples.length === 0 ? 0 : candidateReturnStdDevTotal / examples.length,
     skippedBehaviorGapCount,
     skippedPolicyScoreGapCount,
+    skippedPolicyWinnerScoreGapCount,
     scannedStateCount,
   };
 }
@@ -884,6 +906,24 @@ function getPolicyTopScoreGap(
   }
   const ranked = policy.rankCandidates(candidates);
   return ranked.length <= 1 ? null : ranked[0].score - ranked[1].score;
+}
+
+function getPolicyWinnerScoreGap(
+  example: ActionRankingImitationExample,
+  policy: NeuralActionRankingPolicy | undefined
+): number | null {
+  if (!policy || !example.selectedActionKey || example.candidates.length <= 1) {
+    return null;
+  }
+  const ranked = policy.rankCandidates(example.candidates);
+  const top = ranked[0];
+  const winner = ranked.find(
+    (prediction) => prediction.candidate.key === example.selectedActionKey
+  );
+  if (!top || !winner) {
+    return null;
+  }
+  return top.score - winner.score;
 }
 
 function getPolicyCandidateKeys(

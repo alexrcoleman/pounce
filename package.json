@@ -11,6 +11,7 @@
     "action-ranking:evaluate": "ts-node --transpile-only scripts/evaluateActionRankingPolicy.ts",
     "action-ranking:compare": "ts-node --transpile-only scripts/compareActionRankingPolicies.ts",
     "action-ranking:diagnose": "ts-node --transpile-only scripts/diagnoseActionRankingPolicyDifferences.ts",
+    "action-ranking:audit-labels": "ts-node --transpile-only scripts/auditActionRankingLabels.ts",
     "action-ranking:tune": "ts-node --transpile-only scripts/tuneActionRankingPolicy.ts",
     "action-ranking:tune-rl": "ts-node --transpile-only scripts/tuneActionRankingRlPolicy.ts",
     "action-ranking:check-rl-modes": "ts-node --transpile-only scripts/checkActionRankingRlModes.ts",
