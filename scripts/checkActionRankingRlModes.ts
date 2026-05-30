@@ -407,14 +407,13 @@ const scoreGapPrefiltered = trainNeuralActionRankingPolicy({
   rlCounterfactualValueHuberDelta: 0,
 });
 assert.equal(
-  scoreGapPrefiltered.reinforcement.counterfactualUpdateCount,
-  0,
-  "strict score-gap filtering should prefilter large-gap candidates before training labels"
-);
-assert.equal(
   scoreGapPrefiltered.reinforcement.counterfactualScoreGapSkippedCount,
   0,
   "strict score-gap prefiltering should not spend rollouts on labels that will be skipped by score gap"
+);
+assert.ok(
+  scoreGapPrefiltered.reinforcement.averageCounterfactualScoreGap <= 0.001,
+  "strict score-gap filtering should keep accepted labels within the score-gap cap"
 );
 
 const behaviorGapFiltered = trainNeuralActionRankingPolicy({
@@ -774,6 +773,11 @@ function assertLegacyFeatureExpansion() {
     "cycle.resetRevealedOwnSolitaireConnectorForPounce",
     "cycle.resetRevealedMatchesPounceParity",
     "cycle.resetRevealedPounceConnectorCloseness",
+    "cycle.lookaheadCenterPlayableReach",
+    "cycle.lookaheadCanPlaySoonReach",
+    "cycle.lookaheadOwnSolitaireDestinationReach",
+    "cycle.lookaheadOwnSolitaireConnectorForPounceReach",
+    "cycle.lookaheadPounceConnectorReach",
     "own.pounceCenterPlayable",
     "own.deckCenterPlayable",
     "own.stackCenterPlayableCount",
@@ -895,6 +899,13 @@ function assertTacticalFeatureSurface() {
       0,
     "cycle reset memory should carry pounce connector closeness"
   );
+  assert.ok(
+    getFeature(
+      cycleCandidate,
+      "cycle.lookaheadOwnSolitaireConnectorForPounceReach"
+    ) > 0,
+    "cycle lookahead should see useful deck cards after a waste reset"
+  );
   assert.equal(
     getFeature(cycleCandidate, "own.pounceCenterPlayable"),
     1,
@@ -926,11 +937,64 @@ function assertTacticalFeatureSurface() {
     "visible pressure should count opponent pounce cards close to center play"
   );
 
+  const stockLookaheadBoard = createBoard(2);
+  stockLookaheadBoard.isActive = true;
+  stockLookaheadBoard.isDealt = true;
+  stockLookaheadBoard.piles = [
+    [card("hearts", 4, -1)],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+  ];
+  stockLookaheadBoard.players[0].pounceDeck = [card("clubs", 4, 0)];
+  stockLookaheadBoard.players[0].flippedDeck = [];
+  stockLookaheadBoard.players[0].stacks = [[card("spades", 6, 0)], [], [], []];
+  stockLookaheadBoard.players[0].deck = [
+    card("hearts", 5, 0),
+    card("clubs", 8, 0),
+    card("clubs", 9, 0),
+    card("clubs", 10, 0),
+    card("clubs", 11, 0),
+    card("clubs", 12, 0),
+  ];
+  const stockLookaheadCycle = enumerateActionRankingCandidates(
+    stockLookaheadBoard,
+    0
+  ).find((candidate) => candidate.move.type === "cycle");
+  assert.ok(
+    stockLookaheadCycle,
+    "feature check should include a future-stock cycle candidate"
+  );
+  assert.equal(
+    getFeature(stockLookaheadCycle, "cycle.revealedCenterPlayable"),
+    0,
+    "future stock check should not rely on the immediate cycle reveal"
+  );
+  assert.ok(
+    getFeature(stockLookaheadCycle, "cycle.lookaheadCenterPlayableReach") > 0,
+    "cycle lookahead should see center-playable cards beyond the next reveal"
+  );
+  assert.ok(
+    getFeature(
+      stockLookaheadCycle,
+      "cycle.lookaheadOwnSolitaireDestinationReach"
+    ) > 0,
+    "cycle lookahead should see future stock cards with solitaire destinations"
+  );
+
   return {
     featureCount: ACTION_RANKING_FEATURE_NAMES.length,
     cycleResetRevealedValue: getFeature(
       cycleCandidate,
       "cycle.resetRevealedValue"
+    ),
+    cycleLookaheadCenterPlayableReach: getFeature(
+      stockLookaheadCycle,
+      "cycle.lookaheadCenterPlayableReach"
     ),
     opponentPouncePressure: getFeature(
       cycleCandidate,

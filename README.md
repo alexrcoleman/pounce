@@ -67,6 +67,19 @@ rather than pushing every cycle action up globally.
 Cycle reset moves also expose the known card that would become visible after
 resetting the waste and cycling once, so the policy can learn "reset because I
 remember the next pass is useful" instead of treating all waste resets alike.
+Cycle moves also include distance-weighted lookahead summaries across the
+known stock order: whether a future visible stock card can play to center, can
+play soon, can move to solitaire, or can act as a pounce connector. This is a
+stateless memory proxy for the feed-forward model, giving it a way to value
+cycling back toward a remembered card without adding recurrent network state.
+A light imitation warmup from the behavior-scope checkpoint on the expanded
+102-feature surface (`48` deals, `2` epochs, `IMITATION_LR=0.005`) preserved
+behavior: it measured `-0.008 +/- 0.114` over 384 paired games against the
+starting checkpoint, with matching `20.8%` pounce-out rate. A 2,000-state
+teacher diagnostic found `99.7%` top-action agreement, with the new
+`cycle.lookaheadCanPlaySoonReach` showing up in the few cycle-vs-deck-solitaire
+divergences. This is not a promotion, but it confirms the lookahead inputs can
+be introduced without destabilizing the current policy.
 The global visible-pressure inputs count own and opponent pounce/deck/solitaire
 cards that are playable on center now, plus pounce cards close to center play;
 those are intended to help reward training learn tempo and opponent-help costs

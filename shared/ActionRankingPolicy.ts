@@ -99,6 +99,11 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "cycle.resetRevealedOwnSolitaireConnectorForPounce",
   "cycle.resetRevealedMatchesPounceParity",
   "cycle.resetRevealedPounceConnectorCloseness",
+  "cycle.lookaheadCenterPlayableReach",
+  "cycle.lookaheadCanPlaySoonReach",
+  "cycle.lookaheadOwnSolitaireDestinationReach",
+  "cycle.lookaheadOwnSolitaireConnectorForPounceReach",
+  "cycle.lookaheadPounceConnectorReach",
   "own.pounceCenterPlayable",
   "own.deckCenterPlayable",
   "own.stackCenterPlayableCount",
@@ -483,6 +488,11 @@ function buildActionRankingFeatures(
     bool(cycleShape.resetRevealedOwnSolitaireConnectorForPounce),
     bool(cycleShape.resetRevealedMatchesPounceParity),
     normalize(cycleShape.resetRevealedPounceConnectorCloseness, 1),
+    normalize(cycleShape.lookaheadCenterPlayableReach, 1),
+    normalize(cycleShape.lookaheadCanPlaySoonReach, 1),
+    normalize(cycleShape.lookaheadOwnSolitaireDestinationReach, 1),
+    normalize(cycleShape.lookaheadOwnSolitaireConnectorForPounceReach, 1),
+    normalize(cycleShape.lookaheadPounceConnectorReach, 1),
     bool(pressureFeatures.ownPounceCenterPlayable),
     bool(pressureFeatures.ownDeckCenterPlayable),
     normalize(pressureFeatures.ownStackCenterPlayableCount, 4),
@@ -618,6 +628,11 @@ function getCycleShapeFeatures(
     resetRevealedOwnSolitaireConnectorForPounce: false,
     resetRevealedMatchesPounceParity: false,
     resetRevealedPounceConnectorCloseness: 0,
+    lookaheadCenterPlayableReach: 0,
+    lookaheadCanPlaySoonReach: 0,
+    lookaheadOwnSolitaireDestinationReach: 0,
+    lookaheadOwnSolitaireConnectorForPounceReach: 0,
+    lookaheadPounceConnectorReach: 0,
   };
   if (!player || move.type !== "cycle") {
     return emptyFeatures;
@@ -627,6 +642,8 @@ function getCycleShapeFeatures(
   if (total <= 0) {
     return emptyFeatures;
   }
+
+  const lookaheadFeatures = getCycleLookaheadFeatures(board, player);
 
   if (player.deck.length === 0) {
     const resetDeck = player.flippedDeck.slice().reverse();
@@ -673,6 +690,7 @@ function getCycleShapeFeatures(
         resetRevealedCard && pounceCard
           ? getConnectorCloseness(resetRevealedCard, pounceCard)
           : 0,
+      ...lookaheadFeatures,
     };
   }
 
@@ -720,7 +738,90 @@ function getCycleShapeFeatures(
     resetRevealedOwnSolitaireConnectorForPounce: false,
     resetRevealedMatchesPounceParity: false,
     resetRevealedPounceConnectorCloseness: 0,
+    ...lookaheadFeatures,
   };
+}
+
+const CYCLE_LOOKAHEAD_MAX_STEPS = 16;
+
+function getCycleLookaheadFeatures(board: BoardState, player: PlayerState) {
+  const features = {
+    lookaheadCenterPlayableReach: 0,
+    lookaheadCanPlaySoonReach: 0,
+    lookaheadOwnSolitaireDestinationReach: 0,
+    lookaheadOwnSolitaireConnectorForPounceReach: 0,
+    lookaheadPounceConnectorReach: 0,
+  };
+  let deck = player.deck.slice();
+  let flippedDeck = player.flippedDeck.slice();
+  const pounceCard = peek(player.pounceDeck);
+
+  for (
+    let step = 0;
+    step < CYCLE_LOOKAHEAD_MAX_STEPS &&
+    (deck.length > 0 || flippedDeck.length > 0);
+    step += 1
+  ) {
+    if (deck.length === 0) {
+      deck = flippedDeck.slice().reverse();
+      flippedDeck = [];
+      continue;
+    }
+
+    const cardsAdvanced = Math.min(3, deck.length);
+    const triple = deck.slice(-cardsAdvanced).reverse();
+    deck.splice(deck.length - cardsAdvanced, cardsAdvanced);
+    flippedDeck.push(...triple);
+
+    const visibleCard = peek(flippedDeck);
+    if (!visibleCard) {
+      continue;
+    }
+
+    const reach = 1 / (step + 1);
+    const solitaireDestinations = player.stacks.flatMap((_, dest) =>
+      canMoveCardToSolitaireStack(player, visibleCard, dest) ? [dest] : []
+    );
+
+    if (board.piles.some((pile) => canPlayOnCenterPile(pile, visibleCard))) {
+      features.lookaheadCenterPlayableReach = Math.max(
+        features.lookaheadCenterPlayableReach,
+        reach
+      );
+    }
+    if (getCanPlaySoon(visibleCard, board, 4)) {
+      features.lookaheadCanPlaySoonReach = Math.max(
+        features.lookaheadCanPlaySoonReach,
+        reach
+      );
+    }
+    features.lookaheadOwnSolitaireDestinationReach = Math.max(
+      features.lookaheadOwnSolitaireDestinationReach,
+      reach * normalize(solitaireDestinations.length, 4)
+    );
+    if (
+      solitaireDestinations.some((dest) =>
+        getMakesPouncePlayable(
+          player,
+          { type: "c2s", source: "deck", dest },
+          visibleCard
+        )
+      )
+    ) {
+      features.lookaheadOwnSolitaireConnectorForPounceReach = Math.max(
+        features.lookaheadOwnSolitaireConnectorForPounceReach,
+        reach
+      );
+    }
+    if (pounceCard) {
+      features.lookaheadPounceConnectorReach = Math.max(
+        features.lookaheadPounceConnectorReach,
+        reach * getConnectorCloseness(visibleCard, pounceCard)
+      );
+    }
+  }
+
+  return features;
 }
 
 function getVisiblePressureFeatures(board: BoardState, playerIndex: number) {
