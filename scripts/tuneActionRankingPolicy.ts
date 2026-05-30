@@ -70,6 +70,18 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       "IMPROVEMENT_PREFERENCE_TEMPERATURE",
       1
     ),
+    improvementPreferenceScope: readImprovementPreferenceScopeEnv(
+      "IMPROVEMENT_PREFERENCE_SCOPE",
+      "all"
+    ),
+    improvementRequireBehaviorGap: readBooleanEnv(
+      "IMPROVEMENT_REQUIRE_BEHAVIOR_GAP",
+      false
+    ),
+    improvementMinBehaviorImprovement: readNumberEnv(
+      "IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT",
+      2
+    ),
     improvementEpochs: readIntegerEnv("IMPROVEMENT_EPOCHS", 1),
     improvementLearningRate: readNumberEnv("IMPROVEMENT_LR", 0.0005),
     improvementTargetTemperature: readNumberEnv("IMPROVEMENT_TEMPERATURE", 4),
@@ -215,6 +227,17 @@ function readImprovementStateSourceEnv(
     return fallback;
   }
   return value.toLowerCase() === "policy" ? "policy" : fallback;
+}
+
+function readImprovementPreferenceScopeEnv(
+  name: string,
+  fallback: "all" | "behavior"
+): "all" | "behavior" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  return value.toLowerCase() === "behavior" ? "behavior" : fallback;
 }
 
 function summarizeComparisons(

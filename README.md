@@ -16,7 +16,7 @@ npm run action-ranking:train
 Useful training knobs:
 
 - `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`
-- `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
+- `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
 - `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `HIDDEN_LAYERS`, `MAX_MOVES`, `SEED`
 - `HIDDEN` and `HIDDEN_LAYERS` accept comma-separated layer sizes, for example `HIDDEN=192,96`
@@ -97,6 +97,39 @@ differential in `95.6%` of games. That means the reward fine-tune is not yet a
 proven replacement for the imitation checkpoint; use `action-ranking:compare`
 before promoting a candidate model.
 
+The best policy-state reward candidate so far uses targeted behavior-gap
+examples and a behavior-only pairwise update:
+
+```powershell
+$env:MODEL_IN='.\node_modules\pounce-action-ranking-capacity-model.json'
+$env:IMITATION_DEALS='0'
+$env:IMPROVEMENT_STATES='240'
+$env:IMPROVEMENT_STATE_SOURCE='policy'
+$env:IMPROVEMENT_STATE_SAMPLE='true'
+$env:IMPROVEMENT_STATE_TEMPERATURE='0.9'
+$env:IMPROVEMENT_CANDIDATES='8'
+$env:IMPROVEMENT_ROLLOUT_MOVES='450'
+$env:IMPROVEMENT_ROLLOUT_COUNT='1'
+$env:IMPROVEMENT_COMMON_RANDOM='true'
+$env:IMPROVEMENT_MODE='pairwise'
+$env:IMPROVEMENT_PREFERENCE_SCOPE='behavior'
+$env:IMPROVEMENT_MIN_RETURN_GAP='2'
+$env:IMPROVEMENT_REQUIRE_BEHAVIOR_GAP='true'
+$env:IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT='2'
+$env:IMPROVEMENT_EPOCHS='1'
+$env:IMPROVEMENT_LR='0.0001'
+$env:RL_EPISODES='0'
+$env:MODEL_OUT='.\node_modules\pounce-action-ranking-behavior-scope-240-lr1-model.json'
+npm run action-ranking:train
+```
+
+Against the imitation checkpoint, that candidate measured `+0.067 +/- 0.028`
+point differential delta over a 1,536-game / 16-seed paired comparison, with
+`97.3%` tied point differentials, `+0.048` average score delta, and a `+0.46`
+percentage-point pounce-out delta. Treat it as the current best experimental
+direction rather than a fully proven replacement; the effect is real enough to
+keep exploring but still quite small.
+
 For iterative improvement, `action-ranking:tune` repeatedly trains from the
 current best model, runs paired comparison against that current best, and only
 promotes when `averagePointDifferentialDelta - PROMOTE_SE_MULTIPLIER * standardError`
@@ -111,15 +144,24 @@ candidate actions in the same state now share continuation randomness; increasin
 `IMPROVEMENT_STATE_SOURCE=policy` instead collects examples only from states
 reached by the current neural policy in one rotating seat while teacher bots play
 the other seats, which is useful for fine-tuning where the model actually acts.
+`IMPROVEMENT_REQUIRE_BEHAVIOR_GAP=true` keeps only rollout states where the best
+counterfactual action beats the behavior action by at least
+`IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT` point differential. That targeted mode is
+most useful with policy-sourced states because it avoids training on decisions
+where the current greedy or sampled behavior is already tied with the best
+rollout candidate.
 Early 80-state policy-source pairwise runs changed more relevant decisions but
 still did not beat the imitation checkpoint in paired comparison.
 `IMPROVEMENT_MODE=pairwise` trains only clear rollout-return preferences, using
 `IMPROVEMENT_MIN_RETURN_GAP` and `IMPROVEMENT_MAX_PAIRS` to ignore low-signal
-candidate differences. Larger or more aggressive improvement passes have
-overcorrected in early tests. RL fine-tuning is wired in with batch-normalized,
-clipped advantages and optional discounted local reward-to-go, but conservative
-runs tested so far have mostly preserved the imitation checkpoint rather than
-clearly improving it.
+candidate differences. `IMPROVEMENT_PREFERENCE_SCOPE=behavior` narrows pairwise
+updates to the best rollout action versus the recorded behavior action, which is
+useful when policy-state examples are meant to correct the model's own decisions
+instead of reshaping every candidate comparison in the state. Larger or more
+aggressive improvement passes have overcorrected in early tests. RL fine-tuning
+is wired in with batch-normalized, clipped advantages and optional discounted
+local reward-to-go, but conservative runs tested so far have mostly preserved the
+imitation checkpoint rather than clearly improving it.
 
 ## Deploying
 

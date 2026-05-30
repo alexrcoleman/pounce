@@ -66,6 +66,7 @@ export type PreferenceTrainingOptions = ImitationTrainingOptions & {
   minReturnGap?: number;
   maxPairsPerExample?: number;
   temperature?: number;
+  preferenceScope?: "all" | "behavior";
 };
 
 type ForwardPass = {
@@ -347,6 +348,7 @@ export class NeuralActionRankingPolicy {
       Math.floor(options.maxPairsPerExample ?? 12)
     );
     const temperature = Math.max(1e-6, options.temperature ?? 1);
+    const preferenceScope = options.preferenceScope ?? "all";
     const random = createSeededRandom(options.shuffleSeed ?? "preferences");
     let totalLoss = 0;
     let totalExamples = 0;
@@ -361,7 +363,8 @@ export class NeuralActionRankingPolicy {
           example,
           minReturnGap,
           maxPairsPerExample,
-          random
+          random,
+          preferenceScope
         );
         if (pairs.length === 0) {
           return;
@@ -617,8 +620,13 @@ function getPreferencePairs(
   example: ActionRankingImitationExample,
   minReturnGap: number,
   maxPairsPerExample: number,
-  random: () => number
+  random: () => number,
+  preferenceScope: "all" | "behavior"
 ): { winnerIndex: number; loserIndex: number; returnGap: number }[] {
+  if (preferenceScope === "behavior") {
+    return getBehaviorPreferencePairs(example, minReturnGap);
+  }
+
   const pairs: { winnerIndex: number; loserIndex: number; returnGap: number }[] =
     [];
 
@@ -663,6 +671,56 @@ function getPreferencePairs(
 
   pairs.sort((a, b) => b.returnGap - a.returnGap || random() - 0.5);
   return maxPairsPerExample === 0 ? pairs : pairs.slice(0, maxPairsPerExample);
+}
+
+function getBehaviorPreferencePairs(
+  example: ActionRankingImitationExample,
+  minReturnGap: number
+): { winnerIndex: number; loserIndex: number; returnGap: number }[] {
+  if (
+    example.selectedCandidateIndex == null ||
+    example.behaviorActionKey == null
+  ) {
+    return [];
+  }
+
+  const behaviorIndex = example.candidates.findIndex(
+    (candidate) => candidate.key === example.behaviorActionKey
+  );
+  if (
+    behaviorIndex < 0 ||
+    behaviorIndex === example.selectedCandidateIndex
+  ) {
+    return [];
+  }
+
+  const selectedReturn =
+    example.candidates[example.selectedCandidateIndex]
+      .rolloutPointDifferentialReturn;
+  const behaviorReturn =
+    example.candidates[behaviorIndex].rolloutPointDifferentialReturn;
+  if (selectedReturn == null || behaviorReturn == null) {
+    return [];
+  }
+
+  const returnGap = Math.abs(selectedReturn - behaviorReturn);
+  if (returnGap < minReturnGap) {
+    return [];
+  }
+
+  return [
+    selectedReturn > behaviorReturn
+      ? {
+          winnerIndex: example.selectedCandidateIndex,
+          loserIndex: behaviorIndex,
+          returnGap,
+        }
+      : {
+          winnerIndex: behaviorIndex,
+          loserIndex: example.selectedCandidateIndex,
+          returnGap,
+        },
+  ];
 }
 
 export function createNeuralActionRankingModel(

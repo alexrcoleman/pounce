@@ -32,8 +32,10 @@ export type ActionRankingImitationExample = {
   finalPlayerPoints: number | null;
   finalPointDifferential: number | null;
   pointDifferentialReturn: number | null;
-  teacherActionKey?: string;
+  teacherActionKey?: string | null;
   teacherPointDifferentialReturn?: number | null;
+  behaviorActionKey?: string | null;
+  behaviorPointDifferentialReturn?: number | null;
   selectedActionKey: string | null;
   selectedCandidateIndex: number | null;
   candidates: ActionRankingImitationCandidate[];

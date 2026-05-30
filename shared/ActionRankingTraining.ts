@@ -58,6 +58,9 @@ export type NeuralTrainingOptions = {
   improvementMinReturnGap?: number;
   improvementMaxPairsPerExample?: number;
   improvementPreferenceTemperature?: number;
+  improvementPreferenceScope?: "all" | "behavior";
+  improvementRequireBehaviorGap?: boolean;
+  improvementMinBehaviorImprovement?: number;
   improvementEpochs?: number;
   improvementLearningRate?: number;
   improvementTargetTemperature?: number;
@@ -77,9 +80,13 @@ export type NeuralTrainingResult = {
     examples: number;
     candidates: number;
     averageTeacherReturn: number;
+    averageBehaviorReturn: number;
     averageBestReturn: number;
     averageImprovement: number;
+    averageBestBehaviorImprovement: number;
     averageCandidateReturnStdDev: number;
+    skippedBehaviorGapCount: number;
+    scannedStateCount: number;
     stats: ImitationTrainingStats;
   };
   reinforcement: {
@@ -172,9 +179,23 @@ type RewardImprovementCandidate = ActionRankingCandidate & {
 type RewardImprovementCollection = {
   examples: ActionRankingImitationExample[];
   averageTeacherReturn: number;
+  averageBehaviorReturn: number;
   averageBestReturn: number;
   averageImprovement: number;
+  averageBestBehaviorImprovement: number;
   averageCandidateReturnStdDev: number;
+  skippedBehaviorGapCount: number;
+  scannedStateCount: number;
+};
+
+type RewardImprovementExampleResult = {
+  example: ActionRankingImitationExample | null;
+  skippedForBehaviorGap: boolean;
+  teacherReturn: number | null;
+  behaviorReturn: number | null;
+  bestReturn: number | null;
+  bestBehaviorImprovement: number;
+  candidateReturnStdDev: number;
 };
 
 const SUITS: Suits[] = ["hearts", "spades", "diamonds", "clubs"];
@@ -233,6 +254,8 @@ export function trainNeuralActionRankingPolicy(
     rolloutMoves: options.improvementRolloutMoves ?? 450,
     rolloutCount: options.improvementRolloutCount ?? 1,
     commonRandom: options.improvementCommonRandom ?? true,
+    requireBehaviorGap: options.improvementRequireBehaviorGap ?? false,
+    minBehaviorImprovement: options.improvementMinBehaviorImprovement ?? 2,
     seed: `${seed}:improvement`,
     maxMovesPerGame,
   });
@@ -246,6 +269,7 @@ export function trainNeuralActionRankingPolicy(
             minReturnGap: options.improvementMinReturnGap ?? 1,
             maxPairsPerExample: options.improvementMaxPairsPerExample ?? 12,
             temperature: options.improvementPreferenceTemperature ?? 1,
+            preferenceScope: options.improvementPreferenceScope ?? "all",
             shuffleSeed: `${seed}:improvement-shuffle`,
           })
         : policy.trainRewardTargets(improvement.examples, {
@@ -296,9 +320,14 @@ export function trainNeuralActionRankingPolicy(
         0
       ),
       averageTeacherReturn: improvement.averageTeacherReturn,
+      averageBehaviorReturn: improvement.averageBehaviorReturn,
       averageBestReturn: improvement.averageBestReturn,
       averageImprovement: improvement.averageImprovement,
+      averageBestBehaviorImprovement:
+        improvement.averageBestBehaviorImprovement,
       averageCandidateReturnStdDev: improvement.averageCandidateReturnStdDev,
+      skippedBehaviorGapCount: improvement.skippedBehaviorGapCount,
+      scannedStateCount: improvement.scannedStateCount,
       stats: improvementStats,
     },
     reinforcement,
@@ -322,6 +351,8 @@ export function collectRewardImprovementExamples(options: {
   rolloutMoves: number;
   rolloutCount: number;
   commonRandom: boolean;
+  requireBehaviorGap: boolean;
+  minBehaviorImprovement: number;
   seed: string;
   maxMovesPerGame: number;
 }): RewardImprovementCollection {
@@ -329,19 +360,33 @@ export function collectRewardImprovementExamples(options: {
     return {
       examples: [],
       averageTeacherReturn: 0,
+      averageBehaviorReturn: 0,
       averageBestReturn: 0,
       averageImprovement: 0,
+      averageBestBehaviorImprovement: 0,
       averageCandidateReturnStdDev: 0,
+      skippedBehaviorGapCount: 0,
+      scannedStateCount: 0,
     };
   }
 
   const examples: ActionRankingImitationExample[] = [];
   let teacherReturnTotal = 0;
+  let behaviorReturnTotal = 0;
   let bestReturnTotal = 0;
+  let bestBehaviorImprovementTotal = 0;
   let candidateReturnStdDevTotal = 0;
+  let skippedBehaviorGapCount = 0;
+  let scannedStateCount = 0;
   let dealIndex = 0;
+  const maxScannedStateCount = options.requireBehaviorGap
+    ? options.maxStates * 20
+    : Number.POSITIVE_INFINITY;
 
-  while (examples.length < options.maxStates) {
+  while (
+    examples.length < options.maxStates &&
+    scannedStateCount < maxScannedStateCount
+  ) {
     const board = createTrainingBoard(
       options.playerCount,
       `${options.seed}:deal:${dealIndex}`
@@ -360,7 +405,8 @@ export function collectRewardImprovementExamples(options: {
       let stepIndex = 0;
       !isGameOver(board) &&
       stepIndex < options.maxMovesPerGame &&
-      examples.length < options.maxStates;
+      examples.length < options.maxStates &&
+      scannedStateCount < maxScannedStateCount;
       stepIndex++
     ) {
       const playerIndex = getNextPlayerIndex(cooldowns, activePlayerIndices);
@@ -382,32 +428,42 @@ export function collectRewardImprovementExamples(options: {
       const shouldCollect =
         options.stateSource === "teacher" || playerIndex === neuralPlayerIndex;
       if (shouldCollect && behaviorMove && candidates.length > 1) {
+        scannedStateCount += 1;
         const behaviorKey = getActionRankingMoveKey(behaviorMove);
-        const teacherKey = teacherMove ? getActionRankingMoveKey(teacherMove) : null;
+        const teacherKey = teacherMove
+          ? getActionRankingMoveKey(teacherMove)
+          : null;
         const selectedCandidates = selectImprovementCandidates(
           candidates,
           [behaviorKey, teacherKey].filter((key): key is string => key != null),
           options.candidateLimit,
           random
         );
-        const example = createRewardImprovementExample(
+        const result = createRewardImprovementExample(
           board,
-          examples.length,
           dealIndex,
           stepIndex,
           playerIndex,
           selectedCandidates,
-          teacherMove ?? behaviorMove,
+          behaviorMove,
+          teacherMove,
           `${options.seed}:rollout:${dealIndex}:${stepIndex}`,
           options.rolloutMoves,
           options.rolloutCount,
-          options.commonRandom
+          options.commonRandom,
+          options.requireBehaviorGap,
+          options.minBehaviorImprovement
         );
-        if (example) {
-          teacherReturnTotal += getTeacherReturn(example);
-          bestReturnTotal += example.pointDifferentialReturn ?? 0;
-          candidateReturnStdDevTotal += getCandidateReturnStdDev(example);
-          examples.push(example);
+        if (result.skippedForBehaviorGap) {
+          skippedBehaviorGapCount += 1;
+        }
+        if (result.example) {
+          teacherReturnTotal += result.teacherReturn ?? 0;
+          behaviorReturnTotal += result.behaviorReturn ?? 0;
+          bestReturnTotal += result.bestReturn ?? 0;
+          bestBehaviorImprovementTotal += result.bestBehaviorImprovement;
+          candidateReturnStdDevTotal += result.candidateReturnStdDev;
+          examples.push(result.example);
         }
       }
 
@@ -427,28 +483,39 @@ export function collectRewardImprovementExamples(options: {
   return {
     examples,
     averageTeacherReturn,
+    averageBehaviorReturn:
+      examples.length === 0 ? 0 : behaviorReturnTotal / examples.length,
     averageBestReturn,
     averageImprovement: averageBestReturn - averageTeacherReturn,
+    averageBestBehaviorImprovement:
+      examples.length === 0
+        ? 0
+        : bestBehaviorImprovementTotal / examples.length,
     averageCandidateReturnStdDev:
       examples.length === 0 ? 0 : candidateReturnStdDevTotal / examples.length,
+    skippedBehaviorGapCount,
+    scannedStateCount,
   };
 }
 
 function createRewardImprovementExample(
   board: BoardState,
-  exampleIndex: number,
   trialIndex: number,
   stepIndex: number,
   playerIndex: number,
   candidates: ActionRankingCandidate[],
-  teacherMove: Move,
+  behaviorMove: Move,
+  teacherMove: Move | undefined,
   seed: string,
   rolloutMoves: number,
   rolloutCount: number,
-  commonRandom: boolean
-): ActionRankingImitationExample | null {
+  commonRandom: boolean,
+  requireBehaviorGap: boolean,
+  minBehaviorImprovement: number
+): RewardImprovementExampleResult {
   const pointDifferentialBefore = getPointDifferential(board, playerIndex);
-  const teacherKey = getActionRankingMoveKey(teacherMove);
+  const behaviorKey = getActionRankingMoveKey(behaviorMove);
+  const teacherKey = teacherMove ? getActionRankingMoveKey(teacherMove) : null;
   const improvedCandidates = candidates.map<RewardImprovementCandidate>(
     (candidate, candidateIndex) => {
       const finalPointDifferential = getCounterfactualPointDifferential(
@@ -474,22 +541,59 @@ function createRewardImprovementExample(
       : best;
   }, 0);
   if (bestIndex < 0) {
-    return null;
+    return {
+      example: null,
+      skippedForBehaviorGap: false,
+      teacherReturn: null,
+      behaviorReturn: null,
+      bestReturn: null,
+      bestBehaviorImprovement: 0,
+      candidateReturnStdDev: 0,
+    };
   }
 
-  return {
+  const teacherReturn =
+    teacherKey == null
+      ? null
+      : improvedCandidates.find((candidate) => candidate.key === teacherKey)
+          ?.rolloutPointDifferentialReturn ?? null;
+  const behaviorReturn =
+    improvedCandidates.find((candidate) => candidate.key === behaviorKey)
+      ?.rolloutPointDifferentialReturn ?? null;
+  const bestReturn =
+    improvedCandidates[bestIndex].rolloutPointDifferentialReturn;
+  const bestBehaviorImprovement =
+    behaviorReturn == null ? 0 : bestReturn - behaviorReturn;
+  const candidateReturnStdDev =
+    getImprovementCandidateReturnStdDev(improvedCandidates);
+
+  if (
+    requireBehaviorGap &&
+    bestBehaviorImprovement < minBehaviorImprovement
+  ) {
+    return {
+      example: null,
+      skippedForBehaviorGap: true,
+      teacherReturn,
+      behaviorReturn,
+      bestReturn,
+      bestBehaviorImprovement,
+      candidateReturnStdDev,
+    };
+  }
+
+  const example: ActionRankingImitationExample = {
     trialIndex,
     stepIndex,
     playerIndex,
     playerPointDifferential: pointDifferentialBefore,
     finalPlayerPoints: null,
     finalPointDifferential: improvedCandidates[bestIndex].rolloutPointDifferential,
-    pointDifferentialReturn:
-      improvedCandidates[bestIndex].rolloutPointDifferentialReturn,
+    pointDifferentialReturn: bestReturn,
     teacherActionKey: teacherKey,
-    teacherPointDifferentialReturn:
-      improvedCandidates.find((candidate) => candidate.key === teacherKey)
-        ?.rolloutPointDifferentialReturn ?? null,
+    teacherPointDifferentialReturn: teacherReturn,
+    behaviorActionKey: behaviorKey,
+    behaviorPointDifferentialReturn: behaviorReturn,
     selectedActionKey: improvedCandidates[bestIndex].key,
     selectedCandidateIndex: bestIndex,
     candidates: improvedCandidates.map((candidate) => ({
@@ -505,6 +609,15 @@ function createRewardImprovementExample(
       rolloutPointDifferentialReturn: candidate.rolloutPointDifferentialReturn,
       endsRound: candidate.endsRound,
     })),
+  };
+  return {
+    example,
+    skippedForBehaviorGap: false,
+    teacherReturn,
+    behaviorReturn,
+    bestReturn,
+    bestBehaviorImprovement,
+    candidateReturnStdDev,
   };
 }
 
@@ -620,12 +733,10 @@ function selectImprovementCandidates(
   return selected;
 }
 
-function getTeacherReturn(example: ActionRankingImitationExample): number {
-  return example.teacherPointDifferentialReturn ?? 0;
-}
-
-function getCandidateReturnStdDev(example: ActionRankingImitationExample): number {
-  const returns = example.candidates
+function getImprovementCandidateReturnStdDev(
+  candidates: readonly { rolloutPointDifferentialReturn?: number | null }[]
+): number {
+  const returns = candidates
     .map((candidate) => candidate.rolloutPointDifferentialReturn)
     .filter((value): value is number => value != null);
   if (returns.length <= 1) {
