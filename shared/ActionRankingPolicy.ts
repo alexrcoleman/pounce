@@ -35,6 +35,7 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "own.flippedCount",
   "own.emptyStackCount",
   "own.currentPoints",
+  "own.pointDifferential",
   "board.ticksSinceMove",
   "move.immediatePointDelta",
   "move.immediatePointDifferentialDelta",
@@ -354,6 +355,10 @@ function buildActionRankingFeatures(
     normalize(player?.flippedDeck.length, 35),
     normalize(player?.stacks.filter((stack) => stack.length === 0).length, 4),
     normalizeSigned(player ? getCurrentPointsFromCards(player) : undefined, 52),
+    normalizeSigned(
+      player ? getPointDifferential(board, playerIndex) : undefined,
+      52
+    ),
     normalize(board.ticksSinceMove, 30),
     normalizeSigned(immediatePointDelta, 3),
     normalizeSigned(immediatePointDifferentialDelta, 3),

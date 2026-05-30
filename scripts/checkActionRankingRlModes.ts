@@ -506,6 +506,7 @@ function assertLegacyFeatureExpansion() {
     "action-ranking-feature-expansion-check"
   );
   const droppedFeatures = [
+    "own.pointDifferential",
     "card.centerPlayableDestinationCount",
     "card.ownSolitaireDestinationCount",
     "card.ownSolitaireConnectorForPounce",

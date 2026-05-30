@@ -41,6 +41,9 @@ single-hidden-layer checkpoint format and the newer multi-layer format. It also
 expands older checkpoints onto the current action-feature list with zero weights
 for new inputs, preserving existing scores while allowing future fine-tunes to
 train newly added tactical features.
+The current feature list includes `own.pointDifferential`, so RL fine-tunes can
+condition a move on whether the player is ahead or behind, not just on the
+player's raw card score.
 
 Current useful baseline recipe:
 
@@ -118,6 +121,10 @@ teacher state distribution. This is useful for seeing whether a candidate is
 actually changing center-vs-solitaire choices, pounce-card urgency, connector
 behavior, or opponent-helping center plays before spending time on a large
 paired rollout.
+`action-ranking:trace-divergences` replays paired games until the first policy
+split and reports both broad top feature deltas and a focused feature set for
+connector/cycle debugging. `TRACE_FOCUS_FEATURES` accepts a comma-separated list
+of feature names when a different tactical slice needs to be inspected.
 
 `action-ranking:audit-labels` runs the same reward-improvement label collector
 without updating the model. It reports which move-type pairs the rollouts prefer,
@@ -718,6 +725,13 @@ checkpoint and trained small nonzero weights on the newer connector/alternative
 features, but its greedy behavior was identical to the prior 45-input
 behavior-scope checkpoint over 384 paired games. That makes feature expansion
 safe infrastructure, not a standalone policy improvement yet.
+`own.pointDifferential` has since been added as a 49th feature. Focused
+connector/cycle tracing showed the harmful and helpful scan-budget `cycle>c2s`
+splits were identical on the visible connector features, while differing in
+state context: one occurred while already far ahead with five pounce cards, and
+the other near even with seven pounce cards. Existing checkpoints expand with a
+zero weight for this feature, so behavior is preserved until a future all-layer
+or fresh train can use the extra state signal.
 
 ## Deploying
 

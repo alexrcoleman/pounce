@@ -43,6 +43,7 @@ type DivergenceTrace = {
   modelA: ReturnType<typeof describePrediction>;
   modelB: ReturnType<typeof describePrediction>;
   topFeatureDeltas: ReturnType<typeof getCandidateFeatureDeltas>;
+  focusedFeatureDeltas: ReturnType<typeof getFocusedFeatureDeltas>;
   final: {
     modelA: RolloutMetrics;
     modelB: RolloutMetrics;
@@ -67,6 +68,26 @@ const games = readIntegerEnv("TRACE_GAMES", readIntegerEnv("EVAL_GAMES", 48));
 const maxMovesPerGame = readIntegerEnv("MAX_MOVES", 1800);
 const maxExamples = readIntegerEnv("TRACE_MAX_EXAMPLES", 12);
 const topFeatureCount = readIntegerEnv("TRACE_TOP_FEATURES", 10);
+const focusedFeatures = readFeatureListEnv("TRACE_FOCUS_FEATURES", [
+  "move.c2s",
+  "move.cycle",
+  "source.deck",
+  "dest.solitaire",
+  "card.value",
+  "card.canPlaySoon",
+  "card.centerPlayableDestinationCount",
+  "card.ownSolitaireDestinationCount",
+  "card.ownSolitaireConnectorForPounce",
+  "own.pounceCount",
+  "own.currentPoints",
+  "own.pointDifferential",
+  "solitaire.isTuck",
+  "solitaire.deckMoveHelpful",
+  "solitaire.destTopCanPlaySoon",
+  "solitaire.makesPouncePlayable",
+  "solitaire.exposesCenterPlayable",
+  "solitaire.exposesCanPlaySoon",
+]);
 const seed = process.env.SEED ?? "action-ranking-compare";
 const seeds = readSeedList(seed);
 
@@ -100,6 +121,7 @@ console.log(
         maxMovesPerGame,
         maxExamples,
         topFeatureCount,
+        focusedFeatures,
         seeds,
       },
       summary: summarizeTraces(traces, results.length),
@@ -193,6 +215,11 @@ function traceGame(traceSeed: string, gameIndex: number): DivergenceTrace | null
         topA.candidate,
         topB.candidate,
         topFeatureCount
+      ),
+      focusedFeatureDeltas: getFocusedFeatureDeltas(
+        topA.candidate,
+        topB.candidate,
+        focusedFeatures
       ),
     };
 
@@ -448,6 +475,24 @@ function getCandidateFeatureDeltas(
     .slice(0, limit);
 }
 
+function getFocusedFeatureDeltas(
+  candidateA: ActionRankingCandidate,
+  candidateB: ActionRankingCandidate,
+  features: readonly ActionRankingFeatureName[]
+) {
+  return features.map((feature) => {
+    const index = ACTION_RANKING_FEATURE_NAMES.indexOf(feature);
+    const modelAValue = index < 0 ? 0 : candidateA.features[index] ?? 0;
+    const modelBValue = index < 0 ? 0 : candidateB.features[index] ?? 0;
+    return {
+      feature,
+      modelAValue,
+      modelBValue,
+      delta: modelAValue - modelBValue,
+    };
+  });
+}
+
 function getScoreMap(predictions: readonly ActionRankingPrediction[]) {
   return new Map(
     predictions.map((prediction) => [
@@ -615,4 +660,21 @@ function readSeedList(defaultSeed: string): string[] {
   return Array.from({ length: Math.max(1, runs) }, (_, index) =>
     runs === 1 ? defaultSeed : `${defaultSeed}:${index}`
   );
+}
+
+function readFeatureListEnv(
+  name: string,
+  fallback: readonly ActionRankingFeatureName[]
+): ActionRankingFeatureName[] {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback.slice();
+  }
+
+  const featureSet = new Set<string>(ACTION_RANKING_FEATURE_NAMES);
+  const parsed = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item): item is ActionRankingFeatureName => featureSet.has(item));
+  return parsed.length === 0 ? fallback.slice() : parsed;
 }
