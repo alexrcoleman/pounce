@@ -93,6 +93,21 @@ however, the candidate measured `-0.102 +/- 0.016`, so it is not promotable.
 The useful lesson is narrower: lookahead features make some cycle-over-connector
 corrections legible, but the warmup/RL stack still needs a stronger promotion
 gate and better calibration before replacing the behavior-scope checkpoint.
+The next guarded probe also drops supervised counterfactual labels where the
+rollout winner and current behavior action have identical action-feature
+vectors. A follow-up audit from the lookahead warmup skipped 2 unlearnable
+feature-tie labels while keeping 8 accepted examples after 40 scanned greedy
+episodes. Training the matching 8-label useful-cycle-guarded pairwise candidate
+accepted average return gap `6.56`, skipped 2 feature ties and 1 useful-cycle
+label, but still measured `-0.119 +/- 0.201` against the lookahead warmup and
+`-0.065 +/- 0.137` against the behavior-scope checkpoint over 384 paired games.
+So the filter improves label hygiene, not policy strength by itself.
+The lookahead warmup's fixed-style check is consistent with "learned the modern
+heuristic family": over 384 games per style it measured baseline-adjusted
+point-differential deltas of `+1.530` vs `Mom`, `-0.065` vs `Alex-v2`,
+`+0.454` vs `Alex 75%`, `-0.214` vs `Alex 66%`, and `+0.187` vs `Alex 1.0`.
+That is roughly parity around the tuned Alex variants rather than an independent
+new cutoff strategy.
 The global visible-pressure inputs count own and opponent pounce/deck/solitaire
 cards that are playable on center now, plus pounce cards close to center play;
 those are intended to help reward training learn tempo and opponent-help costs
@@ -504,6 +519,11 @@ immediately, or can play soon while also connecting to the player's
 pounce/solitaire shape. This is disabled by default and is intended for
 self-play recipes that otherwise over-learn `c2s > cycle` from a tiny accepted
 label batch.
+Supervised counterfactual modes also skip labels where the rollout winner and
+the current behavior action have identical action-feature vectors. Those labels
+can show up as same-move-type destination refinements, but if the model sees the
+same input for both actions, the pairwise/value update is unlearnable and only
+adds noise to small score-gap budgets.
 `RL_COUNTERFACTUAL_ANCHOR_WEIGHT` enables conservative policy anchoring for
 supervised counterfactual modes: after applying the RL labels, it distills the
 pre-update policy over sampled decision states so narrow counterfactual lessons

@@ -203,6 +203,7 @@ console.log(
         confidenceSkippedCount: audit.confidenceSkippedCount,
         scoreGapSkippedCount: audit.scoreGapSkippedCount,
         scoreGapBudgetSkippedCount: audit.scoreGapBudgetSkippedCount,
+        featureTieSkippedCount: audit.featureTieSkippedCount,
         connectorCycleSkippedCount: audit.connectorCycleSkippedCount,
         usefulCycleSkippedCount: audit.usefulCycleSkippedCount,
         maxReturnGapSkippedCount: audit.maxReturnGapSkippedCount,

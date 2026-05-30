@@ -184,6 +184,7 @@ export type NeuralTrainingResult = {
     counterfactualConfidenceSkippedCount: number;
     counterfactualScoreGapSkippedCount: number;
     counterfactualScoreGapBudgetSkippedCount: number;
+    counterfactualFeatureTieSkippedCount: number;
     counterfactualConnectorCycleSkippedCount: number;
     counterfactualUsefulCycleSkippedCount: number;
     averageCounterfactualScoreGap: number;
@@ -275,6 +276,7 @@ export type CounterfactualRlLabelAudit = {
   confidenceSkippedCount: number;
   scoreGapSkippedCount: number;
   scoreGapBudgetSkippedCount: number;
+  featureTieSkippedCount: number;
   connectorCycleSkippedCount: number;
   usefulCycleSkippedCount: number;
   maxReturnGapSkippedCount: number;
@@ -1605,6 +1607,7 @@ export function trainPolicyGradientFromRollouts(
   let counterfactualConfidenceSkippedCount = 0;
   let counterfactualScoreGapSkippedCount = 0;
   let counterfactualScoreGapBudgetSkippedCount = 0;
+  let counterfactualFeatureTieSkippedCount = 0;
   let counterfactualConnectorCycleSkippedCount = 0;
   let counterfactualUsefulCycleSkippedCount = 0;
   let counterfactualBehaviorWinRateTotal = 0;
@@ -1898,6 +1901,13 @@ export function trainPolicyGradientFromRollouts(
           counterfactualUsefulCycleSkippedCount += 1;
           return;
         }
+        if (
+          options.counterfactualTrainingMode !== "policy_gradient" &&
+          isCounterfactualBestFeatureTie(transition, result)
+        ) {
+          counterfactualFeatureTieSkippedCount += 1;
+          return;
+        }
         const scoreGap = getCounterfactualBestVsGreedyScoreGap(
           transition,
           result,
@@ -2112,6 +2122,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualConfidenceSkippedCount,
     counterfactualScoreGapSkippedCount,
     counterfactualScoreGapBudgetSkippedCount,
+    counterfactualFeatureTieSkippedCount,
     counterfactualConnectorCycleSkippedCount,
     counterfactualUsefulCycleSkippedCount,
     averageCounterfactualScoreGap:
@@ -2189,6 +2200,7 @@ export function collectCounterfactualRlLabelAudit(
   let policyChangeSkippedCount = 0;
   let scoreGapSkippedCount = 0;
   let scoreGapBudgetSkippedCount = 0;
+  let featureTieSkippedCount = 0;
   let connectorCycleSkippedCount = 0;
   let usefulCycleSkippedCount = 0;
   let counterfactualReturnGapTotal = 0;
@@ -2366,6 +2378,13 @@ export function collectCounterfactualRlLabelAudit(
         usefulCycleSkippedCount += 1;
         return;
       }
+      if (
+        options.counterfactualTrainingMode !== "policy_gradient" &&
+        isCounterfactualBestFeatureTie(transition, result)
+      ) {
+        featureTieSkippedCount += 1;
+        return;
+      }
 
       const scoreGap = getCounterfactualBestVsGreedyScoreGap(
         transition,
@@ -2448,6 +2467,7 @@ export function collectCounterfactualRlLabelAudit(
     policyChangeSkippedCount,
     scoreGapSkippedCount,
     scoreGapBudgetSkippedCount,
+    featureTieSkippedCount,
     connectorCycleSkippedCount,
     usefulCycleSkippedCount,
     maxReturnGapSkippedCount,
@@ -2936,6 +2956,33 @@ function shouldSkipSolitaireOverUsefulCycleLabel(
     (candidate) =>
       candidate.candidate.key !== best.candidate.key &&
       isUsefulCycleRevealCandidate(candidate.candidate)
+  );
+}
+
+function isCounterfactualBestFeatureTie(
+  transition: RolloutTransition,
+  result: CounterfactualTransitionResult
+): boolean {
+  const behavior = transition.candidates[transition.greedyCandidateIndex];
+  if (!behavior) {
+    return false;
+  }
+  const best = getCounterfactualBestCandidate(result).candidate;
+  if (best.key === behavior.key) {
+    return false;
+  }
+  return areActionRankingFeaturesEquivalent(best.features, behavior.features);
+}
+
+function areActionRankingFeaturesEquivalent(
+  left: readonly number[],
+  right: readonly number[]
+): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  return left.every(
+    (value, index) => Math.abs(value - (right[index] ?? Number.NaN)) < 1e-12
   );
 }
 
