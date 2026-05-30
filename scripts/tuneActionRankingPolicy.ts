@@ -104,6 +104,10 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       "RL_COUNTERFACTUAL_ROLLOUT_MOVES",
       450
     ),
+    rlCounterfactualCandidateLimit: readIntegerEnv(
+      "RL_COUNTERFACTUAL_CANDIDATES",
+      2
+    ),
     rlCounterfactualMinReturnGap: readNumberEnv(
       "RL_COUNTERFACTUAL_MIN_RETURN_GAP",
       1

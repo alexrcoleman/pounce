@@ -70,9 +70,39 @@ assert.equal(
   "value mode should regress both selected and greedy candidate targets"
 );
 assert.equal(
+  value.reinforcement.averageCounterfactualCandidateCount,
+  2,
+  "default value mode should evaluate selected and greedy candidates"
+);
+assert.equal(
   value.reinforcement.averagePolicyUpdates,
   0,
   "value mode should not fall back to policy-gradient updates"
+);
+
+const broadValue = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:broad-value",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assertCounterfactualWork(broadValue, "value");
+assert.ok(
+  broadValue.reinforcement.averageCounterfactualCandidateCount > 2,
+  "broad value mode should evaluate more than selected and greedy candidates"
+);
+assert.ok(
+  broadValue.reinforcement.counterfactualTrainingUpdates >
+    broadValue.reinforcement.counterfactualUpdateCount * 2,
+  "broad value mode should train extra candidate value targets"
+);
+assert.equal(
+  broadValue.reinforcement.averagePolicyUpdates,
+  0,
+  "broad value mode should not fall back to policy-gradient updates"
 );
 
 console.log(
@@ -81,6 +111,7 @@ console.log(
       featureExpansion,
       policyGradient: summarize(policyGradient),
       value: summarize(value),
+      broadValue: summarize(broadValue),
     },
     null,
     2
@@ -104,6 +135,8 @@ function assertCounterfactualWork(
 function summarize(result: NeuralTrainingResult) {
   return {
     counterfactualUpdateCount: result.reinforcement.counterfactualUpdateCount,
+    averageCounterfactualCandidateCount:
+      result.reinforcement.averageCounterfactualCandidateCount,
     counterfactualTrainingUpdates:
       result.reinforcement.counterfactualTrainingUpdates,
     averagePolicyUpdates: result.reinforcement.averagePolicyUpdates,

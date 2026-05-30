@@ -17,7 +17,7 @@ Useful training knobs:
 
 - `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`
 - `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_VALUE_SCALE`, `IMPROVEMENT_VALUE_CENTER`, `IMPROVEMENT_VALUE_HUBER`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
-- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
+- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_CANDIDATES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `HIDDEN_LAYERS`, `MAX_MOVES`, `SEED`
 - `HIDDEN` and `HIDDEN_LAYERS` accept comma-separated layer sizes, for example `HIDDEN=192,96`
 - `MODEL_OUT=C:\tmp\pounce-action-ranking-model.json` to save model weights
@@ -195,13 +195,14 @@ counterfactual point-differential return minus the greedy action's return, gated
 by `RL_COUNTERFACTUAL_MIN_RETURN_GAP`. This is slower, but it attacks the main
 credit-assignment problem from episode-level REINFORCE: a good or bad final score
 usually cannot be attributed to every sampled decision in the game.
-`RL_COUNTERFACTUAL_MODE=pairwise` trains those selected-vs-greedy labels as
-direct pairwise preferences instead of a listwise policy-gradient update. That
-is often a better match for this data because the counterfactual rollout only
-compares two actions from the same state.
-`RL_COUNTERFACTUAL_MODE=value` uses the same selected-vs-greedy counterfactual
-returns as two action-value regression targets. The value target scale,
-centering, and Huber clipping are controlled by
+`RL_COUNTERFACTUAL_MODE=pairwise` trains counterfactual labels as direct
+pairwise preferences instead of a listwise policy-gradient update. By default
+the counterfactual rollout compares the sampled action and the greedy action;
+setting `RL_COUNTERFACTUAL_CANDIDATES` above `2` also evaluates top-ranked
+policy alternatives for supervised `pairwise` and `value` modes.
+`RL_COUNTERFACTUAL_MODE=value` uses the same counterfactual returns as
+action-value regression targets. The value target scale, centering, and Huber
+clipping are controlled by
 `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, and
 `RL_COUNTERFACTUAL_VALUE_HUBER`.
 
@@ -234,6 +235,16 @@ The same value pass on top of the current behavior-scope checkpoint measured
 `-0.036 +/- 0.036`. The main open RL problem is now collecting enough stable
 per-decision counterfactual labels and calibrating action-value targets without
 washing out the useful imitation and behavior-gap rankings.
+
+Broader per-decision counterfactual labels are also wired in with
+`RL_COUNTERFACTUAL_CANDIDATES`. With `RL_COUNTERFACTUAL_CANDIDATES=5`, a
+64-episode value-regression run evaluated `4.55` candidates per accepted
+decision on average, trained 1,125 candidate-value updates from 247 decision
+states, and measured `-0.039 +/- 0.045` against the behavior-scope checkpoint.
+The analogous broad pairwise run filtered to 60 high-gap decision states with
+average candidate return spread `8.06`, trained one clearest pair from each, and
+measured `-0.007 +/- 0.007`. This is a better diagnostic path, but still not a
+better deployed policy.
 
 Legacy model feature expansion is now enabled before fine-tuning. Re-running the
 240-state behavior-scope recipe from the capacity checkpoint produced a 48-input
