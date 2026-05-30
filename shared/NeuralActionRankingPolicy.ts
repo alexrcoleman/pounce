@@ -39,6 +39,10 @@ export type ImitationTrainingStats = {
   accuracy: number;
 };
 
+export type RewardTargetTrainingOptions = ImitationTrainingOptions & {
+  targetTemperature?: number;
+};
+
 type ForwardPass = {
   hiddenRaw: number[];
   hidden: number[];
@@ -217,6 +221,78 @@ export class NeuralActionRankingPolicy {
     );
   }
 
+  trainRewardTargets(
+    examples: readonly ActionRankingImitationExample[],
+    options: RewardTargetTrainingOptions = {}
+  ): ImitationTrainingStats {
+    const epochs = Math.max(1, Math.floor(options.epochs ?? 1));
+    const learningRate = options.learningRate ?? DEFAULT_LEARNING_RATE;
+    const l2 = options.l2 ?? 0;
+    const targetTemperature = options.targetTemperature ?? 4;
+    const random = createSeededRandom(options.shuffleSeed ?? "reward-targets");
+    let totalLoss = 0;
+    let totalExamples = 0;
+    let correct = 0;
+    let updates = 0;
+
+    for (let epoch = 0; epoch < epochs; epoch++) {
+      const shuffled = shuffleCopy(examples, random);
+      shuffled.forEach((example) => {
+        if (
+          example.candidates.length === 0 ||
+          example.candidates.some(
+            (candidate) => candidate.rolloutPointDifferentialReturn == null
+          )
+        ) {
+          return;
+        }
+
+        const candidates = example.candidates.map((candidate) => ({
+          key: candidate.key,
+          move: candidate.move,
+          features: candidate.features,
+          immediatePointDelta: candidate.immediatePointDelta,
+          immediatePointDifferentialDelta:
+            candidate.immediatePointDifferentialDelta,
+          endsRound: candidate.endsRound,
+        }));
+        const targetScores = example.candidates.map(
+          (candidate) => candidate.rolloutPointDifferentialReturn ?? 0
+        );
+        const targetProbabilities = softmax(targetScores, targetTemperature);
+        const scores = candidates.map((candidate) =>
+          this.scoreFeatures(candidate.features)
+        );
+        const probabilities = softmax(scores);
+        totalLoss += targetProbabilities.reduce((sum, target, index) => {
+          return sum - target * Math.log(Math.max(1e-12, probabilities[index]));
+        }, 0);
+        totalExamples += 1;
+        if (getBestIndex(scores) === getBestIndex(targetScores)) {
+          correct += 1;
+        }
+
+        this.applyDistributionGradient(
+          candidates,
+          probabilities,
+          targetProbabilities,
+          learningRate,
+          1,
+          l2
+        );
+        updates += 1;
+      });
+    }
+
+    return {
+      epochs,
+      examples: totalExamples,
+      updates,
+      averageLoss: totalExamples === 0 ? 0 : totalLoss / totalExamples,
+      accuracy: totalExamples === 0 ? 0 : correct / totalExamples,
+    };
+  }
+
   private applyListwiseGradient(
     candidates: readonly Pick<ActionRankingCandidate, "features">[],
     probabilities: readonly number[],
@@ -228,6 +304,21 @@ export class NeuralActionRankingPolicy {
     candidates.forEach((candidate, candidateIndex) => {
       const target = candidateIndex === selectedCandidateIndex ? 1 : 0;
       const dScore = scale * (probabilities[candidateIndex] - target);
+      this.applyScoreGradient(candidate.features, dScore, learningRate, l2);
+    });
+  }
+
+  private applyDistributionGradient(
+    candidates: readonly Pick<ActionRankingCandidate, "features">[],
+    probabilities: readonly number[],
+    targets: readonly number[],
+    learningRate: number,
+    scale: number,
+    l2: number
+  ): void {
+    candidates.forEach((candidate, candidateIndex) => {
+      const dScore =
+        scale * (probabilities[candidateIndex] - targets[candidateIndex]);
       this.applyScoreGradient(candidate.features, dScore, learningRate, l2);
     });
   }

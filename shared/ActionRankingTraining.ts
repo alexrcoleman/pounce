@@ -12,6 +12,7 @@ import {
 } from "./GameUtils";
 import {
   enumerateActionRankingCandidates,
+  getActionRankingMoveKey,
   getCurrentPointsFromCards,
   getPointDifferential,
   type ActionRankingCandidate,
@@ -39,6 +40,12 @@ export type NeuralTrainingOptions = {
   rlLearningRate?: number;
   rlTemperature?: number;
   rlLocalRewardWeight?: number;
+  improvementStates?: number;
+  improvementCandidateLimit?: number;
+  improvementRolloutMoves?: number;
+  improvementEpochs?: number;
+  improvementLearningRate?: number;
+  improvementTargetTemperature?: number;
   maxMovesPerGame?: number;
 };
 
@@ -49,6 +56,14 @@ export type NeuralTrainingResult = {
     candidates: number;
     matchedTeacherMoveCount: number;
     unmatchedTeacherMoveCount: number;
+    stats: ImitationTrainingStats;
+  };
+  improvement: {
+    examples: number;
+    candidates: number;
+    averageTeacherReturn: number;
+    averageBestReturn: number;
+    averageImprovement: number;
     stats: ImitationTrainingStats;
   };
   reinforcement: {
@@ -85,6 +100,18 @@ type RolloutResult = {
   transitions: RolloutTransition[];
 };
 
+type RewardImprovementCandidate = ActionRankingCandidate & {
+  rolloutPointDifferential: number;
+  rolloutPointDifferentialReturn: number;
+};
+
+type RewardImprovementCollection = {
+  examples: ActionRankingImitationExample[];
+  averageTeacherReturn: number;
+  averageBestReturn: number;
+  averageImprovement: number;
+};
+
 const SUITS: Suits[] = ["hearts", "spades", "diamonds", "clubs"];
 const VALUES: Values[] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13];
 const DEFAULT_MAX_MOVES_PER_GAME = 1800;
@@ -97,6 +124,7 @@ export function trainNeuralActionRankingPolicy(
   const imitationDeals = options.imitationDeals ?? 24;
   const imitationEpochs = options.imitationEpochs ?? 4;
   const rlEpisodes = options.rlEpisodes ?? 32;
+  const improvementStates = options.improvementStates ?? 0;
   const maxMovesPerGame = options.maxMovesPerGame ?? DEFAULT_MAX_MOVES_PER_GAME;
   const policy = NeuralActionRankingPolicy.create({
     hiddenSize: options.hiddenSize,
@@ -114,6 +142,24 @@ export function trainNeuralActionRankingPolicy(
     learningRate: options.imitationLearningRate,
     shuffleSeed: `${seed}:imitation-shuffle`,
   });
+
+  const improvement = collectRewardImprovementExamples({
+    playerCount,
+    maxStates: improvementStates,
+    candidateLimit: options.improvementCandidateLimit ?? 6,
+    rolloutMoves: options.improvementRolloutMoves ?? 450,
+    seed: `${seed}:improvement`,
+    maxMovesPerGame,
+  });
+  const improvementStats =
+    improvement.examples.length === 0
+      ? emptyTrainingStats(options.improvementEpochs ?? 0)
+      : policy.trainRewardTargets(improvement.examples, {
+          epochs: options.improvementEpochs ?? 3,
+          learningRate: options.improvementLearningRate ?? 0.01,
+          targetTemperature: options.improvementTargetTemperature ?? 4,
+          shuffleSeed: `${seed}:improvement-shuffle`,
+        });
 
   const reinforcement = trainPolicyGradientFromRollouts(policy, {
     playerCount,
@@ -146,6 +192,17 @@ export function trainNeuralActionRankingPolicy(
       ).length,
       stats: imitationStats,
     },
+    improvement: {
+      examples: improvement.examples.length,
+      candidates: improvement.examples.reduce(
+        (sum, example) => sum + example.candidates.length,
+        0
+      ),
+      averageTeacherReturn: improvement.averageTeacherReturn,
+      averageBestReturn: improvement.averageBestReturn,
+      averageImprovement: improvement.averageImprovement,
+      stats: improvementStats,
+    },
     reinforcement,
     evaluation: evaluateNeuralPolicy(policy, {
       playerCount,
@@ -154,6 +211,300 @@ export function trainNeuralActionRankingPolicy(
       maxMovesPerGame,
     }),
   };
+}
+
+export function collectRewardImprovementExamples(options: {
+  playerCount: number;
+  maxStates: number;
+  candidateLimit: number;
+  rolloutMoves: number;
+  seed: string;
+  maxMovesPerGame: number;
+}): RewardImprovementCollection {
+  if (options.maxStates <= 0 || options.candidateLimit <= 0) {
+    return {
+      examples: [],
+      averageTeacherReturn: 0,
+      averageBestReturn: 0,
+      averageImprovement: 0,
+    };
+  }
+
+  const examples: ActionRankingImitationExample[] = [];
+  let teacherReturnTotal = 0;
+  let bestReturnTotal = 0;
+  let dealIndex = 0;
+
+  while (examples.length < options.maxStates) {
+    const board = createTrainingBoard(
+      options.playerCount,
+      `${options.seed}:deal:${dealIndex}`
+    );
+    const random = createSeededRandom(`${options.seed}:states:${dealIndex}`);
+    const activePlayerIndices = getActivePlayerIndices(board);
+    const cooldowns = board.players.map((_, playerIndex) =>
+      activePlayerIndices.includes(playerIndex)
+        ? random()
+        : Number.POSITIVE_INFINITY
+    );
+
+    for (
+      let stepIndex = 0;
+      !isGameOver(board) &&
+      stepIndex < options.maxMovesPerGame &&
+      examples.length < options.maxStates;
+      stepIndex++
+    ) {
+      const playerIndex = getNextPlayerIndex(cooldowns, activePlayerIndices);
+      if (playerIndex < 0) {
+        break;
+      }
+
+      const teacherMove = getBasicAIMove(board, playerIndex, {});
+      const candidates = enumerateActionRankingCandidates(board, playerIndex);
+      if (teacherMove && candidates.length > 1) {
+        const selectedCandidates = selectImprovementCandidates(
+          candidates,
+          getActionRankingMoveKey(teacherMove),
+          options.candidateLimit,
+          random
+        );
+        const example = createRewardImprovementExample(
+          board,
+          examples.length,
+          dealIndex,
+          stepIndex,
+          playerIndex,
+          selectedCandidates,
+          teacherMove,
+          `${options.seed}:rollout:${dealIndex}:${stepIndex}`,
+          options.rolloutMoves
+        );
+        if (example) {
+          teacherReturnTotal += getTeacherReturn(example);
+          bestReturnTotal += example.pointDifferentialReturn ?? 0;
+          examples.push(example);
+        }
+      }
+
+      if (teacherMove) {
+        executeMove(board, playerIndex, teacherMove);
+      }
+      cooldowns[playerIndex] += getMoveDelay(teacherMove?.type, random);
+    }
+    dealIndex += 1;
+  }
+
+  const averageTeacherReturn =
+    examples.length === 0 ? 0 : teacherReturnTotal / examples.length;
+  const averageBestReturn =
+    examples.length === 0 ? 0 : bestReturnTotal / examples.length;
+
+  return {
+    examples,
+    averageTeacherReturn,
+    averageBestReturn,
+    averageImprovement: averageBestReturn - averageTeacherReturn,
+  };
+}
+
+function createRewardImprovementExample(
+  board: BoardState,
+  exampleIndex: number,
+  trialIndex: number,
+  stepIndex: number,
+  playerIndex: number,
+  candidates: ActionRankingCandidate[],
+  teacherMove: Move,
+  seed: string,
+  rolloutMoves: number
+): ActionRankingImitationExample | null {
+  const pointDifferentialBefore = getPointDifferential(board, playerIndex);
+  const teacherKey = getActionRankingMoveKey(teacherMove);
+  const improvedCandidates = candidates.map<RewardImprovementCandidate>(
+    (candidate, candidateIndex) => {
+      const finalPointDifferential = getCounterfactualPointDifferential(
+        board,
+        playerIndex,
+        candidate.move,
+        `${seed}:candidate:${candidateIndex}`,
+        rolloutMoves
+      );
+      return {
+        ...candidate,
+        rolloutPointDifferential: finalPointDifferential,
+        rolloutPointDifferentialReturn:
+          finalPointDifferential - pointDifferentialBefore,
+      };
+    }
+  );
+  const bestIndex = improvedCandidates.reduce((best, candidate, index) => {
+    return index === 0 ||
+      candidate.rolloutPointDifferential >
+        improvedCandidates[best].rolloutPointDifferential
+      ? index
+      : best;
+  }, 0);
+  if (bestIndex < 0) {
+    return null;
+  }
+
+  return {
+    trialIndex,
+    stepIndex,
+    playerIndex,
+    playerPointDifferential: pointDifferentialBefore,
+    finalPlayerPoints: null,
+    finalPointDifferential: improvedCandidates[bestIndex].rolloutPointDifferential,
+    pointDifferentialReturn:
+      improvedCandidates[bestIndex].rolloutPointDifferentialReturn,
+    teacherActionKey: teacherKey,
+    teacherPointDifferentialReturn:
+      improvedCandidates.find((candidate) => candidate.key === teacherKey)
+        ?.rolloutPointDifferentialReturn ?? null,
+    selectedActionKey: improvedCandidates[bestIndex].key,
+    selectedCandidateIndex: bestIndex,
+    candidates: improvedCandidates.map((candidate) => ({
+      key: candidate.key,
+      move: candidate.move,
+      features: candidate.features,
+      label: candidate.key === improvedCandidates[bestIndex].key ? 1 : 0,
+      immediatePointDelta: candidate.immediatePointDelta,
+      immediatePointDifferentialDelta:
+        candidate.immediatePointDifferentialDelta,
+      rolloutPointDifferential: candidate.rolloutPointDifferential,
+      rolloutPointDifferentialReturn: candidate.rolloutPointDifferentialReturn,
+      endsRound: candidate.endsRound,
+    })),
+  };
+}
+
+function getCounterfactualPointDifferential(
+  board: BoardState,
+  playerIndex: number,
+  move: Move,
+  seed: string,
+  maxMoves: number
+): number {
+  const nextBoard = deepClone(board);
+  executeMove(nextBoard, playerIndex, move);
+  runTeacherContinuation(nextBoard, seed, maxMoves);
+  return getPointDifferential(nextBoard, playerIndex);
+}
+
+function selectImprovementCandidates(
+  candidates: ActionRankingCandidate[],
+  teacherKey: string,
+  limit: number,
+  random: () => number
+): ActionRankingCandidate[] {
+  if (candidates.length <= limit) {
+    return candidates;
+  }
+
+  const selected: ActionRankingCandidate[] = [];
+  const teacherCandidate = candidates.find(
+    (candidate) => candidate.key === teacherKey
+  );
+  if (teacherCandidate) {
+    selected.push(teacherCandidate);
+  }
+
+  candidates
+    .slice()
+    .sort(
+      (a, b) =>
+        b.immediatePointDifferentialDelta -
+          a.immediatePointDifferentialDelta || random() - 0.5
+    )
+    .forEach((candidate) => {
+      if (
+        selected.length < Math.max(1, Math.floor(limit / 2)) &&
+        !selected.some((item) => item.key === candidate.key)
+      ) {
+        selected.push(candidate);
+      }
+    });
+
+  shuffleCopy(candidates, random).forEach((candidate) => {
+    if (
+      selected.length < limit &&
+      !selected.some((item) => item.key === candidate.key)
+    ) {
+      selected.push(candidate);
+    }
+  });
+
+  return selected;
+}
+
+function getTeacherReturn(example: ActionRankingImitationExample): number {
+  return example.teacherPointDifferentialReturn ?? 0;
+}
+
+function runTeacherContinuation(
+  board: BoardState,
+  seed: string,
+  maxMoves: number
+): void {
+  const random = createSeededRandom(seed);
+  const activePlayerIndices = getActivePlayerIndices(board);
+  const cooldowns = board.players.map((_, playerIndex) =>
+    activePlayerIndices.includes(playerIndex)
+      ? random()
+      : Number.POSITIVE_INFINITY
+  );
+
+  board.isActive = true;
+  board.isDealt = true;
+  board.isPaused = false;
+  board.roundStartsAt = undefined;
+  board.players.forEach((player, playerIndex) => {
+    if (activePlayerIndices.includes(playerIndex)) {
+      player.socketId = null;
+    }
+  });
+
+  for (let moveCount = 0; !isGameOver(board) && moveCount < maxMoves; moveCount++) {
+    const playerIndex = getNextPlayerIndex(cooldowns, activePlayerIndices);
+    if (playerIndex < 0) {
+      break;
+    }
+    const move = getBasicAIMove(board, playerIndex, {});
+    if (move) {
+      executeMove(board, playerIndex, move);
+    }
+    cooldowns[playerIndex] += getMoveDelay(move?.type, random);
+  }
+}
+
+function getActivePlayerIndices(board: BoardState): number[] {
+  return board.players
+    .map((player, playerIndex) => ({ player, playerIndex }))
+    .filter(({ player }) => !player.isSpectating)
+    .map(({ playerIndex }) => playerIndex);
+}
+
+function emptyTrainingStats(epochs: number): ImitationTrainingStats {
+  return {
+    epochs,
+    examples: 0,
+    updates: 0,
+    averageLoss: 0,
+    accuracy: 0,
+  };
+}
+
+function shuffleCopy<T>(items: readonly T[], random: () => number): T[] {
+  const shuffled = items.slice();
+  for (let index = shuffled.length - 1; index > 0; index--) {
+    const swapIndex = Math.floor(random() * (index + 1));
+    [shuffled[index], shuffled[swapIndex]] = [
+      shuffled[swapIndex],
+      shuffled[index],
+    ];
+  }
+  return shuffled;
 }
 
 export function collectImitationExamplesFromDeals(options: {

@@ -16,6 +16,7 @@ npm run action-ranking:train
 Useful training knobs:
 
 - `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`
+- `IMPROVEMENT_STATES`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
 - `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`
 - `PLAYERS`, `HIDDEN`, `MAX_MOVES`, `SEED`
 - `MODEL_OUT=C:\tmp\pounce-action-ranking-model.json` to save model weights
@@ -28,6 +29,7 @@ Current useful baseline recipe:
 $env:HIDDEN='96'
 $env:IMITATION_DEALS='240'
 $env:IMITATION_EPOCHS='8'
+$env:IMPROVEMENT_STATES='0'
 $env:RL_EPISODES='0'
 $env:MODEL_OUT='.\node_modules\pounce-action-ranking-model.json'
 npm run action-ranking:train
@@ -37,6 +39,12 @@ On a 96-game held-out evaluation seed, that setup has been roughly even with
 the same-seat heuristic baseline by point differential. RL fine-tuning is wired
 in, but the conservative runs tested so far have not clearly beaten that
 imitation checkpoint.
+
+`IMPROVEMENT_STATES` enables an experimental counterfactual rollout pass: it
+samples teacher-game states, tries several legal actions, lets the teacher
+finish from each candidate, and trains from the resulting soft reward targets.
+It is useful for research diagnostics, but the current best checkpoint is still
+the imitation recipe above.
 
 ## Deploying
 
