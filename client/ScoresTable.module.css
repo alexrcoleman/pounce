@@ -47,6 +47,35 @@
   text-align: center;
 }
 
+.playerHeader {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.playerName {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.aiStrategyInfo {
+  width: 14px;
+  height: 14px;
+  border-color: #8da19a;
+  color: #4f665a;
+  font-family: Arial, sans-serif;
+}
+
+.aiStrategyTooltip {
+  display: grid;
+  gap: 3px;
+  max-width: 220px;
+}
+
 .totalRow td {
   color: #111;
   border-top: 1px solid #aaa;

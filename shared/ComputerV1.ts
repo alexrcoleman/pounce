@@ -20,7 +20,9 @@ import {
   getPlayerLocation,
 } from "./CardLocations";
 
-type StrategySettings = {
+export type AIStrategyLean = "solitaire" | "balanced" | "center";
+
+export type StrategySettings = {
   solitaireFromDeck?: boolean;
   solitaireFromDeckOnlyIfHelp?: boolean;
   solitaireFromDeckOnlyIfHelpV2?: boolean;
@@ -29,6 +31,14 @@ type StrategySettings = {
   deckToCenterOnlyIfHelp?: boolean;
   disableCycling?: boolean;
   solitaireHelpThreshold?: number;
+};
+
+export type AIStrategyProfile = {
+  id: string;
+  name: string;
+  lean: AIStrategyLean;
+  summary: string;
+  strategy: StrategySettings;
 };
 
 type CardToCenterMove = Extract<Move, { type: "c2c" }>;
@@ -581,22 +591,31 @@ function canPlayOnSoon(
 
 // Round 8 Totals: X, 19,118,88
 // Round 35: 243,326,321
-const playerStyles: { name: string; strategy: StrategySettings }[] = [
+const playerStyles: AIStrategyProfile[] = [
   {
-    name: "Mom",
+    id: "solitaire-heavy",
+    name: "Solitaire heavy",
+    lean: "solitaire",
+    summary: "Moves waste cards onto solitaire stacks more freely.",
     strategy: {
       solitaireFromDeckOnlyIfHelp: false,
     },
   },
   {
-    name: "Alex-v2",
+    id: "balanced-quick",
+    name: "Balanced quick",
+    lean: "balanced",
+    summary: "Balances quick center plays with useful solitaire setup.",
     strategy: {
       solitaireFromDeckOnlyIfHelp: true,
       solitaireFromDeckOnlyIfHelpV2: true,
     },
   },
   {
-    name: "Alex 75%",
+    id: "center-pressure",
+    name: "Center pressure",
+    lean: "center",
+    summary: "Keeps more waste cards available for center plays.",
     strategy: {
       solitaireFromDeckOnlyIfHelp: true,
       solitaireFromDeckOnlyIfHelpV2: true,
@@ -604,7 +623,10 @@ const playerStyles: { name: string; strategy: StrategySettings }[] = [
     },
   },
   {
-    name: "Alex 66%",
+    id: "balanced-setup",
+    name: "Balanced setup",
+    lean: "balanced",
+    summary: "Looks for setup moves without drifting too far from center play.",
     strategy: {
       solitaireFromDeckOnlyIfHelp: true,
       solitaireFromDeckOnlyIfHelpV2: true,
@@ -612,7 +634,10 @@ const playerStyles: { name: string; strategy: StrategySettings }[] = [
     },
   },
   {
-    name: "Alex 1.0",
+    id: "guarded-setup",
+    name: "Guarded setup",
+    lean: "balanced",
+    summary: "Avoids solitaire setup that blocks cards likely to play soon.",
     strategy: {
       solitaireFromDeck: true,
       solitaireFromDeckOnlyIfHelp: true,
@@ -628,16 +653,49 @@ const playerStyles: { name: string; strategy: StrategySettings }[] = [
   //   },
   // },
 ];
-export function getBasicAIMove(
+
+export const analysisStrategyProfiles: AIStrategyProfile[] = [
+  playerStyles[0],
+  playerStyles[3],
+  playerStyles[2],
+];
+
+export const defaultHumanAnalysisStrategyProfile = playerStyles[3];
+
+export function getAIPlayerStrategyProfileByBotIndex(
+  botIndex: number
+): AIStrategyProfile {
+  return playerStyles[Math.max(0, botIndex) % playerStyles.length];
+}
+
+export function getAIPlayerStrategyProfile(
   boardState: BoardState,
-  playerIndex: number,
-  cursor: CursorState
-): Move | undefined {
+  playerIndex: number
+): AIStrategyProfile {
   const player = boardState.players[playerIndex];
   const botIndex = boardState.players
     .filter((p) => p.socketId == null)
     .indexOf(player);
-  const playerStyle = playerStyles[botIndex % playerStyles.length];
-  const ai = new AIStrategy(playerStyle.strategy, boardState, player, cursor);
+
+  if (botIndex < 0) {
+    return defaultHumanAnalysisStrategyProfile;
+  }
+
+  return getAIPlayerStrategyProfileByBotIndex(botIndex);
+}
+
+export function getBasicAIMove(
+  boardState: BoardState,
+  playerIndex: number,
+  cursor: CursorState,
+  strategyProfile = getAIPlayerStrategyProfile(boardState, playerIndex)
+): Move | undefined {
+  const player = boardState.players[playerIndex];
+  const ai = new AIStrategy(
+    strategyProfile.strategy,
+    boardState,
+    player,
+    cursor
+  );
   return ai.getMove();
 }

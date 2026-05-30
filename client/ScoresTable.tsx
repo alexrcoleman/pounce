@@ -1,5 +1,7 @@
 import { observer } from "mobx-react-lite";
 import { BoardState } from "../shared/GameUtils";
+import { getAIPlayerStrategyProfile } from "../shared/ComputerV1";
+import InfoTooltipIcon from "./InfoTooltipIcon";
 import styles from "./ScoresTable.module.css";
 type Props = {
   board: BoardState;
@@ -38,8 +40,10 @@ export default observer(function ScoresTable({ board, bufferRows = 2 }: Props) {
         <thead>
           <tr>
             {/* <th style={{ width: "30px" }} /> */}
-            {players.map((p, index) => (
-              <th key={index}>{p.name}</th>
+            {players.map((_, index) => (
+              <th key={index}>
+                <PlayerHeader board={board} playerIndex={index} />
+              </th>
             ))}
           </tr>
         </thead>
@@ -82,3 +86,34 @@ export default observer(function ScoresTable({ board, bufferRows = 2 }: Props) {
     </div>
   );
 });
+
+function PlayerHeader({
+  board,
+  playerIndex,
+}: {
+  board: BoardState;
+  playerIndex: number;
+}) {
+  const player = board.players[playerIndex];
+  const strategy =
+    player.socketId == null
+      ? getAIPlayerStrategyProfile(board, playerIndex)
+      : null;
+
+  return (
+    <span className={styles.playerHeader}>
+      <span className={styles.playerName}>{player.name}</span>
+      {strategy ? (
+        <InfoTooltipIcon
+          aria-label={`${player.name} AI strategy`}
+          className={styles.aiStrategyInfo}
+        >
+          <span className={styles.aiStrategyTooltip}>
+            <strong>{strategy.name}</strong>
+            <span>{strategy.summary}</span>
+          </span>
+        </InfoTooltipIcon>
+      ) : null}
+    </span>
+  );
+}

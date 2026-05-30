@@ -38,6 +38,8 @@ const STAT_TOOLTIPS = {
     "Solitaire moves played divided by every detected useful solitaire opportunity for this player.",
   pounceHelpersMissed:
     "Missed solitaire moves that would have helped move, expose, or connect the pounce card.",
+  strategyResult:
+    "Strategy simulations compare solitaire-heavy, balanced, and center-pressure AI styles for this deal. A result appears only when the simulation separates one strategy or pair from the rest.",
 };
 
 const CONFIDENCE_INTERVAL_95_STANDARD_DEVIATIONS = 1.96;
@@ -92,6 +94,7 @@ export default function RoundAnalysisPanel({
     analysis.playerReports.find(
       (report) => report.playerIndex === selectedPlayerIndex
     ) ?? analysis.playerReports[0];
+  const strategyResult = getStrategyResult(selectedReport);
 
   return (
     <section className={styles.root} data-testid="round-analysis-panel">
@@ -173,6 +176,13 @@ export default function RoundAnalysisPanel({
             value={`${selectedReport.dealSimulation.predictedRank}/${getDealRankSize(
               analysis
             )}`}
+          />
+        )}
+        {strategyResult && (
+          <Stat
+            label="Best strategy"
+            tooltip={STAT_TOOLTIPS.strategyResult}
+            value={<StrategyResultValue result={strategyResult} />}
           />
         )}
         <Stat
@@ -467,6 +477,34 @@ function RateValue({ value, ratio }: { value: string; ratio: string }) {
       <div className={styles.rateValueMain}>{value}</div>
       <div className={styles.rateValueMeta}>{ratio}</div>
     </div>
+  );
+}
+
+type StrategyResult =
+  | { type: "single"; strategy: StrategyComparison }
+  | {
+      type: "pair";
+      strategies: [StrategyComparison, StrategyComparison];
+      weakStrategy: StrategyComparison;
+    };
+
+function StrategyResultValue({ result }: { result: StrategyResult }) {
+  if (result.type === "single") {
+    return (
+      <RateValue
+        ratio={`Clear by ${formatSignedScore(
+          result.strategy.clearBestMargin
+        )} differential`}
+        value={result.strategy.name}
+      />
+    );
+  }
+
+  return (
+    <RateValue
+      ratio={`Both tested above ${result.weakStrategy.name}`}
+      value={formatStrategyPair(result.strategies)}
+    />
   );
 }
 
@@ -997,9 +1035,35 @@ function normalizeCardValueLabel(value: string): string {
   return value.length === 1 ? value.toUpperCase() : value;
 }
 
+type StrategyComparison = NonNullable<
+  NonNullable<PlayerRoundAnalysis["dealSimulation"]>["strategyComparisons"]
+>[number];
+
 function getPracticeFocus(report: PlayerRoundAnalysis): string {
+  return getTacticalPracticeFocus(report);
+}
+
+function getStrategyResult(report: PlayerRoundAnalysis): StrategyResult | null {
+  const recommendedStrategy = report.dealSimulation?.recommendedStrategy;
+  if (recommendedStrategy && recommendedStrategy.lean !== "mixed") {
+    return { type: "single", strategy: recommendedStrategy };
+  }
+
+  const strategyPair = getClearlyBetterStrategyPair(report);
+  if (strategyPair) {
+    return {
+      type: "pair",
+      strategies: strategyPair.strongStrategies,
+      weakStrategy: strategyPair.weakStrategy,
+    };
+  }
+
+  return null;
+}
+
+function getTacticalPracticeFocus(report: PlayerRoundAnalysis): string {
   if (report.summary.delayedPlays > 0) {
-    return "You found some plays, but the delayed moments show where the round gave you several seconds to act sooner.";
+    return "The delayed moments show where the round gave you several seconds to act sooner.";
   }
   if (report.summary.missedPounceHelpers > 0) {
     return "Look for solitaire moves that connect or free your pounce card; those are now called out in the key moments.";
@@ -1026,6 +1090,69 @@ function getPracticeFocus(report: PlayerRoundAnalysis): string {
     return "Keep a quick center-pile scan going; the missed windows were playable long enough to notice.";
   }
   return "Nice round. The analyzer did not find any clear missed center plays yet.";
+}
+
+function getClearlyBetterStrategyPair(
+  report: PlayerRoundAnalysis
+):
+  | {
+      strongStrategies: [StrategyComparison, StrategyComparison];
+      weakStrategy: StrategyComparison;
+    }
+  | null {
+  const ranked = (report.dealSimulation?.strategyComparisons ?? [])
+    .filter((strategy) => strategy.lean !== "mixed")
+    .slice()
+    .sort(
+      (a, b) =>
+        b.predictedPointDifferential - a.predictedPointDifferential ||
+        b.predictedScore - a.predictedScore
+    );
+
+  const best = ranked[0];
+  const runnerUp = ranked[1];
+  const third = ranked[2];
+  if (!best || !runnerUp || !third) {
+    return null;
+  }
+
+  const bestRunnerUpMargin =
+    best.predictedPointDifferential - runnerUp.predictedPointDifferential;
+  const runnerUpThirdMargin =
+    runnerUp.predictedPointDifferential - third.predictedPointDifferential;
+
+  if (
+    bestRunnerUpMargin > getMeaningfulStrategyMargin(best, runnerUp) ||
+    runnerUpThirdMargin <= getMeaningfulStrategyMargin(runnerUp, third)
+  ) {
+    return null;
+  }
+
+  return {
+    strongStrategies: [best, runnerUp],
+    weakStrategy: third,
+  };
+}
+
+function getMeaningfulStrategyMargin(
+  first: StrategyComparison,
+  second: StrategyComparison
+): number {
+  return Math.max(
+    1,
+    Math.sqrt(
+      first.predictedPointDifferentialConfidenceInterval95 *
+        first.predictedPointDifferentialConfidenceInterval95 +
+        second.predictedPointDifferentialConfidenceInterval95 *
+          second.predictedPointDifferentialConfidenceInterval95
+    )
+  );
+}
+
+function formatStrategyPair(
+  strategies: [StrategyComparison, StrategyComparison]
+): string {
+  return `${strategies[0].name} and ${strategies[1].name}`;
 }
 
 function formatDuration(durationMs: number): string {
