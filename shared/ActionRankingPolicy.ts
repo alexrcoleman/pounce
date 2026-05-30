@@ -59,6 +59,11 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "solitaire.exposesCenterPlayable",
   "solitaire.exposesCanPlaySoon",
   "solitaire.movesFullStack",
+  "solitaire.postTopConnectorCount",
+  "solitaire.postTopConnectorCloseness",
+  "solitaire.postTopConnectsPounce",
+  "solitaire.postTopConnectsStackRoot",
+  "solitaire.deckStockFraction",
 ] as const;
 
 export type ActionRankingFeatureName =
@@ -391,6 +396,11 @@ function buildActionRankingFeatures(
     bool(strategyFeatures.exposesCenterPlayable),
     bool(strategyFeatures.exposesCanPlaySoon),
     bool(strategyFeatures.movesFullStack),
+    normalize(strategyFeatures.postTopConnectorCount, 5),
+    normalize(strategyFeatures.postTopConnectorCloseness, 1),
+    bool(strategyFeatures.postTopConnectsPounce),
+    bool(strategyFeatures.postTopConnectsStackRoot),
+    normalize(strategyFeatures.deckStockFraction, 1),
   ];
 }
 
@@ -533,12 +543,18 @@ function getSolitaireStrategyFeatures(
     exposesCenterPlayable: false,
     exposesCanPlaySoon: false,
     movesFullStack: false,
+    postTopConnectorCount: 0,
+    postTopConnectorCloseness: 0,
+    postTopConnectsPounce: false,
+    postTopConnectsStackRoot: false,
+    deckStockFraction: 0,
   };
   if (!player || !card || (move.type !== "c2s" && move.type !== "s2s")) {
     return emptyFeatures;
   }
 
   const destStack = player.stacks[move.dest];
+  const postTopConnector = getPostTopConnectorFeatures(player, move, card);
   const exposedCard =
     move.type === "s2s"
       ? player.stacks[move.source][
@@ -563,7 +579,81 @@ function getSolitaireStrategyFeatures(
     movesFullStack:
       move.type === "s2s" &&
       move.count === player.stacks[move.source].length,
+    ...postTopConnector,
+    deckStockFraction:
+      move.type === "c2s" && move.source === "deck"
+        ? getDeckStockFraction(player)
+        : 0,
   };
+}
+
+const POST_TOP_CONNECTOR_THRESHOLD = 5;
+
+function getPostTopConnectorFeatures(
+  player: PlayerState,
+  move: Extract<Move, { type: "c2s" | "s2s" }>,
+  card: CardState
+) {
+  const stacks = getSolitaireStacksAfterMove(player, move, card);
+  const postTop = peek(stacks[move.dest]);
+  const emptyFeatures = {
+    postTopConnectorCount: 0,
+    postTopConnectorCloseness: 0,
+    postTopConnectsPounce: false,
+    postTopConnectsStackRoot: false,
+  };
+  if (!postTop) {
+    return emptyFeatures;
+  }
+
+  return getPostTopConnectorCandidates(player, move, stacks).reduce(
+    (result, candidate) => {
+      const gap = postTop.value - candidate.card.value;
+      if (
+        gap < 1 ||
+        gap > POST_TOP_CONNECTOR_THRESHOLD ||
+        !couldMatch(candidate.card, postTop)
+      ) {
+        return result;
+      }
+
+      result.postTopConnectorCount += 1;
+      result.postTopConnectorCloseness = Math.max(
+        result.postTopConnectorCloseness,
+        (POST_TOP_CONNECTOR_THRESHOLD + 1 - gap) / POST_TOP_CONNECTOR_THRESHOLD
+      );
+      if (candidate.type === "pounce") {
+        result.postTopConnectsPounce = true;
+      } else {
+        result.postTopConnectsStackRoot = true;
+      }
+      return result;
+    },
+    emptyFeatures
+  );
+}
+
+function getPostTopConnectorCandidates(
+  player: PlayerState,
+  move: Extract<Move, { type: "c2s" | "s2s" }>,
+  stacks: PlayerState["stacks"]
+): { type: "pounce" | "stackRoot"; card: CardState }[] {
+  const pounceCard =
+    move.type === "c2s" && move.source === "pounce"
+      ? undefined
+      : peek(player.pounceDeck);
+  return [
+    ...(pounceCard ? [{ type: "pounce" as const, card: pounceCard }] : []),
+    ...stacks
+      .map((stack) => stack[0])
+      .filter((candidate): candidate is CardState => candidate != null)
+      .map((candidate) => ({ type: "stackRoot" as const, card: candidate })),
+  ];
+}
+
+function getDeckStockFraction(player: PlayerState): number {
+  const total = player.deck.length + player.flippedDeck.length;
+  return total <= 0 ? 0 : player.deck.length / total;
 }
 
 function getMoveOutcome(board: BoardState, playerIndex: number, move: Move) {
@@ -747,7 +837,21 @@ function getMakesPouncePlayable(
     return false;
   }
 
-  const stacks = player.stacks.map((stack) => stack.slice()) as PlayerState["stacks"];
+  const stacks = getSolitaireStacksAfterMove(player, move, card);
+  const hasEmptyStack = stacks.some((stack) => stack.length === 0);
+  return stacks.some((stack) =>
+    canMoveCardToSolitaireStackShape(pounceCard, stack, hasEmptyStack)
+  );
+}
+
+function getSolitaireStacksAfterMove(
+  player: PlayerState,
+  move: Extract<Move, { type: "c2s" | "s2s" }>,
+  card: CardState
+): PlayerState["stacks"] {
+  const stacks = player.stacks.map((stack) =>
+    stack.slice()
+  ) as PlayerState["stacks"];
   if (move.type === "c2s") {
     if (isTuckMove(player, card, move.dest)) {
       stacks[move.dest].unshift(card);
@@ -760,10 +864,7 @@ function getMakesPouncePlayable(
     stacks[move.dest].push(...movingCards);
   }
 
-  const hasEmptyStack = stacks.some((stack) => stack.length === 0);
-  return stacks.some((stack) =>
-    canMoveCardToSolitaireStackShape(pounceCard, stack, hasEmptyStack)
-  );
+  return stacks;
 }
 
 function canMoveCardToSolitaireStackShape(

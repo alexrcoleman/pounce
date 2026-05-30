@@ -87,6 +87,11 @@ const focusedFeatures = readFeatureListEnv("TRACE_FOCUS_FEATURES", [
   "solitaire.makesPouncePlayable",
   "solitaire.exposesCenterPlayable",
   "solitaire.exposesCanPlaySoon",
+  "solitaire.postTopConnectorCount",
+  "solitaire.postTopConnectorCloseness",
+  "solitaire.postTopConnectsPounce",
+  "solitaire.postTopConnectsStackRoot",
+  "solitaire.deckStockFraction",
 ]);
 const seed = process.env.SEED ?? "action-ranking-compare";
 const seeds = readSeedList(seed);

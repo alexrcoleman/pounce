@@ -534,6 +534,11 @@ function assertLegacyFeatureExpansion() {
     "card.centerPlayableDestinationCount",
     "card.ownSolitaireDestinationCount",
     "card.ownSolitaireConnectorForPounce",
+    "solitaire.postTopConnectorCount",
+    "solitaire.postTopConnectorCloseness",
+    "solitaire.postTopConnectsPounce",
+    "solitaire.postTopConnectsStackRoot",
+    "solitaire.deckStockFraction",
   ].filter((featureName) => baseModel.featureNames.includes(featureName));
   assert.ok(
     droppedFeatures.length > 0,

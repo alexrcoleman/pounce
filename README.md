@@ -44,6 +44,12 @@ train newly added tactical features.
 The current feature list includes `own.pointDifferential`, so RL fine-tunes can
 condition a move on whether the player is ahead or behind, not just on the
 player's raw card score.
+It also includes post-move solitaire connector features for deck-to-solitaire
+and stack-to-stack moves: how many visible own cards could connect below the
+new exposed stack top, how close the best connector is, whether that connector
+is the pounce card or a stack root, and the stock-vs-waste fraction for
+deck-sourced solitaire moves. These are intended to make connector-vs-cycle
+updates less dependent on broad move-type priors.
 
 Current useful baseline recipe:
 
@@ -761,6 +767,11 @@ still found 14 first divergences, all `cycle>c2s`. That means the current
 rollout objective is consistently preferring some cycle-over-connector delays;
 the next improvement likely needs a better objective/horizon or richer features
 for why the connector matters, not just stricter rollout agreement.
+The action feature set now adds that richer connector context directly:
+post-move connector count/closeness, pounce-vs-stack-root connector flags, and
+a deck stock fraction feature active on deck-to-solitaire moves. Old checkpoints
+expand with zero weights for these inputs, preserving behavior until a fresh
+train or all-layer fine-tune learns from them.
 
 ## Deploying
 
