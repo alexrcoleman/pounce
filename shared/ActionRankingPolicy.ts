@@ -64,6 +64,7 @@ export type ActionRankingFeatureVector = number[];
 
 export type ActionRankingCandidate = {
   key: string;
+  equivalenceKey: string;
   move: Move;
   features: ActionRankingFeatureVector;
   immediatePointDelta: number;
@@ -156,6 +157,23 @@ export function getActionRankingMoveKey(move: Move): string {
   return move.type;
 }
 
+export function getActionRankingMoveEquivalenceKey(
+  board: BoardState,
+  move: Move
+): string {
+  if (move.type !== "c2c") {
+    return getActionRankingMoveKey(move);
+  }
+
+  const pile = board.piles[move.dest];
+  const topCard = peek(pile);
+  return [
+    move.type,
+    getCenterSourceKey(move.source),
+    topCard ? `${topCard.suit}:${topCard.value}` : "empty",
+  ].join(":");
+}
+
 export function getPointDifferential(
   board: BoardState,
   playerIndex: number
@@ -197,6 +215,7 @@ function createActionRankingCandidate(
   const outcome = getMoveOutcome(board, playerIndex, move);
   return {
     key: getActionRankingMoveKey(move),
+    equivalenceKey: getActionRankingMoveEquivalenceKey(board, move),
     move,
     features: buildActionRankingFeatures(
       board,

@@ -8,6 +8,7 @@ const options = {
   imitationDeals: readIntegerEnv("IMITATION_DEALS", 24),
   imitationEpochs: readIntegerEnv("IMITATION_EPOCHS", 4),
   imitationLearningRate: readNumberEnv("IMITATION_LR", 0.02),
+  imitationEquivalentTargets: readBooleanEnv("IMITATION_EQUIVALENT_TARGETS", false),
   improvementStates: readIntegerEnv("IMPROVEMENT_STATES", 0),
   improvementCandidateLimit: readIntegerEnv("IMPROVEMENT_CANDIDATES", 6),
   improvementRolloutMoves: readIntegerEnv("IMPROVEMENT_ROLLOUT_MOVES", 450),

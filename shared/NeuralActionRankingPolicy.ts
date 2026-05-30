@@ -29,6 +29,7 @@ export type ImitationTrainingOptions = {
   learningRate?: number;
   l2?: number;
   shuffleSeed?: string;
+  equivalentTargets?: boolean;
 };
 
 export type ImitationTrainingStats = {
@@ -150,6 +151,7 @@ export class NeuralActionRankingPolicy {
 
         const candidates = example.candidates.map((candidate) => ({
           key: candidate.key,
+          equivalenceKey: candidate.equivalenceKey,
           move: candidate.move,
           features: candidate.features,
           immediatePointDelta: candidate.immediatePointDelta,
@@ -161,18 +163,22 @@ export class NeuralActionRankingPolicy {
           this.scoreFeatures(candidate.features)
         );
         const probabilities = softmax(scores);
-        totalLoss += -Math.log(
-          Math.max(1e-12, probabilities[example.selectedCandidateIndex])
+        const targetProbabilities = getImitationTargetProbabilities(
+          example,
+          options.equivalentTargets ?? false
         );
+        totalLoss += targetProbabilities.reduce((sum, target, index) => {
+          return sum - target * Math.log(Math.max(1e-12, probabilities[index]));
+        }, 0);
         totalExamples += 1;
-        if (getBestIndex(scores) === example.selectedCandidateIndex) {
+        if (isImitationPredictionCorrect(example, getBestIndex(scores), options)) {
           correct += 1;
         }
 
-        this.applyListwiseGradient(
+        this.applyDistributionGradient(
           candidates,
           probabilities,
-          example.selectedCandidateIndex,
+          targetProbabilities,
           learningRate,
           1,
           l2
@@ -378,6 +384,43 @@ export class NeuralActionRankingPolicy {
 
     return { hiddenRaw, hidden, score };
   }
+}
+
+function getImitationTargetProbabilities(
+  example: ActionRankingImitationExample,
+  equivalentTargets: boolean
+): number[] {
+  if (!equivalentTargets) {
+    return example.candidates.map((_, index) =>
+      index === example.selectedCandidateIndex ? 1 : 0
+    );
+  }
+
+  const targetEquivalenceKey =
+    example.candidates[example.selectedCandidateIndex!].equivalenceKey;
+  const targetCount = Math.max(
+    1,
+    example.candidates.filter(
+      (candidate) => candidate.equivalenceKey === targetEquivalenceKey
+    ).length
+  );
+  return example.candidates.map((candidate) =>
+    candidate.equivalenceKey === targetEquivalenceKey ? 1 / targetCount : 0
+  );
+}
+
+function isImitationPredictionCorrect(
+  example: ActionRankingImitationExample,
+  predictedIndex: number,
+  options: ImitationTrainingOptions
+): boolean {
+  if (options.equivalentTargets) {
+    return (
+      example.candidates[predictedIndex].equivalenceKey ===
+      example.candidates[example.selectedCandidateIndex!].equivalenceKey
+    );
+  }
+  return predictedIndex === example.selectedCandidateIndex;
 }
 
 export function createNeuralActionRankingModel(

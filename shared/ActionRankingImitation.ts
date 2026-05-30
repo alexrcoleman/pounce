@@ -13,6 +13,7 @@ import { executeMove, type Move } from "./MoveHandler";
 
 export type ActionRankingImitationCandidate = {
   key: string;
+  equivalenceKey: string;
   move: Move;
   features: number[];
   label: 0 | 1;
@@ -210,6 +211,7 @@ function createImitationExample(
     selectedCandidateIndex,
     candidates: candidates.map((candidate) => ({
       key: candidate.key,
+      equivalenceKey: candidate.equivalenceKey,
       move: candidate.move,
       features: candidate.features,
       label: candidate.key === selectedActionKey ? 1 : 0,

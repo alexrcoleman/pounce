@@ -15,12 +15,13 @@ npm run action-ranking:train
 
 Useful training knobs:
 
-- `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`
+- `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`
 - `IMPROVEMENT_STATES`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
 - `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `MAX_MOVES`, `SEED`
 - `MODEL_OUT=C:\tmp\pounce-action-ranking-model.json` to save model weights
 - `MODEL_IN=...\model.json npm run action-ranking:evaluate` to evaluate saved weights
+- `EVAL_RUNS=4` or `EVAL_SEEDS=seedA,seedB` to evaluate saved weights across multiple seeds
 - `POUNCE_NEURAL_AI_MODEL=...\model.json npm run dev` to run Socket.IO bots with saved weights
 
 Current useful baseline recipe:
@@ -47,10 +48,13 @@ $env:MODEL_OUT='.\node_modules\pounce-action-ranking-model.json'
 npm run action-ranking:train
 ```
 
-On a 96-game held-out evaluation seed, that setup beat the same-seat heuristic
-baseline by about `+0.36` point differential. RL fine-tuning is wired in with
-batch-normalized, clipped advantages, but the conservative runs tested so far
-have preserved rather than clearly improved that checkpoint.
+On one 96-game held-out evaluation seed, that setup beat the same-seat heuristic
+baseline by about `+0.36` point differential. A broader 384-game / 4-seed run
+was still noisy and slightly negative on same-seat baseline-adjusted point
+differential, while the neural player's raw score stayed competitive with the
+teacher opponents. RL fine-tuning is wired in with batch-normalized, clipped
+advantages, but the conservative runs tested so far have preserved rather than
+clearly improved that checkpoint.
 
 `IMPROVEMENT_STATES` enables an experimental counterfactual rollout pass: it
 samples teacher-game states, tries several legal actions, lets the teacher

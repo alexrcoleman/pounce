@@ -36,6 +36,7 @@ export type NeuralTrainingOptions = {
   imitationDeals?: number;
   imitationEpochs?: number;
   imitationLearningRate?: number;
+  imitationEquivalentTargets?: boolean;
   rlEpisodes?: number;
   rlLearningRate?: number;
   rlTemperature?: number;
@@ -150,6 +151,7 @@ export function trainNeuralActionRankingPolicy(
   const imitationStats = policy.trainImitation(imitationExamples, {
     epochs: imitationEpochs,
     learningRate: options.imitationLearningRate,
+    equivalentTargets: options.imitationEquivalentTargets ?? false,
     shuffleSeed: `${seed}:imitation-shuffle`,
   });
 
@@ -378,6 +380,7 @@ function createRewardImprovementExample(
     selectedCandidateIndex: bestIndex,
     candidates: improvedCandidates.map((candidate) => ({
       key: candidate.key,
+      equivalenceKey: candidate.equivalenceKey,
       move: candidate.move,
       features: candidate.features,
       label: candidate.key === improvedCandidates[bestIndex].key ? 1 : 0,
