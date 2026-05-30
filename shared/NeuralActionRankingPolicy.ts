@@ -57,6 +57,7 @@ export type ImitationTrainingStats = {
   accuracy: number;
   pairs?: number;
   averagePairReturnGap?: number;
+  averagePairWeight?: number;
 };
 
 export type RewardTargetTrainingOptions = ImitationTrainingOptions & {
@@ -69,6 +70,9 @@ export type PreferenceTrainingOptions = ImitationTrainingOptions & {
   temperature?: number;
   preferenceScope?: "all" | "behavior";
   targetMargin?: number;
+  pairWeightMode?: "uniform" | "return_gap";
+  pairWeightScale?: number;
+  pairWeightMax?: number;
 };
 
 export type ValueRegressionTrainingOptions = ImitationTrainingOptions & {
@@ -368,12 +372,19 @@ export class NeuralActionRankingPolicy {
     const temperature = Math.max(1e-6, options.temperature ?? 1);
     const preferenceScope = options.preferenceScope ?? "all";
     const targetMargin = Math.max(0, options.targetMargin ?? 0);
+    const pairWeightMode = options.pairWeightMode ?? "uniform";
+    const pairWeightScale = Math.max(
+      1e-6,
+      options.pairWeightScale ?? Math.max(1, minReturnGap)
+    );
+    const pairWeightMax = Math.max(0, options.pairWeightMax ?? 1);
     const random = createSeededRandom(options.shuffleSeed ?? "preferences");
     let totalLoss = 0;
     let totalExamples = 0;
     let correct = 0;
     let updates = 0;
     let returnGapTotal = 0;
+    let pairWeightTotal = 0;
 
     for (let epoch = 0; epoch < epochs; epoch++) {
       const shuffled = shuffleCopy(examples, random);
@@ -393,28 +404,39 @@ export class NeuralActionRankingPolicy {
         pairs.forEach((pair) => {
           const winner = example.candidates[pair.winnerIndex];
           const loser = example.candidates[pair.loserIndex];
+          const pairWeight = getPreferencePairWeight(pair.returnGap, {
+            mode: pairWeightMode,
+            scale: pairWeightScale,
+            max: pairWeightMax,
+          });
+          if (pairWeight <= 0) {
+            return;
+          }
+
           const winnerScore = this.scoreFeatures(winner.features);
           const loserScore = this.scoreFeatures(loser.features);
           const margin = (winnerScore - loserScore) / temperature;
           const marginError = targetMargin - margin;
           const mistakeProbability = sigmoid(marginError);
-          totalLoss += softplus(marginError);
+          totalLoss += pairWeight * softplus(marginError);
           returnGapTotal += pair.returnGap;
+          pairWeightTotal += pairWeight;
           if (winnerScore > loserScore) {
             correct += 1;
           }
 
+          const effectiveLearningRate = learningRate * pairWeight;
           this.applyScoreGradient(
             winner.features,
             -mistakeProbability / temperature,
-            learningRate,
+            effectiveLearningRate,
             l2,
             trainableLayers
           );
           this.applyScoreGradient(
             loser.features,
             mistakeProbability / temperature,
-            learningRate,
+            effectiveLearningRate,
             l2,
             trainableLayers
           );
@@ -431,6 +453,7 @@ export class NeuralActionRankingPolicy {
       accuracy: updates === 0 ? 0 : correct / updates,
       pairs: updates,
       averagePairReturnGap: updates === 0 ? 0 : returnGapTotal / updates,
+      averagePairWeight: updates === 0 ? 0 : pairWeightTotal / updates,
     };
   }
 
@@ -839,6 +862,21 @@ function getBehaviorPreferencePairs(
           returnGap,
         },
   ];
+}
+
+function getPreferencePairWeight(
+  returnGap: number,
+  options: {
+    mode: "uniform" | "return_gap";
+    scale: number;
+    max: number;
+  }
+): number {
+  if (options.mode === "uniform") {
+    return 1;
+  }
+
+  return Math.min(options.max, Math.abs(returnGap) / options.scale);
 }
 
 function getCandidateReturn(

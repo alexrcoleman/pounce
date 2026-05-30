@@ -317,6 +317,18 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
       "RL_COUNTERFACTUAL_PAIRWISE_MARGIN",
       0
     ),
+    rlCounterfactualPairwiseWeightMode: readPairwiseWeightModeEnv(
+      "RL_COUNTERFACTUAL_PAIRWISE_WEIGHT_MODE",
+      "uniform"
+    ),
+    rlCounterfactualPairwiseWeightScale: readNumberEnv(
+      "RL_COUNTERFACTUAL_PAIRWISE_WEIGHT_SCALE",
+      1
+    ),
+    rlCounterfactualPairwiseMaxWeight: readNumberEnv(
+      "RL_COUNTERFACTUAL_PAIRWISE_MAX_WEIGHT",
+      1
+    ),
     rlCounterfactualMaxScoreGap: readNumberEnv(
       "RL_COUNTERFACTUAL_MAX_SCORE_GAP",
       0
@@ -457,6 +469,17 @@ function readConnectorAnchorModeEnv(
     return fallback;
   }
   return value.toLowerCase() === "symmetric" ? "symmetric" : fallback;
+}
+
+function readPairwiseWeightModeEnv(
+  name: string,
+  fallback: "uniform" | "return_gap"
+): "uniform" | "return_gap" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  return value.toLowerCase() === "return_gap" ? "return_gap" : fallback;
 }
 
 function readTrainableLayersEnv(

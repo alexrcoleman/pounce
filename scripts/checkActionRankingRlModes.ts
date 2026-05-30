@@ -81,6 +81,26 @@ assert.equal(
   "value mode should not fall back to policy-gradient updates"
 );
 
+const weightedPairwise = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:weighted-pairwise",
+  rlCounterfactualTrainingMode: "pairwise",
+  rlCounterfactualPairwiseWeightMode: "return_gap",
+  rlCounterfactualPairwiseWeightScale: 100,
+  rlCounterfactualPairwiseMaxWeight: 1,
+});
+assertCounterfactualWork(weightedPairwise, "pairwise");
+assert.ok(
+  weightedPairwise.reinforcement.counterfactualAveragePairWeight > 0 &&
+    weightedPairwise.reinforcement.counterfactualAveragePairWeight < 1,
+  "return-gap pairwise weighting should damp accepted counterfactual pair updates"
+);
+assert.equal(
+  weightedPairwise.reinforcement.averagePolicyUpdates,
+  0,
+  "weighted pairwise mode should not fall back to policy-gradient updates"
+);
+
 const outputOnlyInitialModel = createNeuralActionRankingModel(
   [16],
   "action-ranking-rl-mode-check:output-only-model"
@@ -379,6 +399,7 @@ console.log(
       featureExpansion,
       policyGradient: summarize(policyGradient),
       value: summarize(value),
+      weightedPairwise: summarize(weightedPairwise),
       outputOnlyValue: summarize(outputOnlyValue),
       scoreWeightedValue: summarize(scoreWeightedValue),
       pounceWeightedValue: summarize(pounceWeightedValue),
@@ -403,7 +424,7 @@ console.log(
 
 function assertCounterfactualWork(
   result: NeuralTrainingResult,
-  mode: "policy_gradient" | "value"
+  mode: "policy_gradient" | "pairwise" | "value"
 ): void {
   assert.ok(
     result.reinforcement.counterfactualUpdateCount > 0,
@@ -434,6 +455,8 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.counterfactualConfidenceSkippedCount,
     counterfactualScoreGapSkippedCount:
       result.reinforcement.counterfactualScoreGapSkippedCount,
+    counterfactualAveragePairWeight:
+      result.reinforcement.counterfactualAveragePairWeight,
     counterfactualAnchorExamples:
       result.reinforcement.counterfactualAnchorExamples,
     counterfactualAnchorUpdates:

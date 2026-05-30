@@ -60,6 +60,9 @@ export type NeuralTrainingOptions = {
   rlCounterfactualMaxPolicyMargin?: number;
   rlCounterfactualPreferenceScope?: "all" | "behavior";
   rlCounterfactualPairwiseTargetMargin?: number;
+  rlCounterfactualPairwiseWeightMode?: "uniform" | "return_gap";
+  rlCounterfactualPairwiseWeightScale?: number;
+  rlCounterfactualPairwiseMaxWeight?: number;
   rlCounterfactualMaxScoreGap?: number;
   rlCounterfactualScoreRewardWeight?: number;
   rlCounterfactualPounceRewardWeight?: number;
@@ -161,6 +164,7 @@ export type NeuralTrainingResult = {
     counterfactualPolicyMarginSkippedCount: number;
     counterfactualConfidenceSkippedCount: number;
     counterfactualScoreGapSkippedCount: number;
+    counterfactualAveragePairWeight: number;
     counterfactualAnchorExamples: number;
     counterfactualAnchorUpdates: number;
     counterfactualConnectorAnchorExamples: number;
@@ -466,6 +470,12 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualPreferenceScope ?? "all",
     counterfactualPairwiseTargetMargin:
       options.rlCounterfactualPairwiseTargetMargin ?? 0,
+    counterfactualPairwiseWeightMode:
+      options.rlCounterfactualPairwiseWeightMode ?? "uniform",
+    counterfactualPairwiseWeightScale:
+      options.rlCounterfactualPairwiseWeightScale ?? 1,
+    counterfactualPairwiseMaxWeight:
+      options.rlCounterfactualPairwiseMaxWeight ?? 1,
     counterfactualMaxScoreGap: options.rlCounterfactualMaxScoreGap ?? 0,
     counterfactualScoreRewardWeight:
       options.rlCounterfactualScoreRewardWeight ?? 0,
@@ -1457,6 +1467,9 @@ export function trainPolicyGradientFromRollouts(
     counterfactualMaxPolicyMargin: number;
     counterfactualPreferenceScope: "all" | "behavior";
     counterfactualPairwiseTargetMargin: number;
+    counterfactualPairwiseWeightMode: "uniform" | "return_gap";
+    counterfactualPairwiseWeightScale: number;
+    counterfactualPairwiseMaxWeight: number;
     counterfactualMaxScoreGap: number;
     counterfactualScoreRewardWeight: number;
     counterfactualPounceRewardWeight: number;
@@ -1748,6 +1761,9 @@ export function trainPolicyGradientFromRollouts(
           minReturnGap: options.counterfactualMinReturnGap,
           preferenceScope: options.counterfactualPreferenceScope,
           pairwiseTargetMargin: options.counterfactualPairwiseTargetMargin,
+          pairwiseWeightMode: options.counterfactualPairwiseWeightMode,
+          pairwiseWeightScale: options.counterfactualPairwiseWeightScale,
+          pairwiseMaxWeight: options.counterfactualPairwiseMaxWeight,
           anchorExamples: counterfactualAnchorExamples,
           anchorWeight: options.counterfactualAnchorWeight,
           anchorMaxExamples: options.counterfactualAnchorMaxExamples,
@@ -1825,6 +1841,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualPolicyMarginSkippedCount,
     counterfactualConfidenceSkippedCount,
     counterfactualScoreGapSkippedCount,
+    counterfactualAveragePairWeight: advantageStats.averagePairWeight,
     counterfactualAnchorExamples: advantageStats.anchorExamples,
     counterfactualAnchorUpdates: advantageStats.anchorUpdates,
     counterfactualConnectorAnchorExamples:
@@ -2125,6 +2142,7 @@ function applyPolicyGradientBatch(
     mean,
     stdDev,
     appliedUpdates,
+    averagePairWeight: 0,
     anchorExamples: 0,
     anchorUpdates: 0,
     connectorAnchorExamples: 0,
@@ -2142,6 +2160,9 @@ function trainCounterfactualSupervisedBatch(
     minReturnGap: number;
     preferenceScope: "all" | "behavior";
     pairwiseTargetMargin: number;
+    pairwiseWeightMode: "uniform" | "return_gap";
+    pairwiseWeightScale: number;
+    pairwiseMaxWeight: number;
     anchorExamples: ActionRankingImitationExample[];
     anchorWeight: number;
     anchorMaxExamples: number;
@@ -2192,6 +2213,9 @@ function trainCounterfactualSupervisedBatch(
           maxPairsPerExample: 1,
           preferenceScope: options.preferenceScope,
           targetMargin: options.pairwiseTargetMargin,
+          pairWeightMode: options.pairwiseWeightMode,
+          pairWeightScale: options.pairwiseWeightScale,
+          pairWeightMax: options.pairwiseMaxWeight,
           trainableLayers: options.trainableLayers,
           shuffleSeed: options.shuffleSeed,
         });
@@ -2246,6 +2270,7 @@ function trainCounterfactualSupervisedBatch(
       trainingStats.updates +
       anchorStats.updates +
       connectorAnchorStats.updates,
+    averagePairWeight: trainingStats.averagePairWeight ?? 0,
     anchorExamples: anchorExamples.length,
     anchorUpdates: anchorStats.updates,
     connectorAnchorExamples: connectorAnchorExamples.length,
