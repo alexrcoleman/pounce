@@ -723,7 +723,7 @@ function getPreferencePairs(
       }
 
       const returnGap = Math.abs(leftReturn - rightReturn);
-      if (returnGap < minReturnGap) {
+      if (returnGap === 0 || returnGap < minReturnGap) {
         continue;
       }
 
@@ -778,7 +778,7 @@ function getBehaviorPreferencePairs(
   }
 
   const returnGap = Math.abs(selectedReturn - behaviorReturn);
-  if (returnGap < minReturnGap) {
+  if (returnGap === 0 || returnGap < minReturnGap) {
     return [];
   }
 

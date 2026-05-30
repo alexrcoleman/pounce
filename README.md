@@ -25,6 +25,7 @@ Useful training knobs:
 - `MODEL_IN=...\model.json npm run action-ranking:evaluate` to evaluate saved weights
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare` to compare two models on paired deals/seats
 - `MODEL_IN=...\best.json npm run action-ranking:tune` to iterate reward fine-tunes and promote only paired-comparison improvements
+- `npm run action-ranking:check-rl-modes` to smoke-test that counterfactual RL training modes route to the intended update path
 - `EVAL_RUNS=4` or `EVAL_SEEDS=seedA,seedB` to evaluate saved weights across multiple seeds
 - `POUNCE_NEURAL_AI_MODEL=...\model.json npm run dev` to run Socket.IO bots with saved weights
 
@@ -226,10 +227,10 @@ checkpoint measured `+0.039 +/- 0.123` against capacity over 384 paired games.
 The same value pass on top of the current behavior-scope checkpoint measured
 `-0.002 +/- 0.045` against that checkpoint. A 64-episode
 `RL_COUNTERFACTUAL_MODE=value` run from the behavior-scope checkpoint produced
-247 counterfactual updates and measured `-0.060 +/- 0.035`. The main open RL
-problem is now collecting enough stable per-decision counterfactual labels and
-calibrating action-value targets without washing out the useful imitation and
-behavior-gap rankings.
+247 counterfactual decision examples, 494 candidate-value updates, and measured
+`-0.036 +/- 0.036`. The main open RL problem is now collecting enough stable
+per-decision counterfactual labels and calibrating action-value targets without
+washing out the useful imitation and behavior-gap rankings.
 
 ## Deploying
 

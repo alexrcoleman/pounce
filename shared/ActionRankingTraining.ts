@@ -1066,9 +1066,9 @@ export function trainPolicyGradientFromRollouts(
         }
         counterfactualReturnGapTotal += Math.abs(result.returnGap);
         counterfactualUpdateCount += 1;
-        if (options.counterfactualTrainingMode === "pairwise") {
+        if (options.counterfactualTrainingMode !== "policy_gradient") {
           counterfactualExamples.push(
-            createCounterfactualPreferenceExample(
+            createCounterfactualSupervisedExample(
               transition,
               result,
               episode,
@@ -1278,7 +1278,7 @@ function trainCounterfactualSupervisedBatch(
   };
 }
 
-function createCounterfactualPreferenceExample(
+function createCounterfactualSupervisedExample(
   transition: RolloutTransition,
   result: { selectedReturn: number; greedyReturn: number },
   episode: number,
