@@ -19,6 +19,8 @@ Useful training knobs:
 - `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`
 - `PLAYERS`, `HIDDEN`, `MAX_MOVES`, `SEED`
 - `MODEL_OUT=C:\tmp\pounce-action-ranking-model.json` to save model weights
+- `MODEL_IN=...\model.json npm run action-ranking:evaluate` to evaluate saved weights
+- `POUNCE_NEURAL_AI_MODEL=...\model.json npm run dev` to run Socket.IO bots with saved weights
 
 ## Deploying
 

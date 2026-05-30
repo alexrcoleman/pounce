@@ -50,6 +50,22 @@ type HeldCardSource =
   | { type: "deck" }
   | { type: "solitaire"; cardIndex: number; stackIndex: number };
 
+export type AIMoveProvider = (
+  boardState: BoardState,
+  playerIndex: number,
+  cursor: CursorState
+) => Move | undefined;
+
+let aiMoveProvider: AIMoveProvider | null = null;
+
+export function setAIMoveProvider(provider: AIMoveProvider): void {
+  aiMoveProvider = provider;
+}
+
+export function clearAIMoveProvider(): void {
+  aiMoveProvider = null;
+}
+
 class AIStrategy {
   private sortedPiles: (readonly [CardState[], number])[] = [];
   constructor(
@@ -698,4 +714,16 @@ export function getBasicAIMove(
     cursor
   );
   return ai.getMove();
+}
+
+export function getAIMove(
+  boardState: BoardState,
+  playerIndex: number,
+  cursor: CursorState
+): Move | undefined {
+  return aiMoveProvider?.(boardState, playerIndex, cursor) ?? getBasicAIMove(
+    boardState,
+    playerIndex,
+    cursor
+  );
 }

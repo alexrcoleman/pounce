@@ -319,6 +319,10 @@ export function createTrainingBoard(playerCount: number, seed: string): BoardSta
     createShuffledDeck(playerIndex, `${seed}:player:${playerIndex}`)
   );
   resetBoard(board, decks);
+  board.pileLocs = createDeterministicPileLocations(
+    board.piles.length,
+    `${seed}:piles`
+  );
   board.players.forEach((_, playerIndex) => {
     dealPlayerHand(board, playerIndex);
   });
@@ -330,6 +334,18 @@ export function createTrainingBoard(playerCount: number, seed: string): BoardSta
     player.currentPoints = getCurrentPointsFromCards(player);
   });
   return board;
+}
+
+export function evaluateNeuralModel(
+  model: NeuralActionRankingModel,
+  options: {
+    playerCount?: number;
+    games?: number;
+    seed?: string;
+    maxMovesPerGame?: number;
+  } = {}
+): PolicyEvaluationResult {
+  return evaluateNeuralPolicy(new NeuralActionRankingPolicy(model), options);
 }
 
 function runPolicyRollout(
@@ -446,6 +462,27 @@ function createShuffledDeck(player: number, seed: string): CardState[] {
     [deck[index], deck[swapIndex]] = [deck[swapIndex], deck[index]];
   }
   return deck;
+}
+
+function createDeterministicPileLocations(
+  count: number,
+  seed: string
+): [number, number, number][] {
+  const random = createSeededRandom(seed);
+  return Array.from({ length: count }, (_, index) => {
+    const angle = (2 * Math.PI * index) / Math.max(1, count);
+    const ring = 0.28 + 0.2 * (index % 2);
+    const jitter = 0.04;
+    return [
+      clamp01(0.5 + Math.cos(angle) * ring + (random() - 0.5) * jitter),
+      clamp01(0.5 + Math.sin(angle) * ring + (random() - 0.5) * jitter),
+      random(),
+    ];
+  });
+}
+
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
 }
 
 function getNextPlayerIndex(

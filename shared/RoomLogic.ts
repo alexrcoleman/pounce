@@ -35,7 +35,7 @@ import {
   getApproximateCardLocation,
   getPlayerStackLocation,
 } from "./CardLocations";
-import { getBasicAIMove, getCurrentAIDragMove } from "./ComputerV1";
+import { getAIMove, getCurrentAIDragMove } from "./ComputerV1";
 import deepClone from "./deepClone";
 import { cardEquals, peek } from "./CardUtils";
 import {
@@ -129,7 +129,7 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       rememberAIActiveCenterPile(room, index, now);
       const currentDragMove = getCurrentAIDragMove(board, index, hand);
       const visibleBoard = getVisibleBoard(room, index, now);
-      const move = currentDragMove ?? getBasicAIMove(visibleBoard, index, hand);
+      const move = currentDragMove ?? getAIMove(visibleBoard, index, hand);
 
       if (move) {
         rememberAIMoveFocus(room, index, move, now);
