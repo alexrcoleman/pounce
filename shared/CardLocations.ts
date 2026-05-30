@@ -6,6 +6,7 @@ export const CARD_WIDTH = 55;
 export const CARD_HEIGHT = 77;
 export const FIELD_PILE_AREA_SIZE = 500;
 export const FIELD_STACK_CARD_GAP = 0.2;
+export const PLAYER_BOARD_HEIGHT = 225;
 
 const PLAYER_HAND_OFFSET_X = -8;
 const PLAYER_CARD_SPACING = 70;
@@ -16,6 +17,10 @@ const PLAYER_STACK_TOP = 42;
 const PLAYER_DECK_TOP = 62;
 const PLAYER_POUNCE_TOP = 92;
 export const PLAYER_STACK_CARD_GAP = 20;
+export const ACTIVE_PLAYER_BOARD_BOTTOM_GAP = 49;
+const OPPONENT_PLAYER_TOP =
+  PLAYER_BOARD_HEIGHT + ACTIVE_PLAYER_BOARD_BOTTOM_GAP;
+const OPPONENT_PLAYER_ROW_GAP = 165;
 
 export function getPlayerDeckLocation(
   playerIndex: number,
@@ -81,9 +86,12 @@ export function getPlayerLocation(
   }
   // TODO: Could put everyone in a "circle" and wrap around
   if (playerIndex < activePlayerIndex) {
-    return [80, 185 + 165 * playerIndex];
+    return [80, OPPONENT_PLAYER_TOP + OPPONENT_PLAYER_ROW_GAP * playerIndex];
   }
-  return [80, 185 + 165 * (playerIndex - 1)];
+  return [
+    80,
+    OPPONENT_PLAYER_TOP + OPPONENT_PLAYER_ROW_GAP * (playerIndex - 1),
+  ];
 }
 
 export function getBoardPileLocation(

@@ -9,7 +9,11 @@ import {
 import type { ReactNode } from "react";
 
 import { BoardState } from "../shared/GameUtils";
-import { getPlayerLocation } from "../shared/CardLocations";
+import {
+  ACTIVE_PLAYER_BOARD_BOTTOM_GAP,
+  PLAYER_BOARD_HEIGHT,
+  getPlayerLocation,
+} from "../shared/CardLocations";
 
 export const FIELD_LEFT = 550;
 export const FIELD_TOP = 50;
@@ -17,7 +21,7 @@ export const FIELD_SIZE = 577;
 
 const PLAYER_LEFT = 0;
 export const PLAYER_WIDTH = 480;
-export const PLAYER_HEIGHT = 225;
+export const PLAYER_HEIGHT = PLAYER_BOARD_HEIGHT;
 const COMPACT_BREAKPOINT = 700;
 const TABLET_PORTRAIT_BREAKPOINT = 1024;
 const COMPACT_LANDSCAPE_MAX_WIDTH = 1180;
@@ -26,7 +30,7 @@ const COMPACT_PADDING = 12;
 const COMPACT_TOP_PADDING = 42;
 const COMPACT_GAP = 12;
 const COMPACT_SMALL_GAP = 8;
-const COMPACT_ACTIVE_LIFT = 49;
+const COMPACT_ACTIVE_LIFT = ACTIVE_PLAYER_BOARD_BOTTOM_GAP;
 const PLAYER_VISUAL_LEFT = -20;
 const PLAYER_VISUAL_WIDTH = 528;
 const TOUCH_LANDSCAPE_PADDING = 12;
