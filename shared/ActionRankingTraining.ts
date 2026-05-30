@@ -90,6 +90,7 @@ export type NeuralTrainingOptions = {
   improvementValueHuberDelta?: number;
   improvementRequireBehaviorGap?: boolean;
   improvementMinBehaviorImprovement?: number;
+  improvementBehaviorGapStandardErrorMultiplier?: number;
   improvementEpochs?: number;
   improvementLearningRate?: number;
   improvementTargetTemperature?: number;
@@ -113,8 +114,10 @@ export type NeuralTrainingResult = {
     averageBestReturn: number;
     averageImprovement: number;
     averageBestBehaviorImprovement: number;
+    averageBestBehaviorImprovementStandardError: number;
     averageCandidateReturnStdDev: number;
     skippedBehaviorGapCount: number;
+    skippedBehaviorConfidenceCount: number;
     skippedPolicyScoreGapCount: number;
     skippedPolicyWinnerScoreGapCount: number;
     scannedStateCount: number;
@@ -239,6 +242,7 @@ type CounterfactualTransitionResult = {
 type RewardImprovementCandidate = ActionRankingCandidate & {
   rolloutPointDifferential: number;
   rolloutPointDifferentialReturn: number;
+  rolloutPointDifferentialReturns: number[];
 };
 
 type RewardImprovementCollection = {
@@ -248,8 +252,10 @@ type RewardImprovementCollection = {
   averageBestReturn: number;
   averageImprovement: number;
   averageBestBehaviorImprovement: number;
+  averageBestBehaviorImprovementStandardError: number;
   averageCandidateReturnStdDev: number;
   skippedBehaviorGapCount: number;
+  skippedBehaviorConfidenceCount: number;
   skippedPolicyScoreGapCount: number;
   skippedPolicyWinnerScoreGapCount: number;
   scannedStateCount: number;
@@ -258,10 +264,12 @@ type RewardImprovementCollection = {
 type RewardImprovementExampleResult = {
   example: ActionRankingImitationExample | null;
   skippedForBehaviorGap: boolean;
+  skippedForBehaviorConfidence: boolean;
   teacherReturn: number | null;
   behaviorReturn: number | null;
   bestReturn: number | null;
   bestBehaviorImprovement: number;
+  bestBehaviorImprovementStandardError: number;
   candidateReturnStdDev: number;
 };
 
@@ -328,6 +336,8 @@ export function trainNeuralActionRankingPolicy(
     continuationPolicy: policy,
     requireBehaviorGap: options.improvementRequireBehaviorGap ?? false,
     minBehaviorImprovement: options.improvementMinBehaviorImprovement ?? 2,
+    behaviorGapStandardErrorMultiplier:
+      options.improvementBehaviorGapStandardErrorMultiplier ?? 0,
     seed: `${seed}:improvement`,
     maxMovesPerGame,
   });
@@ -427,8 +437,12 @@ export function trainNeuralActionRankingPolicy(
       averageImprovement: improvement.averageImprovement,
       averageBestBehaviorImprovement:
         improvement.averageBestBehaviorImprovement,
+      averageBestBehaviorImprovementStandardError:
+        improvement.averageBestBehaviorImprovementStandardError,
       averageCandidateReturnStdDev: improvement.averageCandidateReturnStdDev,
       skippedBehaviorGapCount: improvement.skippedBehaviorGapCount,
+      skippedBehaviorConfidenceCount:
+        improvement.skippedBehaviorConfidenceCount,
       skippedPolicyScoreGapCount: improvement.skippedPolicyScoreGapCount,
       skippedPolicyWinnerScoreGapCount:
         improvement.skippedPolicyWinnerScoreGapCount,
@@ -463,6 +477,7 @@ export function collectRewardImprovementExamples(options: {
   continuationPolicy?: NeuralActionRankingPolicy;
   requireBehaviorGap: boolean;
   minBehaviorImprovement: number;
+  behaviorGapStandardErrorMultiplier: number;
   seed: string;
   maxMovesPerGame: number;
 }): RewardImprovementCollection {
@@ -474,8 +489,10 @@ export function collectRewardImprovementExamples(options: {
       averageBestReturn: 0,
       averageImprovement: 0,
       averageBestBehaviorImprovement: 0,
+      averageBestBehaviorImprovementStandardError: 0,
       averageCandidateReturnStdDev: 0,
       skippedBehaviorGapCount: 0,
+      skippedBehaviorConfidenceCount: 0,
       skippedPolicyScoreGapCount: 0,
       skippedPolicyWinnerScoreGapCount: 0,
       scannedStateCount: 0,
@@ -487,8 +504,10 @@ export function collectRewardImprovementExamples(options: {
   let behaviorReturnTotal = 0;
   let bestReturnTotal = 0;
   let bestBehaviorImprovementTotal = 0;
+  let bestBehaviorImprovementStandardErrorTotal = 0;
   let candidateReturnStdDevTotal = 0;
   let skippedBehaviorGapCount = 0;
+  let skippedBehaviorConfidenceCount = 0;
   let skippedPolicyScoreGapCount = 0;
   let skippedPolicyWinnerScoreGapCount = 0;
   let scannedStateCount = 0;
@@ -586,10 +605,14 @@ export function collectRewardImprovementExamples(options: {
             options.continuationMode,
             options.continuationPolicy,
             options.requireBehaviorGap,
-            options.minBehaviorImprovement
+            options.minBehaviorImprovement,
+            options.behaviorGapStandardErrorMultiplier
           );
           if (result.skippedForBehaviorGap) {
             skippedBehaviorGapCount += 1;
+          }
+          if (result.skippedForBehaviorConfidence) {
+            skippedBehaviorConfidenceCount += 1;
           }
           if (result.example) {
             const winnerScoreGap = getPolicyWinnerScoreGap(
@@ -607,6 +630,8 @@ export function collectRewardImprovementExamples(options: {
               behaviorReturnTotal += result.behaviorReturn ?? 0;
               bestReturnTotal += result.bestReturn ?? 0;
               bestBehaviorImprovementTotal += result.bestBehaviorImprovement;
+              bestBehaviorImprovementStandardErrorTotal +=
+                result.bestBehaviorImprovementStandardError;
               candidateReturnStdDevTotal += result.candidateReturnStdDev;
               examples.push(result.example);
             }
@@ -638,9 +663,14 @@ export function collectRewardImprovementExamples(options: {
       examples.length === 0
         ? 0
         : bestBehaviorImprovementTotal / examples.length,
+    averageBestBehaviorImprovementStandardError:
+      examples.length === 0
+        ? 0
+        : bestBehaviorImprovementStandardErrorTotal / examples.length,
     averageCandidateReturnStdDev:
       examples.length === 0 ? 0 : candidateReturnStdDevTotal / examples.length,
     skippedBehaviorGapCount,
+    skippedBehaviorConfidenceCount,
     skippedPolicyScoreGapCount,
     skippedPolicyWinnerScoreGapCount,
     scannedStateCount,
@@ -715,14 +745,15 @@ function createRewardImprovementExample(
   continuationMode: "teacher" | "policy",
   continuationPolicy: NeuralActionRankingPolicy | undefined,
   requireBehaviorGap: boolean,
-  minBehaviorImprovement: number
+  minBehaviorImprovement: number,
+  behaviorGapStandardErrorMultiplier: number
 ): RewardImprovementExampleResult {
   const pointDifferentialBefore = getPointDifferential(board, playerIndex);
   const behaviorKey = getActionRankingMoveKey(behaviorMove);
   const teacherKey = teacherMove ? getActionRankingMoveKey(teacherMove) : null;
   const improvedCandidates = candidates.map<RewardImprovementCandidate>(
     (candidate, candidateIndex) => {
-      const finalPointDifferential = getCounterfactualPointDifferential(
+      const finalPointDifferentials = getCounterfactualPointDifferentials(
         board,
         playerIndex,
         candidate.move,
@@ -731,11 +762,15 @@ function createRewardImprovementExample(
         continuationMode,
         continuationPolicy
       );
+      const finalPointDifferential = meanNumbers(finalPointDifferentials);
       return {
         ...candidate,
         rolloutPointDifferential: finalPointDifferential,
         rolloutPointDifferentialReturn:
           finalPointDifferential - pointDifferentialBefore,
+        rolloutPointDifferentialReturns: finalPointDifferentials.map(
+          (value) => value - pointDifferentialBefore
+        ),
       };
     }
   );
@@ -754,7 +789,9 @@ function createRewardImprovementExample(
       behaviorReturn: null,
       bestReturn: null,
       bestBehaviorImprovement: 0,
+      bestBehaviorImprovementStandardError: 0,
       candidateReturnStdDev: 0,
+      skippedForBehaviorConfidence: false,
     };
   }
 
@@ -770,20 +807,46 @@ function createRewardImprovementExample(
     improvedCandidates[bestIndex].rolloutPointDifferentialReturn;
   const bestBehaviorImprovement =
     behaviorReturn == null ? 0 : bestReturn - behaviorReturn;
+  const behaviorCandidate = improvedCandidates.find(
+    (candidate) => candidate.key === behaviorKey
+  );
+  const bestBehaviorImprovementStandardError =
+    behaviorCandidate == null
+      ? 0
+      : getPairedReturnGapStandardError(
+          improvedCandidates[bestIndex],
+          behaviorCandidate
+        );
   const candidateReturnStdDev =
     getImprovementCandidateReturnStdDev(improvedCandidates);
 
-  if (
-    requireBehaviorGap &&
-    bestBehaviorImprovement < minBehaviorImprovement
-  ) {
+  const behaviorGapLowerBound =
+    bestBehaviorImprovement -
+    Math.max(0, behaviorGapStandardErrorMultiplier) *
+      bestBehaviorImprovementStandardError;
+  if (requireBehaviorGap && bestBehaviorImprovement < minBehaviorImprovement) {
     return {
       example: null,
       skippedForBehaviorGap: true,
+      skippedForBehaviorConfidence: false,
       teacherReturn,
       behaviorReturn,
       bestReturn,
       bestBehaviorImprovement,
+      bestBehaviorImprovementStandardError,
+      candidateReturnStdDev,
+    };
+  }
+  if (requireBehaviorGap && behaviorGapLowerBound < minBehaviorImprovement) {
+    return {
+      example: null,
+      skippedForBehaviorGap: false,
+      skippedForBehaviorConfidence: true,
+      teacherReturn,
+      behaviorReturn,
+      bestReturn,
+      bestBehaviorImprovement,
+      bestBehaviorImprovementStandardError,
       candidateReturnStdDev,
     };
   }
@@ -819,10 +882,12 @@ function createRewardImprovementExample(
   return {
     example,
     skippedForBehaviorGap: false,
+    skippedForBehaviorConfidence: false,
     teacherReturn,
     behaviorReturn,
     bestReturn,
     bestBehaviorImprovement,
+    bestBehaviorImprovementStandardError,
     candidateReturnStdDev,
   };
 }
@@ -836,28 +901,86 @@ function getCounterfactualPointDifferential(
   continuationMode: "teacher" | "policy" = "teacher",
   continuationPolicy?: NeuralActionRankingPolicy
 ): number {
+  return meanNumbers(
+    getCounterfactualPointDifferentials(
+      board,
+      playerIndex,
+      move,
+      seeds,
+      maxMoves,
+      continuationMode,
+      continuationPolicy
+    )
+  );
+}
+
+function getCounterfactualPointDifferentials(
+  board: BoardState,
+  playerIndex: number,
+  move: Move,
+  seeds: readonly string[],
+  maxMoves: number,
+  continuationMode: "teacher" | "policy" = "teacher",
+  continuationPolicy?: NeuralActionRankingPolicy
+): number[] {
   const safeSeeds = seeds.length > 0 ? seeds : ["counterfactual"];
-  const total = safeSeeds.reduce((sum, seed) => {
+  return safeSeeds.map((seed) => {
     if (continuationMode === "policy" && continuationPolicy) {
-      return (
-        sum +
-        getCounterfactualPolicyPointDifferential(
-          board,
-          playerIndex,
-          move,
-          [seed],
-          maxMoves,
-          continuationPolicy
-        )
+      return getCounterfactualPolicyPointDifferential(
+        board,
+        playerIndex,
+        move,
+        [seed],
+        maxMoves,
+        continuationPolicy
       );
     }
 
     const nextBoard = deepClone(board);
     executeMove(nextBoard, playerIndex, move);
     runTeacherContinuation(nextBoard, seed, maxMoves);
-    return sum + getPointDifferential(nextBoard, playerIndex);
-  }, 0);
-  return total / safeSeeds.length;
+    return getPointDifferential(nextBoard, playerIndex);
+  });
+}
+
+function getPairedReturnGapStandardError(
+  winner: RewardImprovementCandidate,
+  loser: RewardImprovementCandidate
+): number {
+  const count = Math.min(
+    winner.rolloutPointDifferentialReturns.length,
+    loser.rolloutPointDifferentialReturns.length
+  );
+  if (count <= 1) {
+    return 0;
+  }
+  const gaps = Array.from(
+    { length: count },
+    (_, index) =>
+      winner.rolloutPointDifferentialReturns[index] -
+      loser.rolloutPointDifferentialReturns[index]
+  );
+  return getSampleStandardDeviation(gaps) / Math.sqrt(count);
+}
+
+function meanNumbers(values: readonly number[]): number {
+  return values.length === 0
+    ? 0
+    : values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function getSampleStandardDeviation(values: readonly number[]): number {
+  if (values.length <= 1) {
+    return 0;
+  }
+  const average = meanNumbers(values);
+  const variance =
+    values.reduce((sum, value) => {
+      const delta = value - average;
+      return sum + delta * delta;
+    }, 0) /
+    (values.length - 1);
+  return Math.sqrt(Math.max(0, variance));
 }
 
 function getCounterfactualSeeds(

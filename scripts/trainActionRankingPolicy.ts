@@ -79,6 +79,10 @@ const options = {
     "IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT",
     2
   ),
+  improvementBehaviorGapStandardErrorMultiplier: readNumberEnv(
+    "IMPROVEMENT_BEHAVIOR_GAP_SE_MULTIPLIER",
+    0
+  ),
   improvementEpochs: readIntegerEnv("IMPROVEMENT_EPOCHS", 3),
   improvementLearningRate: readNumberEnv("IMPROVEMENT_LR", 0.01),
   improvementTargetTemperature: readNumberEnv("IMPROVEMENT_TEMPERATURE", 4),

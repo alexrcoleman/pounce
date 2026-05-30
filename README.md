@@ -16,7 +16,7 @@ npm run action-ranking:train
 Useful training knobs:
 
 - `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`
-- `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_MAX_SCORE_GAP`, `IMPROVEMENT_MAX_WINNER_SCORE_GAP`, `IMPROVEMENT_POLICY_CANDIDATES`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_CONTINUATION`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_PAIRWISE_MARGIN`, `IMPROVEMENT_VALUE_SCALE`, `IMPROVEMENT_VALUE_CENTER`, `IMPROVEMENT_VALUE_TARGET_MODE`, `IMPROVEMENT_VALUE_HUBER`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
+- `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_MAX_SCORE_GAP`, `IMPROVEMENT_MAX_WINNER_SCORE_GAP`, `IMPROVEMENT_POLICY_CANDIDATES`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_CONTINUATION`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_PAIRWISE_MARGIN`, `IMPROVEMENT_VALUE_SCALE`, `IMPROVEMENT_VALUE_CENTER`, `IMPROVEMENT_VALUE_TARGET_MODE`, `IMPROVEMENT_VALUE_HUBER`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_BEHAVIOR_GAP_SE_MULTIPLIER`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
 - `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_CANDIDATES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_PREFERENCE_SCOPE`, `RL_COUNTERFACTUAL_PAIRWISE_MARGIN`, `RL_COUNTERFACTUAL_MAX_SCORE_GAP`, `RL_COUNTERFACTUAL_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_ANCHOR_TEMPERATURE`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_TARGET_MODE`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `HIDDEN_LAYERS`, `MAX_MOVES`, `SEED`
 - `HIDDEN` and `HIDDEN_LAYERS` accept comma-separated layer sizes, for example `HIDDEN=192,96`
@@ -123,7 +123,8 @@ improvement rollout knobs: `LABEL_STATES`, `LABEL_STATE_SOURCE`,
 `LABEL_MAX_SCORE_GAP`, `LABEL_MAX_WINNER_SCORE_GAP`,
 `LABEL_POLICY_CANDIDATES`, `LABEL_CANDIDATES`, `LABEL_ROLLOUT_MOVES`,
 `LABEL_ROLLOUT_COUNT`, `LABEL_CONTINUATION`, `LABEL_REQUIRE_BEHAVIOR_GAP`,
-`LABEL_MIN_BEHAVIOR_IMPROVEMENT`, and `LABEL_MIN_RETURN_GAP`.
+`LABEL_MIN_BEHAVIOR_IMPROVEMENT`, `LABEL_BEHAVIOR_GAP_SE_MULTIPLIER`, and
+`LABEL_MIN_RETURN_GAP`.
 
 The best policy-state reward candidate so far uses targeted behavior-gap
 examples and a behavior-only pairwise update:
@@ -197,6 +198,11 @@ counterfactual action beats the behavior action by at least
 most useful with policy-sourced states because it avoids training on decisions
 where the current greedy or sampled behavior is already tied with the best
 rollout candidate.
+When `IMPROVEMENT_ROLLOUT_COUNT` is greater than `1`,
+`IMPROVEMENT_BEHAVIOR_GAP_SE_MULTIPLIER` can make that filter confidence-aware:
+the accepted lower bound is `mean gap - multiplier * standard error`, using
+paired continuation seeds when common randomness is enabled. This helps avoid
+training from high-variance labels whose apparent advantage may be rollout noise.
 `IMPROVEMENT_MAX_SCORE_GAP` filters policy-sourced states to decisions where the
 current model's top two candidate scores are close enough to plausibly move, and
 `IMPROVEMENT_POLICY_CANDIDATES` forces the top-ranked policy alternatives into
@@ -393,6 +399,16 @@ examples and produced bounded score drift while preserving 100% top-action
 agreement over 2,000 sampled teacher states. In paired evaluation it still
 measured `-0.043 +/- 0.045` over 384 games, so residual value regression is
 safer infrastructure but not yet an improvement.
+Multi-rollout confidence filtering is also wired in. With `LABEL_ROLLOUT_COUNT=3`
+and `LABEL_BEHAVIOR_GAP_SE_MULTIPLIER=1`, the audit skipped 15 additional
+high-variance labels after 800 scanned policy states, leaving 9 accepted labels;
+the remaining winners still sat far below the current policy top action, so the
+score-support problem remained. Combining that confidence gate with
+`LABEL_MAX_WINNER_SCORE_GAP=1` left zero labels at the same budget. Training the
+confidence-only residual-value recipe from 6 examples preserved 100% diagnostic
+top-action agreement but measured `-0.084 +/- 0.015` over 384 paired games.
+Variance filtering is useful instrumentation, but by itself it is not enough to
+make the current rollout labels policy-improving.
 
 Legacy model feature expansion is now enabled before fine-tuning. Re-running the
 240-state behavior-scope recipe from the capacity checkpoint produced a 48-input

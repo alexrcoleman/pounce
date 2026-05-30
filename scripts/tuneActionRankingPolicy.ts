@@ -109,6 +109,10 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       "IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT",
       2
     ),
+    improvementBehaviorGapStandardErrorMultiplier: readNumberEnv(
+      "IMPROVEMENT_BEHAVIOR_GAP_SE_MULTIPLIER",
+      0
+    ),
     improvementEpochs: readIntegerEnv("IMPROVEMENT_EPOCHS", 1),
     improvementLearningRate: readNumberEnv("IMPROVEMENT_LR", 0.0005),
     improvementTargetTemperature: readNumberEnv("IMPROVEMENT_TEMPERATURE", 4),

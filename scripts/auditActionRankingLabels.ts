@@ -61,6 +61,10 @@ const minBehaviorImprovement = readNumberEnv(
   "LABEL_MIN_BEHAVIOR_IMPROVEMENT",
   2
 );
+const behaviorGapStandardErrorMultiplier = readNumberEnv(
+  "LABEL_BEHAVIOR_GAP_SE_MULTIPLIER",
+  0
+);
 const minReturnGap = readNumberEnv("LABEL_MIN_RETURN_GAP", 1);
 const topPairCount = readIntegerEnv("LABEL_TOP_PAIRS", 12);
 const maxSampleExamples = readIntegerEnv("LABEL_MAX_EXAMPLES", 8);
@@ -99,6 +103,7 @@ const collection = collectRewardImprovementExamples({
   continuationPolicy: policy,
   requireBehaviorGap,
   minBehaviorImprovement,
+  behaviorGapStandardErrorMultiplier,
   seed,
   maxMovesPerGame,
 });
@@ -126,6 +131,7 @@ console.log(
         continuationMode,
         requireBehaviorGap,
         minBehaviorImprovement,
+        behaviorGapStandardErrorMultiplier,
         minReturnGap,
         topPairCount,
         maxSampleExamples,
@@ -141,6 +147,7 @@ console.log(
         ),
         scannedStates: collection.scannedStateCount,
         skippedBehaviorGap: collection.skippedBehaviorGapCount,
+        skippedBehaviorConfidence: collection.skippedBehaviorConfidenceCount,
         skippedPolicyScoreGap: collection.skippedPolicyScoreGapCount,
         skippedPolicyWinnerScoreGap:
           collection.skippedPolicyWinnerScoreGapCount,
@@ -150,6 +157,8 @@ console.log(
         averageImprovement: collection.averageImprovement,
         averageBestBehaviorImprovement:
           collection.averageBestBehaviorImprovement,
+        averageBestBehaviorImprovementStandardError:
+          collection.averageBestBehaviorImprovementStandardError,
         averageCandidateReturnStdDev:
           collection.averageCandidateReturnStdDev,
       },
