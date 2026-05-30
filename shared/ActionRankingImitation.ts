@@ -21,6 +21,9 @@ export type ActionRankingImitationCandidate = {
   immediatePointDifferentialDelta: number;
   rolloutPointDifferential?: number;
   rolloutPointDifferentialReturn?: number;
+  rolloutScore?: number;
+  rolloutScoreReturn?: number;
+  rolloutObjectiveReturn?: number;
   endsRound: boolean;
 };
 
@@ -34,8 +37,10 @@ export type ActionRankingImitationExample = {
   pointDifferentialReturn: number | null;
   teacherActionKey?: string | null;
   teacherPointDifferentialReturn?: number | null;
+  teacherObjectiveReturn?: number | null;
   behaviorActionKey?: string | null;
   behaviorPointDifferentialReturn?: number | null;
+  behaviorObjectiveReturn?: number | null;
   selectedActionKey: string | null;
   selectedCandidateIndex: number | null;
   candidates: ActionRankingImitationCandidate[];

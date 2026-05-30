@@ -69,6 +69,7 @@ const behaviorGapStandardErrorMultiplier = readNumberEnv(
   "LABEL_BEHAVIOR_GAP_SE_MULTIPLIER",
   0
 );
+const scoreRewardWeight = readNumberEnv("LABEL_SCORE_WEIGHT", 0);
 const minReturnGap = readNumberEnv("LABEL_MIN_RETURN_GAP", 1);
 const topPairCount = readIntegerEnv("LABEL_TOP_PAIRS", 12);
 const maxSampleExamples = readIntegerEnv("LABEL_MAX_EXAMPLES", 8);
@@ -110,6 +111,7 @@ const collection = collectRewardImprovementExamples({
   requireBehaviorGap,
   minBehaviorImprovement,
   behaviorGapStandardErrorMultiplier,
+  scoreRewardWeight,
   seed,
   maxMovesPerGame,
 });
@@ -139,6 +141,7 @@ console.log(
         requireBehaviorGap,
         minBehaviorImprovement,
         behaviorGapStandardErrorMultiplier,
+        scoreRewardWeight,
         minReturnGap,
         topPairCount,
         maxSampleExamples,
@@ -457,8 +460,8 @@ function describeSampleExample(item: {
   const rankedCandidates = item.example.candidates
     .slice()
     .sort((left, right) => {
-      const rightReturn = right.rolloutPointDifferentialReturn ?? -Infinity;
-      const leftReturn = left.rolloutPointDifferentialReturn ?? -Infinity;
+      const rightReturn = getCandidateReturn(right) ?? -Infinity;
+      const leftReturn = getCandidateReturn(left) ?? -Infinity;
       return rightReturn - leftReturn;
     })
     .slice(0, maxSampleCandidates)
@@ -484,8 +487,10 @@ function describeCandidate(candidate: ActionRankingImitationCandidate) {
     key: candidate.key,
     move: describeMove(candidate.move),
     moveType: candidate.move.type,
+    rolloutObjectiveReturn: candidate.rolloutObjectiveReturn ?? null,
     rolloutPointDifferentialReturn:
       candidate.rolloutPointDifferentialReturn ?? null,
+    rolloutScoreReturn: candidate.rolloutScoreReturn ?? null,
     immediatePointDelta: candidate.immediatePointDelta,
     immediatePointDifferentialDelta:
       candidate.immediatePointDifferentialDelta,
@@ -549,12 +554,18 @@ function getReturnGap(
   winner: ActionRankingImitationCandidate,
   loser: ActionRankingImitationCandidate
 ): number | null {
-  const winnerReturn = winner.rolloutPointDifferentialReturn;
-  const loserReturn = loser.rolloutPointDifferentialReturn;
+  const winnerReturn = getCandidateReturn(winner);
+  const loserReturn = getCandidateReturn(loser);
   if (winnerReturn == null || loserReturn == null) {
     return null;
   }
   return winnerReturn - loserReturn;
+}
+
+function getCandidateReturn(
+  candidate: ActionRankingImitationCandidate
+): number | undefined {
+  return candidate.rolloutObjectiveReturn ?? candidate.rolloutPointDifferentialReturn;
 }
 
 function addDirectedPair(

@@ -16,7 +16,7 @@ npm run action-ranking:train
 Useful training knobs:
 
 - `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`
-- `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_MAX_SCORE_GAP`, `IMPROVEMENT_MAX_WINNER_SCORE_GAP`, `IMPROVEMENT_MAX_CANDIDATE_SCORE_GAP`, `IMPROVEMENT_POLICY_CANDIDATES`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_CONTINUATION`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_PAIRWISE_MARGIN`, `IMPROVEMENT_VALUE_SCALE`, `IMPROVEMENT_VALUE_CENTER`, `IMPROVEMENT_VALUE_TARGET_MODE`, `IMPROVEMENT_VALUE_HUBER`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_BEHAVIOR_GAP_SE_MULTIPLIER`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
+- `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_MAX_SCORE_GAP`, `IMPROVEMENT_MAX_WINNER_SCORE_GAP`, `IMPROVEMENT_MAX_CANDIDATE_SCORE_GAP`, `IMPROVEMENT_POLICY_CANDIDATES`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_CONTINUATION`, `IMPROVEMENT_SCORE_WEIGHT`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_PAIRWISE_MARGIN`, `IMPROVEMENT_VALUE_SCALE`, `IMPROVEMENT_VALUE_CENTER`, `IMPROVEMENT_VALUE_TARGET_MODE`, `IMPROVEMENT_VALUE_HUBER`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_BEHAVIOR_GAP_SE_MULTIPLIER`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
 - `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_CANDIDATES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_PREFERENCE_SCOPE`, `RL_COUNTERFACTUAL_PAIRWISE_MARGIN`, `RL_COUNTERFACTUAL_MAX_SCORE_GAP`, `RL_COUNTERFACTUAL_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_ANCHOR_TEMPERATURE`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_TARGET_MODE`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `HIDDEN_LAYERS`, `MAX_MOVES`, `SEED`
 - `HIDDEN` and `HIDDEN_LAYERS` accept comma-separated layer sizes, for example `HIDDEN=192,96`
@@ -125,7 +125,7 @@ improvement rollout knobs: `LABEL_STATES`, `LABEL_STATE_SOURCE`,
 `LABEL_CANDIDATES`, `LABEL_ROLLOUT_MOVES`, `LABEL_ROLLOUT_COUNT`,
 `LABEL_CONTINUATION`, `LABEL_REQUIRE_BEHAVIOR_GAP`,
 `LABEL_MIN_BEHAVIOR_IMPROVEMENT`, `LABEL_BEHAVIOR_GAP_SE_MULTIPLIER`, and
-`LABEL_MIN_RETURN_GAP`.
+`LABEL_SCORE_WEIGHT`, and `LABEL_MIN_RETURN_GAP`.
 
 The best policy-state reward candidate so far uses targeted behavior-gap
 examples and a behavior-only pairwise update:
@@ -195,10 +195,18 @@ reached by the current neural policy in one rotating seat while teacher bots pla
 the other seats, which is useful for fine-tuning where the model actually acts.
 `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP=true` keeps only rollout states where the best
 counterfactual action beats the behavior action by at least
-`IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT` point differential. That targeted mode is
-most useful with policy-sourced states because it avoids training on decisions
-where the current greedy or sampled behavior is already tied with the best
-rollout candidate.
+`IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT` on the rollout objective. With the default
+score weight, that objective is point differential. This targeted mode is most
+useful with policy-sourced states because it avoids training on decisions where
+the current greedy or sampled behavior is already tied with the best rollout
+candidate.
+`IMPROVEMENT_SCORE_WEIGHT` optionally blends raw scoring into the rollout
+objective used for labels and value targets:
+`pointDifferentialReturn + weight * scoreReturn`. The default `0` preserves the
+existing point-differential objective. Positive values can test whether a local
+score component avoids labels that tie differential while quietly reducing the
+neural player's own score; audit output still reports objective return, point
+differential return, and score return separately.
 When `IMPROVEMENT_ROLLOUT_COUNT` is greater than `1`,
 `IMPROVEMENT_BEHAVIOR_GAP_SE_MULTIPLIER` can make that filter confidence-aware:
 the accepted lower bound is `mean gap - multiplier * standard error`, using
@@ -427,6 +435,15 @@ stronger update with `IMPROVEMENT_LR=0.002` and `IMPROVEMENT_EPOCHS=5` changed
 cycle. It tied point differential on average over 384 games but lost raw score
 by `0.190`, so this is a better-targeted correction mechanism, not a better
 checkpoint yet.
+Score-weighted improvement objectives are now available for probing that raw
+score loss. `IMPROVEMENT_SCORE_WEIGHT=0.25` on the same candidate-support recipe
+kept the near-policy label shape and changed 0.55% of sampled decisions, still
+all deck-to-solitaire over cycle; paired comparison measured `+0.019 +/- 0.160`
+point differential but `-0.193` raw score over 384 games. A stronger
+`IMPROVEMENT_SCORE_WEIGHT=1` collected more examples and changed 0.70% of
+sampled decisions, but measured `-0.115 +/- 0.087` point differential and
+`-0.276` raw score. The blended objective is useful instrumentation, but these
+weights did not produce a better checkpoint.
 
 Legacy model feature expansion is now enabled before fine-tuning. Re-running the
 240-state behavior-scope recipe from the capacity checkpoint produced a 48-input

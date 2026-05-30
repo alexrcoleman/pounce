@@ -293,7 +293,7 @@ export class NeuralActionRankingPolicy {
         if (
           example.candidates.length === 0 ||
           example.candidates.some(
-            (candidate) => candidate.rolloutPointDifferentialReturn == null
+            (candidate) => getCandidateReturn(candidate) == null
           )
         ) {
           return;
@@ -309,7 +309,7 @@ export class NeuralActionRankingPolicy {
           endsRound: candidate.endsRound,
         }));
         const targetScores = example.candidates.map(
-          (candidate) => candidate.rolloutPointDifferentialReturn ?? 0
+          (candidate) => getCandidateReturn(candidate) ?? 0
         );
         const targetProbabilities = softmax(targetScores, targetTemperature);
         const scores = candidates.map((candidate) =>
@@ -449,7 +449,7 @@ export class NeuralActionRankingPolicy {
       const shuffled = shuffleCopy(examples, random);
       shuffled.forEach((example) => {
         const returns = example.candidates.map(
-          (candidate) => candidate.rolloutPointDifferentialReturn
+          (candidate) => getCandidateReturn(candidate)
         );
         if (
           example.candidates.length === 0 ||
@@ -722,8 +722,7 @@ function getPreferencePairs(
     [];
 
   for (let leftIndex = 0; leftIndex < example.candidates.length; leftIndex++) {
-    const leftReturn =
-      example.candidates[leftIndex].rolloutPointDifferentialReturn;
+    const leftReturn = getCandidateReturn(example.candidates[leftIndex]);
     if (leftReturn == null) {
       continue;
     }
@@ -733,8 +732,7 @@ function getPreferencePairs(
       rightIndex < example.candidates.length;
       rightIndex++
     ) {
-      const rightReturn =
-        example.candidates[rightIndex].rolloutPointDifferentialReturn;
+      const rightReturn = getCandidateReturn(example.candidates[rightIndex]);
       if (rightReturn == null) {
         continue;
       }
@@ -786,10 +784,8 @@ function getBehaviorPreferencePairs(
   }
 
   const selectedReturn =
-    example.candidates[example.selectedCandidateIndex]
-      .rolloutPointDifferentialReturn;
-  const behaviorReturn =
-    example.candidates[behaviorIndex].rolloutPointDifferentialReturn;
+    getCandidateReturn(example.candidates[example.selectedCandidateIndex]);
+  const behaviorReturn = getCandidateReturn(example.candidates[behaviorIndex]);
   if (selectedReturn == null || behaviorReturn == null) {
     return [];
   }
@@ -812,6 +808,17 @@ function getBehaviorPreferencePairs(
           returnGap,
         },
   ];
+}
+
+function getCandidateReturn(
+  candidate: Pick<
+    ActionRankingImitationExample["candidates"][number],
+    "rolloutObjectiveReturn" | "rolloutPointDifferentialReturn"
+  >
+): number | undefined {
+  return (
+    candidate.rolloutObjectiveReturn ?? candidate.rolloutPointDifferentialReturn
+  );
 }
 
 export function createNeuralActionRankingModel(

@@ -105,6 +105,7 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       "absolute"
     ),
     improvementValueHuberDelta: readNumberEnv("IMPROVEMENT_VALUE_HUBER", 0),
+    improvementScoreRewardWeight: readNumberEnv("IMPROVEMENT_SCORE_WEIGHT", 0),
     improvementRequireBehaviorGap: readBooleanEnv(
       "IMPROVEMENT_REQUIRE_BEHAVIOR_GAP",
       false

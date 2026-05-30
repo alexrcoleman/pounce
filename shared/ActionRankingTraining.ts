@@ -89,6 +89,7 @@ export type NeuralTrainingOptions = {
   improvementValueCenterTargets?: boolean;
   improvementValueTargetMode?: "absolute" | "residual";
   improvementValueHuberDelta?: number;
+  improvementScoreRewardWeight?: number;
   improvementRequireBehaviorGap?: boolean;
   improvementMinBehaviorImprovement?: number;
   improvementBehaviorGapStandardErrorMultiplier?: number;
@@ -242,10 +243,19 @@ type CounterfactualTransitionResult = {
   trainingGap: number;
 };
 
+type CounterfactualOutcome = {
+  pointDifferential: number;
+  score: number;
+};
+
 type RewardImprovementCandidate = ActionRankingCandidate & {
   rolloutPointDifferential: number;
   rolloutPointDifferentialReturn: number;
   rolloutPointDifferentialReturns: number[];
+  rolloutScore: number;
+  rolloutScoreReturn: number;
+  rolloutObjectiveReturn: number;
+  rolloutObjectiveReturns: number[];
 };
 
 type RewardImprovementCollection = {
@@ -345,6 +355,7 @@ export function trainNeuralActionRankingPolicy(
     minBehaviorImprovement: options.improvementMinBehaviorImprovement ?? 2,
     behaviorGapStandardErrorMultiplier:
       options.improvementBehaviorGapStandardErrorMultiplier ?? 0,
+    scoreRewardWeight: options.improvementScoreRewardWeight ?? 0,
     seed: `${seed}:improvement`,
     maxMovesPerGame,
   });
@@ -489,6 +500,7 @@ export function collectRewardImprovementExamples(options: {
   requireBehaviorGap: boolean;
   minBehaviorImprovement: number;
   behaviorGapStandardErrorMultiplier: number;
+  scoreRewardWeight: number;
   seed: string;
   maxMovesPerGame: number;
 }): RewardImprovementCollection {
@@ -633,7 +645,8 @@ export function collectRewardImprovementExamples(options: {
             options.continuationPolicy,
             options.requireBehaviorGap,
             options.minBehaviorImprovement,
-            options.behaviorGapStandardErrorMultiplier
+            options.behaviorGapStandardErrorMultiplier,
+            options.scoreRewardWeight
           );
           if (result.skippedForBehaviorGap) {
             skippedBehaviorGapCount += 1;
@@ -775,14 +788,19 @@ function createRewardImprovementExample(
   continuationPolicy: NeuralActionRankingPolicy | undefined,
   requireBehaviorGap: boolean,
   minBehaviorImprovement: number,
-  behaviorGapStandardErrorMultiplier: number
+  behaviorGapStandardErrorMultiplier: number,
+  scoreRewardWeight: number
 ): RewardImprovementExampleResult {
   const pointDifferentialBefore = getPointDifferential(board, playerIndex);
+  const scoreBefore = getCurrentPointsFromCards(board.players[playerIndex]);
+  const safeScoreWeight = Number.isFinite(scoreRewardWeight)
+    ? scoreRewardWeight
+    : 0;
   const behaviorKey = getActionRankingMoveKey(behaviorMove);
   const teacherKey = teacherMove ? getActionRankingMoveKey(teacherMove) : null;
   const improvedCandidates = candidates.map<RewardImprovementCandidate>(
     (candidate, candidateIndex) => {
-      const finalPointDifferentials = getCounterfactualPointDifferentials(
+      const outcomes = getCounterfactualOutcomes(
         board,
         playerIndex,
         candidate.move,
@@ -791,22 +809,36 @@ function createRewardImprovementExample(
         continuationMode,
         continuationPolicy
       );
+      const finalPointDifferentials = outcomes.map(
+        (outcome) => outcome.pointDifferential
+      );
+      const finalScores = outcomes.map((outcome) => outcome.score);
       const finalPointDifferential = meanNumbers(finalPointDifferentials);
+      const finalScore = meanNumbers(finalScores);
+      const pointDifferentialReturns = finalPointDifferentials.map(
+        (value) => value - pointDifferentialBefore
+      );
+      const scoreReturns = finalScores.map((value) => value - scoreBefore);
+      const objectiveReturns = pointDifferentialReturns.map(
+        (value, index) => value + safeScoreWeight * (scoreReturns[index] ?? 0)
+      );
       return {
         ...candidate,
         rolloutPointDifferential: finalPointDifferential,
         rolloutPointDifferentialReturn:
           finalPointDifferential - pointDifferentialBefore,
-        rolloutPointDifferentialReturns: finalPointDifferentials.map(
-          (value) => value - pointDifferentialBefore
-        ),
+        rolloutPointDifferentialReturns: pointDifferentialReturns,
+        rolloutScore: finalScore,
+        rolloutScoreReturn: finalScore - scoreBefore,
+        rolloutObjectiveReturn: meanNumbers(objectiveReturns),
+        rolloutObjectiveReturns: objectiveReturns,
       };
     }
   );
   const bestIndex = improvedCandidates.reduce((best, candidate, index) => {
     return index === 0 ||
-      candidate.rolloutPointDifferential >
-        improvedCandidates[best].rolloutPointDifferential
+      candidate.rolloutObjectiveReturn >
+        improvedCandidates[best].rolloutObjectiveReturn
       ? index
       : best;
   }, 0);
@@ -828,12 +860,11 @@ function createRewardImprovementExample(
     teacherKey == null
       ? null
       : improvedCandidates.find((candidate) => candidate.key === teacherKey)
-          ?.rolloutPointDifferentialReturn ?? null;
+          ?.rolloutObjectiveReturn ?? null;
   const behaviorReturn =
     improvedCandidates.find((candidate) => candidate.key === behaviorKey)
-      ?.rolloutPointDifferentialReturn ?? null;
-  const bestReturn =
-    improvedCandidates[bestIndex].rolloutPointDifferentialReturn;
+      ?.rolloutObjectiveReturn ?? null;
+  const bestReturn = improvedCandidates[bestIndex].rolloutObjectiveReturn;
   const bestBehaviorImprovement =
     behaviorReturn == null ? 0 : bestReturn - behaviorReturn;
   const behaviorCandidate = improvedCandidates.find(
@@ -885,13 +916,23 @@ function createRewardImprovementExample(
     stepIndex,
     playerIndex,
     playerPointDifferential: pointDifferentialBefore,
-    finalPlayerPoints: null,
-    finalPointDifferential: improvedCandidates[bestIndex].rolloutPointDifferential,
-    pointDifferentialReturn: bestReturn,
+    finalPlayerPoints: improvedCandidates[bestIndex].rolloutScore,
+    finalPointDifferential:
+      improvedCandidates[bestIndex].rolloutPointDifferential,
+    pointDifferentialReturn:
+      improvedCandidates[bestIndex].rolloutPointDifferentialReturn,
     teacherActionKey: teacherKey,
-    teacherPointDifferentialReturn: teacherReturn,
+    teacherPointDifferentialReturn:
+      teacherKey == null
+        ? null
+        : improvedCandidates.find((candidate) => candidate.key === teacherKey)
+            ?.rolloutPointDifferentialReturn ?? null,
+    teacherObjectiveReturn: teacherReturn,
     behaviorActionKey: behaviorKey,
-    behaviorPointDifferentialReturn: behaviorReturn,
+    behaviorPointDifferentialReturn:
+      improvedCandidates.find((candidate) => candidate.key === behaviorKey)
+        ?.rolloutPointDifferentialReturn ?? null,
+    behaviorObjectiveReturn: behaviorReturn,
     selectedActionKey: improvedCandidates[bestIndex].key,
     selectedCandidateIndex: bestIndex,
     candidates: improvedCandidates.map((candidate) => ({
@@ -905,6 +946,9 @@ function createRewardImprovementExample(
         candidate.immediatePointDifferentialDelta,
       rolloutPointDifferential: candidate.rolloutPointDifferential,
       rolloutPointDifferentialReturn: candidate.rolloutPointDifferentialReturn,
+      rolloutScore: candidate.rolloutScore,
+      rolloutScoreReturn: candidate.rolloutScoreReturn,
+      rolloutObjectiveReturn: candidate.rolloutObjectiveReturn,
       endsRound: candidate.endsRound,
     })),
   };
@@ -952,14 +996,34 @@ function getCounterfactualPointDifferentials(
   continuationMode: "teacher" | "policy" = "teacher",
   continuationPolicy?: NeuralActionRankingPolicy
 ): number[] {
+  return getCounterfactualOutcomes(
+    board,
+    playerIndex,
+    move,
+    seeds,
+    maxMoves,
+    continuationMode,
+    continuationPolicy
+  ).map((outcome) => outcome.pointDifferential);
+}
+
+function getCounterfactualOutcomes(
+  board: BoardState,
+  playerIndex: number,
+  move: Move,
+  seeds: readonly string[],
+  maxMoves: number,
+  continuationMode: "teacher" | "policy" = "teacher",
+  continuationPolicy?: NeuralActionRankingPolicy
+): CounterfactualOutcome[] {
   const safeSeeds = seeds.length > 0 ? seeds : ["counterfactual"];
   return safeSeeds.map((seed) => {
     if (continuationMode === "policy" && continuationPolicy) {
-      return getCounterfactualPolicyPointDifferential(
+      return getCounterfactualPolicyOutcome(
         board,
         playerIndex,
         move,
-        [seed],
+        seed,
         maxMoves,
         continuationPolicy
       );
@@ -968,7 +1032,10 @@ function getCounterfactualPointDifferentials(
     const nextBoard = deepClone(board);
     executeMove(nextBoard, playerIndex, move);
     runTeacherContinuation(nextBoard, seed, maxMoves);
-    return getPointDifferential(nextBoard, playerIndex);
+    return {
+      pointDifferential: getPointDifferential(nextBoard, playerIndex),
+      score: getCurrentPointsFromCards(nextBoard.players[playerIndex]),
+    };
   });
 }
 
@@ -977,8 +1044,8 @@ function getPairedReturnGapStandardError(
   loser: RewardImprovementCandidate
 ): number {
   const count = Math.min(
-    winner.rolloutPointDifferentialReturns.length,
-    loser.rolloutPointDifferentialReturns.length
+    winner.rolloutObjectiveReturns.length,
+    loser.rolloutObjectiveReturns.length
   );
   if (count <= 1) {
     return 0;
@@ -986,8 +1053,8 @@ function getPairedReturnGapStandardError(
   const gaps = Array.from(
     { length: count },
     (_, index) =>
-      winner.rolloutPointDifferentialReturns[index] -
-      loser.rolloutPointDifferentialReturns[index]
+      winner.rolloutObjectiveReturns[index] -
+      loser.rolloutObjectiveReturns[index]
   );
   return getSampleStandardDeviation(gaps) / Math.sqrt(count);
 }
@@ -2011,21 +2078,44 @@ function getCounterfactualPolicyPointDifferential(
   policy: NeuralActionRankingPolicy
 ): number {
   const safeSeeds = seeds.length > 0 ? seeds : ["policy-counterfactual"];
-  const total = safeSeeds.reduce((sum, seed) => {
-    const nextBoard = deepClone(board);
-    executeMove(nextBoard, playerIndex, move);
-    const rollout = runPolicyRollout(nextBoard, {
-      policy,
-      random: createSeededRandom(seed),
-      decisionRandom: createSeededRandom(`${seed}:decision`),
-      temperature: 1,
-      sample: false,
-      maxMovesPerGame: maxMoves,
-      neuralPlayerIndices: [playerIndex],
-    });
-    return sum + (rollout.finalPointDifferentials[playerIndex] ?? 0);
-  }, 0);
-  return total / safeSeeds.length;
+  return meanNumbers(
+    safeSeeds.map(
+      (seed) =>
+        getCounterfactualPolicyOutcome(
+          board,
+          playerIndex,
+          move,
+          seed,
+          maxMoves,
+          policy
+        ).pointDifferential
+    )
+  );
+}
+
+function getCounterfactualPolicyOutcome(
+  board: BoardState,
+  playerIndex: number,
+  move: Move,
+  seed: string,
+  maxMoves: number,
+  policy: NeuralActionRankingPolicy
+): CounterfactualOutcome {
+  const nextBoard = deepClone(board);
+  executeMove(nextBoard, playerIndex, move);
+  const rollout = runPolicyRollout(nextBoard, {
+    policy,
+    random: createSeededRandom(seed),
+    decisionRandom: createSeededRandom(`${seed}:decision`),
+    temperature: 1,
+    sample: false,
+    maxMovesPerGame: maxMoves,
+    neuralPlayerIndices: [playerIndex],
+  });
+  return {
+    pointDifferential: rollout.finalPointDifferentials[playerIndex] ?? 0,
+    score: rollout.finalScores[playerIndex] ?? 0,
+  };
 }
 
 function getDiscountedLocalRewardReturns(
