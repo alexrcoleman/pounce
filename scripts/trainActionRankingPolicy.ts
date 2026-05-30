@@ -128,6 +128,10 @@ const options = {
     "RL_COUNTERFACTUAL_MAX_SCORE_GAP",
     0
   ),
+  rlCounterfactualScoreRewardWeight: readNumberEnv(
+    "RL_COUNTERFACTUAL_SCORE_WEIGHT",
+    0
+  ),
   rlCounterfactualAnchorWeight: readNumberEnv(
     "RL_COUNTERFACTUAL_ANCHOR_WEIGHT",
     0

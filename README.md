@@ -17,7 +17,7 @@ Useful training knobs:
 
 - `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`
 - `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_MAX_SCORE_GAP`, `IMPROVEMENT_MAX_WINNER_SCORE_GAP`, `IMPROVEMENT_MAX_CANDIDATE_SCORE_GAP`, `IMPROVEMENT_POLICY_CANDIDATES`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_CONTINUATION`, `IMPROVEMENT_SCORE_WEIGHT`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_PAIRWISE_MARGIN`, `IMPROVEMENT_VALUE_SCALE`, `IMPROVEMENT_VALUE_CENTER`, `IMPROVEMENT_VALUE_TARGET_MODE`, `IMPROVEMENT_VALUE_HUBER`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_BEHAVIOR_GAP_SE_MULTIPLIER`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
-- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_CANDIDATES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_PREFERENCE_SCOPE`, `RL_COUNTERFACTUAL_PAIRWISE_MARGIN`, `RL_COUNTERFACTUAL_MAX_SCORE_GAP`, `RL_COUNTERFACTUAL_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_ANCHOR_TEMPERATURE`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_TARGET_MODE`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
+- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_CANDIDATES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_PREFERENCE_SCOPE`, `RL_COUNTERFACTUAL_PAIRWISE_MARGIN`, `RL_COUNTERFACTUAL_MAX_SCORE_GAP`, `RL_COUNTERFACTUAL_SCORE_WEIGHT`, `RL_COUNTERFACTUAL_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_ANCHOR_TEMPERATURE`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_TARGET_MODE`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `HIDDEN_LAYERS`, `MAX_MOVES`, `SEED`
 - `HIDDEN` and `HIDDEN_LAYERS` accept comma-separated layer sizes, for example `HIDDEN=192,96`
 - `MODEL_OUT=C:\tmp\pounce-action-ranking-model.json` to save model weights
@@ -289,6 +289,12 @@ nudging scores.
 the rollout winner is currently below the greedy action by more than that score
 gap. This targets uncertain decisions first and avoids asking a small batch of
 rollout labels to overturn strong existing priors.
+`RL_COUNTERFACTUAL_SCORE_WEIGHT` optionally blends final personal score into
+per-decision counterfactual returns:
+`pointDifferentialReturn + weight * scoreReturn`. The default `0` preserves the
+existing point-differential objective. Positive values apply to counterfactual
+policy-gradient advantages, pairwise preferences, and value targets while still
+recording point-differential and score returns separately on supervised examples.
 `RL_COUNTERFACTUAL_ANCHOR_WEIGHT` enables conservative policy anchoring for
 supervised counterfactual modes: after applying the RL labels, it distills the
 pre-update policy over sampled decision states so narrow counterfactual lessons
@@ -379,6 +385,17 @@ original learning rate; raising `RL_LR` to `0.005` produced 2 changed decisions,
 both deck-to-solitaire over cycle, but still measured `-0.026 +/- 0.055`.
 These controls reduce harmful generalization, but they have not found a better
 checkpoint yet.
+Score-weighted counterfactual RL is also wired in. A 64-episode broad value run
+from the behavior-scope checkpoint with `RL_COUNTERFACTUAL_SCORE_WEIGHT=0.5`,
+`RL_COUNTERFACTUAL_CANDIDATES=5`, `RL_COUNTERFACTUAL_VALUE_SCALE=8`,
+`RL_COUNTERFACTUAL_VALUE_HUBER=2`, and `RL_LR=0.00005` collected 247
+counterfactual decision examples and 1,125 value updates, but preserved 100%
+diagnostic top-action agreement and measured `-0.046 +/- 0.020` point
+differential with `-0.055` raw score over 384 paired games. Switching the same
+recipe to `RL_COUNTERFACTUAL_VALUE_TARGET_MODE=residual` kept the update almost
+perfectly anchored, tied raw score, and measured `-0.0069 +/- 0.0069`. That
+makes score-weighted counterfactual returns usable, but still not sufficient to
+produce a better deployed greedy policy at this budget.
 
 Uncertainty-targeted improvement collection is also wired in. With
 `IMPROVEMENT_MAX_SCORE_GAP` and `IMPROVEMENT_POLICY_CANDIDATES`, the collector

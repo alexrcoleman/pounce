@@ -30,6 +30,7 @@ const commonOptions = {
   rlCounterfactualRolloutCount: 1,
   rlCounterfactualRolloutMoves: 80,
   rlCounterfactualMinReturnGap: 0,
+  rlCounterfactualScoreRewardWeight: 0,
   rlUpdateEpochs: 1,
   rlUpdateScope: "exploratory" as const,
   rlNormalizeAdvantages: true,
@@ -78,6 +79,27 @@ assert.equal(
   value.reinforcement.averagePolicyUpdates,
   0,
   "value mode should not fall back to policy-gradient updates"
+);
+
+const scoreWeightedValue = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:score-weighted-value",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualScoreRewardWeight: 0.5,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assertCounterfactualWork(scoreWeightedValue, "value");
+assert.equal(
+  scoreWeightedValue.reinforcement.counterfactualTrainingUpdates,
+  scoreWeightedValue.reinforcement.counterfactualUpdateCount * 2,
+  "score-weighted value mode should regress selected and greedy candidate targets"
+);
+assert.equal(
+  scoreWeightedValue.reinforcement.averagePolicyUpdates,
+  0,
+  "score-weighted value mode should not fall back to policy-gradient updates"
 );
 
 const residualValue = trainNeuralActionRankingPolicy({
@@ -172,6 +194,7 @@ console.log(
       featureExpansion,
       policyGradient: summarize(policyGradient),
       value: summarize(value),
+      scoreWeightedValue: summarize(scoreWeightedValue),
       residualValue: summarize(residualValue),
       broadValue: summarize(broadValue),
       anchoredValue: summarize(anchoredValue),

@@ -55,6 +55,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualPreferenceScope?: "all" | "behavior";
   rlCounterfactualPairwiseTargetMargin?: number;
   rlCounterfactualMaxScoreGap?: number;
+  rlCounterfactualScoreRewardWeight?: number;
   rlCounterfactualAnchorWeight?: number;
   rlCounterfactualAnchorMaxExamples?: number;
   rlCounterfactualAnchorTemperature?: number;
@@ -203,6 +204,7 @@ export type PolicyComparisonResult = {
 type RolloutTransition = {
   playerIndex: number;
   pointDifferentialBefore: number;
+  scoreBefore: number;
   board?: BoardState;
   candidates: ActionRankingCandidate[];
   selectedCandidateIndex: number;
@@ -233,12 +235,16 @@ type CounterfactualCandidateReturn = {
   candidate: ActionRankingCandidate;
   candidateIndex: number;
   rolloutPointDifferentialReturn: number;
+  rolloutScoreReturn: number;
+  rolloutObjectiveReturn: number;
 };
 
 type CounterfactualTransitionResult = {
   candidates: CounterfactualCandidateReturn[];
   selectedReturn: number;
   greedyReturn: number;
+  selectedPointDifferentialReturn: number;
+  greedyPointDifferentialReturn: number;
   returnGap: number;
   trainingGap: number;
 };
@@ -402,6 +408,8 @@ export function trainNeuralActionRankingPolicy(
     counterfactualPairwiseTargetMargin:
       options.rlCounterfactualPairwiseTargetMargin ?? 0,
     counterfactualMaxScoreGap: options.rlCounterfactualMaxScoreGap ?? 0,
+    counterfactualScoreRewardWeight:
+      options.rlCounterfactualScoreRewardWeight ?? 0,
     counterfactualAnchorWeight: options.rlCounterfactualAnchorWeight ?? 0,
     counterfactualAnchorMaxExamples:
       options.rlCounterfactualAnchorMaxExamples ?? 512,
@@ -1371,6 +1379,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualPreferenceScope: "all" | "behavior";
     counterfactualPairwiseTargetMargin: number;
     counterfactualMaxScoreGap: number;
+    counterfactualScoreRewardWeight: number;
     counterfactualAnchorWeight: number;
     counterfactualAnchorMaxExamples: number;
     counterfactualAnchorTemperature: number;
@@ -1499,7 +1508,8 @@ export function trainPolicyGradientFromRollouts(
           options.counterfactualRolloutMoves,
           options.counterfactualTrainingMode === "policy_gradient"
             ? 2
-            : options.counterfactualCandidateLimit
+            : options.counterfactualCandidateLimit,
+          options.counterfactualScoreRewardWeight
         );
         const counterfactualGap =
           options.counterfactualTrainingMode === "policy_gradient"
@@ -1736,7 +1746,7 @@ function trainCounterfactualSupervisedBatch(
       : null;
   const signedGaps = examples.map((example) => {
     const returns = example.candidates
-      .map((candidate) => candidate.rolloutPointDifferentialReturn)
+      .map((candidate) => getCounterfactualTrainingReturn(candidate))
       .filter((value): value is number => value != null);
     return returns.length === 0
       ? 0
@@ -1838,8 +1848,7 @@ function getCounterfactualBestVsGreedyScoreGap(
     return null;
   }
   const best = result.candidates.reduce((winner, candidate) =>
-    candidate.rolloutPointDifferentialReturn >
-    winner.rolloutPointDifferentialReturn
+    candidate.rolloutObjectiveReturn > winner.rolloutObjectiveReturn
       ? candidate
       : winner
   );
@@ -1894,12 +1903,12 @@ function createCounterfactualSupervisedExample(
 ): ActionRankingImitationExample {
   const greedy = transition.candidates[transition.greedyCandidateIndex];
   const best = result.candidates.reduce((winner, candidate) =>
-    candidate.rolloutPointDifferentialReturn >
-    winner.rolloutPointDifferentialReturn
+    candidate.rolloutObjectiveReturn > winner.rolloutObjectiveReturn
       ? candidate
       : winner
   );
-  const bestReturn = best.rolloutPointDifferentialReturn;
+  const bestReturn = best.rolloutObjectiveReturn;
+  const bestPointDifferentialReturn = best.rolloutPointDifferentialReturn;
   const bestKey = best.candidate.key;
   const selectedCandidateIndex = result.candidates.findIndex(
     (candidate) => candidate.candidate.key === bestKey
@@ -1910,13 +1919,15 @@ function createCounterfactualSupervisedExample(
     stepIndex: transitionIndex,
     playerIndex: transition.playerIndex,
     playerPointDifferential: transition.pointDifferentialBefore,
-    finalPlayerPoints: null,
-    finalPointDifferential: transition.pointDifferentialBefore + bestReturn,
-    pointDifferentialReturn: bestReturn,
+    finalPlayerPoints: transition.scoreBefore + best.rolloutScoreReturn,
+    finalPointDifferential:
+      transition.pointDifferentialBefore + bestPointDifferentialReturn,
+    pointDifferentialReturn: bestPointDifferentialReturn,
     teacherActionKey: null,
     teacherPointDifferentialReturn: null,
     behaviorActionKey: greedy.key,
-    behaviorPointDifferentialReturn: result.greedyReturn,
+    behaviorPointDifferentialReturn: result.greedyPointDifferentialReturn,
+    behaviorObjectiveReturn: result.greedyReturn,
     selectedActionKey: bestKey,
     selectedCandidateIndex,
     candidates: result.candidates.map((candidateResult) => {
@@ -1935,10 +1946,24 @@ function createCounterfactualSupervisedExample(
         rolloutPointDifferential:
           transition.pointDifferentialBefore + rolloutPointDifferentialReturn,
         rolloutPointDifferentialReturn,
+        rolloutScore: transition.scoreBefore + candidateResult.rolloutScoreReturn,
+        rolloutScoreReturn: candidateResult.rolloutScoreReturn,
+        rolloutObjectiveReturn: candidateResult.rolloutObjectiveReturn,
         endsRound: candidate.endsRound,
       };
     }),
   };
+}
+
+function getCounterfactualTrainingReturn(candidate: {
+  rolloutObjectiveReturn?: number | null;
+  rolloutPointDifferentialReturn?: number | null;
+}): number | undefined {
+  return (
+    candidate.rolloutObjectiveReturn ??
+    candidate.rolloutPointDifferentialReturn ??
+    undefined
+  );
 }
 
 function summarizeValues(values: readonly number[]) {
@@ -1965,7 +1990,8 @@ function getCounterfactualTransitionResult(
   rolloutCount: number,
   commonRandom: boolean,
   maxMoves: number,
-  candidateLimit: number
+  candidateLimit: number,
+  scoreRewardWeight: number
 ): CounterfactualTransitionResult | null {
   if (
     !transition.board ||
@@ -1986,40 +2012,68 @@ function getCounterfactualTransitionResult(
     return null;
   }
 
+  const safeScoreWeight = Number.isFinite(scoreRewardWeight)
+    ? scoreRewardWeight
+    : 0;
   const candidates = candidateIndices.map((candidateIndex, index) => {
     const candidate = transition.candidates[candidateIndex];
-    const rolloutPointDifferentialReturn =
-      getCounterfactualPolicyPointDifferential(
-        transition.board!,
-        transition.playerIndex,
-        candidate.move,
-        getCounterfactualSeeds(seed, index, rolloutCount, commonRandom),
-        maxMoves,
-        policy
-      ) - transition.pointDifferentialBefore;
+    const outcomes = getCounterfactualPolicyOutcomes(
+      transition.board!,
+      transition.playerIndex,
+      candidate.move,
+      getCounterfactualSeeds(seed, index, rolloutCount, commonRandom),
+      maxMoves,
+      policy
+    );
+    const pointDifferentialReturns = outcomes.map(
+      (outcome) => outcome.pointDifferential - transition.pointDifferentialBefore
+    );
+    const scoreReturns = outcomes.map(
+      (outcome) => outcome.score - transition.scoreBefore
+    );
+    const objectiveReturns = pointDifferentialReturns.map(
+      (value, outcomeIndex) =>
+        value + safeScoreWeight * (scoreReturns[outcomeIndex] ?? 0)
+    );
+    const rolloutPointDifferentialReturn = meanNumbers(
+      pointDifferentialReturns
+    );
+    const rolloutScoreReturn = meanNumbers(scoreReturns);
+    const rolloutObjectiveReturn = meanNumbers(objectiveReturns);
     return {
       candidate,
       candidateIndex,
       rolloutPointDifferentialReturn,
+      rolloutScoreReturn,
+      rolloutObjectiveReturn,
     };
   });
   const selectedReturn =
     candidates.find(
       (candidate) =>
         candidate.candidateIndex === transition.selectedCandidateIndex
-    )?.rolloutPointDifferentialReturn ?? 0;
+    )?.rolloutObjectiveReturn ?? 0;
   const greedyReturn =
+    candidates.find(
+      (candidate) => candidate.candidateIndex === transition.greedyCandidateIndex
+    )?.rolloutObjectiveReturn ?? 0;
+  const selectedPointDifferentialReturn =
+    candidates.find(
+      (candidate) =>
+        candidate.candidateIndex === transition.selectedCandidateIndex
+    )?.rolloutPointDifferentialReturn ?? 0;
+  const greedyPointDifferentialReturn =
     candidates.find(
       (candidate) => candidate.candidateIndex === transition.greedyCandidateIndex
     )?.rolloutPointDifferentialReturn ?? 0;
   const bestReturn = candidates.reduce(
     (best, candidate) =>
-      Math.max(best, candidate.rolloutPointDifferentialReturn),
+      Math.max(best, candidate.rolloutObjectiveReturn),
     Number.NEGATIVE_INFINITY
   );
   const worstReturn = candidates.reduce(
     (worst, candidate) =>
-      Math.min(worst, candidate.rolloutPointDifferentialReturn),
+      Math.min(worst, candidate.rolloutObjectiveReturn),
     Number.POSITIVE_INFINITY
   );
 
@@ -2027,6 +2081,8 @@ function getCounterfactualTransitionResult(
     candidates,
     selectedReturn,
     greedyReturn,
+    selectedPointDifferentialReturn,
+    greedyPointDifferentialReturn,
     returnGap: selectedReturn - greedyReturn,
     trainingGap: bestReturn - worstReturn,
   };
@@ -2077,18 +2133,35 @@ function getCounterfactualPolicyPointDifferential(
   maxMoves: number,
   policy: NeuralActionRankingPolicy
 ): number {
-  const safeSeeds = seeds.length > 0 ? seeds : ["policy-counterfactual"];
   return meanNumbers(
-    safeSeeds.map(
-      (seed) =>
-        getCounterfactualPolicyOutcome(
-          board,
-          playerIndex,
-          move,
-          seed,
-          maxMoves,
-          policy
-        ).pointDifferential
+    getCounterfactualPolicyOutcomes(
+      board,
+      playerIndex,
+      move,
+      seeds,
+      maxMoves,
+      policy
+    ).map((outcome) => outcome.pointDifferential)
+  );
+}
+
+function getCounterfactualPolicyOutcomes(
+  board: BoardState,
+  playerIndex: number,
+  move: Move,
+  seeds: readonly string[],
+  maxMoves: number,
+  policy: NeuralActionRankingPolicy
+): CounterfactualOutcome[] {
+  const safeSeeds = seeds.length > 0 ? seeds : ["policy-counterfactual"];
+  return safeSeeds.map((seed) =>
+    getCounterfactualPolicyOutcome(
+      board,
+      playerIndex,
+      move,
+      seed,
+      maxMoves,
+      policy
     )
   );
 }
@@ -2557,6 +2630,7 @@ function chooseNeuralMove(
   }
 
   const pointDifferentialBefore = getPointDifferential(board, playerIndex);
+  const scoreBefore = getCurrentPointsFromCards(board.players[playerIndex]);
   const greedy = options.policy.chooseCandidate(candidates, {
     temperature: 1,
     random: options.decisionRandom ?? options.random,
@@ -2581,6 +2655,7 @@ function chooseNeuralMove(
     transitions.push({
       playerIndex,
       pointDifferentialBefore,
+      scoreBefore,
       board: options.captureTransitionBoards ? deepClone(board) : undefined,
       candidates,
       selectedCandidateIndex,
