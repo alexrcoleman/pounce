@@ -96,6 +96,10 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       "IMPROVEMENT_VALUE_CENTER",
       true
     ),
+    improvementValueTargetMode: readValueTargetModeEnv(
+      "IMPROVEMENT_VALUE_TARGET_MODE",
+      "absolute"
+    ),
     improvementValueHuberDelta: readNumberEnv("IMPROVEMENT_VALUE_HUBER", 0),
     improvementRequireBehaviorGap: readBooleanEnv(
       "IMPROVEMENT_REQUIRE_BEHAVIOR_GAP",
@@ -164,6 +168,10 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
     rlCounterfactualValueCenterTargets: readBooleanEnv(
       "RL_COUNTERFACTUAL_VALUE_CENTER",
       true
+    ),
+    rlCounterfactualValueTargetMode: readValueTargetModeEnv(
+      "RL_COUNTERFACTUAL_VALUE_TARGET_MODE",
+      "absolute"
     ),
     rlCounterfactualValueHuberDelta: readNumberEnv(
       "RL_COUNTERFACTUAL_VALUE_HUBER",
@@ -334,6 +342,17 @@ function readImprovementContinuationModeEnv(
     return fallback;
   }
   return value.toLowerCase() === "policy" ? "policy" : fallback;
+}
+
+function readValueTargetModeEnv(
+  name: string,
+  fallback: "absolute" | "residual"
+): "absolute" | "residual" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  return value.toLowerCase() === "residual" ? "residual" : fallback;
 }
 
 function readRlBaselineModeEnv(

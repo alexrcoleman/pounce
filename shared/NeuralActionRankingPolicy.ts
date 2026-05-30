@@ -73,6 +73,7 @@ export type PreferenceTrainingOptions = ImitationTrainingOptions & {
 export type ValueRegressionTrainingOptions = ImitationTrainingOptions & {
   centerTargets?: boolean;
   targetScale?: number;
+  targetMode?: "absolute" | "residual";
   huberDelta?: number;
 };
 
@@ -431,6 +432,11 @@ export class NeuralActionRankingPolicy {
     const learningRate = options.learningRate ?? DEFAULT_LEARNING_RATE;
     const l2 = options.l2 ?? 0;
     const targetScale = Math.max(1e-6, options.targetScale ?? 4);
+    const targetMode = options.targetMode ?? "absolute";
+    const anchorPolicy =
+      targetMode === "residual"
+        ? new NeuralActionRankingPolicy(this.getModel())
+        : null;
     const huberDelta = Math.max(0, options.huberDelta ?? 0);
     const centerTargets = options.centerTargets ?? true;
     const random = createSeededRandom(options.shuffleSeed ?? "value-regression");
@@ -458,7 +464,13 @@ export class NeuralActionRankingPolicy {
             ? mean(numericReturns)
             : 0;
         const targets = numericReturns.map(
-          (value) => (value - center) / targetScale
+          (value, candidateIndex) =>
+            (anchorPolicy == null
+              ? 0
+              : anchorPolicy.scoreFeatures(
+                  example.candidates[candidateIndex].features
+                )) +
+            (value - center) / targetScale
         );
         const scores = example.candidates.map((candidate) =>
           this.scoreFeatures(candidate.features)

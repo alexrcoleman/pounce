@@ -80,6 +80,27 @@ assert.equal(
   "value mode should not fall back to policy-gradient updates"
 );
 
+const residualValue = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:residual-value",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueTargetMode: "residual",
+  rlCounterfactualValueHuberDelta: 0,
+});
+assertCounterfactualWork(residualValue, "value");
+assert.equal(
+  residualValue.reinforcement.counterfactualTrainingUpdates,
+  residualValue.reinforcement.counterfactualUpdateCount * 2,
+  "residual value mode should regress both selected and greedy candidate targets"
+);
+assert.equal(
+  residualValue.reinforcement.averagePolicyUpdates,
+  0,
+  "residual value mode should not fall back to policy-gradient updates"
+);
+
 const broadValue = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:broad-value",
@@ -151,6 +172,7 @@ console.log(
       featureExpansion,
       policyGradient: summarize(policyGradient),
       value: summarize(value),
+      residualValue: summarize(residualValue),
       broadValue: summarize(broadValue),
       anchoredValue: summarize(anchoredValue),
       scoreGapFiltered: summarize(scoreGapFiltered),

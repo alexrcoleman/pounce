@@ -60,6 +60,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualAnchorTemperature?: number;
   rlCounterfactualValueTargetScale?: number;
   rlCounterfactualValueCenterTargets?: boolean;
+  rlCounterfactualValueTargetMode?: "absolute" | "residual";
   rlCounterfactualValueHuberDelta?: number;
   rlUpdateEpochs?: number;
   rlUpdateScope?: "all" | "exploratory";
@@ -85,6 +86,7 @@ export type NeuralTrainingOptions = {
   improvementPairwiseTargetMargin?: number;
   improvementValueTargetScale?: number;
   improvementValueCenterTargets?: boolean;
+  improvementValueTargetMode?: "absolute" | "residual";
   improvementValueHuberDelta?: number;
   improvementRequireBehaviorGap?: boolean;
   improvementMinBehaviorImprovement?: number;
@@ -344,6 +346,7 @@ export function trainNeuralActionRankingPolicy(
           targetTemperature: options.improvementTargetTemperature ?? 4,
           valueTargetScale: options.improvementValueTargetScale ?? 4,
           valueCenterTargets: options.improvementValueCenterTargets ?? true,
+          valueTargetMode: options.improvementValueTargetMode ?? "absolute",
           valueHuberDelta: options.improvementValueHuberDelta ?? 0,
           shuffleSeed: `${seed}:improvement-shuffle`,
         });
@@ -380,6 +383,8 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualValueTargetScale ?? 4,
     counterfactualValueCenterTargets:
       options.rlCounterfactualValueCenterTargets ?? true,
+    counterfactualValueTargetMode:
+      options.rlCounterfactualValueTargetMode ?? "absolute",
     counterfactualValueHuberDelta:
       options.rlCounterfactualValueHuberDelta ?? 0,
     updateEpochs: options.rlUpdateEpochs ?? 1,
@@ -657,6 +662,7 @@ function trainImprovementExamples(
     targetTemperature: number;
     valueTargetScale: number;
     valueCenterTargets: boolean;
+    valueTargetMode: "absolute" | "residual";
     valueHuberDelta: number;
     shuffleSeed: string;
   }
@@ -680,6 +686,7 @@ function trainImprovementExamples(
       learningRate: options.learningRate,
       targetScale: options.valueTargetScale,
       centerTargets: options.valueCenterTargets,
+      targetMode: options.valueTargetMode,
       huberDelta: options.valueHuberDelta,
       shuffleSeed: options.shuffleSeed,
     });
@@ -1123,6 +1130,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualAnchorTemperature: number;
     counterfactualValueTargetScale: number;
     counterfactualValueCenterTargets: boolean;
+    counterfactualValueTargetMode: "absolute" | "residual";
     counterfactualValueHuberDelta: number;
     updateEpochs: number;
     updateScope: PolicyGradientUpdateScope;
@@ -1330,6 +1338,7 @@ export function trainPolicyGradientFromRollouts(
           anchorTemperature: options.counterfactualAnchorTemperature,
           valueTargetScale: options.counterfactualValueTargetScale,
           valueCenterTargets: options.counterfactualValueCenterTargets,
+          valueTargetMode: options.counterfactualValueTargetMode,
           valueHuberDelta: options.counterfactualValueHuberDelta,
           shuffleSeed: `${options.seed}:counterfactual-shuffle`,
         })
@@ -1470,6 +1479,7 @@ function trainCounterfactualSupervisedBatch(
     anchorTemperature: number;
     valueTargetScale: number;
     valueCenterTargets: boolean;
+    valueTargetMode: "absolute" | "residual";
     valueHuberDelta: number;
     shuffleSeed: string;
   }
@@ -1494,6 +1504,7 @@ function trainCounterfactualSupervisedBatch(
           learningRate: options.learningRate,
           centerTargets: options.valueCenterTargets,
           targetScale: options.valueTargetScale,
+          targetMode: options.valueTargetMode,
           huberDelta: options.valueHuberDelta,
           shuffleSeed: options.shuffleSeed,
         })
