@@ -38,6 +38,10 @@ const OfflinePage: NextPage<{
     "pounce::show-framerate",
     false
   );
+  const [showNetworkStats, setShowNetworkStats] = useStoredBoolean(
+    "pounce::show-network-stats",
+    false
+  );
   const [soundEffectVolume, setSoundEffectVolume] = useStoredNumber(
     "pounce::sound-effect-volume",
     DEFAULT_SOUND_EFFECT_VOLUME_PERCENT,
@@ -138,6 +142,8 @@ const OfflinePage: NextPage<{
             setEasyReadCards={setEasyReadCards}
             showFramerate={showFramerate}
             setShowFramerate={setShowFramerate}
+            showNetworkStats={showNetworkStats}
+            setShowNetworkStats={setShowNetworkStats}
             onLeaveRoom={onLeaveRoom}
             settingsRequest={settingsRequest}
             onSettingsRequestHandled={onSettingsRequestHandled}

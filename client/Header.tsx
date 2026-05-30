@@ -22,8 +22,14 @@ import SettingsDialog, {
   type SettingsOpenRequest,
   type SettingsPage,
 } from "./SettingsDialog";
+import useNetworkInformation, {
+  getNetworkInformationTitle,
+  getNetworkSummary,
+} from "./useNetworkInformation";
 
 export type { SettingsOpenRequest, SettingsPage } from "./SettingsDialog";
+
+const PENDING_MOVE_SYNC_BADGE_DELAY_MS = 2000;
 
 type Props = {
   roomId?: string | null;
@@ -38,6 +44,8 @@ type Props = {
   setEasyReadCards: (use: boolean) => void;
   showFramerate: boolean;
   setShowFramerate: (show: boolean) => void;
+  showNetworkStats: boolean;
+  setShowNetworkStats: (show: boolean) => void;
   scale: number;
   setScale: (scale: number) => void;
   soundEffectVolume: number;
@@ -122,6 +130,10 @@ export default observer(function Header(props: Props) {
         role="toolbar"
         aria-label="Game controls"
       >
+        <PendingMoveSyncBadgeContainer />
+        {props.showNetworkStats ? (
+          <NetworkStatsIndicator roomId={props.roomId} />
+        ) : null}
         {props.showFramerate ? <FramerateIndicator /> : null}
         {canSendReactions ? (
           <HeaderReactionButton
@@ -182,15 +194,246 @@ export default observer(function Header(props: Props) {
           setPage={setSettingsPage}
           setScale={props.setScale}
           setSoundEffectVolume={props.setSoundEffectVolume}
+          setShowNetworkStats={props.setShowNetworkStats}
           setUseAnimations={props.setUseAnimations}
           soundEffectVolume={props.soundEffectVolume}
           showFramerate={props.showFramerate}
+          showNetworkStats={props.showNetworkStats}
           useAnimations={props.useAnimations}
         />
       ) : null}
     </>
   );
 });
+
+const PendingMoveSyncBadgeContainer = observer(
+  function PendingMoveSyncBadgeContainer() {
+    const { state } = useClientContext();
+    const pendingMoveConfirmations = getPendingMoveConfirmations(
+      state.pendingMoves
+    );
+    const showPendingMoveSyncBadge = useDelayedPendingMoveBadge(
+      pendingMoveConfirmations.oldestCreatedAt
+    );
+
+    return showPendingMoveSyncBadge && pendingMoveConfirmations.count > 0 ? (
+      <PendingMoveSyncBadge count={pendingMoveConfirmations.count} />
+    ) : null;
+  }
+);
+
+function PendingMoveSyncBadge({ count }: { count: number }) {
+  const label =
+    count > 1
+      ? `${count} moves waiting for confirmation`
+      : "Move waiting for confirmation";
+
+  return (
+    <div className={styles.syncingMoveBadge} aria-label={label} title={label}>
+      <span className={styles.syncingMoveSpinner} aria-hidden="true" />
+      <span className={styles.syncingMoveLabel}>Sync</span>
+    </div>
+  );
+}
+
+function getPendingMoveConfirmations(
+  pendingMoves: ReadonlyArray<{
+    acceptedRevision?: number;
+    createdAt: number;
+  }>
+) {
+  let count = 0;
+  let oldestCreatedAt: number | null = null;
+
+  pendingMoves.forEach((move) => {
+    if (move.acceptedRevision != null) {
+      // Accepted moves stay optimistic until the matching board revision arrives.
+      return;
+    }
+
+    count += 1;
+    oldestCreatedAt =
+      oldestCreatedAt == null
+        ? move.createdAt
+        : Math.min(oldestCreatedAt, move.createdAt);
+  });
+
+  return { count, oldestCreatedAt };
+}
+
+function useDelayedPendingMoveBadge(oldestCreatedAt: number | null) {
+  const [isVisible, setVisible] = useState(false);
+
+  useEffect(() => {
+    if (oldestCreatedAt == null) {
+      setVisible(false);
+      return;
+    }
+
+    const remainingMs =
+      PENDING_MOVE_SYNC_BADGE_DELAY_MS - (Date.now() - oldestCreatedAt);
+    if (remainingMs <= 0) {
+      setVisible(true);
+      return;
+    }
+
+    setVisible(false);
+    const timeout = window.setTimeout(() => setVisible(true), remainingMs);
+    return () => window.clearTimeout(timeout);
+  }, [oldestCreatedAt]);
+
+  return isVisible;
+}
+
+type NetworkStatsStatus =
+  | "local"
+  | "offline"
+  | "measuring"
+  | "good"
+  | "fair"
+  | "poor"
+  | "unstable";
+
+const NetworkStatsIndicator = observer(function NetworkStatsIndicator({
+  roomId,
+}: {
+  roomId?: string | null;
+}) {
+  const { state } = useClientContext();
+  const networkInformation = useNetworkInformation();
+  const isOfflineRoom = roomId?.toLowerCase() === "offline";
+  const status = getNetworkStatsStatus(
+    state.isConnected,
+    isOfflineRoom,
+    state.isPingUnstable,
+    state.pingLatency
+  );
+  const pingLabel = getNetworkStatsPingLabel(status, state.pingLatency);
+  const networkSummary = getNetworkSummary(networkInformation);
+  const metaLabel = getNetworkStatsMetaLabel(status, networkSummary);
+  const networkTitle = getNetworkInformationTitle(networkInformation);
+  const title = getNetworkStatsTitle(status, pingLabel, networkTitle);
+  const className = `${styles.networkStatsIndicator} ${getNetworkStatsClass(
+    status
+  )}`;
+
+  return (
+    <div className={className} aria-label={title} title={title}>
+      <span className={styles.networkBars} aria-hidden="true">
+        <span />
+      </span>
+      <span className={styles.networkStatsText}>
+        <strong className={styles.networkStatsValue}>{pingLabel}</strong>
+        <span className={styles.networkStatsMeta}>{metaLabel}</span>
+      </span>
+    </div>
+  );
+});
+
+function getNetworkStatsStatus(
+  isConnected: boolean,
+  isOffline: boolean,
+  isUnstable: boolean,
+  latency: number | null
+): NetworkStatsStatus {
+  if (isOffline) {
+    return "local";
+  }
+  if (!isConnected) {
+    return "offline";
+  }
+  if (isUnstable) {
+    return "unstable";
+  }
+  if (latency == null) {
+    return "measuring";
+  }
+  if (latency <= 120) {
+    return "good";
+  }
+  if (latency <= 250) {
+    return "fair";
+  }
+  return "poor";
+}
+
+function getNetworkStatsPingLabel(
+  status: NetworkStatsStatus,
+  latency: number | null
+): string {
+  if (status === "local") {
+    return "Local";
+  }
+  if (status === "offline") {
+    return "Offline";
+  }
+  if (status === "measuring") {
+    return "-- ms";
+  }
+  if (status === "unstable" && latency == null) {
+    return ">3s";
+  }
+  return `${latency ?? 0} ms`;
+}
+
+function getNetworkStatsMetaLabel(
+  status: NetworkStatsStatus,
+  networkSummary: string | null
+): string {
+  if (status === "local") {
+    return "Local";
+  }
+  if (status === "offline") {
+    return "Offline";
+  }
+  if (status === "unstable") {
+    return "Unstable";
+  }
+  return networkSummary ?? "Network";
+}
+
+function getNetworkStatsTitle(
+  status: NetworkStatsStatus,
+  pingLabel: string,
+  networkTitle: string | null
+): string {
+  if (status === "local") {
+    return "Offline game runs locally";
+  }
+  if (status === "offline") {
+    return "Room connection is offline";
+  }
+  if (status === "measuring") {
+    return networkTitle
+      ? `Measuring room ping, ${networkTitle}`
+      : "Measuring room ping";
+  }
+  if (status === "unstable") {
+    return networkTitle
+      ? `Unstable connection detected, ${networkTitle}`
+      : "Unstable connection detected";
+  }
+  return networkTitle
+    ? `Room ping ${pingLabel}, ${networkTitle}`
+    : `Room ping ${pingLabel}`;
+}
+
+function getNetworkStatsClass(status: NetworkStatsStatus) {
+  switch (status) {
+    case "good":
+      return styles.networkStatsGood;
+    case "fair":
+      return styles.networkStatsFair;
+    case "poor":
+      return styles.networkStatsPoor;
+    case "unstable":
+      return styles.networkStatsUnstable;
+    case "local":
+      return styles.networkStatsLocal;
+    default:
+      return styles.networkStatsUnknown;
+  }
+}
 
 function FramerateIndicator() {
   const fps = useFramerate();

@@ -9,6 +9,11 @@ import { useClientContext } from "./ClientContext";
 import RoomShare from "./RoomShare";
 import ChevronLeftIcon from "./icons/ChevronLeftIcon";
 import InfoTooltipIcon from "./InfoTooltipIcon";
+import useNetworkInformation, {
+  getNetworkInformationTitle,
+  getNetworkSummary,
+  type NetworkInformationSnapshot,
+} from "./useNetworkInformation";
 
 export type SettingsPage = "main" | "room" | "appearance";
 
@@ -32,6 +37,8 @@ type SettingsDialogProps = {
   setEasyReadCards: (use: boolean) => void;
   showFramerate: boolean;
   setShowFramerate: (show: boolean) => void;
+  showNetworkStats: boolean;
+  setShowNetworkStats: (show: boolean) => void;
   scale: number;
   setScale: (scale: number) => void;
   soundEffectVolume: number;
@@ -66,6 +73,7 @@ export default observer(function SettingsDialog({
   const disconnectedCount =
     state.board?.players.filter((p) => p.disconnected).length ?? 0;
   const buildDate = useLocalBuildDate(process.env.NEXT_PUBLIC_BUILD_DATE);
+  const networkInformation = useNetworkInformation();
   const [isFairHandHelpOpen, setFairHandHelpOpen] = useState(false);
   const previousSoundEffectVolumeRef = useRef(
     props.soundEffectVolume > 0 ? props.soundEffectVolume : 100
@@ -232,7 +240,9 @@ export default observer(function SettingsDialog({
                 <PingIndicator
                   isConnected={isConnected}
                   isOffline={isOfflineRoom}
+                  isUnstable={state.isPingUnstable}
                   latency={state.pingLatency}
+                  networkInformation={networkInformation}
                 />
               }
             />
@@ -391,6 +401,15 @@ export default observer(function SettingsDialog({
                 <Switch
                   checked={props.showFramerate}
                   onChange={(v) => props.setShowFramerate(v)}
+                />
+              }
+            />
+            <SettingRow
+              title="Show network stats"
+              control={
+                <Switch
+                  checked={props.showNetworkStats}
+                  onChange={(v) => props.setShowNetworkStats(v)}
                 />
               }
             />
@@ -583,20 +602,27 @@ type PingStatus =
   | "measuring"
   | "good"
   | "fair"
-  | "poor";
+  | "poor"
+  | "unstable";
 
 function PingIndicator({
   isConnected,
   isOffline,
+  isUnstable,
   latency,
+  networkInformation,
 }: {
   isConnected: boolean;
   isOffline: boolean;
+  isUnstable: boolean;
   latency: number | null;
+  networkInformation: NetworkInformationSnapshot;
 }) {
-  const status = getPingStatus(isConnected, isOffline, latency);
+  const status = getPingStatus(isConnected, isOffline, isUnstable, latency);
   const label = getPingLabel(status, latency);
   const className = `${styles.pingDot} ${getPingDotClass(status)}`;
+  const networkSummary = getNetworkSummary(networkInformation);
+  const networkTitle = getNetworkInformationTitle(networkInformation);
   const title =
     status === "local"
       ? "Offline game runs locally"
@@ -604,12 +630,20 @@ function PingIndicator({
       ? "Room connection is offline"
       : status === "measuring"
       ? "Measuring room ping"
-      : `Room ping: ${label}`;
+      : status === "unstable"
+      ? `Room ping has exceeded 3 seconds${
+          networkTitle ? `, ${networkTitle}` : ""
+        }`
+      : `Room ping: ${label}${networkTitle ? `, ${networkTitle}` : ""}`;
 
   return (
     <span className={styles.pingIndicator} aria-label={title} title={title}>
       <span className={className} aria-hidden="true" />
-      <span className={styles.pingText}>{label}</span>
+      <span className={styles.pingText}>
+        {networkSummary && status !== "local"
+          ? `${label} / ${networkSummary}`
+          : label}
+      </span>
     </span>
   );
 }
@@ -617,6 +651,7 @@ function PingIndicator({
 function getPingStatus(
   isConnected: boolean,
   isOffline: boolean,
+  isUnstable: boolean,
   latency: number | null
 ): PingStatus {
   if (isOffline) {
@@ -624,6 +659,9 @@ function getPingStatus(
   }
   if (!isConnected) {
     return "offline";
+  }
+  if (isUnstable) {
+    return "unstable";
   }
   if (latency == null) {
     return "measuring";
@@ -647,6 +685,9 @@ function getPingLabel(status: PingStatus, latency: number | null) {
   if (status === "measuring") {
     return "Measuring";
   }
+  if (status === "unstable") {
+    return latency == null ? "Unstable" : `${latency} ms`;
+  }
   return `${latency ?? 0} ms`;
 }
 
@@ -658,6 +699,8 @@ function getPingDotClass(status: PingStatus) {
       return styles.pingFair;
     case "poor":
       return styles.pingPoor;
+    case "unstable":
+      return styles.pingUnstable;
     case "local":
       return styles.pingLocal;
     default:

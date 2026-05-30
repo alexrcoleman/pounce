@@ -35,9 +35,14 @@ const PLAYER_SESSION_STORAGE_KEY = "pounce::playerSessionId";
 const DEFAULT_SOCKET_PORT = "3001";
 const RECONNECT_TOAST_ID = "room-reconnect";
 const STUCK_TOAST_ID = "room-stuck-status";
+const UNSTABLE_CONNECTION_TOAST_ID = "room-unstable-connection";
 const SOCKET_HEALTH_ENDPOINT_PATH = "/api/socketio/health";
 const INITIAL_SOCKET_WARMUP_TIMEOUT_MS = 10000;
 const SOCKET_WARMUP_RETRY_MS = 500;
+const PING_INTERVAL_MS = 3000;
+const UNSTABLE_PING_WARNING_MS = 3000;
+const PING_TIMEOUT_MS = 5000;
+const STABLE_PING_RESET_MS = 1000;
 
 export default function useGameSocket(
   roomId: string | null,
@@ -246,8 +251,15 @@ export default function useGameSocket(
     let isClosed = false;
     let hasAttemptedInitialWarmup = false;
     let isInitialWarmupInFlight = false;
-    let hasPendingPing = false;
-    let pingTimeout: ReturnType<typeof setTimeout> | undefined;
+    let hasShownUnstablePingToast = false;
+    let nextPingId = 0;
+    let pendingPing:
+      | {
+          id: number;
+          timeout: ReturnType<typeof setTimeout>;
+          warningTimeout: ReturnType<typeof setTimeout>;
+        }
+      | undefined;
     const showReconnectToast = () => {
       if (!hasConnectedRef.current || state.board == null) {
         return;
@@ -275,8 +287,53 @@ export default function useGameSocket(
         runInAction(() => state.setPingLatency(latency));
       }
     };
+    const updatePingUnstable = (isUnstable: boolean) => {
+      if (!isClosed) {
+        runInAction(() => state.setPingUnstable(isUnstable));
+      }
+    };
+    const clearPendingPing = () => {
+      if (!pendingPing) {
+        return;
+      }
+
+      clearTimeout(pendingPing.timeout);
+      clearTimeout(pendingPing.warningTimeout);
+      pendingPing = undefined;
+    };
+    const resetUnstablePingLatch = () => {
+      if (!hasShownUnstablePingToast && !state.isPingUnstable) {
+        return;
+      }
+
+      hasShownUnstablePingToast = false;
+      updatePingUnstable(false);
+      toast.dismiss(UNSTABLE_CONNECTION_TOAST_ID);
+    };
+    const showUnstableConnectionToast = () => {
+      if (
+        isClosed ||
+        !socket.connected ||
+        !hasConnectedRef.current ||
+        state.board == null
+      ) {
+        return;
+      }
+
+      updatePingUnstable(true);
+      if (hasShownUnstablePingToast) {
+        return;
+      }
+
+      hasShownUnstablePingToast = true;
+      toast.warning("Unstable connection detected", {
+        description: "Moves may take longer to confirm.",
+        duration: 4500,
+        id: UNSTABLE_CONNECTION_TOAST_ID,
+      });
+    };
     const sendPing = () => {
-      if (hasPendingPing) {
+      if (pendingPing) {
         return;
       }
       if (!socket.connected) {
@@ -284,20 +341,36 @@ export default function useGameSocket(
         return;
       }
 
-      hasPendingPing = true;
+      const pingId = ++nextPingId;
       const startedAt = performance.now();
-      pingTimeout = setTimeout(() => {
-        hasPendingPing = false;
-        updatePingLatency(null);
-      }, 5000);
+      pendingPing = {
+        id: pingId,
+        warningTimeout: setTimeout(() => {
+          if (pendingPing?.id !== pingId) {
+            return;
+          }
+          showUnstableConnectionToast();
+        }, UNSTABLE_PING_WARNING_MS),
+        timeout: setTimeout(() => {
+          if (pendingPing?.id !== pingId) {
+            return;
+          }
+
+          clearPendingPing();
+          updatePingLatency(null);
+        }, PING_TIMEOUT_MS),
+      };
       socket.emit("room_ping", { clientTime: Date.now() }, () => {
-        if (pingTimeout) {
-          clearTimeout(pingTimeout);
-          pingTimeout = undefined;
+        if (pendingPing?.id !== pingId) {
+          return;
         }
+
+        clearPendingPing();
         const roundTripMs = performance.now() - startedAt;
-        hasPendingPing = false;
         updatePingLatency(roundTripMs);
+        if (roundTripMs < STABLE_PING_RESET_MS) {
+          resetUnstablePingLatch();
+        }
       });
     };
     const warmUpServerAndReconnect = () => {
@@ -325,6 +398,7 @@ export default function useGameSocket(
         });
     };
     socket.on("connect_error", () => {
+      clearPendingPing();
       updatePingLatency(null);
       if (hasConnectedRef.current || state.board != null) {
         setError(null);
@@ -345,6 +419,7 @@ export default function useGameSocket(
       console.log("Connected", socket.id);
       hasConnectedRef.current = true;
       setError(null);
+      resetUnstablePingLatch();
       runInAction(() => state.onConnect(socket.id));
       sendPing();
     });
@@ -383,25 +458,26 @@ export default function useGameSocket(
     });
 
     socket.on("disconnect", () => {
+      clearPendingPing();
       pendingJoinRoomRef.current = lastJoinedRoomRef.current;
       clearInFlightMoveActions();
       runInAction(() => state.onDisconnect());
+      resetUnstablePingLatch();
       showReconnectToast();
     });
-    const pingInterval = setInterval(sendPing, 3000);
+    const pingInterval = setInterval(sendPing, PING_INTERVAL_MS);
     return () => {
       isClosed = true;
       if (socket) {
         socket.close();
       }
-      if (pingTimeout) {
-        clearTimeout(pingTimeout);
-      }
+      clearPendingPing();
       clearInterval(pingInterval);
       clearMoveAckTimeouts();
       queuedMoveActions.current = [];
       optimisticallyPlayedMoveActionIds.current.clear();
       toast.dismiss(RECONNECT_TOAST_ID);
+      toast.dismiss(UNSTABLE_CONNECTION_TOAST_ID);
     };
   }, []);
   const isConnected = state.isConnected;

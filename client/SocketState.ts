@@ -14,6 +14,7 @@ import type { PlayerReaction } from "../shared/Reactions";
 type PendingMoveAction = {
   actionId: string;
   baseRevision: number;
+  createdAt: number;
   move: Move;
   acceptedRevision?: number;
 };
@@ -36,6 +37,7 @@ export default class SocketState {
   latency = 0;
   stuckPlayerIndices: number[] = [];
   pingLatency: number | null = null;
+  isPingUnstable = false;
   serverClockOffset = 0;
   isConnected = false;
   socketId = "";
@@ -91,6 +93,7 @@ export default class SocketState {
     this.isConnected = true;
     this.socketId = socketId;
     this.pingLatency = null;
+    this.isPingUnstable = false;
     this.recomputeBoard();
   }
   setPlayerSessionId(playerSessionId: string | null) {
@@ -102,6 +105,9 @@ export default class SocketState {
   setPingLatency(latency: number | null) {
     this.pingLatency =
       typeof latency === "number" ? Math.max(0, Math.round(latency)) : null;
+  }
+  setPingUnstable(isUnstable: boolean) {
+    this.isPingUnstable = isUnstable;
   }
   getEstimatedServerTime(now = Date.now()) {
     return now + this.serverClockOffset;
@@ -128,6 +134,7 @@ export default class SocketState {
   onDisconnect() {
     this.isConnected = false;
     this.pingLatency = null;
+    this.isPingUnstable = false;
     this.hands = [];
     this.reactions = [];
     this.recomputeBoard();
@@ -155,6 +162,7 @@ export default class SocketState {
     const action = {
       actionId: `${this.socketId || "local"}:${++this.nextActionNumber}`,
       baseRevision: this.serverRevision,
+      createdAt: Date.now(),
       move,
     };
     this.pendingMoves.push(action);
@@ -202,6 +210,7 @@ export default class SocketState {
     this.stuckPlayerIndices = [];
     this.serverRevision = 0;
     this.serverClockOffset = 0;
+    this.isPingUnstable = false;
     this.pendingMoves = [];
     this.reactions = [];
     this.hands = [];

@@ -247,6 +247,151 @@
   letter-spacing: 0;
 }
 
+.syncingMoveBadge {
+  --syncing-color: #ffd76a;
+
+  height: 34px;
+  min-width: 62px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 0 8px;
+  color: #fff8e8;
+  background: rgba(76, 49, 13, 0.52);
+  border: 1px solid rgba(255, 215, 106, 0.46);
+  border-radius: 6px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -10px 18px rgba(0, 0, 0, 0.08),
+    0 0 0 1px rgba(0, 0, 0, 0.06);
+  line-height: 1;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.34);
+}
+
+.syncingMoveSpinner {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border: 2px solid rgba(255, 248, 232, 0.28);
+  border-top-color: var(--syncing-color);
+  border-radius: 50%;
+  animation: syncingMoveSpin 0.82s linear infinite;
+}
+
+.syncingMoveLabel {
+  overflow: hidden;
+  color: #fff5cf;
+  font-size: 12px;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.networkStatsIndicator {
+  --network-status-color: #8b8176;
+
+  height: 34px;
+  min-width: 82px;
+  display: inline-grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  color: #fff8e8;
+  background: rgba(16, 19, 18, 0.3);
+  border: 1px solid rgba(255, 248, 230, 0.18);
+  border-radius: 6px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 -10px 18px rgba(0, 0, 0, 0.08);
+  line-height: 1;
+  pointer-events: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.34);
+}
+
+.networkStatsGood {
+  --network-status-color: #38ba76;
+}
+
+.networkStatsFair {
+  --network-status-color: #e0a33d;
+}
+
+.networkStatsPoor,
+.networkStatsUnstable {
+  --network-status-color: #ef6262;
+}
+
+.networkStatsLocal {
+  --network-status-color: #78a7e0;
+}
+
+.networkStatsUnknown {
+  --network-status-color: #bdb5ab;
+}
+
+.networkBars {
+  width: 16px;
+  height: 14px;
+  display: inline-grid;
+  grid-template-columns: repeat(3, 4px);
+  align-items: end;
+  gap: 2px;
+}
+
+.networkBars::before,
+.networkBars::after,
+.networkBars span {
+  content: "";
+  width: 4px;
+  border-radius: 2px 2px 1px 1px;
+  background: var(--network-status-color);
+  box-shadow: 0 0 0 2px rgba(255, 248, 230, 0.08);
+}
+
+.networkBars::before {
+  height: 6px;
+}
+
+.networkBars span {
+  height: 10px;
+  opacity: 0.92;
+}
+
+.networkBars::after {
+  height: 14px;
+  opacity: 0.82;
+}
+
+.networkStatsText {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.networkStatsValue {
+  overflow: hidden;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.networkStatsMeta {
+  overflow: hidden;
+  color: rgba(255, 248, 232, 0.82);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
 .stuckButton {
   min-width: 98px;
   max-width: 128px;
@@ -332,6 +477,17 @@
     padding: 0 7px;
   }
 
+  .syncingMoveBadge {
+    min-width: 56px;
+    gap: 5px;
+    padding: 0 7px;
+  }
+
+  .networkStatsIndicator {
+    min-width: 74px;
+    padding: 0 7px;
+  }
+
   .stuckButton {
     min-width: 96px;
     max-width: 116px;
@@ -356,6 +512,38 @@
     padding: 0 6px;
   }
 
+  .syncingMoveBadge {
+    min-width: 34px;
+    width: 34px;
+    padding: 0;
+  }
+
+  .syncingMoveLabel {
+    display: none;
+  }
+
+  .networkStatsIndicator {
+    min-width: 54px;
+    grid-template-columns: 14px minmax(0, 1fr);
+    gap: 5px;
+    padding: 0 6px;
+  }
+
+  .networkBars {
+    width: 14px;
+    grid-template-columns: repeat(3, 3px);
+  }
+
+  .networkBars::before,
+  .networkBars::after,
+  .networkBars span {
+    width: 3px;
+  }
+
+  .networkStatsMeta {
+    display: none;
+  }
+
   .framerateIndicator span {
     display: none;
   }
@@ -369,6 +557,12 @@
 @supports not (backdrop-filter: blur(1px)) {
   .floatingControls {
     background: rgba(35, 25, 17, 0.82);
+  }
+}
+
+@keyframes syncingMoveSpin {
+  to {
+    transform: rotate(360deg);
   }
 }
 
@@ -856,6 +1050,11 @@
 .pingPoor {
   background: #c73636;
   box-shadow: 0 0 0 3px rgba(199, 54, 54, 0.15);
+}
+
+.pingUnstable {
+  background: #c73636;
+  box-shadow: 0 0 0 3px rgba(199, 54, 54, 0.18);
 }
 
 .pingLocal {
