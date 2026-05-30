@@ -148,9 +148,13 @@ pairwise with `all` scope, and exploratory broad value regression. Use
 `RL_TUNE_RECIPES` as a JSON array of `{ "name": string, "options": { ... } }`
 to sweep custom recipe knobs while inheriting conservative RL defaults.
 `RL_TUNE_ROUNDS`, `RL_TUNE_OUT_DIR`, `COMPARE_GAMES`, and `COMPARE_RUNS` control
-the search budget and verification strength. As with the manual comparisons
-below, this is a search tool; a promoted model still needs a larger final
-paired comparison before replacing the current best checkpoint.
+the search budget and verification strength. Set `CONFIRM_GAMES` above `0` to
+run a held-out confirmation comparison for search-passing candidates and
+near-misses whose search lower bound is at least `CONFIRM_TRIGGER_MIN_DELTA`;
+`CONFIRM_RUNS`, `CONFIRM_MIN_DELTA`, and `CONFIRM_SE_MULTIPLIER` control that
+second gate. As with the manual comparisons below, this is still a search tool;
+a promoted model still needs a larger final paired comparison before replacing
+the current best checkpoint.
 
 `IMPROVEMENT_STATES` enables the counterfactual rollout pass: it samples
 teacher-game states, tries several legal actions, lets the teacher finish from
@@ -265,6 +269,14 @@ labels to all decisions rather than exploratory decisions was worse at this data
 scale: a 16-episode value run measured `-0.102 +/- 0.065`, and a 16-episode
 pairwise run measured `-0.086 +/- 0.053`. This is a better diagnostic path, but
 still not a better deployed policy.
+
+The first `action-ranking:tune-rl` sweeps also produced no promotion-worthy RL
+candidate. The default 64-episode recipe set did not beat the current
+behavior-scope checkpoint. A custom low-LR behavior-scope pairwise sweep had one
+near-miss at `+0.149 +/- 0.149` over 96 search games, but a larger 768-game
+held-out paired comparison was an exact tie on point differential, score, and
+behavior metrics. Treat that as noise or an update too small to affect greedy
+play, not as an RL improvement.
 
 Legacy model feature expansion is now enabled before fine-tuning. Re-running the
 240-state behavior-scope recipe from the capacity checkpoint produced a 48-input

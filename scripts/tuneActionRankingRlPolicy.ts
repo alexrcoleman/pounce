@@ -34,6 +34,20 @@ const playerCount = readIntegerEnv("PLAYERS", 4);
 const maxMovesPerGame = readIntegerEnv("MAX_MOVES", 1800);
 const compareGames = readIntegerEnv("COMPARE_GAMES", 48);
 const compareRuns = readIntegerEnv("COMPARE_RUNS", 2);
+const confirmGames = readIntegerEnv("CONFIRM_GAMES", 0);
+const confirmRuns = readIntegerEnv(
+  "CONFIRM_RUNS",
+  Math.max(1, compareRuns * 2)
+);
+const confirmMinDelta = readNumberEnv("CONFIRM_MIN_DELTA", promoteMinDelta);
+const confirmStandardErrorMultiplier = readNumberEnv(
+  "CONFIRM_SE_MULTIPLIER",
+  promoteStandardErrorMultiplier
+);
+const confirmTriggerMinDelta = readNumberEnv(
+  "CONFIRM_TRIGGER_MIN_DELTA",
+  promoteMinDelta
+);
 const recipes = readRecipes();
 
 fs.mkdirSync(outputDir, { recursive: true });
@@ -64,28 +78,40 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       writeModel(candidatePath, candidateModel);
     }
 
-    const comparisons = Array.from(
-      { length: Math.max(1, compareRuns) },
-      (_, index) =>
-        compareNeuralModels(candidateModel, bestModel, {
+    const comparisonBatch = compareModelBatch(candidateModel, bestModel, {
+      playerCount,
+      games: compareGames,
+      runs: compareRuns,
+      seed: `${seed}:compare:${roundNumber}:${recipe.name}`,
+      maxMovesPerGame,
+    });
+    const comparison = comparisonBatch.comparison;
+    const lowerBound = getPromotionLowerBound(
+      comparison,
+      promoteStandardErrorMultiplier
+    );
+    const searchPassed = lowerBound > promoteMinDelta;
+    const shouldConfirm =
+      confirmGames > 0 &&
+      (searchPassed || lowerBound >= confirmTriggerMinDelta);
+    const confirmationBatch = shouldConfirm
+      ? compareModelBatch(candidateModel, bestModel, {
           playerCount,
-          games: compareGames,
-          seed:
-            compareRuns === 1
-              ? `${seed}:compare:${roundNumber}:${recipe.name}`
-              : `${seed}:compare:${roundNumber}:${recipe.name}:${index}`,
+          games: confirmGames,
+          runs: confirmRuns,
+          seed: `${seed}:confirm:${roundNumber}:${recipe.name}`,
           maxMovesPerGame,
         })
-    );
-    const comparison =
-      comparisons.length === 1
-        ? comparisons[0]
-        : summarizeComparisons(comparisons);
-    const lowerBound =
-      comparison.averagePointDifferentialDelta -
-      promoteStandardErrorMultiplier *
-        comparison.pointDifferentialDeltaStandardError;
-    const promoted = lowerBound > promoteMinDelta;
+      : null;
+    const confirmationLowerBound = confirmationBatch
+      ? getPromotionLowerBound(
+          confirmationBatch.comparison,
+          confirmStandardErrorMultiplier
+        )
+      : null;
+    const promoted = confirmationBatch
+      ? confirmationLowerBound! > confirmMinDelta
+      : searchPassed;
 
     if (promoted) {
       bestModel = candidateModel;
@@ -100,6 +126,7 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       recipe: recipe.name,
       recipeIndex,
       promoted,
+      searchPassed,
       lowerBound,
       candidatePath: keepCandidates ? candidatePath : null,
       bestModelPath,
@@ -109,7 +136,14 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
         evaluation: candidateResult.evaluation,
       },
       comparison,
-      perCompareRun: comparisons.length === 1 ? undefined : comparisons,
+      perCompareRun: comparisonBatch.perCompareRun,
+      confirmation: confirmationBatch
+        ? {
+            lowerBound: confirmationLowerBound,
+            comparison: confirmationBatch.comparison,
+            perCompareRun: confirmationBatch.perCompareRun,
+          }
+        : null,
     });
   }
 
@@ -133,6 +167,13 @@ console.log(
       promotionRule: {
         promoteMinDelta,
         promoteStandardErrorMultiplier,
+      },
+      confirmationRule: {
+        confirmGames,
+        confirmRuns,
+        confirmMinDelta,
+        confirmStandardErrorMultiplier,
+        confirmTriggerMinDelta,
       },
       roundResults,
     },
@@ -271,6 +312,45 @@ function readBooleanEnv(name: string, fallback: boolean): boolean {
 
 function sanitizeFilePart(value: string): string {
   return value.replace(/[^a-z0-9._-]+/gi, "-").replace(/^-+|-+$/g, "");
+}
+
+function compareModelBatch(
+  modelA: NeuralActionRankingModel,
+  modelB: NeuralActionRankingModel,
+  options: {
+    playerCount: number;
+    games: number;
+    runs: number;
+    seed: string;
+    maxMovesPerGame: number;
+  }
+) {
+  const runCount = Math.max(1, options.runs);
+  const comparisons = Array.from({ length: runCount }, (_, index) =>
+    compareNeuralModels(modelA, modelB, {
+      playerCount: options.playerCount,
+      games: options.games,
+      seed: runCount === 1 ? options.seed : `${options.seed}:${index}`,
+      maxMovesPerGame: options.maxMovesPerGame,
+    })
+  );
+  return {
+    comparison:
+      comparisons.length === 1
+        ? comparisons[0]
+        : summarizeComparisons(comparisons),
+    perCompareRun: comparisons.length === 1 ? undefined : comparisons,
+  };
+}
+
+function getPromotionLowerBound(
+  comparison: ModelComparisonResult,
+  standardErrorMultiplier: number
+): number {
+  return (
+    comparison.averagePointDifferentialDelta -
+    standardErrorMultiplier * comparison.pointDifferentialDeltaStandardError
+  );
 }
 
 function summarizeComparisons(comparisons: ModelComparisonResult[]) {
