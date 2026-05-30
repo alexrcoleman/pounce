@@ -96,6 +96,7 @@ const options = {
   rlTemperature: readNumberEnv("RL_TEMPERATURE", 0.85),
   rlLocalRewardWeight: readNumberEnv("RL_LOCAL_REWARD_WEIGHT", 0.15),
   rlLocalRewardDiscount: readNumberEnv("RL_LOCAL_REWARD_DISCOUNT", 0),
+  rlOpponentMode: readRlOpponentModeEnv("RL_OPPONENT_MODE", "teacher"),
   rlBaselineMode: readRlBaselineModeEnv("RL_BASELINE_MODE", "teacher"),
   rlCommonRandom: readBooleanEnv("RL_COMMON_RANDOM", true),
   rlCreditMode: readRlCreditModeEnv("RL_CREDIT_MODE", "episode"),
@@ -377,6 +378,17 @@ function readRlBaselineModeEnv(
     return fallback;
   }
   return value.toLowerCase() === "greedy" ? "greedy" : fallback;
+}
+
+function readRlOpponentModeEnv(
+  name: string,
+  fallback: "teacher" | "self"
+): "teacher" | "self" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  return value.toLowerCase() === "self" ? "self" : fallback;
 }
 
 function readRlCreditModeEnv(

@@ -409,6 +409,7 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
     rlTemperature: readNumberEnv("RL_TEMPERATURE", 1.05),
     rlLocalRewardWeight: readNumberEnv("RL_LOCAL_REWARD_WEIGHT", 0),
     rlLocalRewardDiscount: readNumberEnv("RL_LOCAL_REWARD_DISCOUNT", 0),
+    rlOpponentMode: readRlOpponentModeEnv("RL_OPPONENT_MODE", "teacher"),
     rlBaselineMode: "greedy",
     rlCommonRandom: true,
     rlCreditMode: "counterfactual",
@@ -580,6 +581,17 @@ function readBooleanEnv(name: string, fallback: boolean): boolean {
     return false;
   }
   return fallback;
+}
+
+function readRlOpponentModeEnv(
+  name: string,
+  fallback: "teacher" | "self"
+): "teacher" | "self" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  return value.toLowerCase() === "self" ? "self" : fallback;
 }
 
 function readValueTargetModeEnv(

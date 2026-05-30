@@ -56,6 +56,30 @@ assert.ok(
   "policy_gradient should report policy updates"
 );
 
+const selfPlayEpisodePolicyGradient = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:self-play-episode-policy-gradient",
+  rlOpponentMode: "self",
+  rlCreditMode: "episode",
+  rlEpisodes: 2,
+  rlCounterfactualScanEpisodes: 2,
+  rlUpdateScope: "all",
+});
+assert.equal(
+  selfPlayEpisodePolicyGradient.reinforcement.opponentMode,
+  "self",
+  "self-play RL should report self opponent mode"
+);
+assert.equal(
+  selfPlayEpisodePolicyGradient.reinforcement.averageTrainingPlayerCount,
+  commonOptions.playerCount,
+  "self-play RL should train from every active neural seat"
+);
+assert.ok(
+  selfPlayEpisodePolicyGradient.reinforcement.averagePolicyUpdates > 0,
+  "self-play episode RL should collect policy updates"
+);
+
 const value = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:value",
@@ -440,6 +464,7 @@ console.log(
     {
       featureExpansion,
       policyGradient: summarize(policyGradient),
+      selfPlayEpisodePolicyGradient: summarize(selfPlayEpisodePolicyGradient),
       value: summarize(value),
       weightedPairwise: summarize(weightedPairwise),
       outputOnlyValue: summarize(outputOnlyValue),
@@ -482,6 +507,9 @@ function assertCounterfactualWork(
 
 function summarize(result: NeuralTrainingResult) {
   return {
+    opponentMode: result.reinforcement.opponentMode,
+    averageTrainingPlayerCount:
+      result.reinforcement.averageTrainingPlayerCount,
     counterfactualUpdateCount: result.reinforcement.counterfactualUpdateCount,
     counterfactualScannedEpisodes:
       result.reinforcement.counterfactualScannedEpisodes,
