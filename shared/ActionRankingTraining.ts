@@ -77,6 +77,8 @@ export type NeuralTrainingOptions = {
   rlCounterfactualAnchorWeight?: number;
   rlCounterfactualAnchorMaxExamples?: number;
   rlCounterfactualAnchorTemperature?: number;
+  rlCounterfactualBehaviorCorrectionWeight?: number;
+  rlCounterfactualBehaviorCorrectionMargin?: number;
   rlCounterfactualConnectorAnchorWeight?: number;
   rlCounterfactualConnectorAnchorMaxExamples?: number;
   rlCounterfactualConnectorAnchorMargin?: number;
@@ -184,6 +186,7 @@ export type NeuralTrainingResult = {
     counterfactualAveragePairWeight: number;
     counterfactualAnchorExamples: number;
     counterfactualAnchorUpdates: number;
+    counterfactualBehaviorCorrectionUpdates: number;
     counterfactualConnectorAnchorExamples: number;
     counterfactualConnectorAnchorUpdates: number;
     averagePolicyUpdates: number;
@@ -537,6 +540,10 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualAnchorMaxExamples ?? 512,
     counterfactualAnchorTemperature:
       options.rlCounterfactualAnchorTemperature ?? 1,
+    counterfactualBehaviorCorrectionWeight:
+      options.rlCounterfactualBehaviorCorrectionWeight ?? 0,
+    counterfactualBehaviorCorrectionMargin:
+      options.rlCounterfactualBehaviorCorrectionMargin ?? 0.05,
     counterfactualConnectorAnchorWeight:
       options.rlCounterfactualConnectorAnchorWeight ?? 0,
     counterfactualConnectorAnchorMaxExamples:
@@ -1534,6 +1541,8 @@ export function trainPolicyGradientFromRollouts(
     counterfactualAnchorWeight: number;
     counterfactualAnchorMaxExamples: number;
     counterfactualAnchorTemperature: number;
+    counterfactualBehaviorCorrectionWeight: number;
+    counterfactualBehaviorCorrectionMargin: number;
     counterfactualConnectorAnchorWeight: number;
     counterfactualConnectorAnchorMaxExamples: number;
     counterfactualConnectorAnchorMargin: number;
@@ -1936,6 +1945,10 @@ export function trainPolicyGradientFromRollouts(
           anchorWeight: options.counterfactualAnchorWeight,
           anchorMaxExamples: options.counterfactualAnchorMaxExamples,
           anchorTemperature: options.counterfactualAnchorTemperature,
+          behaviorCorrectionWeight:
+            options.counterfactualBehaviorCorrectionWeight,
+          behaviorCorrectionMargin:
+            options.counterfactualBehaviorCorrectionMargin,
           connectorAnchorWeight: options.counterfactualConnectorAnchorWeight,
           connectorAnchorMaxExamples:
             options.counterfactualConnectorAnchorMaxExamples,
@@ -2029,6 +2042,8 @@ export function trainPolicyGradientFromRollouts(
     counterfactualAveragePairWeight: advantageStats.averagePairWeight,
     counterfactualAnchorExamples: advantageStats.anchorExamples,
     counterfactualAnchorUpdates: advantageStats.anchorUpdates,
+    counterfactualBehaviorCorrectionUpdates:
+      advantageStats.behaviorCorrectionUpdates,
     counterfactualConnectorAnchorExamples:
       advantageStats.connectorAnchorExamples,
     counterfactualConnectorAnchorUpdates:
@@ -2381,6 +2396,7 @@ function applyPolicyGradientBatch(
     averagePairWeight: 0,
     anchorExamples: 0,
     anchorUpdates: 0,
+    behaviorCorrectionUpdates: 0,
     connectorAnchorExamples: 0,
     connectorAnchorUpdates: 0,
   };
@@ -2403,6 +2419,8 @@ function trainCounterfactualSupervisedBatch(
     anchorWeight: number;
     anchorMaxExamples: number;
     anchorTemperature: number;
+    behaviorCorrectionWeight: number;
+    behaviorCorrectionMargin: number;
     connectorAnchorWeight: number;
     connectorAnchorMaxExamples: number;
     connectorAnchorMargin: number;
@@ -2455,6 +2473,19 @@ function trainCounterfactualSupervisedBatch(
           trainableLayers: options.trainableLayers,
           shuffleSeed: options.shuffleSeed,
         });
+  const behaviorCorrectionStats =
+    options.behaviorCorrectionWeight <= 0 || examples.length === 0
+      ? emptyTrainingStats(0)
+      : policy.trainPairwisePreferences(examples, {
+          epochs: options.updateEpochs,
+          learningRate: options.learningRate * options.behaviorCorrectionWeight,
+          minReturnGap: 0,
+          maxPairsPerExample: 1,
+          preferenceScope: "behavior",
+          targetMargin: options.behaviorCorrectionMargin,
+          trainableLayers: options.trainableLayers,
+          shuffleSeed: `${options.shuffleSeed}:behavior-correction`,
+        });
   const anchorExamples =
     anchorPolicy == null || options.anchorWeight <= 0
       ? []
@@ -2504,11 +2535,13 @@ function trainCounterfactualSupervisedBatch(
     stdDev: stats.stdDev,
     appliedUpdates:
       trainingStats.updates +
+      behaviorCorrectionStats.updates +
       anchorStats.updates +
       connectorAnchorStats.updates,
     averagePairWeight: trainingStats.averagePairWeight ?? 0,
     anchorExamples: anchorExamples.length,
     anchorUpdates: anchorStats.updates,
+    behaviorCorrectionUpdates: behaviorCorrectionStats.updates,
     connectorAnchorExamples: connectorAnchorExamples.length,
     connectorAnchorUpdates: connectorAnchorStats.updates,
   };

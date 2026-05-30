@@ -211,6 +211,14 @@ const options = {
     "RL_COUNTERFACTUAL_ANCHOR_TEMPERATURE",
     1
   ),
+  rlCounterfactualBehaviorCorrectionWeight: readNumberEnv(
+    "RL_COUNTERFACTUAL_BEHAVIOR_CORRECTION_WEIGHT",
+    0
+  ),
+  rlCounterfactualBehaviorCorrectionMargin: readNumberEnv(
+    "RL_COUNTERFACTUAL_BEHAVIOR_CORRECTION_MARGIN",
+    0.05
+  ),
   rlCounterfactualConnectorAnchorWeight: readNumberEnv(
     "RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_WEIGHT",
     0

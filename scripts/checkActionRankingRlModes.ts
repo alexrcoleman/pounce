@@ -497,6 +497,27 @@ assert.ok(
   "policy-change filtering should skip labels whose rollout winner is already greedy"
 );
 
+const behaviorCorrectionValue = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:behavior-correction-value",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualStateSource: "greedy",
+  rlUpdateScope: "all",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualMinReturnGap: 0,
+  rlCounterfactualRequirePolicyChange: true,
+  rlCounterfactualBehaviorCorrectionWeight: 0.5,
+  rlCounterfactualBehaviorCorrectionMargin: 0.03,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.ok(
+  behaviorCorrectionValue.reinforcement
+    .counterfactualBehaviorCorrectionUpdates > 0,
+  "behavior-correction value mode should train winner-vs-greedy auxiliary updates"
+);
+
 const maxReturnGapFiltered = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:max-return-gap-filtered",
@@ -542,6 +563,7 @@ console.log(
       behaviorWinRateFiltered: summarize(behaviorWinRateFiltered),
       policyMarginFiltered: summarize(policyMarginFiltered),
       policyChangeFiltered: summarize(policyChangeFiltered),
+      behaviorCorrectionValue: summarize(behaviorCorrectionValue),
       maxReturnGapFiltered: summarize(maxReturnGapFiltered),
     },
     null,
@@ -605,6 +627,8 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.counterfactualAnchorExamples,
     counterfactualAnchorUpdates:
       result.reinforcement.counterfactualAnchorUpdates,
+    counterfactualBehaviorCorrectionUpdates:
+      result.reinforcement.counterfactualBehaviorCorrectionUpdates,
     counterfactualConnectorAnchorExamples:
       result.reinforcement.counterfactualConnectorAnchorExamples,
     counterfactualConnectorAnchorUpdates:
