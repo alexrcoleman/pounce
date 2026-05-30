@@ -33,6 +33,25 @@ type PairStats = {
   policyScoreGapToWinner: RunningStats;
 };
 
+type LabelStateContext = {
+  playerPointDifferential: number;
+  pounceCount: number | null;
+  currentPoints: number | null;
+  pointDifferentialBin: string;
+  pounceBin: string;
+  currentPointsBin: string;
+};
+
+type PairStateContextStats = {
+  count: number;
+  playerPointDifferential: RunningStats;
+  pounceCount: RunningStats;
+  currentPoints: RunningStats;
+  pointDifferentialBins: Map<string, number>;
+  pounceBins: Map<string, number>;
+  currentPointsBins: Map<string, number>;
+};
+
 const MOVE_TYPES: MoveType[] = [
   "c2c",
   "c2s",
@@ -176,6 +195,7 @@ function diagnoseCounterfactualLabels(
   const behaviorMoveCounts = createMoveTypeCounts();
   const policyTopMoveCounts = createMoveTypeCounts();
   const winnerVsBehaviorPairs = new Map<string, PairStats>();
+  const stateContextsByPair = new Map<string, PairStateContextStats>();
   const objectiveGap = createRunningStats();
   const pointDifferentialGap = createRunningStats();
   const scoreGap = createRunningStats();
@@ -237,6 +257,7 @@ function diagnoseCounterfactualLabels(
       }
       const pair = `${winner.move.type}>${behavior.move.type}`;
       const gaps = getCandidateGaps(winner, behavior);
+      const stateContext = getLabelStateContext(example, winner);
       addValueIfPresent(objectiveGap, gaps.objective);
       addValueIfPresent(pointDifferentialGap, gaps.pointDifferential);
       addValueIfPresent(scoreGap, gaps.score);
@@ -250,6 +271,7 @@ function diagnoseCounterfactualLabels(
           ? policyRanking[0].score - winnerPrediction.score
           : null
       );
+      addPairStateContextStats(stateContextsByPair, pair, stateContext);
       if (gaps.immediatePointDifferential < 0) {
         winnerLowerImmediateThanBehaviorCount += 1;
       }
@@ -305,6 +327,7 @@ function diagnoseCounterfactualLabels(
     policyScoreGapToWinner: summarizeStats(policyScoreGapToWinner),
     policyTopMargin: summarizeStats(policyTopMargin),
     topWinnerVsBehaviorPairs: summarizePairStats(winnerVsBehaviorPairs, 12),
+    stateContextsByPair: summarizePairStateContexts(stateContextsByPair, 12),
     sampleExamples: selectSampleExamples(sampleCandidates).map((item) =>
       summarizeExample(item, auditPolicy)
     ),
@@ -393,6 +416,7 @@ function summarizeExample(
     stepIndex: item.example.stepIndex,
     playerIndex: item.example.playerIndex,
     pair: item.pair,
+    stateContext: getLabelStateContext(item.example, item.winner),
     objectiveGap: item.objectiveGap,
     winner: summarizeCandidate(item.winner, policyScoreByKey, topScore),
     behavior: item.behavior
@@ -509,6 +533,142 @@ function getTopFeatureDeltas(
     .filter((item) => item.delta !== 0)
     .sort((leftItem, rightItem) => Math.abs(rightItem.delta) - Math.abs(leftItem.delta))
     .slice(0, limit);
+}
+
+function getLabelStateContext(
+  example: ActionRankingImitationExample,
+  candidate: ActionRankingImitationCandidate
+): LabelStateContext {
+  const pounceCount = getFeatureValue(candidate, "own.pounceCount", 13);
+  const currentPoints = getFeatureValue(candidate, "own.currentPoints", 52);
+  return {
+    playerPointDifferential: example.playerPointDifferential,
+    pounceCount,
+    currentPoints,
+    pointDifferentialBin: getPointDifferentialBin(
+      example.playerPointDifferential
+    ),
+    pounceBin: getPounceBin(pounceCount),
+    currentPointsBin: getCurrentPointsBin(currentPoints),
+  };
+}
+
+function getFeatureValue(
+  candidate: ActionRankingImitationCandidate,
+  feature: (typeof ACTION_RANKING_FEATURE_NAMES)[number],
+  scale: number
+): number | null {
+  const index = ACTION_RANKING_FEATURE_NAMES.indexOf(feature);
+  if (index < 0) {
+    return null;
+  }
+  const value = candidate.features[index];
+  return value == null || !Number.isFinite(value) ? null : value * scale;
+}
+
+function getPointDifferentialBin(value: number): string {
+  if (value <= -6) {
+    return "behind_6_plus";
+  }
+  if (value < -1) {
+    return "behind_1_to_5";
+  }
+  if (value <= 1) {
+    return "near_even";
+  }
+  if (value < 6) {
+    return "ahead_1_to_5";
+  }
+  return "ahead_6_plus";
+}
+
+function getPounceBin(value: number | null): string {
+  if (value == null) {
+    return "unknown";
+  }
+  if (value <= 3) {
+    return "low_0_to_3";
+  }
+  if (value <= 7) {
+    return "mid_4_to_7";
+  }
+  return "high_8_to_13";
+}
+
+function getCurrentPointsBin(value: number | null): string {
+  if (value == null) {
+    return "unknown";
+  }
+  if (value < 0) {
+    return "negative";
+  }
+  if (value === 0) {
+    return "zero";
+  }
+  return "positive";
+}
+
+function createPairStateContextStats(): PairStateContextStats {
+  return {
+    count: 0,
+    playerPointDifferential: createRunningStats(),
+    pounceCount: createRunningStats(),
+    currentPoints: createRunningStats(),
+    pointDifferentialBins: new Map<string, number>(),
+    pounceBins: new Map<string, number>(),
+    currentPointsBins: new Map<string, number>(),
+  };
+}
+
+function addPairStateContextStats(
+  contextsByPair: Map<string, PairStateContextStats>,
+  pair: string,
+  context: LabelStateContext
+): void {
+  let stats = contextsByPair.get(pair);
+  if (!stats) {
+    stats = createPairStateContextStats();
+    contextsByPair.set(pair, stats);
+  }
+  stats.count += 1;
+  addValue(stats.playerPointDifferential, context.playerPointDifferential);
+  addValueIfPresent(stats.pounceCount, context.pounceCount);
+  addValueIfPresent(stats.currentPoints, context.currentPoints);
+  addBin(stats.pointDifferentialBins, context.pointDifferentialBin);
+  addBin(stats.pounceBins, context.pounceBin);
+  addBin(stats.currentPointsBins, context.currentPointsBin);
+}
+
+function summarizePairStateContexts(
+  contextsByPair: ReadonlyMap<string, PairStateContextStats>,
+  limit: number
+) {
+  return Array.from(contextsByPair.entries())
+    .map(([pair, stats]) => ({
+      pair,
+      count: stats.count,
+      playerPointDifferential: summarizeStats(stats.playerPointDifferential),
+      pounceCount: summarizeStats(stats.pounceCount),
+      currentPoints: summarizeStats(stats.currentPoints),
+      pointDifferentialBins: summarizeBins(stats.pointDifferentialBins),
+      pounceBins: summarizeBins(stats.pounceBins),
+      currentPointsBins: summarizeBins(stats.currentPointsBins),
+    }))
+    .sort((left, right) => right.count - left.count)
+    .slice(0, limit);
+}
+
+function addBin(bins: Map<string, number>, bin: string): void {
+  bins.set(bin, (bins.get(bin) ?? 0) + 1);
+}
+
+function summarizeBins(bins: ReadonlyMap<string, number>) {
+  return Array.from(bins.entries())
+    .map(([bin, count]) => ({ bin, count }))
+    .sort(
+      (left, right) =>
+        right.count - left.count || left.bin.localeCompare(right.bin)
+    );
 }
 
 function getSelectedCandidate(

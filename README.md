@@ -141,7 +141,8 @@ improvement rollout knobs: `LABEL_STATES`, `LABEL_STATE_SOURCE`,
 `action-ranking:audit-rl-labels` audits the accepted counterfactual RL labels
 for a model without updating it. It uses the `RL_COUNTERFACTUAL_*` knobs and
 reports skip counts, winner-vs-behavior move-type pairs, rollout return gaps,
-pounce-progress gaps, policy score gaps, and sample candidate return tables.
+pounce-progress gaps, policy score gaps, state-context bins by move pair, and
+sample candidate return tables.
 `RL_AUDIT_EPISODES`, `RL_AUDIT_FOCUS_PAIR`, `RL_AUDIT_MAX_EXAMPLES`, and
 `RL_AUDIT_SAMPLE_CANDIDATES` control audit size and output detail.
 
@@ -732,6 +733,18 @@ state context: one occurred while already far ahead with five pounce cards, and
 the other near even with seven pounce cards. Existing checkpoints expand with a
 zero weight for this feature, so behavior is preserved until a future all-layer
 or fresh train can use the extra state signal.
+A first all-layer version of the same scan-256 weighted symmetric recipe
+(`RL_TRAINABLE_LAYERS=all`, `RL_LR=0.00005`) moved all 192
+`own.pointDifferential` input weights, but only weakly: mean absolute first-layer
+weight was `0.00000096`. It measured `+0.0043 +/- 0.0052` over the original
+768-game comparison and `+0.00065 +/- 0.01446` over the 1,536-game held-out
+comparison. The held-out trace found 15 first divergences, 14 of them
+`cycle>c2s`, including severe losses when behind with a large pounce pile. The
+trainer-seed audit showed the accepted `cycle>c2s` labels themselves were also
+behind/near-even, high-pounce, negative-score states on average
+(`-2.11` point differential, `11.67` pounce cards, `-22.67` current points), so
+the next fix should target label reliability or hidden-layer generalization
+rather than a simple ahead/behind rule.
 
 ## Deploying
 
