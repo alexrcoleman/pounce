@@ -481,6 +481,10 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
       "RL_COUNTERFACTUAL_MAX_SCORE_GAP",
       0
     ),
+    rlCounterfactualScoreGapBudget: readIntegerEnv(
+      "RL_COUNTERFACTUAL_SCORE_GAP_BUDGET",
+      0
+    ),
     rlCounterfactualScoreRewardWeight: readNumberEnv(
       "RL_COUNTERFACTUAL_SCORE_WEIGHT",
       0

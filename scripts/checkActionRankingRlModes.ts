@@ -518,6 +518,27 @@ assert.ok(
   "behavior-correction value mode should train winner-vs-greedy auxiliary updates"
 );
 
+const scoreGapBudgetFiltered = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:score-gap-budget-filtered",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualStateSource: "greedy",
+  rlUpdateScope: "all",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualMinReturnGap: 0,
+  rlCounterfactualRequirePolicyChange: true,
+  rlCounterfactualScoreGapBudget: 4,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.ok(
+  scoreGapBudgetFiltered.reinforcement.counterfactualUpdateCount <= 4 &&
+    scoreGapBudgetFiltered.reinforcement
+      .counterfactualScoreGapBudgetSkippedCount > 0,
+  "score-gap budget filtering should keep only the closest deployable labels"
+);
+
 const maxReturnGapFiltered = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:max-return-gap-filtered",
@@ -564,6 +585,7 @@ console.log(
       policyMarginFiltered: summarize(policyMarginFiltered),
       policyChangeFiltered: summarize(policyChangeFiltered),
       behaviorCorrectionValue: summarize(behaviorCorrectionValue),
+      scoreGapBudgetFiltered: summarize(scoreGapBudgetFiltered),
       maxReturnGapFiltered: summarize(maxReturnGapFiltered),
     },
     null,
@@ -615,6 +637,8 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.counterfactualConfidenceSkippedCount,
     counterfactualScoreGapSkippedCount:
       result.reinforcement.counterfactualScoreGapSkippedCount,
+    counterfactualScoreGapBudgetSkippedCount:
+      result.reinforcement.counterfactualScoreGapBudgetSkippedCount,
     counterfactualConnectorCycleSkippedCount:
       result.reinforcement.counterfactualConnectorCycleSkippedCount,
     counterfactualUsefulCycleSkippedCount:
@@ -633,6 +657,8 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.counterfactualConnectorAnchorExamples,
     counterfactualConnectorAnchorUpdates:
       result.reinforcement.counterfactualConnectorAnchorUpdates,
+    averageCounterfactualScoreGap:
+      result.reinforcement.averageCounterfactualScoreGap,
     averagePolicyUpdates: result.reinforcement.averagePolicyUpdates,
     averageGradientUpdates: result.reinforcement.averageGradientUpdates,
     averageRawAdvantage: result.reinforcement.averageRawAdvantage,

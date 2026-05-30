@@ -137,6 +137,10 @@ const options = {
     "RL_COUNTERFACTUAL_MAX_SCORE_GAP",
     0
   ),
+  counterfactualScoreGapBudget: readIntegerEnv(
+    "RL_COUNTERFACTUAL_SCORE_GAP_BUDGET",
+    0
+  ),
   counterfactualScoreRewardWeight: readNumberEnv(
     "RL_COUNTERFACTUAL_SCORE_WEIGHT",
     0
@@ -192,6 +196,7 @@ console.log(
         behaviorWinRateSkippedCount: audit.behaviorWinRateSkippedCount,
         confidenceSkippedCount: audit.confidenceSkippedCount,
         scoreGapSkippedCount: audit.scoreGapSkippedCount,
+        scoreGapBudgetSkippedCount: audit.scoreGapBudgetSkippedCount,
         connectorCycleSkippedCount: audit.connectorCycleSkippedCount,
         usefulCycleSkippedCount: audit.usefulCycleSkippedCount,
         maxReturnGapSkippedCount: audit.maxReturnGapSkippedCount,
@@ -199,6 +204,8 @@ console.log(
           audit.averageCounterfactualReturnGap,
         averageCounterfactualCandidateCount:
           audit.averageCounterfactualCandidateCount,
+        averageCounterfactualScoreGap:
+          audit.averageCounterfactualScoreGap,
         averageCounterfactualBehaviorWinRate:
           audit.averageCounterfactualBehaviorWinRate,
       },
