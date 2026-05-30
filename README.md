@@ -24,6 +24,7 @@ Useful training knobs:
 - `MODEL_IN=...\model.json npm run action-ranking:train` to fine-tune saved weights
 - `MODEL_IN=...\model.json npm run action-ranking:evaluate` to evaluate saved weights
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare` to compare two models on paired deals/seats
+- `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:diagnose` to compare top-ranked actions on sampled teacher states
 - `MODEL_IN=...\best.json npm run action-ranking:tune` to iterate reward fine-tunes and promote only paired-comparison improvements
 - `MODEL_IN=...\best.json npm run action-ranking:tune-rl` to sweep counterfactual RL recipes and promote only paired-comparison improvements
 - `npm run action-ranking:check-rl-modes` to smoke-test legacy feature expansion and counterfactual RL training mode routing
@@ -101,6 +102,15 @@ that pairwise fine-tune directly against its imitation checkpoint measured
 differential in `95.6%` of games. That means the reward fine-tune is not yet a
 proven replacement for the imitation checkpoint; use `action-ranking:compare`
 before promoting a candidate model.
+
+For strategy debugging, `action-ranking:diagnose` compares two model checkpoints
+on the same sampled teacher-game decision states and reports top-action
+agreement, teacher-action agreement, move-type deltas, feature deltas, and a few
+concrete disagreements. `DIAG_DEALS`, `DIAG_MAX_EXAMPLES`,
+`DIAG_MAX_DISAGREEMENTS`, and `DIAG_TOP_FEATURES` control the sample size and
+output detail. This is useful for seeing whether a candidate is actually
+changing center-vs-solitaire choices, pounce-card urgency, connector behavior,
+or opponent-helping center plays before spending time on a large paired rollout.
 
 The best policy-state reward candidate so far uses targeted behavior-gap
 examples and a behavior-only pairwise update:
