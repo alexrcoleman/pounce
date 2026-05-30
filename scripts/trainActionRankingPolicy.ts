@@ -18,6 +18,8 @@ const options = {
   rlLearningRate: readNumberEnv("RL_LR", 0.001),
   rlTemperature: readNumberEnv("RL_TEMPERATURE", 0.85),
   rlLocalRewardWeight: readNumberEnv("RL_LOCAL_REWARD_WEIGHT", 0.15),
+  rlNormalizeAdvantages: readBooleanEnv("RL_NORMALIZE_ADVANTAGES", true),
+  rlAdvantageClip: readNumberEnv("RL_ADVANTAGE_CLIP", 3),
   maxMovesPerGame: readIntegerEnv("MAX_MOVES", 1800),
 };
 
@@ -59,4 +61,18 @@ function readNumberEnv(name: string, fallback: number): number {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function readBooleanEnv(name: string, fallback: boolean): boolean {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  if (["1", "true", "yes", "on"].includes(value.toLowerCase())) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(value.toLowerCase())) {
+    return false;
+  }
+  return fallback;
 }

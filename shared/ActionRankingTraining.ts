@@ -40,6 +40,8 @@ export type NeuralTrainingOptions = {
   rlLearningRate?: number;
   rlTemperature?: number;
   rlLocalRewardWeight?: number;
+  rlNormalizeAdvantages?: boolean;
+  rlAdvantageClip?: number;
   improvementStates?: number;
   improvementCandidateLimit?: number;
   improvementRolloutMoves?: number;
@@ -72,6 +74,8 @@ export type NeuralTrainingResult = {
     averageTeacherBaselinePointDifferential: number;
     averageBaselineAdjustedReturn: number;
     averagePolicyUpdates: number;
+    averageRawAdvantage: number;
+    rawAdvantageStdDev: number;
   };
   evaluation: PolicyEvaluationResult;
 };
@@ -98,6 +102,12 @@ type RolloutResult = {
   finalScores: number[];
   finalPointDifferentials: number[];
   transitions: RolloutTransition[];
+};
+
+type PolicyGradientUpdate = {
+  candidates: ActionRankingCandidate[];
+  selectedCandidateIndex: number;
+  rawAdvantage: number;
 };
 
 type RewardImprovementCandidate = ActionRankingCandidate & {
@@ -168,6 +178,8 @@ export function trainNeuralActionRankingPolicy(
     learningRate: options.rlLearningRate ?? 0.001,
     temperature: options.rlTemperature ?? 0.85,
     localRewardWeight: options.rlLocalRewardWeight ?? 0.15,
+    normalizeAdvantages: options.rlNormalizeAdvantages ?? true,
+    advantageClip: options.rlAdvantageClip ?? 3,
     maxMovesPerGame,
   });
 
@@ -538,13 +550,15 @@ export function trainPolicyGradientFromRollouts(
     learningRate: number;
     temperature: number;
     localRewardWeight: number;
+    normalizeAdvantages: boolean;
+    advantageClip: number;
     maxMovesPerGame: number;
   }
 ) {
   let finalPointDifferentialTotal = 0;
   let teacherBaselinePointDifferentialTotal = 0;
   let baselineAdjustedReturnTotal = 0;
-  let updateTotal = 0;
+  const updates: PolicyGradientUpdate[] = [];
 
   for (let episode = 0; episode < options.episodes; episode++) {
     const neuralPlayerIndex = episode % options.playerCount;
@@ -576,24 +590,26 @@ export function trainPolicyGradientFromRollouts(
       finalDifferential - teacherBaselineDifferential;
 
     rollout.transitions.forEach((transition) => {
-      const advantage =
-        (baselineAdjustedReturn +
-          options.localRewardWeight * transition.localReward) /
-        20;
-      policy.trainPolicyGradient(
-        transition.candidates,
-        transition.selectedCandidateIndex,
-        advantage,
-        options.learningRate,
-        options.temperature
-      );
-      updateTotal += 1;
+      updates.push({
+        candidates: transition.candidates,
+        selectedCandidateIndex: transition.selectedCandidateIndex,
+        rawAdvantage:
+          baselineAdjustedReturn +
+          options.localRewardWeight * transition.localReward,
+      });
     });
 
     finalPointDifferentialTotal += finalDifferential;
     teacherBaselinePointDifferentialTotal += teacherBaselineDifferential;
     baselineAdjustedReturnTotal += baselineAdjustedReturn;
   }
+
+  const advantageStats = applyPolicyGradientBatch(policy, updates, {
+    learningRate: options.learningRate,
+    temperature: options.temperature,
+    normalizeAdvantages: options.normalizeAdvantages,
+    advantageClip: options.advantageClip,
+  });
 
   return {
     episodes: options.episodes,
@@ -610,8 +626,58 @@ export function trainPolicyGradientFromRollouts(
         ? 0
         : baselineAdjustedReturnTotal / options.episodes,
     averagePolicyUpdates:
-      options.episodes === 0 ? 0 : updateTotal / options.episodes,
+      options.episodes === 0 ? 0 : updates.length / options.episodes,
+    averageRawAdvantage: advantageStats.mean,
+    rawAdvantageStdDev: advantageStats.stdDev,
   };
+}
+
+function applyPolicyGradientBatch(
+  policy: NeuralActionRankingPolicy,
+  updates: PolicyGradientUpdate[],
+  options: {
+    learningRate: number;
+    temperature: number;
+    normalizeAdvantages: boolean;
+    advantageClip: number;
+  }
+) {
+  const mean =
+    updates.length === 0
+      ? 0
+      : updates.reduce((sum, update) => sum + update.rawAdvantage, 0) /
+        updates.length;
+  const variance =
+    updates.length <= 1
+      ? 0
+      : updates.reduce((sum, update) => {
+          const delta = update.rawAdvantage - mean;
+          return sum + delta * delta;
+        }, 0) /
+        (updates.length - 1);
+  const stdDev = Math.sqrt(variance);
+  const scale = options.normalizeAdvantages
+    ? Math.max(1e-6, stdDev)
+    : 20;
+  const clip = Math.max(0, options.advantageClip);
+
+  updates.forEach((update) => {
+    const centered = options.normalizeAdvantages
+      ? update.rawAdvantage - mean
+      : update.rawAdvantage;
+    const normalized = centered / scale;
+    const advantage =
+      clip > 0 ? Math.max(-clip, Math.min(clip, normalized)) : normalized;
+    policy.trainPolicyGradient(
+      update.candidates,
+      update.selectedCandidateIndex,
+      advantage,
+      options.learningRate,
+      options.temperature
+    );
+  });
+
+  return { mean, stdDev };
 }
 
 export function evaluateNeuralPolicy(
