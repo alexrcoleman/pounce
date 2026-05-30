@@ -25,6 +25,7 @@ Useful training knobs:
 - `MODEL_IN=...\model.json npm run action-ranking:evaluate` to evaluate saved weights
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare` to compare two models on paired deals/seats
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:diagnose` to compare top-ranked actions on sampled teacher states
+- `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:trace-divergences` to inspect the first policy-action divergence in paired games
 - `MODEL_IN=...\best.json npm run action-ranking:audit-labels` to audit rollout labels before training on them
 - `MODEL_IN=...\best.json npm run action-ranking:audit-rl-labels` to audit accepted counterfactual RL labels before training on them
 - `MODEL_IN=...\best.json npm run action-ranking:tune` to iterate reward fine-tunes and promote only paired-comparison improvements
@@ -541,6 +542,15 @@ batch and still produced zero diagnostic top-action disagreements, but measured
 `-0.0334 +/- 0.0030`. That suggests hidden-layer drift was responsible for most
 of the visible cycle-over-connector overgeneralization, while the remaining
 performance gap is more likely label objective/selection quality.
+`action-ranking:trace-divergences` can now explain those rare paired-comparison
+losses by replaying paired games until the first policy-action split, then
+finishing both trajectories. On the capped output-only pairwise recipe, only
+four of 768 paired games diverged, but all four were `cycle>c2s` near-ties and
+all four lost for the RL model, averaging `-5.42` point differential, `-4.5`
+score, and `+1.75` pounce cards remaining on those divergent games. Increasing
+anchor strength to `1` or replaying all 2,090 anchor states did not remove those
+same four splits, so the next targeted fix should add connector-vs-cycle
+protection or better label selection rather than just more generic anchoring.
 
 Uncertainty-targeted improvement collection is also wired in. With
 `IMPROVEMENT_MAX_SCORE_GAP` and `IMPROVEMENT_POLICY_CANDIDATES`, the collector
