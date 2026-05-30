@@ -293,6 +293,14 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
       "RL_COUNTERFACTUAL_MAX_RETURN_GAP",
       0
     ),
+    rlCounterfactualRequireBehaviorGap: readBooleanEnv(
+      "RL_COUNTERFACTUAL_REQUIRE_BEHAVIOR_GAP",
+      false
+    ),
+    rlCounterfactualMinBehaviorImprovement: readNumberEnv(
+      "RL_COUNTERFACTUAL_MIN_BEHAVIOR_IMPROVEMENT",
+      readNumberEnv("RL_COUNTERFACTUAL_MIN_RETURN_GAP", 1)
+    ),
     rlCounterfactualStateSource: readRlCounterfactualStateSourceEnv(
       "RL_COUNTERFACTUAL_STATE_SOURCE",
       "sampled"

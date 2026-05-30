@@ -52,6 +52,8 @@ export type NeuralTrainingOptions = {
   rlCounterfactualCandidateLimit?: number;
   rlCounterfactualMinReturnGap?: number;
   rlCounterfactualMaxReturnGap?: number;
+  rlCounterfactualRequireBehaviorGap?: boolean;
+  rlCounterfactualMinBehaviorImprovement?: number;
   rlCounterfactualStateSource?: "sampled" | "greedy";
   rlCounterfactualTrainingMode?: "policy_gradient" | "pairwise" | "value";
   rlCounterfactualGapStandardErrorMultiplier?: number;
@@ -153,6 +155,8 @@ export type NeuralTrainingResult = {
     counterfactualTrainingUpdates: number;
     counterfactualUpdateCount: number;
     counterfactualMaxReturnGapSkippedCount: number;
+    counterfactualBehaviorGapSkippedCount: number;
+    counterfactualBehaviorConfidenceSkippedCount: number;
     counterfactualPolicyMarginSkippedCount: number;
     counterfactualConfidenceSkippedCount: number;
     counterfactualScoreGapSkippedCount: number;
@@ -224,6 +228,8 @@ export type CounterfactualRlLabelAudit = {
   returnGapSkippedCount: number;
   policyGradientGreedySkippedCount: number;
   policyMarginSkippedCount: number;
+  behaviorGapSkippedCount: number;
+  behaviorConfidenceSkippedCount: number;
   confidenceSkippedCount: number;
   scoreGapSkippedCount: number;
   maxReturnGapSkippedCount: number;
@@ -283,6 +289,8 @@ type CounterfactualTransitionResult = {
   returnGapStandardError: number;
   trainingGap: number;
   trainingGapStandardError: number;
+  behaviorGap: number;
+  behaviorGapStandardError: number;
 };
 
 type CounterfactualOutcome = {
@@ -439,6 +447,12 @@ export function trainNeuralActionRankingPolicy(
     counterfactualCandidateLimit: options.rlCounterfactualCandidateLimit ?? 2,
     counterfactualMinReturnGap: options.rlCounterfactualMinReturnGap ?? 1,
     counterfactualMaxReturnGap: options.rlCounterfactualMaxReturnGap ?? 0,
+    counterfactualRequireBehaviorGap:
+      options.rlCounterfactualRequireBehaviorGap ?? false,
+    counterfactualMinBehaviorImprovement:
+      options.rlCounterfactualMinBehaviorImprovement ??
+      options.rlCounterfactualMinReturnGap ??
+      1,
     counterfactualStateSource:
       options.rlCounterfactualStateSource ?? "sampled",
     counterfactualTrainingMode:
@@ -1432,6 +1446,8 @@ export function trainPolicyGradientFromRollouts(
     counterfactualCandidateLimit: number;
     counterfactualMinReturnGap: number;
     counterfactualMaxReturnGap: number;
+    counterfactualRequireBehaviorGap: boolean;
+    counterfactualMinBehaviorImprovement: number;
     counterfactualStateSource: CounterfactualStateSource;
     counterfactualTrainingMode: CounterfactualTrainingMode;
     counterfactualGapStandardErrorMultiplier: number;
@@ -1472,6 +1488,8 @@ export function trainPolicyGradientFromRollouts(
   let counterfactualCandidateCountTotal = 0;
   let counterfactualUpdateCount = 0;
   let counterfactualMaxReturnGapSkippedCount = 0;
+  let counterfactualBehaviorGapSkippedCount = 0;
+  let counterfactualBehaviorConfidenceSkippedCount = 0;
   let counterfactualPolicyMarginSkippedCount = 0;
   let counterfactualConfidenceSkippedCount = 0;
   let counterfactualScoreGapSkippedCount = 0;
@@ -1609,6 +1627,12 @@ export function trainPolicyGradientFromRollouts(
           options.counterfactualTrainingMode === "policy_gradient"
             ? result?.returnGapStandardError
             : result?.trainingGapStandardError;
+        const behaviorGapLowerBound =
+          result == null
+            ? null
+            : result.behaviorGap -
+              Math.max(0, options.counterfactualGapStandardErrorMultiplier) *
+                result.behaviorGapStandardError;
         const counterfactualGapLowerBound =
           counterfactualGap == null
             ? null
@@ -1622,6 +1646,24 @@ export function trainPolicyGradientFromRollouts(
             !isExploratoryDecision) ||
           Math.abs(counterfactualGap) < options.counterfactualMinReturnGap
         ) {
+          return;
+        }
+        if (
+          options.counterfactualTrainingMode !== "policy_gradient" &&
+          options.counterfactualRequireBehaviorGap &&
+          result.behaviorGap < options.counterfactualMinBehaviorImprovement
+        ) {
+          counterfactualBehaviorGapSkippedCount += 1;
+          return;
+        }
+        if (
+          options.counterfactualTrainingMode !== "policy_gradient" &&
+          options.counterfactualRequireBehaviorGap &&
+          (behaviorGapLowerBound == null ||
+            behaviorGapLowerBound <
+              options.counterfactualMinBehaviorImprovement)
+        ) {
+          counterfactualBehaviorConfidenceSkippedCount += 1;
           return;
         }
         if (
@@ -1773,6 +1815,8 @@ export function trainPolicyGradientFromRollouts(
     counterfactualTrainingUpdates: advantageStats.appliedUpdates,
     counterfactualUpdateCount,
     counterfactualMaxReturnGapSkippedCount,
+    counterfactualBehaviorGapSkippedCount,
+    counterfactualBehaviorConfidenceSkippedCount,
     counterfactualPolicyMarginSkippedCount,
     counterfactualConfidenceSkippedCount,
     counterfactualScoreGapSkippedCount,
@@ -1806,6 +1850,8 @@ export function collectCounterfactualRlLabelAudit(
     counterfactualCandidateLimit: number;
     counterfactualMinReturnGap: number;
     counterfactualMaxReturnGap: number;
+    counterfactualRequireBehaviorGap: boolean;
+    counterfactualMinBehaviorImprovement: number;
     counterfactualStateSource: CounterfactualStateSource;
     counterfactualTrainingMode: CounterfactualTrainingMode;
     counterfactualGapStandardErrorMultiplier: number;
@@ -1824,6 +1870,8 @@ export function collectCounterfactualRlLabelAudit(
   let returnGapSkippedCount = 0;
   let policyGradientGreedySkippedCount = 0;
   let policyMarginSkippedCount = 0;
+  let behaviorGapSkippedCount = 0;
+  let behaviorConfidenceSkippedCount = 0;
   let confidenceSkippedCount = 0;
   let maxReturnGapSkippedCount = 0;
   let scoreGapSkippedCount = 0;
@@ -1902,6 +1950,12 @@ export function collectCounterfactualRlLabelAudit(
         options.counterfactualTrainingMode === "policy_gradient"
           ? result?.returnGapStandardError
           : result?.trainingGapStandardError;
+      const behaviorGapLowerBound =
+        result == null
+          ? null
+          : result.behaviorGap -
+            Math.max(0, options.counterfactualGapStandardErrorMultiplier) *
+              result.behaviorGapStandardError;
       const counterfactualGapLowerBound =
         counterfactualGap == null
           ? null
@@ -1922,6 +1976,23 @@ export function collectCounterfactualRlLabelAudit(
       }
       if (Math.abs(counterfactualGap) < options.counterfactualMinReturnGap) {
         returnGapSkippedCount += 1;
+        return;
+      }
+      if (
+        options.counterfactualTrainingMode !== "policy_gradient" &&
+        options.counterfactualRequireBehaviorGap &&
+        result.behaviorGap < options.counterfactualMinBehaviorImprovement
+      ) {
+        behaviorGapSkippedCount += 1;
+        return;
+      }
+      if (
+        options.counterfactualTrainingMode !== "policy_gradient" &&
+        options.counterfactualRequireBehaviorGap &&
+        (behaviorGapLowerBound == null ||
+          behaviorGapLowerBound < options.counterfactualMinBehaviorImprovement)
+      ) {
+        behaviorConfidenceSkippedCount += 1;
         return;
       }
       if (
@@ -1975,6 +2046,8 @@ export function collectCounterfactualRlLabelAudit(
     returnGapSkippedCount,
     policyGradientGreedySkippedCount,
     policyMarginSkippedCount,
+    behaviorGapSkippedCount,
+    behaviorConfidenceSkippedCount,
     confidenceSkippedCount,
     scoreGapSkippedCount,
     maxReturnGapSkippedCount,
@@ -2544,6 +2617,7 @@ function getCounterfactualTransitionResult(
   const returnGap = selectedReturn - greedyReturn;
   const trainingGap =
     bestCandidate.rolloutObjectiveReturn - worstCandidate.rolloutObjectiveReturn;
+  const behaviorGap = bestCandidate.rolloutObjectiveReturn - greedyReturn;
 
   return {
     candidates,
@@ -2564,6 +2638,10 @@ function getCounterfactualTransitionResult(
       bestCandidate,
       worstCandidate
     ),
+    behaviorGap,
+    behaviorGapStandardError: greedyCandidate
+      ? getCounterfactualReturnGapStandardError(bestCandidate, greedyCandidate)
+      : 0,
   };
 }
 

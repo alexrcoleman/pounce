@@ -82,6 +82,14 @@ const options = {
     "RL_COUNTERFACTUAL_MAX_RETURN_GAP",
     0
   ),
+  counterfactualRequireBehaviorGap: readBooleanEnv(
+    "RL_COUNTERFACTUAL_REQUIRE_BEHAVIOR_GAP",
+    false
+  ),
+  counterfactualMinBehaviorImprovement: readNumberEnv(
+    "RL_COUNTERFACTUAL_MIN_BEHAVIOR_IMPROVEMENT",
+    readNumberEnv("RL_COUNTERFACTUAL_MIN_RETURN_GAP", 1)
+  ),
   counterfactualStateSource: readCounterfactualStateSourceEnv(
     "RL_COUNTERFACTUAL_STATE_SOURCE",
     "greedy"
@@ -142,6 +150,9 @@ console.log(
         policyGradientGreedySkippedCount:
           audit.policyGradientGreedySkippedCount,
         policyMarginSkippedCount: audit.policyMarginSkippedCount,
+        behaviorGapSkippedCount: audit.behaviorGapSkippedCount,
+        behaviorConfidenceSkippedCount:
+          audit.behaviorConfidenceSkippedCount,
         confidenceSkippedCount: audit.confidenceSkippedCount,
         scoreGapSkippedCount: audit.scoreGapSkippedCount,
         maxReturnGapSkippedCount: audit.maxReturnGapSkippedCount,

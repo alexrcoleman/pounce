@@ -285,6 +285,22 @@ assert.ok(
   "score-gap filtering should skip labels that fight a large policy score gap"
 );
 
+const behaviorGapFiltered = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:behavior-gap-filtered",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualRequireBehaviorGap: true,
+  rlCounterfactualMinBehaviorImprovement: 100,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.ok(
+  behaviorGapFiltered.reinforcement.counterfactualBehaviorGapSkippedCount > 0,
+  "behavior-gap filtering should skip labels whose winner does not improve on greedy behavior"
+);
+
 const confidenceFiltered = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:confidence-filtered",
@@ -348,6 +364,7 @@ console.log(
       anchoredValue: summarize(anchoredValue),
       connectorAnchoredValue: summarize(connectorAnchoredValue),
       scoreGapFiltered: summarize(scoreGapFiltered),
+      behaviorGapFiltered: summarize(behaviorGapFiltered),
       confidenceFiltered: summarize(confidenceFiltered),
       policyMarginFiltered: summarize(policyMarginFiltered),
       maxReturnGapFiltered: summarize(maxReturnGapFiltered),
@@ -382,6 +399,10 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.counterfactualMaxReturnGapSkippedCount,
     counterfactualPolicyMarginSkippedCount:
       result.reinforcement.counterfactualPolicyMarginSkippedCount,
+    counterfactualBehaviorGapSkippedCount:
+      result.reinforcement.counterfactualBehaviorGapSkippedCount,
+    counterfactualBehaviorConfidenceSkippedCount:
+      result.reinforcement.counterfactualBehaviorConfidenceSkippedCount,
     counterfactualConfidenceSkippedCount:
       result.reinforcement.counterfactualConfidenceSkippedCount,
     counterfactualScoreGapSkippedCount:
