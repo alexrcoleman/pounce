@@ -54,6 +54,10 @@ export type NeuralTrainingOptions = {
   rlCounterfactualTrainingMode?: "policy_gradient" | "pairwise" | "value";
   rlCounterfactualPreferenceScope?: "all" | "behavior";
   rlCounterfactualPairwiseTargetMargin?: number;
+  rlCounterfactualMaxScoreGap?: number;
+  rlCounterfactualAnchorWeight?: number;
+  rlCounterfactualAnchorMaxExamples?: number;
+  rlCounterfactualAnchorTemperature?: number;
   rlCounterfactualValueTargetScale?: number;
   rlCounterfactualValueCenterTargets?: boolean;
   rlCounterfactualValueHuberDelta?: number;
@@ -122,6 +126,9 @@ export type NeuralTrainingResult = {
     averageCounterfactualCandidateCount: number;
     counterfactualTrainingUpdates: number;
     counterfactualUpdateCount: number;
+    counterfactualScoreGapSkippedCount: number;
+    counterfactualAnchorExamples: number;
+    counterfactualAnchorUpdates: number;
     averagePolicyUpdates: number;
     averageGradientUpdates: number;
     averageRawAdvantage: number;
@@ -350,6 +357,12 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualPreferenceScope ?? "all",
     counterfactualPairwiseTargetMargin:
       options.rlCounterfactualPairwiseTargetMargin ?? 0,
+    counterfactualMaxScoreGap: options.rlCounterfactualMaxScoreGap ?? 0,
+    counterfactualAnchorWeight: options.rlCounterfactualAnchorWeight ?? 0,
+    counterfactualAnchorMaxExamples:
+      options.rlCounterfactualAnchorMaxExamples ?? 512,
+    counterfactualAnchorTemperature:
+      options.rlCounterfactualAnchorTemperature ?? 1,
     counterfactualValueTargetScale:
       options.rlCounterfactualValueTargetScale ?? 4,
     counterfactualValueCenterTargets:
@@ -981,6 +994,10 @@ export function trainPolicyGradientFromRollouts(
     counterfactualTrainingMode: CounterfactualTrainingMode;
     counterfactualPreferenceScope: "all" | "behavior";
     counterfactualPairwiseTargetMargin: number;
+    counterfactualMaxScoreGap: number;
+    counterfactualAnchorWeight: number;
+    counterfactualAnchorMaxExamples: number;
+    counterfactualAnchorTemperature: number;
     counterfactualValueTargetScale: number;
     counterfactualValueCenterTargets: boolean;
     counterfactualValueHuberDelta: number;
@@ -1002,8 +1019,10 @@ export function trainPolicyGradientFromRollouts(
   let counterfactualReturnGapTotal = 0;
   let counterfactualCandidateCountTotal = 0;
   let counterfactualUpdateCount = 0;
+  let counterfactualScoreGapSkippedCount = 0;
   const updates: PolicyGradientUpdate[] = [];
   const counterfactualExamples: ActionRankingImitationExample[] = [];
+  const counterfactualAnchorExamples: ActionRankingImitationExample[] = [];
   const baselineMode = options.baselineMode;
   const updateScope = options.updateScope;
   const creditMode = options.creditMode;
@@ -1072,6 +1091,19 @@ export function trainPolicyGradientFromRollouts(
     );
     sampledDecisionCountTotal += rollout.transitions.length;
     rollout.transitions.forEach((transition, transitionIndex) => {
+      if (
+        creditMode === "counterfactual" &&
+        options.counterfactualAnchorWeight > 0 &&
+        transition.candidates.length > 1
+      ) {
+        counterfactualAnchorExamples.push(
+          createCounterfactualAnchorExample(
+            transition,
+            episode,
+            transitionIndex
+          )
+        );
+      }
       const isExploratoryDecision =
         transition.selectedCandidateIndex !== transition.greedyCandidateIndex;
       if (isExploratoryDecision) {
@@ -1103,6 +1135,20 @@ export function trainPolicyGradientFromRollouts(
             !isExploratoryDecision) ||
           Math.abs(counterfactualGap) < options.counterfactualMinReturnGap
         ) {
+          return;
+        }
+        const scoreGap = getCounterfactualBestVsGreedyScoreGap(
+          transition,
+          result,
+          policy
+        );
+        if (
+          options.counterfactualTrainingMode !== "policy_gradient" &&
+          options.counterfactualMaxScoreGap > 0 &&
+          scoreGap != null &&
+          scoreGap > options.counterfactualMaxScoreGap
+        ) {
+          counterfactualScoreGapSkippedCount += 1;
           return;
         }
         counterfactualReturnGapTotal += Math.abs(counterfactualGap);
@@ -1155,6 +1201,10 @@ export function trainPolicyGradientFromRollouts(
           minReturnGap: options.counterfactualMinReturnGap,
           preferenceScope: options.counterfactualPreferenceScope,
           pairwiseTargetMargin: options.counterfactualPairwiseTargetMargin,
+          anchorExamples: counterfactualAnchorExamples,
+          anchorWeight: options.counterfactualAnchorWeight,
+          anchorMaxExamples: options.counterfactualAnchorMaxExamples,
+          anchorTemperature: options.counterfactualAnchorTemperature,
           valueTargetScale: options.counterfactualValueTargetScale,
           valueCenterTargets: options.counterfactualValueCenterTargets,
           valueHuberDelta: options.counterfactualValueHuberDelta,
@@ -1211,6 +1261,9 @@ export function trainPolicyGradientFromRollouts(
         : counterfactualCandidateCountTotal / counterfactualUpdateCount,
     counterfactualTrainingUpdates: advantageStats.appliedUpdates,
     counterfactualUpdateCount,
+    counterfactualScoreGapSkippedCount,
+    counterfactualAnchorExamples: advantageStats.anchorExamples,
+    counterfactualAnchorUpdates: advantageStats.anchorUpdates,
     averagePolicyUpdates:
       options.episodes === 0 ? 0 : updates.length / options.episodes,
     averageGradientUpdates:
@@ -1275,7 +1328,7 @@ function applyPolicyGradientBatch(
     });
   }
 
-  return { mean, stdDev, appliedUpdates };
+  return { mean, stdDev, appliedUpdates, anchorExamples: 0, anchorUpdates: 0 };
 }
 
 function trainCounterfactualSupervisedBatch(
@@ -1288,12 +1341,20 @@ function trainCounterfactualSupervisedBatch(
     minReturnGap: number;
     preferenceScope: "all" | "behavior";
     pairwiseTargetMargin: number;
+    anchorExamples: ActionRankingImitationExample[];
+    anchorWeight: number;
+    anchorMaxExamples: number;
+    anchorTemperature: number;
     valueTargetScale: number;
     valueCenterTargets: boolean;
     valueHuberDelta: number;
     shuffleSeed: string;
   }
 ) {
+  const anchorPolicy =
+    options.anchorWeight > 0 && options.anchorExamples.length > 0
+      ? new NeuralActionRankingPolicy(policy.getModel())
+      : null;
   const signedGaps = examples.map((example) => {
     const returns = example.candidates
       .map((candidate) => candidate.rolloutPointDifferentialReturn)
@@ -1322,11 +1383,126 @@ function trainCounterfactualSupervisedBatch(
           targetMargin: options.pairwiseTargetMargin,
           shuffleSeed: options.shuffleSeed,
         });
+  const anchorExamples =
+    anchorPolicy == null
+      ? []
+      : createCounterfactualAnchorTargets(
+          options.anchorExamples,
+          anchorPolicy,
+          options.anchorMaxExamples,
+          `${options.shuffleSeed}:anchor-select`
+        );
+  const anchorStats =
+    anchorExamples.length === 0
+      ? emptyTrainingStats(0)
+      : policy.trainRewardTargets(anchorExamples, {
+          epochs: options.updateEpochs,
+          learningRate: options.learningRate * options.anchorWeight,
+          targetTemperature: options.anchorTemperature,
+          shuffleSeed: `${options.shuffleSeed}:anchor`,
+        });
 
   return {
     mean: stats.mean,
     stdDev: stats.stdDev,
-    appliedUpdates: trainingStats.updates,
+    appliedUpdates: trainingStats.updates + anchorStats.updates,
+    anchorExamples: anchorExamples.length,
+    anchorUpdates: anchorStats.updates,
+  };
+}
+
+function createCounterfactualAnchorTargets(
+  examples: ActionRankingImitationExample[],
+  anchorPolicy: NeuralActionRankingPolicy,
+  maxExamples: number,
+  seed: string
+): ActionRankingImitationExample[] {
+  const selectedExamples =
+    maxExamples > 0 && examples.length > maxExamples
+      ? shuffleCopy(examples, createSeededRandom(seed)).slice(0, maxExamples)
+      : examples;
+
+  return selectedExamples.map((example) => {
+    const anchorScores = example.candidates.map((candidate) =>
+      anchorPolicy.scoreFeatures(candidate.features)
+    );
+    const selectedCandidateIndex = anchorScores.reduce(
+      (bestIndex, score, index) =>
+        index === 0 || score > anchorScores[bestIndex] ? index : bestIndex,
+      0
+    );
+    return {
+      ...example,
+      finalPlayerPoints: null,
+      finalPointDifferential: null,
+      pointDifferentialReturn: null,
+      selectedActionKey:
+        example.candidates[selectedCandidateIndex]?.key ?? null,
+      selectedCandidateIndex,
+      candidates: example.candidates.map((candidate, candidateIndex) => ({
+        ...candidate,
+        label: candidateIndex === selectedCandidateIndex ? 1 : 0,
+        rolloutPointDifferentialReturn: anchorScores[candidateIndex],
+      })),
+    };
+  });
+}
+
+function getCounterfactualBestVsGreedyScoreGap(
+  transition: RolloutTransition,
+  result: CounterfactualTransitionResult,
+  policy: NeuralActionRankingPolicy
+): number | null {
+  const greedy = transition.candidates[transition.greedyCandidateIndex];
+  if (!greedy) {
+    return null;
+  }
+  const best = result.candidates.reduce((winner, candidate) =>
+    candidate.rolloutPointDifferentialReturn >
+    winner.rolloutPointDifferentialReturn
+      ? candidate
+      : winner
+  );
+  if (best.candidate.key === greedy.key) {
+    return 0;
+  }
+  return (
+    policy.scoreFeatures(greedy.features) -
+    policy.scoreFeatures(best.candidate.features)
+  );
+}
+
+function createCounterfactualAnchorExample(
+  transition: RolloutTransition,
+  episode: number,
+  transitionIndex: number
+): ActionRankingImitationExample {
+  const greedy = transition.candidates[transition.greedyCandidateIndex];
+  return {
+    trialIndex: episode,
+    stepIndex: transitionIndex,
+    playerIndex: transition.playerIndex,
+    playerPointDifferential: transition.pointDifferentialBefore,
+    finalPlayerPoints: null,
+    finalPointDifferential: null,
+    pointDifferentialReturn: null,
+    teacherActionKey: null,
+    teacherPointDifferentialReturn: null,
+    behaviorActionKey: greedy?.key ?? null,
+    behaviorPointDifferentialReturn: null,
+    selectedActionKey: greedy?.key ?? null,
+    selectedCandidateIndex: transition.greedyCandidateIndex,
+    candidates: transition.candidates.map((candidate, candidateIndex) => ({
+      key: candidate.key,
+      equivalenceKey: candidate.equivalenceKey,
+      move: candidate.move,
+      features: candidate.features,
+      label: candidateIndex === transition.greedyCandidateIndex ? 1 : 0,
+      immediatePointDelta: candidate.immediatePointDelta,
+      immediatePointDifferentialDelta:
+        candidate.immediatePointDifferentialDelta,
+      endsRound: candidate.endsRound,
+    })),
   };
 }
 

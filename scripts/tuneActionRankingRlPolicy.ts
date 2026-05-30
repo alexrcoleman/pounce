@@ -266,6 +266,22 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
       "RL_COUNTERFACTUAL_PAIRWISE_MARGIN",
       0
     ),
+    rlCounterfactualMaxScoreGap: readNumberEnv(
+      "RL_COUNTERFACTUAL_MAX_SCORE_GAP",
+      0
+    ),
+    rlCounterfactualAnchorWeight: readNumberEnv(
+      "RL_COUNTERFACTUAL_ANCHOR_WEIGHT",
+      0
+    ),
+    rlCounterfactualAnchorMaxExamples: readIntegerEnv(
+      "RL_COUNTERFACTUAL_ANCHOR_EXAMPLES",
+      512
+    ),
+    rlCounterfactualAnchorTemperature: readNumberEnv(
+      "RL_COUNTERFACTUAL_ANCHOR_TEMPERATURE",
+      1
+    ),
     rlUpdateEpochs: readIntegerEnv("RL_UPDATE_EPOCHS", 1),
     rlUpdateScope: "exploratory",
     rlNormalizeAdvantages: true,

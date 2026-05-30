@@ -128,6 +128,22 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       "RL_COUNTERFACTUAL_PAIRWISE_MARGIN",
       0
     ),
+    rlCounterfactualMaxScoreGap: readNumberEnv(
+      "RL_COUNTERFACTUAL_MAX_SCORE_GAP",
+      0
+    ),
+    rlCounterfactualAnchorWeight: readNumberEnv(
+      "RL_COUNTERFACTUAL_ANCHOR_WEIGHT",
+      0
+    ),
+    rlCounterfactualAnchorMaxExamples: readIntegerEnv(
+      "RL_COUNTERFACTUAL_ANCHOR_EXAMPLES",
+      512
+    ),
+    rlCounterfactualAnchorTemperature: readNumberEnv(
+      "RL_COUNTERFACTUAL_ANCHOR_TEMPERATURE",
+      1
+    ),
     rlCounterfactualValueTargetScale: readNumberEnv(
       "RL_COUNTERFACTUAL_VALUE_SCALE",
       4

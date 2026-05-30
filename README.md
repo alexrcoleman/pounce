@@ -17,7 +17,7 @@ Useful training knobs:
 
 - `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`
 - `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_PAIRWISE_MARGIN`, `IMPROVEMENT_VALUE_SCALE`, `IMPROVEMENT_VALUE_CENTER`, `IMPROVEMENT_VALUE_HUBER`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
-- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_CANDIDATES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_PREFERENCE_SCOPE`, `RL_COUNTERFACTUAL_PAIRWISE_MARGIN`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
+- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_CANDIDATES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_PREFERENCE_SCOPE`, `RL_COUNTERFACTUAL_PAIRWISE_MARGIN`, `RL_COUNTERFACTUAL_MAX_SCORE_GAP`, `RL_COUNTERFACTUAL_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_ANCHOR_TEMPERATURE`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `HIDDEN_LAYERS`, `MAX_MOVES`, `SEED`
 - `HIDDEN` and `HIDDEN_LAYERS` accept comma-separated layer sizes, for example `HIDDEN=192,96`
 - `MODEL_OUT=C:\tmp\pounce-action-ranking-model.json` to save model weights
@@ -237,6 +237,16 @@ best rollout candidate versus the current greedy behavior action; the default
 counterfactual pairwise labels, which is useful for testing whether RL labels are
 strong enough to actually change the deployed greedy action instead of only
 nudging scores.
+`RL_COUNTERFACTUAL_MAX_SCORE_GAP` can skip supervised counterfactual labels when
+the rollout winner is currently below the greedy action by more than that score
+gap. This targets uncertain decisions first and avoids asking a small batch of
+rollout labels to overturn strong existing priors.
+`RL_COUNTERFACTUAL_ANCHOR_WEIGHT` enables conservative policy anchoring for
+supervised counterfactual modes: after applying the RL labels, it distills the
+pre-update policy over sampled decision states so narrow counterfactual lessons
+are less likely to generalize into broad connector or cycling regressions.
+`RL_COUNTERFACTUAL_ANCHOR_EXAMPLES` caps that replay batch, and
+`RL_COUNTERFACTUAL_ANCHOR_TEMPERATURE` controls the anchor target softness.
 `RL_COUNTERFACTUAL_MODE=value` uses the same counterfactual returns as
 action-value regression targets. The value target scale, centering, and Huber
 clipping are controlled by
@@ -311,6 +321,16 @@ horizon to `RL_COUNTERFACTUAL_ROLLOUT_MOVES=1800` also changed one sampled
 decision, still cycle-over-connector, and measured `-0.011 +/- 0.093`. The next
 RL direction should improve state/label targeting or add regularization that
 preserves useful connector priors while applying counterfactual corrections.
+Policy anchoring and score-gap filtering are now wired in to test that more
+conservative path. Anchoring with `RL_COUNTERFACTUAL_ANCHOR_WEIGHT=0.25` reduced
+the broad margin run from 7 to 3 changed decisions in the 2,000-state
+diagnostic, but those changes were still cycle-over-connector and measured
+`-0.029 +/- 0.047` over 384 paired games. Filtering labels with
+`RL_COUNTERFACTUAL_MAX_SCORE_GAP=0.5` prevented the bad connector flips at the
+original learning rate; raising `RL_LR` to `0.005` produced 2 changed decisions,
+both deck-to-solitaire over cycle, but still measured `-0.026 +/- 0.055`.
+These controls reduce harmful generalization, but they have not found a better
+checkpoint yet.
 
 Legacy model feature expansion is now enabled before fine-tuning. Re-running the
 240-state behavior-scope recipe from the capacity checkpoint produced a 48-input
