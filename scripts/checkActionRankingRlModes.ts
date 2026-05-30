@@ -1,5 +1,8 @@
 import assert from "assert/strict";
-import { ACTION_RANKING_FEATURE_NAMES } from "../shared/ActionRankingPolicy";
+import {
+  ACTION_RANKING_FEATURE_NAMES,
+  enumerateActionRankingCandidates,
+} from "../shared/ActionRankingPolicy";
 import {
   trainNeuralActionRankingPolicy,
   type NeuralTrainingResult,
@@ -9,6 +12,7 @@ import {
   NeuralActionRankingPolicy,
   type NeuralActionRankingModelV2,
 } from "../shared/NeuralActionRankingPolicy";
+import { createBoard, type CardState } from "../shared/GameUtils";
 
 const commonOptions = {
   playerCount: 4,
@@ -39,6 +43,7 @@ const commonOptions = {
 };
 
 const featureExpansion = assertLegacyFeatureExpansion();
+const tacticalFeatureSurface = assertTacticalFeatureSurface();
 
 const policyGradient = trainNeuralActionRankingPolicy({
   ...commonOptions,
@@ -493,6 +498,7 @@ console.log(
   JSON.stringify(
     {
       featureExpansion,
+      tacticalFeatureSurface,
       policyGradient: summarize(policyGradient),
       selfPlayEpisodePolicyGradient: summarize(selfPlayEpisodePolicyGradient),
       championOpponentPolicyGradient: summarize(
@@ -631,6 +637,22 @@ function assertLegacyFeatureExpansion() {
     "solitaire.postTopConnectsPounce",
     "solitaire.postTopConnectsStackRoot",
     "solitaire.deckStockFraction",
+    "cycle.resetRevealsCard",
+    "cycle.resetRevealedValue",
+    "cycle.resetRevealedCenterPlayable",
+    "cycle.resetRevealedCanPlaySoon",
+    "cycle.resetRevealedOwnSolitaireDestinationCount",
+    "cycle.resetRevealedOwnSolitaireConnectorForPounce",
+    "cycle.resetRevealedMatchesPounceParity",
+    "cycle.resetRevealedPounceConnectorCloseness",
+    "own.pounceCenterPlayable",
+    "own.deckCenterPlayable",
+    "own.stackCenterPlayableCount",
+    "own.pounceCanPlaySoon",
+    "opponent.pounceCenterPlayableCount",
+    "opponent.deckCenterPlayableCount",
+    "opponent.stackCenterPlayableCount",
+    "opponent.pounceCanPlaySoonCount",
   ].filter((featureName) => baseModel.featureNames.includes(featureName));
   assert.ok(
     droppedFeatures.length > 0,
@@ -691,6 +713,118 @@ function assertLegacyFeatureExpansion() {
     droppedFeatures,
     maxScoreDelta: Math.abs(legacyScore - expandedScore),
   };
+}
+
+function assertTacticalFeatureSurface() {
+  const board = createBoard(2);
+  board.isActive = true;
+  board.isDealt = true;
+  board.piles = [
+    [card("hearts", 4, -1)],
+    [card("clubs", 3, -1)],
+    [card("spades", 5, -1)],
+    [card("diamonds", 4, -1)],
+    [],
+    [],
+    [],
+    [],
+  ];
+  board.players[0].pounceDeck = [card("clubs", 4, 0)];
+  board.players[0].deck = [];
+  board.players[0].flippedDeck = [card("hearts", 5, 0)];
+  board.players[0].stacks = [[card("spades", 6, 0)], [], [], []];
+  board.players[1].pounceDeck = [card("spades", 6, 1)];
+  board.players[1].deck = [];
+  board.players[1].flippedDeck = [card("diamonds", 5, 1)];
+  board.players[1].stacks = [[card("hearts", 5, 1)], [], [], []];
+
+  const cycleCandidate = enumerateActionRankingCandidates(board, 0).find(
+    (candidate) => candidate.move.type === "cycle"
+  );
+  assert.ok(cycleCandidate, "feature check should include a cycle candidate");
+
+  assert.equal(
+    getFeature(cycleCandidate, "cycle.resetRevealsCard"),
+    1,
+    "cycle reset should expose the remembered next-pass waste card"
+  );
+  assert.equal(
+    getFeature(cycleCandidate, "cycle.resetRevealedCenterPlayable"),
+    1,
+    "cycle reset memory should report center-playable next-pass cards"
+  );
+  assert.equal(
+    getFeature(
+      cycleCandidate,
+      "cycle.resetRevealedOwnSolitaireConnectorForPounce"
+    ),
+    1,
+    "cycle reset memory should report next-pass pounce connectors"
+  );
+  assert.ok(
+    getFeature(cycleCandidate, "cycle.resetRevealedPounceConnectorCloseness") >
+      0,
+    "cycle reset memory should carry pounce connector closeness"
+  );
+  assert.equal(
+    getFeature(cycleCandidate, "own.pounceCenterPlayable"),
+    1,
+    "visible pressure should mark own playable pounce card"
+  );
+  assert.equal(
+    getFeature(cycleCandidate, "own.deckCenterPlayable"),
+    1,
+    "visible pressure should mark own playable waste card"
+  );
+  assert.ok(
+    getFeature(cycleCandidate, "own.stackCenterPlayableCount") > 0,
+    "visible pressure should count own playable solitaire tops"
+  );
+  assert.ok(
+    getFeature(cycleCandidate, "opponent.pounceCenterPlayableCount") > 0,
+    "visible pressure should count opponent playable pounce cards"
+  );
+  assert.ok(
+    getFeature(cycleCandidate, "opponent.deckCenterPlayableCount") > 0,
+    "visible pressure should count opponent playable waste cards"
+  );
+  assert.ok(
+    getFeature(cycleCandidate, "opponent.stackCenterPlayableCount") > 0,
+    "visible pressure should count opponent playable solitaire tops"
+  );
+  assert.ok(
+    getFeature(cycleCandidate, "opponent.pounceCanPlaySoonCount") > 0,
+    "visible pressure should count opponent pounce cards close to center play"
+  );
+
+  return {
+    featureCount: ACTION_RANKING_FEATURE_NAMES.length,
+    cycleResetRevealedValue: getFeature(
+      cycleCandidate,
+      "cycle.resetRevealedValue"
+    ),
+    opponentPouncePressure: getFeature(
+      cycleCandidate,
+      "opponent.pounceCenterPlayableCount"
+    ),
+  };
+}
+
+function getFeature(
+  candidate: { features: readonly number[] },
+  featureName: (typeof ACTION_RANKING_FEATURE_NAMES)[number]
+): number {
+  const index = ACTION_RANKING_FEATURE_NAMES.indexOf(featureName);
+  assert.ok(index >= 0, `${featureName} should exist`);
+  return candidate.features[index] ?? 0;
+}
+
+function card(
+  suit: CardState["suit"],
+  value: CardState["value"],
+  player: number
+): CardState {
+  return { suit, value, player };
 }
 
 function scoreModelOnCurrentFeatures(

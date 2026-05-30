@@ -91,6 +91,22 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "solitaire.postTopConnectsPounce",
   "solitaire.postTopConnectsStackRoot",
   "solitaire.deckStockFraction",
+  "cycle.resetRevealsCard",
+  "cycle.resetRevealedValue",
+  "cycle.resetRevealedCenterPlayable",
+  "cycle.resetRevealedCanPlaySoon",
+  "cycle.resetRevealedOwnSolitaireDestinationCount",
+  "cycle.resetRevealedOwnSolitaireConnectorForPounce",
+  "cycle.resetRevealedMatchesPounceParity",
+  "cycle.resetRevealedPounceConnectorCloseness",
+  "own.pounceCenterPlayable",
+  "own.deckCenterPlayable",
+  "own.stackCenterPlayableCount",
+  "own.pounceCanPlaySoon",
+  "opponent.pounceCenterPlayableCount",
+  "opponent.deckCenterPlayableCount",
+  "opponent.stackCenterPlayableCount",
+  "opponent.pounceCanPlaySoonCount",
 ] as const;
 
 export type ActionRankingFeatureName =
@@ -358,6 +374,7 @@ function buildActionRankingFeatures(
     move,
     card
   );
+  const pressureFeatures = getVisiblePressureFeatures(board, playerIndex);
   const botIndex = player
     ? board.players
         .filter((candidate) => candidate.socketId == null)
@@ -458,6 +475,22 @@ function buildActionRankingFeatures(
     bool(strategyFeatures.postTopConnectsPounce),
     bool(strategyFeatures.postTopConnectsStackRoot),
     normalize(strategyFeatures.deckStockFraction, 1),
+    bool(cycleShape.resetRevealedCard != null),
+    normalizeCardValue(cycleShape.resetRevealedCard),
+    bool(cycleShape.resetRevealedCenterPlayable),
+    bool(cycleShape.resetRevealedCanPlaySoon),
+    normalize(cycleShape.resetRevealedOwnSolitaireDestinationCount, 4),
+    bool(cycleShape.resetRevealedOwnSolitaireConnectorForPounce),
+    bool(cycleShape.resetRevealedMatchesPounceParity),
+    normalize(cycleShape.resetRevealedPounceConnectorCloseness, 1),
+    bool(pressureFeatures.ownPounceCenterPlayable),
+    bool(pressureFeatures.ownDeckCenterPlayable),
+    normalize(pressureFeatures.ownStackCenterPlayableCount, 4),
+    bool(pressureFeatures.ownPounceCanPlaySoon),
+    normalize(pressureFeatures.opponentPounceCenterPlayableCount, 6),
+    normalize(pressureFeatures.opponentDeckCenterPlayableCount, 6),
+    normalize(pressureFeatures.opponentStackCenterPlayableCount, 24),
+    normalize(pressureFeatures.opponentPounceCanPlaySoonCount, 6),
   ];
 }
 
@@ -578,6 +611,13 @@ function getCycleShapeFeatures(
     resetsWaste: false,
     stockFractionAfter: 0,
     cardsAdvanced: 0,
+    resetRevealedCard: undefined as CardState | undefined,
+    resetRevealedCenterPlayable: false,
+    resetRevealedCanPlaySoon: false,
+    resetRevealedOwnSolitaireDestinationCount: 0,
+    resetRevealedOwnSolitaireConnectorForPounce: false,
+    resetRevealedMatchesPounceParity: false,
+    resetRevealedPounceConnectorCloseness: 0,
   };
   if (!player || move.type !== "cycle") {
     return emptyFeatures;
@@ -589,10 +629,50 @@ function getCycleShapeFeatures(
   }
 
   if (player.deck.length === 0) {
+    const resetDeck = player.flippedDeck.slice().reverse();
+    const cardsAdvancedAfterReset = Math.min(3, resetDeck.length);
+    const resetRevealedCard =
+      cardsAdvancedAfterReset > 0
+        ? peek(resetDeck.slice(-cardsAdvancedAfterReset).reverse())
+        : undefined;
+    const pounceCard = peek(player.pounceDeck);
+    const resetSolitaireDestinations = resetRevealedCard
+      ? player.stacks.flatMap((_, dest) =>
+          canMoveCardToSolitaireStack(player, resetRevealedCard, dest)
+            ? [dest]
+            : []
+        )
+      : [];
     return {
       ...emptyFeatures,
       resetsWaste: player.flippedDeck.length > 0,
       stockFractionAfter: 1,
+      resetRevealedCard,
+      resetRevealedCenterPlayable:
+        resetRevealedCard != null &&
+        board.piles.some((pile) => canPlayOnCenterPile(pile, resetRevealedCard)),
+      resetRevealedCanPlaySoon:
+        resetRevealedCard != null && getCanPlaySoon(resetRevealedCard, board, 4),
+      resetRevealedOwnSolitaireDestinationCount:
+        resetSolitaireDestinations.length,
+      resetRevealedOwnSolitaireConnectorForPounce:
+        resetRevealedCard != null &&
+        resetSolitaireDestinations.some((dest) =>
+          getMakesPouncePlayable(
+            player,
+            { type: "c2s", source: "deck", dest },
+            resetRevealedCard
+          )
+        ),
+      resetRevealedMatchesPounceParity:
+        resetRevealedCard != null &&
+        pounceCard != null &&
+        getStackCompatibilityParity(resetRevealedCard) ===
+          getStackCompatibilityParity(pounceCard),
+      resetRevealedPounceConnectorCloseness:
+        resetRevealedCard && pounceCard
+          ? getConnectorCloseness(resetRevealedCard, pounceCard)
+          : 0,
     };
   }
 
@@ -633,7 +713,75 @@ function getCycleShapeFeatures(
     resetsWaste: false,
     stockFractionAfter: (player.deck.length - cardsAdvanced) / total,
     cardsAdvanced,
+    resetRevealedCard: undefined,
+    resetRevealedCenterPlayable: false,
+    resetRevealedCanPlaySoon: false,
+    resetRevealedOwnSolitaireDestinationCount: 0,
+    resetRevealedOwnSolitaireConnectorForPounce: false,
+    resetRevealedMatchesPounceParity: false,
+    resetRevealedPounceConnectorCloseness: 0,
   };
+}
+
+function getVisiblePressureFeatures(board: BoardState, playerIndex: number) {
+  return board.players.reduce(
+    (result, player, index) => {
+      if (player.isSpectating) {
+        return result;
+      }
+      const isOwnPlayer = index === playerIndex;
+      const pounceCard = peek(player.pounceDeck);
+      const deckCard = peek(player.flippedDeck);
+      const stackPlayableCount = player.stacks.filter((stack) => {
+        const topCard = peek(stack);
+        return (
+          topCard != null &&
+          board.piles.some((pile) => canPlayOnCenterPile(pile, topCard))
+        );
+      }).length;
+
+      if (isOwnPlayer) {
+        result.ownPounceCenterPlayable =
+          pounceCard != null &&
+          board.piles.some((pile) => canPlayOnCenterPile(pile, pounceCard));
+        result.ownDeckCenterPlayable =
+          deckCard != null &&
+          board.piles.some((pile) => canPlayOnCenterPile(pile, deckCard));
+        result.ownStackCenterPlayableCount = stackPlayableCount;
+        result.ownPounceCanPlaySoon =
+          pounceCard != null && getCanPlaySoon(pounceCard, board, 4);
+        return result;
+      }
+
+      if (
+        pounceCard != null &&
+        board.piles.some((pile) => canPlayOnCenterPile(pile, pounceCard))
+      ) {
+        result.opponentPounceCenterPlayableCount += 1;
+      }
+      if (
+        deckCard != null &&
+        board.piles.some((pile) => canPlayOnCenterPile(pile, deckCard))
+      ) {
+        result.opponentDeckCenterPlayableCount += 1;
+      }
+      result.opponentStackCenterPlayableCount += stackPlayableCount;
+      if (pounceCard != null && getCanPlaySoon(pounceCard, board, 4)) {
+        result.opponentPounceCanPlaySoonCount += 1;
+      }
+      return result;
+    },
+    {
+      ownPounceCenterPlayable: false,
+      ownDeckCenterPlayable: false,
+      ownStackCenterPlayableCount: 0,
+      ownPounceCanPlaySoon: false,
+      opponentPounceCenterPlayableCount: 0,
+      opponentDeckCenterPlayableCount: 0,
+      opponentStackCenterPlayableCount: 0,
+      opponentPounceCanPlaySoonCount: 0,
+    }
+  );
 }
 
 function getOwnSolitaireDestinations(

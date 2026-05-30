@@ -64,6 +64,13 @@ to the pounce card, whether the action only resets the waste pile, and the
 remaining stock fraction after the cycle. These inputs are meant to let reward
 labels explain when cycling is good because a remembered stock card is useful,
 rather than pushing every cycle action up globally.
+Cycle reset moves also expose the known card that would become visible after
+resetting the waste and cycling once, so the policy can learn "reset because I
+remember the next pass is useful" instead of treating all waste resets alike.
+The global visible-pressure inputs count own and opponent pounce/deck/solitaire
+cards that are playable on center now, plus pounce cards close to center play;
+those are intended to help reward training learn tempo and opponent-help costs
+without encoding a fixed move-type priority.
 `action-ranking:compare-self-play` now fills the table with the candidate and
 champion models directly instead of using heuristic opponents. By default it
 splits seats by parity and replays each deal with the assignments swapped, so a
