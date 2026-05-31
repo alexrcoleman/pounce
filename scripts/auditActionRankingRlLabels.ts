@@ -169,6 +169,14 @@ const options = {
     "RL_COUNTERFACTUAL_POUNCE_WEIGHT",
     0
   ),
+  counterfactualMinScoreReturnGap: readNumberEnv(
+    "RL_COUNTERFACTUAL_MIN_SCORE_RETURN_GAP",
+    0
+  ),
+  counterfactualMinPounceProgressGap: readNumberEnv(
+    "RL_COUNTERFACTUAL_MIN_POUNCE_PROGRESS_GAP",
+    0
+  ),
   counterfactualSkipCycleOverConnector: readBooleanEnv(
     "RL_COUNTERFACTUAL_SKIP_CYCLE_OVER_CONNECTOR",
     false
@@ -227,6 +235,8 @@ console.log(
         movePairExcludedSkippedCount: audit.movePairExcludedSkippedCount,
         moveTypeMismatchSkippedCount: audit.moveTypeMismatchSkippedCount,
         moveTypeMatchSkippedCount: audit.moveTypeMatchSkippedCount,
+        scoreReturnGapSkippedCount: audit.scoreReturnGapSkippedCount,
+        pounceProgressGapSkippedCount: audit.pounceProgressGapSkippedCount,
         featureTieSkippedCount: audit.featureTieSkippedCount,
         connectorCycleSkippedCount: audit.connectorCycleSkippedCount,
         weakConnectorCycleSkippedCount:

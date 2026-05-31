@@ -842,6 +842,10 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.counterfactualMoveTypeMismatchSkippedCount,
     counterfactualMoveTypeMatchSkippedCount:
       result.reinforcement.counterfactualMoveTypeMatchSkippedCount,
+    counterfactualScoreReturnGapSkippedCount:
+      result.reinforcement.counterfactualScoreReturnGapSkippedCount,
+    counterfactualPounceProgressGapSkippedCount:
+      result.reinforcement.counterfactualPounceProgressGapSkippedCount,
     counterfactualFeatureTieSkippedCount:
       result.reinforcement.counterfactualFeatureTieSkippedCount,
     counterfactualConnectorCycleSkippedCount:

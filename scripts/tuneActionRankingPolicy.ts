@@ -218,6 +218,14 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       "RL_COUNTERFACTUAL_POUNCE_WEIGHT",
       0
     ),
+    rlCounterfactualMinScoreReturnGap: readNumberEnv(
+      "RL_COUNTERFACTUAL_MIN_SCORE_RETURN_GAP",
+      0
+    ),
+    rlCounterfactualMinPounceProgressGap: readNumberEnv(
+      "RL_COUNTERFACTUAL_MIN_POUNCE_PROGRESS_GAP",
+      0
+    ),
     rlCounterfactualAnchorWeight: readNumberEnv(
       "RL_COUNTERFACTUAL_ANCHOR_WEIGHT",
       0

@@ -138,6 +138,15 @@ near-gap updates either tied the warmup exactly or did not flip deployed
 decisions. This is the best current candidate shape for actual divergent
 strategy, but it needs better contextual regularization or more near-deployable
 labels before promotion.
+Cross-type cycle-memory probes can now also require local reward support with
+`RL_COUNTERFACTUAL_MIN_SCORE_RETURN_GAP` and
+`RL_COUNTERFACTUAL_MIN_POUNCE_PROGRESS_GAP`. In a 64-episode audit using
+cross-type-only labels, 5 rollouts, `0.8` behavior win-rate, and both local
+minimums set to `1`, the accepted batch was exactly the two `cycle>c2s`
+stock-memory labels above; two same-family labels were skipped before the local
+support filters, and no accepted label failed the score/pounce gates. This gives
+the next training sweep a cleaner way to ask for "cycle because it advances the
+stock toward useful score/pounce progress" rather than generic cycle preference.
 Imitation training can now target a single fixed heuristic style with
 `IMITATION_TEACHER_STYLE="Alex 75%"`, and `action-ranking:imitation-by-style`
 reports top-action/equivalence/family agreement against each style. On the
@@ -718,6 +727,12 @@ pounce deck during the counterfactual continuation:
 `pointDifferentialReturn + scoreWeight * scoreReturn + pounceWeight *
 pounceProgressReturn`, where pounce progress is the starting pounce count minus
 the final pounce count. The default `0` preserves the existing objective.
+`RL_COUNTERFACTUAL_MIN_SCORE_RETURN_GAP` and
+`RL_COUNTERFACTUAL_MIN_POUNCE_PROGRESS_GAP` are supervised label filters rather
+than reward terms. When set above `0`, the rollout winner must beat the current
+behavior action by at least that much on raw score return and/or pounce progress
+return before the label is accepted. This is useful for risky cross-type probes
+where point-differential rollouts should also show direct tactical support.
 `RL_COUNTERFACTUAL_SKIP_CYCLE_OVER_CONNECTOR=true` skips supervised labels where
 the rollout winner is cycling while an evaluated card-to-solitaire move has an
 active post-move connector feature, directly supports the pounce card, or is a

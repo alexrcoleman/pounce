@@ -80,6 +80,8 @@ export type NeuralTrainingOptions = {
   rlCounterfactualStopAfterLabels?: number;
   rlCounterfactualScoreRewardWeight?: number;
   rlCounterfactualPounceRewardWeight?: number;
+  rlCounterfactualMinScoreReturnGap?: number;
+  rlCounterfactualMinPounceProgressGap?: number;
   rlCounterfactualSkipCycleOverConnector?: boolean;
   rlCounterfactualSkipWeakCycleOverConnector?: boolean;
   rlCounterfactualSkipSolitaireOverUsefulCycle?: boolean;
@@ -196,6 +198,8 @@ export type NeuralTrainingResult = {
     counterfactualMovePairExcludedSkippedCount: number;
     counterfactualMoveTypeMismatchSkippedCount: number;
     counterfactualMoveTypeMatchSkippedCount: number;
+    counterfactualScoreReturnGapSkippedCount: number;
+    counterfactualPounceProgressGapSkippedCount: number;
     counterfactualFeatureTieSkippedCount: number;
     counterfactualConnectorCycleSkippedCount: number;
     counterfactualWeakConnectorCycleSkippedCount: number;
@@ -296,6 +300,8 @@ export type CounterfactualRlLabelAudit = {
   movePairExcludedSkippedCount: number;
   moveTypeMismatchSkippedCount: number;
   moveTypeMatchSkippedCount: number;
+  scoreReturnGapSkippedCount: number;
+  pounceProgressGapSkippedCount: number;
   featureTieSkippedCount: number;
   connectorCycleSkippedCount: number;
   weakConnectorCycleSkippedCount: number;
@@ -629,6 +635,10 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualScoreRewardWeight ?? 0,
     counterfactualPounceRewardWeight:
       options.rlCounterfactualPounceRewardWeight ?? 0,
+    counterfactualMinScoreReturnGap:
+      options.rlCounterfactualMinScoreReturnGap ?? 0,
+    counterfactualMinPounceProgressGap:
+      options.rlCounterfactualMinPounceProgressGap ?? 0,
     counterfactualSkipCycleOverConnector:
       options.rlCounterfactualSkipCycleOverConnector ?? false,
     counterfactualSkipWeakCycleOverConnector:
@@ -1644,6 +1654,8 @@ export function trainPolicyGradientFromRollouts(
     counterfactualStopAfterLabels: number;
     counterfactualScoreRewardWeight: number;
     counterfactualPounceRewardWeight: number;
+    counterfactualMinScoreReturnGap: number;
+    counterfactualMinPounceProgressGap: number;
     counterfactualSkipCycleOverConnector: boolean;
     counterfactualSkipWeakCycleOverConnector: boolean;
     counterfactualSkipSolitaireOverUsefulCycle: boolean;
@@ -1695,6 +1707,8 @@ export function trainPolicyGradientFromRollouts(
   let counterfactualMovePairExcludedSkippedCount = 0;
   let counterfactualMoveTypeMismatchSkippedCount = 0;
   let counterfactualMoveTypeMatchSkippedCount = 0;
+  let counterfactualScoreReturnGapSkippedCount = 0;
+  let counterfactualPounceProgressGapSkippedCount = 0;
   let counterfactualFeatureTieSkippedCount = 0;
   let counterfactualConnectorCycleSkippedCount = 0;
   let counterfactualWeakConnectorCycleSkippedCount = 0;
@@ -1993,6 +2007,30 @@ export function trainPolicyGradientFromRollouts(
         }
         if (
           options.counterfactualTrainingMode !== "policy_gradient" &&
+          options.counterfactualMinScoreReturnGap > 0 &&
+          !doesCounterfactualBestMeetScoreReturnGap(
+            transition,
+            result,
+            options.counterfactualMinScoreReturnGap
+          )
+        ) {
+          counterfactualScoreReturnGapSkippedCount += 1;
+          return;
+        }
+        if (
+          options.counterfactualTrainingMode !== "policy_gradient" &&
+          options.counterfactualMinPounceProgressGap > 0 &&
+          !doesCounterfactualBestMeetPounceProgressGap(
+            transition,
+            result,
+            options.counterfactualMinPounceProgressGap
+          )
+        ) {
+          counterfactualPounceProgressGapSkippedCount += 1;
+          return;
+        }
+        if (
+          options.counterfactualTrainingMode !== "policy_gradient" &&
           isExcludedCounterfactualMovePair(
             movePair,
             options.counterfactualExcludedMovePairs
@@ -2260,6 +2298,8 @@ export function trainPolicyGradientFromRollouts(
     counterfactualMovePairExcludedSkippedCount,
     counterfactualMoveTypeMismatchSkippedCount,
     counterfactualMoveTypeMatchSkippedCount,
+    counterfactualScoreReturnGapSkippedCount,
+    counterfactualPounceProgressGapSkippedCount,
     counterfactualFeatureTieSkippedCount,
     counterfactualConnectorCycleSkippedCount,
     counterfactualWeakConnectorCycleSkippedCount,
@@ -2325,6 +2365,8 @@ export function collectCounterfactualRlLabelAudit(
     counterfactualStopAfterLabels: number;
     counterfactualScoreRewardWeight: number;
     counterfactualPounceRewardWeight: number;
+    counterfactualMinScoreReturnGap: number;
+    counterfactualMinPounceProgressGap: number;
     counterfactualSkipCycleOverConnector: boolean;
     counterfactualSkipWeakCycleOverConnector: boolean;
     counterfactualSkipSolitaireOverUsefulCycle: boolean;
@@ -2351,6 +2393,8 @@ export function collectCounterfactualRlLabelAudit(
   let movePairExcludedSkippedCount = 0;
   let moveTypeMismatchSkippedCount = 0;
   let moveTypeMatchSkippedCount = 0;
+  let scoreReturnGapSkippedCount = 0;
+  let pounceProgressGapSkippedCount = 0;
   let featureTieSkippedCount = 0;
   let connectorCycleSkippedCount = 0;
   let weakConnectorCycleSkippedCount = 0;
@@ -2533,6 +2577,30 @@ export function collectCounterfactualRlLabelAudit(
       }
       if (
         options.counterfactualTrainingMode !== "policy_gradient" &&
+        options.counterfactualMinScoreReturnGap > 0 &&
+        !doesCounterfactualBestMeetScoreReturnGap(
+          transition,
+          result,
+          options.counterfactualMinScoreReturnGap
+        )
+      ) {
+        scoreReturnGapSkippedCount += 1;
+        return;
+      }
+      if (
+        options.counterfactualTrainingMode !== "policy_gradient" &&
+        options.counterfactualMinPounceProgressGap > 0 &&
+        !doesCounterfactualBestMeetPounceProgressGap(
+          transition,
+          result,
+          options.counterfactualMinPounceProgressGap
+        )
+      ) {
+        pounceProgressGapSkippedCount += 1;
+        return;
+      }
+      if (
+        options.counterfactualTrainingMode !== "policy_gradient" &&
         isExcludedCounterfactualMovePair(
           movePair,
           options.counterfactualExcludedMovePairs
@@ -2667,6 +2735,8 @@ export function collectCounterfactualRlLabelAudit(
     movePairExcludedSkippedCount,
     moveTypeMismatchSkippedCount,
     moveTypeMatchSkippedCount,
+    scoreReturnGapSkippedCount,
+    pounceProgressGapSkippedCount,
     featureTieSkippedCount,
     connectorCycleSkippedCount,
     weakConnectorCycleSkippedCount,
@@ -3347,6 +3417,53 @@ function isCounterfactualBestGreedy(
 ): boolean {
   const greedy = transition.candidates[transition.greedyCandidateIndex];
   return greedy?.key === getCounterfactualBestCandidate(result).candidate.key;
+}
+
+function doesCounterfactualBestMeetScoreReturnGap(
+  transition: RolloutTransition,
+  result: CounterfactualTransitionResult,
+  minGap: number
+): boolean {
+  const behavior = getCounterfactualBehaviorCandidate(transition, result);
+  if (!behavior) {
+    return false;
+  }
+  return (
+    getCounterfactualBestCandidate(result).rolloutScoreReturn -
+      behavior.rolloutScoreReturn >=
+    minGap
+  );
+}
+
+function doesCounterfactualBestMeetPounceProgressGap(
+  transition: RolloutTransition,
+  result: CounterfactualTransitionResult,
+  minGap: number
+): boolean {
+  const behavior = getCounterfactualBehaviorCandidate(transition, result);
+  if (!behavior) {
+    return false;
+  }
+  return (
+    getCounterfactualBestCandidate(result).rolloutPounceProgressReturn -
+      behavior.rolloutPounceProgressReturn >=
+    minGap
+  );
+}
+
+function getCounterfactualBehaviorCandidate(
+  transition: RolloutTransition,
+  result: CounterfactualTransitionResult
+): CounterfactualCandidateReturn | null {
+  const behavior = transition.candidates[transition.greedyCandidateIndex];
+  if (!behavior) {
+    return null;
+  }
+  return (
+    result.candidates.find(
+      (candidate) => candidate.candidate.key === behavior.key
+    ) ?? null
+  );
 }
 
 function getCounterfactualBestCandidate(

@@ -523,6 +523,14 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
       "RL_COUNTERFACTUAL_POUNCE_WEIGHT",
       0
     ),
+    rlCounterfactualMinScoreReturnGap: readNumberEnv(
+      "RL_COUNTERFACTUAL_MIN_SCORE_RETURN_GAP",
+      0
+    ),
+    rlCounterfactualMinPounceProgressGap: readNumberEnv(
+      "RL_COUNTERFACTUAL_MIN_POUNCE_PROGRESS_GAP",
+      0
+    ),
     rlCounterfactualSkipCycleOverConnector: readBooleanEnv(
       "RL_COUNTERFACTUAL_SKIP_CYCLE_OVER_CONNECTOR",
       false
