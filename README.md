@@ -1130,6 +1130,22 @@ applied four weighted updates, but measured `-0.515 +/- 0.082` over 384 paired
 games against the behavior-scope checkpoint. The runtime bottleneck is improved;
 label quality and update calibration are still the blocker before this path can
 promote a stronger policy.
+The 108-feature warmup line now has richer move-pair audit summaries and a
+narrower `RL_COUNTERFACTUAL_SKIP_WEAK_CYCLE_OVER_CONNECTOR` guard. A strict
+near-margin audit using the current solitaire-context warmup model kept two
+`cycle>c2s` labels because both beat the evaluated connector on pounce progress
+and raw score; a looser broad audit skipped 13 weak cycle-over-connector labels,
+showing the guard filters the intended shape without globally banning stock-delay
+labels. A small all-layer pairwise candidate using the weak guard plus the
+useful-cycle mirror guard accepted only 7 labels (`cycle>c2s:3`, `c2c>c2c:3`,
+`c2s>c2s:1`) and moved 2 label-state top actions. It measured essentially
+neutral but not promotable against the 108-feature warmup checkpoint over 384
+paired games (`-0.005 +/- 0.062` point differential, `+0.052` raw score).
+Tracing found 9 first divergences, 6 of them `cycle>c2s`; those averaged
+positive point differential and better pounce remaining, but still included
+large losses when behind with 13 pounce cards. The guard is a useful filter, but
+we still need better reliability/state-context selection before training
+cycle-over-connector labels hard.
 
 ## Deploying
 
