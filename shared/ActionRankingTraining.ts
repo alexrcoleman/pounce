@@ -126,6 +126,7 @@ export type NeuralTrainingOptions = {
   improvementLearningRate?: number;
   improvementTargetTemperature?: number;
   maxMovesPerGame?: number;
+  evaluationGames?: number;
 };
 
 export type NeuralTrainingResult = {
@@ -195,6 +196,7 @@ export type NeuralTrainingResult = {
     counterfactualBehaviorCorrectionUpdates: number;
     counterfactualConnectorAnchorExamples: number;
     counterfactualConnectorAnchorUpdates: number;
+    counterfactualPolicyShift: CounterfactualPolicyShiftStats;
     averagePolicyUpdates: number;
     averageGradientUpdates: number;
     averageRawAdvantage: number;
@@ -323,6 +325,26 @@ type CounterfactualSupervisedLabel = {
   candidateCount: number;
   behaviorWinRate: number;
   scoreGap: number | null;
+};
+
+export type CounterfactualPolicyShiftStats = {
+  examples: number;
+  winnerExamples: number;
+  behaviorExamples: number;
+  preUpdateWinnerTopCount: number;
+  postUpdateWinnerTopCount: number;
+  preUpdateBehaviorTopCount: number;
+  postUpdateBehaviorTopCount: number;
+  changedTopActionCount: number;
+  preUpdateWinnerTopRate: number;
+  postUpdateWinnerTopRate: number;
+  preUpdateBehaviorTopRate: number;
+  postUpdateBehaviorTopRate: number;
+  changedTopActionRate: number;
+  averageWinnerScoreMarginBefore: number;
+  averageWinnerScoreMarginAfter: number;
+  averageBehaviorScoreMarginBefore: number;
+  averageBehaviorScoreMarginAfter: number;
 };
 
 type PolicyGradientOpponentMode = "teacher" | "self" | "champion";
@@ -644,7 +666,7 @@ export function trainNeuralActionRankingPolicy(
     reinforcement,
     evaluation: evaluateNeuralPolicy(policy, {
       playerCount,
-      games: 12,
+      games: options.evaluationGames ?? 12,
       seed: `${seed}:eval`,
       maxMovesPerGame,
     }),
@@ -2142,6 +2164,7 @@ export function trainPolicyGradientFromRollouts(
       advantageStats.connectorAnchorExamples,
     counterfactualConnectorAnchorUpdates:
       advantageStats.connectorAnchorUpdates,
+    counterfactualPolicyShift: advantageStats.policyShift,
     averagePolicyUpdates:
       options.episodes === 0 ? 0 : updates.length / options.episodes,
     averageGradientUpdates:
@@ -2554,6 +2577,7 @@ function applyPolicyGradientBatch(
     behaviorCorrectionUpdates: 0,
     connectorAnchorExamples: 0,
     connectorAnchorUpdates: 0,
+    policyShift: createEmptyCounterfactualPolicyShiftStats(),
   };
 }
 
@@ -2589,10 +2613,14 @@ function trainCounterfactualSupervisedBatch(
     shuffleSeed: string;
   }
 ) {
+  const beforePolicy =
+    examples.length > 0
+      ? new NeuralActionRankingPolicy(policy.getModel())
+      : null;
   const anchorPolicy =
     (options.anchorWeight > 0 || options.connectorAnchorWeight > 0) &&
     options.anchorExamples.length > 0
-      ? new NeuralActionRankingPolicy(policy.getModel())
+      ? beforePolicy ?? new NeuralActionRankingPolicy(policy.getModel())
       : null;
   const signedGaps = examples.map((example) => {
     const returns = example.candidates
@@ -2684,6 +2712,10 @@ function trainCounterfactualSupervisedBatch(
           trainableLayers: options.trainableLayers,
           shuffleSeed: `${options.shuffleSeed}:connector-anchor`,
         });
+  const policyShift =
+    beforePolicy == null
+      ? createEmptyCounterfactualPolicyShiftStats()
+      : getCounterfactualPolicyShiftStats(examples, beforePolicy, policy);
 
   return {
     mean: stats.mean,
@@ -2699,7 +2731,190 @@ function trainCounterfactualSupervisedBatch(
     behaviorCorrectionUpdates: behaviorCorrectionStats.updates,
     connectorAnchorExamples: connectorAnchorExamples.length,
     connectorAnchorUpdates: connectorAnchorStats.updates,
+    policyShift,
   };
+}
+
+function getCounterfactualPolicyShiftStats(
+  examples: readonly ActionRankingImitationExample[],
+  beforePolicy: NeuralActionRankingPolicy,
+  afterPolicy: NeuralActionRankingPolicy
+): CounterfactualPolicyShiftStats {
+  if (examples.length === 0) {
+    return createEmptyCounterfactualPolicyShiftStats();
+  }
+
+  let winnerExamples = 0;
+  let behaviorExamples = 0;
+  let preUpdateWinnerTopCount = 0;
+  let postUpdateWinnerTopCount = 0;
+  let preUpdateBehaviorTopCount = 0;
+  let postUpdateBehaviorTopCount = 0;
+  let changedTopActionCount = 0;
+  let winnerMarginBeforeTotal = 0;
+  let winnerMarginAfterTotal = 0;
+  let behaviorMarginBeforeTotal = 0;
+  let behaviorMarginAfterTotal = 0;
+
+  examples.forEach((example) => {
+    const beforeScores = getPolicyScoresForExample(beforePolicy, example);
+    const afterScores = getPolicyScoresForExample(afterPolicy, example);
+    const beforeTopIndex = getBestScoreIndex(beforeScores);
+    const afterTopIndex = getBestScoreIndex(afterScores);
+    const beforeTopKey = example.candidates[beforeTopIndex]?.key ?? null;
+    const afterTopKey = example.candidates[afterTopIndex]?.key ?? null;
+
+    if (beforeTopKey !== afterTopKey) {
+      changedTopActionCount += 1;
+    }
+
+    const winnerIndex = example.selectedCandidateIndex ?? -1;
+    if (isValidCandidateIndex(example, winnerIndex)) {
+      winnerExamples += 1;
+      if (beforeTopIndex === winnerIndex) {
+        preUpdateWinnerTopCount += 1;
+      }
+      if (afterTopIndex === winnerIndex) {
+        postUpdateWinnerTopCount += 1;
+      }
+      winnerMarginBeforeTotal += getScoreMargin(beforeScores, winnerIndex);
+      winnerMarginAfterTotal += getScoreMargin(afterScores, winnerIndex);
+    }
+
+    const behaviorIndex = getBehaviorCandidateIndex(example);
+    if (isValidCandidateIndex(example, behaviorIndex)) {
+      behaviorExamples += 1;
+      if (beforeTopIndex === behaviorIndex) {
+        preUpdateBehaviorTopCount += 1;
+      }
+      if (afterTopIndex === behaviorIndex) {
+        postUpdateBehaviorTopCount += 1;
+      }
+      behaviorMarginBeforeTotal += getScoreMargin(beforeScores, behaviorIndex);
+      behaviorMarginAfterTotal += getScoreMargin(afterScores, behaviorIndex);
+    }
+  });
+
+  return {
+    examples: examples.length,
+    winnerExamples,
+    behaviorExamples,
+    preUpdateWinnerTopCount,
+    postUpdateWinnerTopCount,
+    preUpdateBehaviorTopCount,
+    postUpdateBehaviorTopCount,
+    changedTopActionCount,
+    preUpdateWinnerTopRate: getRate(preUpdateWinnerTopCount, winnerExamples),
+    postUpdateWinnerTopRate: getRate(postUpdateWinnerTopCount, winnerExamples),
+    preUpdateBehaviorTopRate: getRate(
+      preUpdateBehaviorTopCount,
+      behaviorExamples
+    ),
+    postUpdateBehaviorTopRate: getRate(
+      postUpdateBehaviorTopCount,
+      behaviorExamples
+    ),
+    changedTopActionRate: getRate(changedTopActionCount, examples.length),
+    averageWinnerScoreMarginBefore: getMean(
+      winnerMarginBeforeTotal,
+      winnerExamples
+    ),
+    averageWinnerScoreMarginAfter: getMean(
+      winnerMarginAfterTotal,
+      winnerExamples
+    ),
+    averageBehaviorScoreMarginBefore: getMean(
+      behaviorMarginBeforeTotal,
+      behaviorExamples
+    ),
+    averageBehaviorScoreMarginAfter: getMean(
+      behaviorMarginAfterTotal,
+      behaviorExamples
+    ),
+  };
+}
+
+function createEmptyCounterfactualPolicyShiftStats(): CounterfactualPolicyShiftStats {
+  return {
+    examples: 0,
+    winnerExamples: 0,
+    behaviorExamples: 0,
+    preUpdateWinnerTopCount: 0,
+    postUpdateWinnerTopCount: 0,
+    preUpdateBehaviorTopCount: 0,
+    postUpdateBehaviorTopCount: 0,
+    changedTopActionCount: 0,
+    preUpdateWinnerTopRate: 0,
+    postUpdateWinnerTopRate: 0,
+    preUpdateBehaviorTopRate: 0,
+    postUpdateBehaviorTopRate: 0,
+    changedTopActionRate: 0,
+    averageWinnerScoreMarginBefore: 0,
+    averageWinnerScoreMarginAfter: 0,
+    averageBehaviorScoreMarginBefore: 0,
+    averageBehaviorScoreMarginAfter: 0,
+  };
+}
+
+function getPolicyScoresForExample(
+  policy: NeuralActionRankingPolicy,
+  example: ActionRankingImitationExample
+): number[] {
+  return example.candidates.map((candidate) =>
+    policy.scoreFeatures(candidate.features)
+  );
+}
+
+function getBestScoreIndex(scores: readonly number[]): number {
+  return scores.reduce(
+    (bestIndex, score, index) =>
+      bestIndex < 0 || score > scores[bestIndex] ? index : bestIndex,
+    -1
+  );
+}
+
+function getBehaviorCandidateIndex(
+  example: ActionRankingImitationExample
+): number {
+  if (!example.behaviorActionKey) {
+    return -1;
+  }
+  return example.candidates.findIndex(
+    (candidate) => candidate.key === example.behaviorActionKey
+  );
+}
+
+function isValidCandidateIndex(
+  example: ActionRankingImitationExample,
+  index: number
+): boolean {
+  return index >= 0 && index < example.candidates.length;
+}
+
+function getScoreMargin(scores: readonly number[], targetIndex: number): number {
+  if (targetIndex < 0 || targetIndex >= scores.length) {
+    return 0;
+  }
+
+  const targetScore = scores[targetIndex];
+  const bestOtherScore = scores.reduce((best, score, index) => {
+    if (index === targetIndex) {
+      return best;
+    }
+    return Math.max(best, score);
+  }, Number.NEGATIVE_INFINITY);
+
+  return bestOtherScore === Number.NEGATIVE_INFINITY
+    ? 0
+    : targetScore - bestOtherScore;
+}
+
+function getRate(count: number, total: number): number {
+  return total === 0 ? 0 : count / total;
+}
+
+function getMean(total: number, count: number): number {
+  return count === 0 ? 0 : total / count;
 }
 
 function createCounterfactualAnchorTargets(

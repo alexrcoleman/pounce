@@ -16,16 +16,17 @@ const hiddenLayerSizes =
   initialModel == null
     ? readIntegerListEnv("HIDDEN_LAYERS", readIntegerListEnv("HIDDEN", [48]))
     : getModelHiddenLayerSizes(initialModel);
+const rlOnly = readBooleanEnv("RL_ONLY", false);
 
 const options = {
   playerCount: readIntegerEnv("PLAYERS", 4),
   hiddenLayerSizes,
   seed: process.env.SEED ?? "action-ranking-training",
-  imitationDeals: readIntegerEnv("IMITATION_DEALS", 24),
+  imitationDeals: rlOnly ? 0 : readIntegerEnv("IMITATION_DEALS", 24),
   imitationEpochs: readIntegerEnv("IMITATION_EPOCHS", 4),
   imitationLearningRate: readNumberEnv("IMITATION_LR", 0.02),
   imitationEquivalentTargets: readBooleanEnv("IMITATION_EQUIVALENT_TARGETS", false),
-  improvementStates: readIntegerEnv("IMPROVEMENT_STATES", 0),
+  improvementStates: rlOnly ? 0 : readIntegerEnv("IMPROVEMENT_STATES", 0),
   improvementStateSource: readImprovementStateSourceEnv(
     "IMPROVEMENT_STATE_SOURCE",
     "teacher"
@@ -269,6 +270,7 @@ const options = {
   rlNormalizeAdvantages: readBooleanEnv("RL_NORMALIZE_ADVANTAGES", true),
   rlAdvantageClip: readNumberEnv("RL_ADVANTAGE_CLIP", 3),
   maxMovesPerGame: readIntegerEnv("MAX_MOVES", 1800),
+  evaluationGames: readIntegerEnv("EVAL_GAMES", 12),
 };
 
 const result = trainNeuralActionRankingPolicy({

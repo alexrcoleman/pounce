@@ -23,6 +23,7 @@ Useful training knobs:
 - `HIDDEN` and `HIDDEN_LAYERS` accept comma-separated layer sizes, for example `HIDDEN=192,96`
 - `MODEL_OUT=C:\tmp\pounce-action-ranking-model.json` to save model weights
 - `MODEL_IN=...\model.json npm run action-ranking:train` to fine-tune saved weights
+- `RL_ONLY=true MODEL_IN=...\model.json npm run action-ranking:train` to run a pure RL fine-tune without accidental imitation or improvement updates
 - `MODEL_IN=...\model.json npm run action-ranking:evaluate` to evaluate saved weights
 - `MODEL_IN=...\model.json npm run action-ranking:evaluate-by-style` to evaluate saved weights against each fixed heuristic AI style
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare` to compare two models on paired deals/seats
@@ -35,6 +36,7 @@ Useful training knobs:
 - `MODEL_IN=...\best.json npm run action-ranking:tune-rl` to sweep counterfactual RL recipes and promote only paired-comparison improvements
 - `npm run action-ranking:check-rl-modes` to smoke-test legacy feature expansion and counterfactual RL training mode routing
 - `EVAL_RUNS=4` or `EVAL_SEEDS=seedA,seedB` to evaluate saved weights across multiple seeds
+- `EVAL_GAMES=0` can skip the small built-in evaluation in `action-ranking:train` when running quick training smoke checks
 - `POUNCE_NEURAL_AI_MODEL=...\model.json npm run dev` to run Socket.IO bots with saved weights
 
 Evaluation output includes same-seat teacher baseline metrics plus behavior
@@ -44,6 +46,12 @@ single-hidden-layer checkpoint format and the newer multi-layer format. It also
 expands older checkpoints onto the current action-feature list with zero weights
 for new inputs, preserving existing scores while allowing future fine-tunes to
 train newly added tactical features.
+Counterfactual RL training also reports `counterfactualPolicyShift`: pre/post
+top-action rates for the rollout winner and current behavior action on the
+accepted supervised labels, plus the changed-top-action rate. Use it as a cheap
+sanity check before spending hundreds of paired games on a candidate; a batch
+with zero changed top actions probably only moved scores inside existing
+margins.
 The current feature list includes `own.pointDifferential`, so RL fine-tunes can
 condition a move on whether the player is ahead or behind, not just on the
 player's raw card score.

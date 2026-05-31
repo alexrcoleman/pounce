@@ -660,6 +660,13 @@ function assertCounterfactualWork(
     result.reinforcement.counterfactualTrainingUpdates > 0,
     `${mode} should apply training updates`
   );
+  if (mode !== "policy_gradient") {
+    assert.equal(
+      result.reinforcement.counterfactualPolicyShift.examples,
+      result.reinforcement.counterfactualUpdateCount,
+      `${mode} should report policy-shift diagnostics for supervised labels`
+    );
+  }
 }
 
 function summarize(result: NeuralTrainingResult) {
@@ -716,6 +723,8 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.counterfactualConnectorAnchorExamples,
     counterfactualConnectorAnchorUpdates:
       result.reinforcement.counterfactualConnectorAnchorUpdates,
+    counterfactualPolicyShift:
+      result.reinforcement.counterfactualPolicyShift,
     averageCounterfactualScoreGap:
       result.reinforcement.averageCounterfactualScoreGap,
     averagePolicyUpdates: result.reinforcement.averagePolicyUpdates,
