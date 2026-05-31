@@ -1,5 +1,15 @@
-import { getBasicAIMove, getBasicAIMoveForStyle } from "./ComputerV1";
+import {
+  getBasicAIMove,
+  getBasicAIMoveForStyle,
+  getCurrentAIDragMove,
+} from "./ComputerV1";
 import deepClone from "./deepClone";
+import {
+  applySimulationMoveResult,
+  createSimulationHands,
+  getSimulationActionOptions,
+  getSimulationHand,
+} from "./AISimulationCursor";
 import {
   createBoard,
   dealPlayerHand,
@@ -7,6 +17,7 @@ import {
   resetBoard,
   type BoardState,
   type CardState,
+  type CursorState,
   type Suits,
   type Values,
 } from "./GameUtils";
@@ -375,6 +386,7 @@ type RolloutTransition = {
   scoreBefore: number;
   pounceRemainingBefore: number;
   board?: BoardState;
+  hands?: CursorState[];
   candidates: ActionRankingCandidate[];
   selectedCandidateIndex: number;
   greedyCandidateIndex: number;
@@ -383,7 +395,9 @@ type RolloutTransition = {
 
 type BasicMoveProvider = (
   board: BoardState,
-  playerIndex: number
+  playerIndex: number,
+  cursor: CursorState,
+  hands: readonly CursorState[]
 ) => Move | undefined;
 
 type RolloutResult = {
@@ -899,6 +913,7 @@ export function collectRewardImprovementExamples(options: {
         ? random()
         : Number.POSITIVE_INFINITY
     );
+    const hands = createSimulationHands(board);
 
     for (
       let stepIndex = 0;
@@ -913,23 +928,33 @@ export function collectRewardImprovementExamples(options: {
         break;
       }
 
-      const teacherMove = getBasicAIMove(board, playerIndex, {});
+      const hand = getSimulationHand(hands, playerIndex);
+      const currentDragMove = getCurrentAIDragMove(board, playerIndex, hand);
+      const actionOptions = getSimulationActionOptions(
+        options.actionOptions,
+        hands
+      );
+      const teacherMove =
+        currentDragMove ?? getBasicAIMove(board, playerIndex, hand);
       const candidates = enumerateActionRankingCandidates(
         board,
         playerIndex,
-        options.actionOptions
+        actionOptions
       );
-      const behaviorMove = getImprovementStateBehaviorMove(
-        board,
-        playerIndex,
-        neuralPlayerIndex,
-        candidates,
-        teacherMove,
-        options,
-        random
-      );
+      const behaviorMove =
+        currentDragMove ??
+        getImprovementStateBehaviorMove(
+          board,
+          playerIndex,
+          neuralPlayerIndex,
+          candidates,
+          teacherMove,
+          options,
+          random
+        );
       const shouldCollect =
-        options.stateSource === "teacher" || playerIndex === neuralPlayerIndex;
+        currentDragMove == null &&
+        (options.stateSource === "teacher" || playerIndex === neuralPlayerIndex);
       if (shouldCollect && behaviorMove && candidates.length > 1) {
         scannedStateCount += 1;
         const policyTopScoreGap = getPolicyTopScoreGap(
@@ -989,7 +1014,8 @@ export function collectRewardImprovementExamples(options: {
             options.requireBehaviorGap,
             options.minBehaviorImprovement,
             options.behaviorGapStandardErrorMultiplier,
-            options.scoreRewardWeight
+            options.scoreRewardWeight,
+            actionOptions
           );
           if (result.skippedForBehaviorGap) {
             skippedBehaviorGapCount += 1;
@@ -1023,7 +1049,14 @@ export function collectRewardImprovementExamples(options: {
       }
 
       if (behaviorMove) {
-        executeMove(board, playerIndex, behaviorMove);
+        const result = executeMove(board, playerIndex, behaviorMove, hand);
+        applySimulationMoveResult(
+          board,
+          playerIndex,
+          behaviorMove,
+          hand,
+          result
+        );
       }
       cooldowns[playerIndex] += getMoveDelay(behaviorMove?.type, random);
     }
@@ -1132,7 +1165,8 @@ function createRewardImprovementExample(
   requireBehaviorGap: boolean,
   minBehaviorImprovement: number,
   behaviorGapStandardErrorMultiplier: number,
-  scoreRewardWeight: number
+  scoreRewardWeight: number,
+  actionOptions: ActionRankingOptions | undefined
 ): RewardImprovementExampleResult {
   const pointDifferentialBefore = getPointDifferential(board, playerIndex);
   const scoreBefore = getCurrentPointsFromCards(board.players[playerIndex]);
@@ -1150,7 +1184,8 @@ function createRewardImprovementExample(
         getCounterfactualSeeds(seed, candidateIndex, rolloutCount, commonRandom),
         rolloutMoves,
         continuationMode,
-        continuationPolicy
+        continuationPolicy,
+        actionOptions
       );
       const finalPointDifferentials = outcomes.map(
         (outcome) => outcome.pointDifferential
@@ -1315,7 +1350,8 @@ function getCounterfactualPointDifferential(
   seeds: readonly string[],
   maxMoves: number,
   continuationMode: "teacher" | "policy" = "teacher",
-  continuationPolicy?: NeuralActionRankingPolicy
+  continuationPolicy?: NeuralActionRankingPolicy,
+  actionOptions?: ActionRankingOptions
 ): number {
   return meanNumbers(
     getCounterfactualPointDifferentials(
@@ -1325,7 +1361,8 @@ function getCounterfactualPointDifferential(
       seeds,
       maxMoves,
       continuationMode,
-      continuationPolicy
+      continuationPolicy,
+      actionOptions
     )
   );
 }
@@ -1337,7 +1374,8 @@ function getCounterfactualPointDifferentials(
   seeds: readonly string[],
   maxMoves: number,
   continuationMode: "teacher" | "policy" = "teacher",
-  continuationPolicy?: NeuralActionRankingPolicy
+  continuationPolicy?: NeuralActionRankingPolicy,
+  actionOptions?: ActionRankingOptions
 ): number[] {
   return getCounterfactualOutcomes(
     board,
@@ -1346,7 +1384,8 @@ function getCounterfactualPointDifferentials(
     seeds,
     maxMoves,
     continuationMode,
-    continuationPolicy
+    continuationPolicy,
+    actionOptions
   ).map((outcome) => outcome.pointDifferential);
 }
 
@@ -1357,7 +1396,8 @@ function getCounterfactualOutcomes(
   seeds: readonly string[],
   maxMoves: number,
   continuationMode: "teacher" | "policy" = "teacher",
-  continuationPolicy?: NeuralActionRankingPolicy
+  continuationPolicy?: NeuralActionRankingPolicy,
+  actionOptions?: ActionRankingOptions
 ): CounterfactualOutcome[] {
   const safeSeeds = seeds.length > 0 ? seeds : ["counterfactual"];
   return safeSeeds.map((seed) => {
@@ -1368,13 +1408,19 @@ function getCounterfactualOutcomes(
         move,
         seed,
         maxMoves,
-        continuationPolicy
+        continuationPolicy,
+        [playerIndex],
+        undefined,
+        actionOptions
       );
     }
 
     const nextBoard = deepClone(board);
-    executeMove(nextBoard, playerIndex, move);
-    runTeacherContinuation(nextBoard, seed, maxMoves);
+    const hands = createSimulationHands(nextBoard, actionOptions?.hands);
+    const hand = getSimulationHand(hands, playerIndex);
+    const result = executeMove(nextBoard, playerIndex, move, hand);
+    applySimulationMoveResult(nextBoard, playerIndex, move, hand, result);
+    runTeacherContinuation(nextBoard, seed, maxMoves, hands);
     return {
       pointDifferential: getPointDifferential(nextBoard, playerIndex),
       score: getCurrentPointsFromCards(nextBoard.players[playerIndex]),
@@ -1696,7 +1742,8 @@ function getImprovementCandidateReturnStdDev(
 function runTeacherContinuation(
   board: BoardState,
   seed: string,
-  maxMoves: number
+  maxMoves: number,
+  initialHands?: readonly CursorState[]
 ): void {
   const random = createSeededRandom(seed);
   const activePlayerIndices = getActivePlayerIndices(board);
@@ -1705,6 +1752,7 @@ function runTeacherContinuation(
       ? random()
       : Number.POSITIVE_INFINITY
   );
+  const hands = createSimulationHands(board, initialHands);
 
   board.isActive = true;
   board.isDealt = true;
@@ -1721,9 +1769,13 @@ function runTeacherContinuation(
     if (playerIndex < 0) {
       break;
     }
-    const move = getBasicAIMove(board, playerIndex, {});
+    const hand = getSimulationHand(hands, playerIndex);
+    const move =
+      getCurrentAIDragMove(board, playerIndex, hand) ??
+      getBasicAIMove(board, playerIndex, hand);
     if (move) {
-      executeMove(board, playerIndex, move);
+      const result = executeMove(board, playerIndex, move, hand);
+      applySimulationMoveResult(board, playerIndex, move, hand, result);
     }
     cooldowns[playerIndex] += getMoveDelay(move?.type, random);
   }
@@ -4877,7 +4929,8 @@ function createCounterfactualCandidateReturn(
     policy,
     continuationNeuralPlayerIndices,
     opponentPolicy,
-    actionOptions
+    actionOptions,
+    transition.hands
   );
   const pointDifferentialReturns = outcomes.map(
     (outcome) => outcome.pointDifferential - transition.pointDifferentialBefore
@@ -5259,7 +5312,8 @@ function getCounterfactualPolicyOutcomes(
   policy: NeuralActionRankingPolicy,
   continuationNeuralPlayerIndices: readonly number[] = [playerIndex],
   opponentPolicy?: NeuralActionRankingPolicy,
-  actionOptions?: ActionRankingOptions
+  actionOptions?: ActionRankingOptions,
+  initialHands?: readonly CursorState[]
 ): CounterfactualOutcome[] {
   const safeSeeds = seeds.length > 0 ? seeds : ["policy-counterfactual"];
   return safeSeeds.map((seed) =>
@@ -5272,7 +5326,8 @@ function getCounterfactualPolicyOutcomes(
       policy,
       continuationNeuralPlayerIndices,
       opponentPolicy,
-      actionOptions
+      actionOptions,
+      initialHands
     )
   );
 }
@@ -5286,10 +5341,17 @@ function getCounterfactualPolicyOutcome(
   policy: NeuralActionRankingPolicy,
   continuationNeuralPlayerIndices: readonly number[] = [playerIndex],
   opponentPolicy?: NeuralActionRankingPolicy,
-  actionOptions?: ActionRankingOptions
+  actionOptions?: ActionRankingOptions,
+  initialHands?: readonly CursorState[]
 ): CounterfactualOutcome {
   const nextBoard = deepClone(board);
-  executeMove(nextBoard, playerIndex, move);
+  const hands = createSimulationHands(
+    nextBoard,
+    initialHands ?? actionOptions?.hands
+  );
+  const hand = getSimulationHand(hands, playerIndex);
+  const result = executeMove(nextBoard, playerIndex, move, hand);
+  applySimulationMoveResult(nextBoard, playerIndex, move, hand, result);
   const continuationPlayerSet = new Set(continuationNeuralPlayerIndices);
   const rollout = runPolicyRollout(nextBoard, {
     policy,
@@ -5308,6 +5370,7 @@ function getCounterfactualPolicyOutcome(
             : opponentPolicy
       : undefined,
     actionOptions,
+    initialHands: hands,
   });
   return {
     pointDifferential: rollout.finalPointDifferentials[playerIndex] ?? 0,
@@ -5584,8 +5647,8 @@ export function evaluateNeuralPolicyAgainstBasicStyle(
 ): PolicyEvaluationResult {
   return evaluateNeuralPolicy(policy, {
     ...options,
-    basicMoveProvider: (board, playerIndex) =>
-      getBasicAIMoveForStyle(board, playerIndex, {}, styleName),
+    basicMoveProvider: (board, playerIndex, cursor) =>
+      getBasicAIMoveForStyle(board, playerIndex, cursor, styleName),
   });
 }
 
@@ -5897,6 +5960,7 @@ function runPolicyRollout(
     captureTransitionBoards?: boolean;
     basicMoveProvider?: BasicMoveProvider;
     actionOptions?: ActionRankingOptions;
+    initialHands?: readonly CursorState[];
   }
 ): RolloutResult {
   const board = deepClone(startBoard);
@@ -5922,6 +5986,7 @@ function runPolicyRollout(
   );
   const transitions: RolloutTransition[] = [];
   const moveTypeCountsByPlayer = board.players.map(() => createMoveTypeCounts());
+  const hands = createSimulationHands(board, options.initialHands);
 
   board.isActive = true;
   board.isDealt = true;
@@ -5943,6 +6008,12 @@ function runPolicyRollout(
       break;
     }
 
+    const hand = getSimulationHand(hands, playerIndex);
+    const actionOptions = getSimulationActionOptions(
+      options.actionOptions,
+      hands
+    );
+    const currentDragMove = getCurrentAIDragMove(board, playerIndex, hand);
     const playerPolicy =
       options.policyByPlayer?.(playerIndex) ??
       (neuralPlayers.has(playerIndex) ? options.policy : undefined);
@@ -5950,24 +6021,28 @@ function runPolicyRollout(
       options.sample && (samplePlayers == null || samplePlayers.has(playerIndex));
     const shouldCapture =
       capturePlayers == null || capturePlayers.has(playerIndex);
-    const move = playerPolicy
-      ? chooseNeuralMove(
-          board,
-          playerIndex,
-          {
-            ...options,
-            policy: playerPolicy,
-            sample: shouldSample,
-            captureTransition: shouldCapture,
-          },
-          transitions
-        )
-      : options.basicMoveProvider
-        ? options.basicMoveProvider(board, playerIndex)
-        : getBasicAIMove(board, playerIndex, {});
+    const move =
+      currentDragMove ??
+      (playerPolicy
+        ? chooseNeuralMove(
+            board,
+            playerIndex,
+            {
+              ...options,
+              policy: playerPolicy,
+              sample: shouldSample,
+              captureTransition: shouldCapture,
+              actionOptions,
+            },
+            transitions
+          )
+        : options.basicMoveProvider
+        ? options.basicMoveProvider(board, playerIndex, hand, hands)
+        : getBasicAIMove(board, playerIndex, hand));
 
     if (move) {
-      executeMove(board, playerIndex, move);
+      const result = executeMove(board, playerIndex, move, hand);
+      applySimulationMoveResult(board, playerIndex, move, hand, result);
       moveTypeCountsByPlayer[playerIndex][move.type] += 1;
     }
     cooldowns[playerIndex] += getMoveDelay(move?.type, options.random);
@@ -6049,6 +6124,10 @@ function chooseNeuralMove(
       scoreBefore,
       pounceRemainingBefore,
       board: options.captureTransitionBoards ? deepClone(board) : undefined,
+      hands:
+        options.captureTransitionBoards && options.actionOptions?.hands
+          ? createSimulationHands(board, options.actionOptions.hands)
+          : undefined,
       candidates,
       selectedCandidateIndex,
       greedyCandidateIndex,

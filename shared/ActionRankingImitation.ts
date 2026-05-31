@@ -1,5 +1,15 @@
-import { getBasicAIMove, getBasicAIMoveForStyle } from "./ComputerV1";
+import {
+  getBasicAIMove,
+  getBasicAIMoveForStyle,
+  getCurrentAIDragMove,
+} from "./ComputerV1";
 import deepClone from "./deepClone";
+import {
+  applySimulationMoveResult,
+  createSimulationHands,
+  getSimulationActionOptions,
+  getSimulationHand,
+} from "./AISimulationCursor";
 import { isGameOver, type BoardState } from "./GameUtils";
 import {
   ACTION_RANKING_FEATURE_NAMES,
@@ -137,6 +147,7 @@ function collectActionRankingImitationTrial(
   const examples: ActionRankingImitationExample[] = [];
   let matchedTeacherMoveCount = 0;
   let unmatchedTeacherMoveCount = 0;
+  const hands = createSimulationHands(board);
 
   board.isActive = true;
   board.isDealt = true;
@@ -158,14 +169,22 @@ function collectActionRankingImitationTrial(
       break;
     }
 
+    const hand = getSimulationHand(hands, playerIndex);
+    const currentDragMove = getCurrentAIDragMove(board, playerIndex, hand);
+    const currentActionOptions = getSimulationActionOptions(
+      actionOptions,
+      hands
+    );
     const candidates = enumerateActionRankingCandidates(
       board,
       playerIndex,
-      actionOptions
+      currentActionOptions
     );
-    const teacherMove = teacherStyleName
-      ? getBasicAIMoveForStyle(board, playerIndex, {}, teacherStyleName)
-      : getBasicAIMove(board, playerIndex, {});
+    const teacherMove =
+      currentDragMove ??
+      (teacherStyleName
+        ? getBasicAIMoveForStyle(board, playerIndex, hand, teacherStyleName)
+        : getBasicAIMove(board, playerIndex, hand));
     const selectedActionKey = teacherMove
       ? getActionRankingMoveKey(teacherMove)
       : null;
@@ -197,7 +216,8 @@ function collectActionRankingImitationTrial(
     }
 
     if (teacherMove) {
-      executeMove(board, playerIndex, teacherMove);
+      const result = executeMove(board, playerIndex, teacherMove, hand);
+      applySimulationMoveResult(board, playerIndex, teacherMove, hand, result);
     }
     cooldowns[playerIndex] += getMoveDelay(teacherMove?.type, random);
   }

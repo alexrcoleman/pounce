@@ -61,8 +61,9 @@ Training and audit scripts keep those candidates disabled by default so old
 baselines and smoke checks remain comparable; set `RL_INCLUDE_WAIT_ACTIONS=true`
 and/or `RL_INCLUDE_PREMOVE_ACTIONS=true` for runs that should train the expanded
 surface. Live premove actions move the AI cursor/hand toward a source card.
-Rollout training currently treats premove as a tempo action unless a later
-cursor-state simulation makes the held-card follow-up explicit.
+Rollout training persists simulated cursor state, checks for held-card drag
+moves before asking the policy for a fresh action, and passes the current
+simulated hands into action features and counterfactual continuations.
 Current features include own/opponent held-card context from visible hands,
 opponent held-card follow pressure after a center play, and center-distance
 features for the action card and current waste card. Center distance is the

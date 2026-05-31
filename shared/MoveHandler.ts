@@ -45,7 +45,7 @@ export type Move =
         | { type: "solitaire"; index: number };
     }
   | { type: "move_field_stack"; index: number; position: [number, number] };
-type MoveResult = {
+export type MoveResult = {
   cursorMove?: CursorLocation;
   cursorMoveItem?: CardState;
   cursorMoveItems?: CardState[];
