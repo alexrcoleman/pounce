@@ -27,12 +27,17 @@ const puzzlesPerSeed = getPounceRushTemplateCount() * 36;
 const observedTemplateIds = new Set<string>();
 let deckConnectorCount = 0;
 let deckShiftConnectorCount = 0;
+let deckRevealCenterCount = 0;
 let centerRunCount = 0;
 let uncoverCenterChainCount = 0;
+let uncoverTwoCenterCount = 0;
 let deepStackCount = 0;
 let extraCenterPileCount = 0;
 let solitaireConnectorCount = 0;
 let tallStackMoveCount = 0;
+let wasteFirstCenterCount = 0;
+let wasteFirstDoubleCenterCount = 0;
+let wasteUncoverCenterCount = 0;
 const observedSequenceValues = new Set<number>();
 
 const firstRushPuzzle = createPounceRushPuzzle({
@@ -91,14 +96,29 @@ for (const seed of seeds) {
     if (hasDeckShiftConnectorLine(puzzle.sequence)) {
       deckShiftConnectorCount += 1;
     }
+    if (hasDeckRevealCenterLine(puzzle.sequence)) {
+      deckRevealCenterCount += 1;
+    }
     if (hasCenterRunLine(puzzle.sequence)) {
       centerRunCount += 1;
     }
     if (hasUncoverCenterChainLine(puzzle.sequence)) {
       uncoverCenterChainCount += 1;
     }
+    if (hasUncoverTwoCenterLine(puzzle.sequence)) {
+      uncoverTwoCenterCount += 1;
+    }
     if (hasSolitaireConnectorLine(puzzle.sequence)) {
       solitaireConnectorCount += 1;
+    }
+    if (hasWasteFirstCenterLine(puzzle.sequence)) {
+      wasteFirstCenterCount += 1;
+    }
+    if (hasWasteFirstDoubleCenterLine(puzzle.sequence)) {
+      wasteFirstDoubleCenterCount += 1;
+    }
+    if (hasWasteUncoverCenterLine(puzzle.sequence)) {
+      wasteUncoverCenterCount += 1;
     }
     if (puzzle.sequence.some((move) => move.type === "s2s" && move.count > 1)) {
       tallStackMoveCount += 1;
@@ -118,14 +138,34 @@ assert.ok(
   deckShiftConnectorCount > 0,
   "expected deck-to-solitaire then solitaire-to-solitaire pounce puzzles"
 );
+assert.ok(
+  deckRevealCenterCount > 0,
+  "expected deck-to-solitaire reveal-center pounce puzzles"
+);
 assert.ok(centerRunCount > 0, "expected strung-together center-run puzzles");
 assert.ok(
   uncoverCenterChainCount > 0,
   "expected uncover-center chain pounce puzzles"
 );
 assert.ok(
+  uncoverTwoCenterCount > 0,
+  "expected two-center uncover pounce puzzles"
+);
+assert.ok(
   solitaireConnectorCount > 0,
   "expected solitaire-to-solitaire pounce puzzles"
+);
+assert.ok(
+  wasteFirstCenterCount > 0,
+  "expected waste-first center pounce puzzles"
+);
+assert.ok(
+  wasteFirstDoubleCenterCount > 0,
+  "expected waste-first double-solitaire center pounce puzzles"
+);
+assert.ok(
+  wasteUncoverCenterCount > 0,
+  "expected waste-first uncover-center pounce puzzles"
 );
 assert.ok(tallStackMoveCount > 0, "expected taller moving-stack puzzles");
 assert.ok(deepStackCount > 0, "expected deeper solitaire stacks");
@@ -209,6 +249,23 @@ function hasDeckShiftConnectorLine(sequence: Move[]): boolean {
   });
 }
 
+function hasDeckRevealCenterLine(sequence: Move[]): boolean {
+  return sequence.some((move, index) => {
+    const shiftMove = sequence[index + 1];
+    const centerMove = sequence[index + 2];
+    const finalMove = sequence[index + 3];
+    return (
+      move.type === "c2s" &&
+      move.source === "deck" &&
+      shiftMove?.type === "s2s" &&
+      centerMove?.type === "c2c" &&
+      centerMove.source.type === "solitaire" &&
+      finalMove?.type === "c2c" &&
+      finalMove.source.type === "pounce"
+    );
+  });
+}
+
 function hasCenterRunLine(sequence: Move[]): boolean {
   return sequence.some((move, index) => {
     const secondMove = sequence[index + 1];
@@ -243,6 +300,24 @@ function hasUncoverCenterChainLine(sequence: Move[]): boolean {
   });
 }
 
+function hasUncoverTwoCenterLine(sequence: Move[]): boolean {
+  return sequence.some((move, index) => {
+    const firstCenterMove = sequence[index + 1];
+    const secondCenterMove = sequence[index + 2];
+    const finalMove = sequence[index + 3];
+    return (
+      move.type === "s2s" &&
+      firstCenterMove?.type === "c2c" &&
+      firstCenterMove.source.type === "solitaire" &&
+      secondCenterMove?.type === "c2c" &&
+      secondCenterMove.source.type === "solitaire" &&
+      secondCenterMove.source.index === firstCenterMove.source.index &&
+      finalMove?.type === "c2c" &&
+      finalMove.source.type === "pounce"
+    );
+  });
+}
+
 function hasSolitaireConnectorLine(sequence: Move[]): boolean {
   return sequence.some((move, index) => {
     const nextMove = sequence[index + 1];
@@ -250,6 +325,56 @@ function hasSolitaireConnectorLine(sequence: Move[]): boolean {
       move.type === "s2s" &&
       nextMove?.type === "c2s" &&
       nextMove.source === "pounce"
+    );
+  });
+}
+
+function hasWasteFirstCenterLine(sequence: Move[]): boolean {
+  return sequence.some((move, index) => {
+    const centerMove = sequence[index + 1];
+    const finalMove = sequence[index + 2];
+    return (
+      move.type === "c2c" &&
+      move.source.type === "deck" &&
+      centerMove?.type === "c2c" &&
+      centerMove.source.type === "solitaire" &&
+      finalMove?.type === "c2c" &&
+      finalMove.source.type === "pounce"
+    );
+  });
+}
+
+function hasWasteFirstDoubleCenterLine(sequence: Move[]): boolean {
+  return sequence.some((move, index) => {
+    const firstCenterMove = sequence[index + 1];
+    const secondCenterMove = sequence[index + 2];
+    const finalMove = sequence[index + 3];
+    return (
+      move.type === "c2c" &&
+      move.source.type === "deck" &&
+      firstCenterMove?.type === "c2c" &&
+      firstCenterMove.source.type === "solitaire" &&
+      secondCenterMove?.type === "c2c" &&
+      secondCenterMove.source.type === "solitaire" &&
+      finalMove?.type === "c2c" &&
+      finalMove.source.type === "pounce"
+    );
+  });
+}
+
+function hasWasteUncoverCenterLine(sequence: Move[]): boolean {
+  return sequence.some((move, index) => {
+    const shiftMove = sequence[index + 1];
+    const centerMove = sequence[index + 2];
+    const finalMove = sequence[index + 3];
+    return (
+      move.type === "c2c" &&
+      move.source.type === "deck" &&
+      shiftMove?.type === "s2s" &&
+      centerMove?.type === "c2c" &&
+      centerMove.source.type === "solitaire" &&
+      finalMove?.type === "c2c" &&
+      finalMove.source.type === "pounce"
     );
   });
 }

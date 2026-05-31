@@ -538,6 +538,116 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     },
   },
   {
+    id: "waste-solitaire-center-pounce",
+    kind: "combo",
+    objective: "Unload a pounce card",
+    difficulty: "Combo",
+    difficultyScore: 6,
+    minPuzzleNumber: 8,
+    tags: ["waste", "solitaire", "center", "mixed-source", "pounce"],
+    build: () => ({
+      deckCard: card("spades", 13),
+      flippedDeck: [card("hearts", 9)],
+      pounceDeck: [card("clubs", 12), card("hearts", 11)],
+      stacks: [
+        [card("diamonds", 13)],
+        [card("clubs", 13)],
+        [card("hearts", 10)],
+        [card("diamonds", 12)],
+      ],
+      piles: [
+        suitedPile("hearts", 8),
+        suitedPile("spades", 4),
+        suitedPile("diamonds", 3),
+        suitedPile("clubs", 3),
+      ],
+      sequence: [
+        { type: "c2c", source: { type: "deck" }, dest: 0 },
+        { type: "c2c", source: { type: "solitaire", index: 2 }, dest: 0 },
+        { type: "c2c", source: { type: "pounce" }, dest: 0 },
+      ],
+    }),
+  },
+  {
+    id: "waste-double-solitaire-center-pounce",
+    kind: "combo",
+    objective: "Unload a pounce card",
+    difficulty: "Combo",
+    difficultyScore: 8,
+    minPuzzleNumber: 14,
+    tags: [
+      "daily-hard",
+      "waste",
+      "solitaire",
+      "center",
+      "mixed-source",
+      "pounce",
+    ],
+    build: () => ({
+      deckCard: card("spades", 13),
+      flippedDeck: [card("diamonds", 8)],
+      pounceDeck: [card("spades", 12), card("diamonds", 11)],
+      stacks: [
+        [card("clubs", 10), card("diamonds", 9)],
+        [card("clubs", 11), card("diamonds", 10)],
+        [card("hearts", 13)],
+        [card("clubs", 8)],
+      ],
+      piles: [
+        suitedPile("diamonds", 7),
+        suitedPile("hearts", 4),
+        suitedPile("spades", 5),
+        suitedPile("clubs", 3),
+      ],
+      sequence: [
+        { type: "c2c", source: { type: "deck" }, dest: 0 },
+        { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
+        { type: "c2c", source: { type: "solitaire", index: 1 }, dest: 0 },
+        { type: "c2c", source: { type: "pounce" }, dest: 0 },
+      ],
+    }),
+  },
+  {
+    id: "waste-center-uncover-pounce",
+    kind: "combo",
+    objective: "Unload a pounce card",
+    difficulty: "Combo",
+    difficultyScore: 8,
+    minPuzzleNumber: 14,
+    tags: [
+      "daily-hard",
+      "waste",
+      "uncover",
+      "stack-shift",
+      "center",
+      "mixed-source",
+      "pounce",
+    ],
+    build: () => ({
+      deckCard: card("spades", 13),
+      flippedDeck: [card("hearts", 6)],
+      pounceDeck: [card("spades", 12), card("hearts", 8)],
+      stacks: [
+        [card("hearts", 7), card("clubs", 6)],
+        [card("diamonds", 7)],
+        [card("hearts", 13)],
+        [card("clubs", 13)],
+      ],
+      piles: [
+        suitedPile("hearts", 5),
+        suitedPile("spades", 4),
+        suitedPile("diamonds", 3),
+        suitedPile("clubs", 3),
+      ],
+      sequence: [
+        { type: "c2c", source: { type: "deck" }, dest: 0 },
+        { type: "s2s", source: 0, dest: 1, count: 1 },
+        { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
+        { type: "c2c", source: { type: "pounce" }, dest: 0 },
+      ],
+    }),
+  },
+  {
     id: "deck-shift-open-slot-pounce",
     kind: "combo",
     objective: "Unload a pounce card",
@@ -579,6 +689,85 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
         ],
       };
     },
+  },
+  {
+    id: "uncover-two-center-pounce",
+    kind: "combo",
+    objective: "Unload a pounce card",
+    difficulty: "Combo",
+    difficultyScore: 9,
+    minPuzzleNumber: 18,
+    tags: [
+      "daily-hard",
+      "uncover",
+      "stack-shift",
+      "solitaire",
+      "center",
+      "pounce",
+    ],
+    build: () => ({
+      deckCard: card("spades", 13),
+      flippedDeck: [card("diamonds", 12)],
+      pounceDeck: [card("clubs", 12), card("hearts", 7)],
+      stacks: [
+        [card("hearts", 6), card("clubs", 5), card("diamonds", 4)],
+        [card("spades", 5)],
+        [card("hearts", 13)],
+        [card("diamonds", 10)],
+      ],
+      piles: [
+        suitedPile("clubs", 4),
+        suitedPile("hearts", 5),
+        suitedPile("diamonds", 6),
+        suitedPile("spades", 3),
+      ],
+      sequence: [
+        { type: "s2s", source: 0, dest: 1, count: 1 },
+        { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
+        { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 1 },
+        { type: "c2c", source: { type: "pounce" }, dest: 1 },
+      ],
+    }),
+  },
+  {
+    id: "deck-stack-reveal-center-pounce",
+    kind: "combo",
+    objective: "Unload a pounce card",
+    difficulty: "Combo",
+    difficultyScore: 9,
+    minPuzzleNumber: 18,
+    tags: [
+      "daily-hard",
+      "deck",
+      "center",
+      "uncover",
+      "stack-shift",
+      "mixed-source",
+      "pounce",
+    ],
+    build: () => ({
+      deckCard: card("clubs", 13),
+      flippedDeck: [card("hearts", 6)],
+      pounceDeck: [card("clubs", 12), card("diamonds", 7)],
+      stacks: [
+        [card("diamonds", 6), card("clubs", 5)],
+        [card("spades", 7)],
+        [card("hearts", 13)],
+        [card("spades", 9)],
+      ],
+      piles: [
+        suitedPile("diamonds", 5),
+        suitedPile("hearts", 4),
+        suitedPile("spades", 3),
+        suitedPile("clubs", 7),
+      ],
+      sequence: [
+        { type: "c2s", source: "deck", dest: 1 },
+        { type: "s2s", source: 0, dest: 1, count: 1 },
+        { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
+        { type: "c2c", source: { type: "pounce" }, dest: 0 },
+      ],
+    }),
   },
   {
     id: "double-solitaire-waste-center-pounce",
@@ -1507,6 +1696,13 @@ function getCodifiedSubparMoveMessage(
     return {
       title: "Nice try",
       detail: "That card can play straight to the center.",
+    };
+  }
+
+  if (expectedMove.type === "s2s" && move.type === "s2s") {
+    return {
+      title: "Different stack",
+      detail: "There is a cleaner stack shift to unload pounce.",
     };
   }
 

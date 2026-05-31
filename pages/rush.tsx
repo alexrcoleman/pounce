@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
+import CheckOutlined from "@ant-design/icons/CheckOutlined";
 import { Button } from "antd";
 import Board from "../client/Board";
 import { ClientProvider } from "../client/ClientContext";
@@ -203,7 +204,11 @@ const PounceRushPage: NextPage<{
             key={feedback.id}
             role="status"
           >
-            <span className={styles.feedbackIcon} aria-hidden="true" />
+            <span className={styles.feedbackIcon} aria-hidden="true">
+              {feedback.tone === "success" ? (
+                <CheckOutlined rev={undefined} />
+              ) : null}
+            </span>
             <span>
               <strong>{feedback.title}</strong>
               {feedback.detail ? <small>{feedback.detail}</small> : null}

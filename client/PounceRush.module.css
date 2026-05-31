@@ -207,9 +207,18 @@
   position: relative;
   width: 16px;
   height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex: 0 0 auto;
   border: 2px solid currentColor;
   border-radius: 50%;
+}
+
+.feedbackIcon svg {
+  width: 10px;
+  height: 10px;
+  display: block;
 }
 
 .feedbackIcon::after {
@@ -225,15 +234,7 @@
 }
 
 .feedbackSuccess .feedbackIcon::after {
-  left: 4px;
-  right: auto;
-  top: 1px;
-  width: 5px;
-  height: 9px;
-  background: transparent;
-  border-right: 2px solid currentColor;
-  border-bottom: 2px solid currentColor;
-  transform: rotate(45deg);
+  content: none;
 }
 
 .startOverlay {
