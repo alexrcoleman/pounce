@@ -664,6 +664,32 @@ assert.ok(
   "different-move-type filtering should only accept cross-family move pairs"
 );
 
+const behaviorMoveTypeFiltered = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:behavior-move-type-filtered",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualStateSource: "greedy",
+  rlUpdateScope: "all",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualMinReturnGap: 0,
+  rlCounterfactualRequirePolicyChange: true,
+  rlCounterfactualBehaviorMoveTypes: ["c2s"],
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.ok(
+  behaviorMoveTypeFiltered.reinforcement
+    .counterfactualBehaviorMoveTypeSkippedCount > 0,
+  "behavior-move-type filtering should skip off-family greedy behavior states"
+);
+assert.ok(
+  Object.keys(
+    behaviorMoveTypeFiltered.reinforcement.counterfactualAcceptedMovePairCounts
+  ).every((pair) => isBehaviorMoveTypePair(pair, "c2s")),
+  "behavior-move-type filtering should only accept labels with matching behavior move types"
+);
+
 const cappedScoreGapBudgetFiltered = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:capped-score-gap-budget-filtered",
@@ -836,6 +862,8 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.counterfactualMovePairBudgetSkippedCount,
     counterfactualMovePairExcludedSkippedCount:
       result.reinforcement.counterfactualMovePairExcludedSkippedCount,
+    counterfactualBehaviorMoveTypeSkippedCount:
+      result.reinforcement.counterfactualBehaviorMoveTypeSkippedCount,
     counterfactualMoveTypeMismatchSkippedCount:
       result.reinforcement.counterfactualMoveTypeMismatchSkippedCount,
     counterfactualMoveTypeMatchSkippedCount:
@@ -886,6 +914,11 @@ function isSameMoveTypePair(movePair: string): boolean {
     behaviorType != null &&
     winnerType.trim().toLowerCase() === behaviorType.trim().toLowerCase()
   );
+}
+
+function isBehaviorMoveTypePair(movePair: string, moveType: string): boolean {
+  const [, behaviorType] = movePair.split(">");
+  return behaviorType?.trim().toLowerCase() === moveType.toLowerCase();
 }
 
 function assertLegacyFeatureExpansion() {

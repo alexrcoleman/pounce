@@ -5,6 +5,7 @@ import {
   trainNeuralActionRankingPolicy,
 } from "../shared/ActionRankingTraining";
 import type { NeuralActionRankingModel } from "../shared/NeuralActionRankingPolicy";
+import type { Move } from "../shared/MoveHandler";
 
 const modelIn = process.env.MODEL_IN;
 if (!modelIn) {
@@ -202,6 +203,10 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       "RL_COUNTERFACTUAL_MAX_SCORE_GAP",
       0
     ),
+    rlCounterfactualBehaviorMoveTypes: readMoveTypeListEnv(
+      "RL_COUNTERFACTUAL_BEHAVIOR_MOVE_TYPES",
+      []
+    ),
     rlCounterfactualRequireSameMoveType: readBooleanEnv(
       "RL_COUNTERFACTUAL_REQUIRE_SAME_MOVE_TYPE",
       false
@@ -392,6 +397,38 @@ function readBooleanEnv(name: string, fallback: boolean): boolean {
     return false;
   }
   return fallback;
+}
+
+function readMoveTypeListEnv(
+  name: string,
+  fallback: Move["type"][]
+): Move["type"][] {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  const parsed = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .map((item) => parseMoveTypeEnvValue(name, item));
+  return parsed.length > 0 ? parsed : fallback;
+}
+
+function parseMoveTypeEnvValue(name: string, value: string): Move["type"] {
+  const normalized = value.trim().toLowerCase() as Move["type"];
+  const moveTypes: readonly Move["type"][] = [
+    "c2c",
+    "c2s",
+    "s2s",
+    "cycle",
+    "flip_deck",
+    "move_field_stack",
+  ];
+  if (!moveTypes.includes(normalized)) {
+    throw new Error(`${name} contains unknown move type: ${value}`);
+  }
+  return normalized;
 }
 
 function readImprovementTrainingModeEnv(

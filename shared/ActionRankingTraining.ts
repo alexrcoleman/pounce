@@ -75,6 +75,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualScoreGapBudget?: number;
   rlCounterfactualMaxLabelsPerMovePair?: number;
   rlCounterfactualExcludedMovePairs?: readonly string[];
+  rlCounterfactualBehaviorMoveTypes?: readonly Move["type"][];
   rlCounterfactualRequireSameMoveType?: boolean;
   rlCounterfactualRequireDifferentMoveType?: boolean;
   rlCounterfactualStopAfterLabels?: number;
@@ -196,6 +197,7 @@ export type NeuralTrainingResult = {
     counterfactualScoreGapBudgetSkippedCount: number;
     counterfactualMovePairBudgetSkippedCount: number;
     counterfactualMovePairExcludedSkippedCount: number;
+    counterfactualBehaviorMoveTypeSkippedCount: number;
     counterfactualMoveTypeMismatchSkippedCount: number;
     counterfactualMoveTypeMatchSkippedCount: number;
     counterfactualScoreReturnGapSkippedCount: number;
@@ -298,6 +300,7 @@ export type CounterfactualRlLabelAudit = {
   scoreGapBudgetSkippedCount: number;
   movePairBudgetSkippedCount: number;
   movePairExcludedSkippedCount: number;
+  behaviorMoveTypeSkippedCount: number;
   moveTypeMismatchSkippedCount: number;
   moveTypeMatchSkippedCount: number;
   scoreReturnGapSkippedCount: number;
@@ -627,6 +630,8 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualMaxLabelsPerMovePair ?? 0,
     counterfactualExcludedMovePairs:
       options.rlCounterfactualExcludedMovePairs ?? [],
+    counterfactualBehaviorMoveTypes:
+      options.rlCounterfactualBehaviorMoveTypes ?? [],
     counterfactualRequireSameMoveType:
       options.rlCounterfactualRequireSameMoveType ?? false,
     counterfactualRequireDifferentMoveType:
@@ -1651,6 +1656,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualScoreGapBudget: number;
     counterfactualMaxLabelsPerMovePair: number;
     counterfactualExcludedMovePairs: readonly string[];
+    counterfactualBehaviorMoveTypes: readonly Move["type"][];
     counterfactualRequireSameMoveType: boolean;
     counterfactualRequireDifferentMoveType: boolean;
     counterfactualStopAfterLabels: number;
@@ -1707,6 +1713,7 @@ export function trainPolicyGradientFromRollouts(
   let counterfactualScoreGapBudgetSkippedCount = 0;
   let counterfactualMovePairBudgetSkippedCount = 0;
   let counterfactualMovePairExcludedSkippedCount = 0;
+  let counterfactualBehaviorMoveTypeSkippedCount = 0;
   let counterfactualMoveTypeMismatchSkippedCount = 0;
   let counterfactualMoveTypeMatchSkippedCount = 0;
   let counterfactualScoreReturnGapSkippedCount = 0;
@@ -1889,6 +1896,16 @@ export function trainPolicyGradientFromRollouts(
           policyTopScoreGap > options.counterfactualMaxPolicyMargin
         ) {
           counterfactualPolicyMarginSkippedCount += 1;
+          return;
+        }
+        if (
+          options.counterfactualTrainingMode !== "policy_gradient" &&
+          !isCounterfactualBehaviorMoveTypeAllowed(
+            transition,
+            options.counterfactualBehaviorMoveTypes
+          )
+        ) {
+          counterfactualBehaviorMoveTypeSkippedCount += 1;
           return;
         }
         const result = getCounterfactualTransitionResult(
@@ -2299,6 +2316,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualScoreGapBudgetSkippedCount,
     counterfactualMovePairBudgetSkippedCount,
     counterfactualMovePairExcludedSkippedCount,
+    counterfactualBehaviorMoveTypeSkippedCount,
     counterfactualMoveTypeMismatchSkippedCount,
     counterfactualMoveTypeMatchSkippedCount,
     counterfactualScoreReturnGapSkippedCount,
@@ -2363,6 +2381,7 @@ export function collectCounterfactualRlLabelAudit(
     counterfactualScoreGapBudget: number;
     counterfactualMaxLabelsPerMovePair: number;
     counterfactualExcludedMovePairs: readonly string[];
+    counterfactualBehaviorMoveTypes: readonly Move["type"][];
     counterfactualRequireSameMoveType: boolean;
     counterfactualRequireDifferentMoveType: boolean;
     counterfactualStopAfterLabels: number;
@@ -2394,6 +2413,7 @@ export function collectCounterfactualRlLabelAudit(
   let scoreGapBudgetSkippedCount = 0;
   let movePairBudgetSkippedCount = 0;
   let movePairExcludedSkippedCount = 0;
+  let behaviorMoveTypeSkippedCount = 0;
   let moveTypeMismatchSkippedCount = 0;
   let moveTypeMatchSkippedCount = 0;
   let scoreReturnGapSkippedCount = 0;
@@ -2458,6 +2478,17 @@ export function collectCounterfactualRlLabelAudit(
         policyTopScoreGap > options.counterfactualMaxPolicyMargin
       ) {
         policyMarginSkippedCount += 1;
+        return;
+      }
+
+      if (
+        options.counterfactualTrainingMode !== "policy_gradient" &&
+        !isCounterfactualBehaviorMoveTypeAllowed(
+          transition,
+          options.counterfactualBehaviorMoveTypes
+        )
+      ) {
+        behaviorMoveTypeSkippedCount += 1;
         return;
       }
 
@@ -2739,6 +2770,7 @@ export function collectCounterfactualRlLabelAudit(
     scoreGapBudgetSkippedCount,
     movePairBudgetSkippedCount,
     movePairExcludedSkippedCount,
+    behaviorMoveTypeSkippedCount,
     moveTypeMismatchSkippedCount,
     moveTypeMatchSkippedCount,
     scoreReturnGapSkippedCount,
@@ -4360,6 +4392,20 @@ function getCounterfactualMoveTypeCandidateFilter(options: {
     return "different";
   }
   return "none";
+}
+
+function isCounterfactualBehaviorMoveTypeAllowed(
+  transition: RolloutTransition,
+  allowedMoveTypes: readonly Move["type"][]
+): boolean {
+  if (allowedMoveTypes.length === 0) {
+    return true;
+  }
+  const behavior = transition.candidates[transition.greedyCandidateIndex];
+  if (!behavior) {
+    return false;
+  }
+  return allowedMoveTypes.includes(behavior.move.type);
 }
 
 function isCounterfactualCandidateMoveTypeAllowed(

@@ -149,6 +149,10 @@ const options = {
     "RL_COUNTERFACTUAL_EXCLUDE_MOVE_PAIRS",
     []
   ),
+  counterfactualBehaviorMoveTypes: readMoveTypeListEnv(
+    "RL_COUNTERFACTUAL_BEHAVIOR_MOVE_TYPES",
+    []
+  ),
   counterfactualRequireSameMoveType: readBooleanEnv(
     "RL_COUNTERFACTUAL_REQUIRE_SAME_MOVE_TYPE",
     false
@@ -233,6 +237,7 @@ console.log(
         scoreGapBudgetSkippedCount: audit.scoreGapBudgetSkippedCount,
         movePairBudgetSkippedCount: audit.movePairBudgetSkippedCount,
         movePairExcludedSkippedCount: audit.movePairExcludedSkippedCount,
+        behaviorMoveTypeSkippedCount: audit.behaviorMoveTypeSkippedCount,
         moveTypeMismatchSkippedCount: audit.moveTypeMismatchSkippedCount,
         moveTypeMatchSkippedCount: audit.moveTypeMatchSkippedCount,
         scoreReturnGapSkippedCount: audit.scoreReturnGapSkippedCount,
@@ -871,6 +876,31 @@ function readStringListEnv(name: string, fallback: string[]): string[] {
     .map((item) => item.trim())
     .filter(Boolean);
   return parsed.length > 0 ? parsed : fallback;
+}
+
+function readMoveTypeListEnv(
+  name: string,
+  fallback: MoveType[]
+): MoveType[] {
+  return readStringListEnv(name, fallback).map((item) =>
+    parseMoveTypeEnvValue(name, item)
+  );
+}
+
+function parseMoveTypeEnvValue(name: string, value: string): MoveType {
+  const normalized = value.trim().toLowerCase() as MoveType;
+  const moveTypes: readonly MoveType[] = [
+    "c2c",
+    "c2s",
+    "s2s",
+    "cycle",
+    "flip_deck",
+    "move_field_stack",
+  ];
+  if (!moveTypes.includes(normalized)) {
+    throw new Error(`${name} contains unknown move type: ${value}`);
+  }
+  return normalized;
 }
 
 function readNumberEnv(name: string, fallback: number): number {

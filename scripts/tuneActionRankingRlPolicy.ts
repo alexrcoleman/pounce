@@ -503,6 +503,10 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
       "RL_COUNTERFACTUAL_EXCLUDE_MOVE_PAIRS",
       []
     ),
+    rlCounterfactualBehaviorMoveTypes: readMoveTypeListEnv(
+      "RL_COUNTERFACTUAL_BEHAVIOR_MOVE_TYPES",
+      []
+    ),
     rlCounterfactualRequireSameMoveType: readBooleanEnv(
       "RL_COUNTERFACTUAL_REQUIRE_SAME_MOVE_TYPE",
       false
@@ -758,6 +762,31 @@ function readStringListEnv(name: string, fallback: string[]): string[] {
     .map((item) => item.trim())
     .filter(Boolean);
   return parsed.length > 0 ? parsed : fallback;
+}
+
+function readMoveTypeListEnv(
+  name: string,
+  fallback: Move["type"][]
+): Move["type"][] {
+  return readStringListEnv(name, fallback).map((item) =>
+    parseMoveTypeEnvValue(name, item)
+  );
+}
+
+function parseMoveTypeEnvValue(name: string, value: string): Move["type"] {
+  const normalized = value.trim().toLowerCase() as Move["type"];
+  const moveTypes: readonly Move["type"][] = [
+    "c2c",
+    "c2s",
+    "s2s",
+    "cycle",
+    "flip_deck",
+    "move_field_stack",
+  ];
+  if (!moveTypes.includes(normalized)) {
+    throw new Error(`${name} contains unknown move type: ${value}`);
+  }
+  return normalized;
 }
 
 function sanitizeFilePart(value: string): string {
