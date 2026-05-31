@@ -72,10 +72,10 @@ const PounceRushPage: NextPage<{
     return (
       <>
         <Head>
-          <title>Pounce Rush | Pounce</title>
+          <title>Pounce Puzzles | Pounce</title>
         </Head>
         <LoadingState
-          title="Setting up Pounce Rush"
+          title="Setting up Pounce Puzzles"
           detail="This usually takes a moment."
         />
       </>
@@ -134,7 +134,7 @@ const PounceRushPage: NextPage<{
   return (
     <>
       <Head>
-        <title>Pounce Rush | Pounce</title>
+        <title>Pounce Puzzles | Pounce</title>
       </Head>
       <div
         className={`${styles.root} ${
@@ -174,7 +174,7 @@ const PounceRushPage: NextPage<{
               {currentPuzzle.objective}
             </div>
             <div className={styles.objectiveMeta}>
-              Puzzle {puzzleNumber + 1} / {currentPuzzle.difficulty}{" "}
+              Puzzle {puzzleNumber + 1} / D{currentPuzzle.difficultyScore} /{" "}
               {displayedStep}/{sequenceLength}
               {isDailyPuzzle && isRunning ? ` / Try ${dailyTryCount}` : ""}
             </div>
@@ -214,7 +214,7 @@ const PounceRushPage: NextPage<{
         {isIdle ? (
           <div className={styles.startOverlay} role="dialog" aria-modal>
             <div className={styles.startPanel}>
-              <h1 className={styles.startTitle}>Pounce Rush</h1>
+              <h1 className={styles.startTitle}>Pounce Puzzles</h1>
               <div className={styles.modeTabs} role="tablist">
                 <button
                   aria-pressed={isDailyPuzzle}
@@ -270,7 +270,7 @@ const PounceRushPage: NextPage<{
                     </>
                   ) : (
                     <>
-                      <strong>One puzzle today</strong>
+                      <strong>Hard combo today</strong>
                       <span>Solve it once for time, tries, and streak.</span>
                     </>
                   )
@@ -404,7 +404,10 @@ const PounceRushPage: NextPage<{
                         <SolvedCheck />
                       ) : null}
                     </span>
-                    <strong>{entry.objective}</strong>
+                    <strong>
+                      D{entry.difficultyScore} /{" "}
+                      {formatMoveCount(entry.sequenceLength)}
+                    </strong>
                   </button>
                 ))}
               </div>
@@ -505,7 +508,7 @@ const PounceRushPage: NextPage<{
                 {puzzleHistory.map((entry) => (
                   <div className={styles.reportItem} key={entry.reportCode}>
                     <span>
-                      Puzzle {entry.puzzleNumber + 1}
+                      Puzzle {entry.puzzleNumber + 1} / D{entry.difficultyScore}
                       {isPuzzleSolved(entry.puzzleNumber, score) ? (
                         <SolvedCheck />
                       ) : null}
@@ -548,6 +551,10 @@ function formatDailyLabel(dateKey: string): string {
     day: "numeric",
     year: "numeric",
   }).format(new Date(year, month - 1, day));
+}
+
+function formatMoveCount(moveCount: number): string {
+  return moveCount === 1 ? "1 move" : `${moveCount} moves`;
 }
 
 function isPuzzleSolved(puzzleNumber: number, score: number): boolean {

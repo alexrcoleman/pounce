@@ -21,6 +21,7 @@ export type PounceRushObjective = "Unload a pounce card";
 export type PounceRushPuzzle = {
   board: BoardState;
   difficulty: "Warmup" | "Sharp" | "Combo";
+  difficultyScore: number;
   id: string;
   kind: PounceRushPuzzleKind;
   objective: PounceRushObjective;
@@ -41,6 +42,7 @@ export type CreatePounceRushPuzzleOptions = {
 
 export type PounceRushPuzzleSummary = {
   difficulty: PounceRushPuzzle["difficulty"];
+  difficultyScore: number;
   id: string;
   kind: PounceRushPuzzleKind;
   objective: PounceRushObjective;
@@ -59,10 +61,26 @@ export type PounceRushMoveRejection = {
 type PuzzleTemplate = {
   build: (context: PuzzleBuildContext) => PuzzleSetup;
   difficulty: PounceRushPuzzle["difficulty"];
+  difficultyScore: number;
   id: string;
   kind: PounceRushPuzzleKind;
+  minPuzzleNumber?: number;
   objective: PounceRushObjective;
+  tags: PuzzleTemplateTag[];
 };
+
+type PuzzleTemplateTag =
+  | "center"
+  | "daily-hard"
+  | "deck"
+  | "direct"
+  | "free-slot"
+  | "mixed-source"
+  | "pounce"
+  | "solitaire"
+  | "stack-shift"
+  | "uncover"
+  | "waste";
 
 type PuzzleBuildContext = {
   rng: () => number;
@@ -79,6 +97,7 @@ type PuzzleSetup = {
 
 const PLAYER_INDEX = 0;
 const DEFAULT_POUNCE_RUSH_SEED = "rush";
+const DAILY_PUZZLE_MIN_DIFFICULTY_SCORE = 8;
 const MAX_PUZZLE_GENERATION_ATTEMPTS = 24;
 const CENTER_PILE_LOCS: [number, number, number][] = [
   [0.13, 0.16, 0.02],
@@ -98,6 +117,8 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     kind: "pounce_center",
     objective: "Unload a pounce card",
     difficulty: "Warmup",
+    difficultyScore: 1,
+    tags: ["pounce", "center", "direct"],
     build: () => ({
       deckCard: card("hearts", 13),
       flippedDeck: [card("clubs", 12)],
@@ -122,6 +143,8 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     kind: "solitaire_center",
     objective: "Unload a pounce card",
     difficulty: "Warmup",
+    difficultyScore: 3,
+    tags: ["solitaire", "center"],
     build: () => ({
       deckCard: card("spades", 13),
       flippedDeck: [card("diamonds", 4)],
@@ -149,6 +172,8 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     kind: "pounce_center",
     objective: "Unload a pounce card",
     difficulty: "Warmup",
+    difficultyScore: 2,
+    tags: ["pounce", "center", "direct"],
     build: ({ rng }) => {
       const targetValue = pickValue(rng, [3, 4, 5, 7, 8, 9, 10, 11]);
       return {
@@ -176,6 +201,8 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     kind: "solitaire_center",
     objective: "Unload a pounce card",
     difficulty: "Warmup",
+    difficultyScore: 3,
+    tags: ["solitaire", "center"],
     build: ({ rng }) => {
       const targetValue = pickValue(rng, [3, 4, 5, 7, 8, 9, 10]);
       return {
@@ -206,6 +233,8 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     kind: "waste_center",
     objective: "Unload a pounce card",
     difficulty: "Warmup",
+    difficultyScore: 2,
+    tags: ["waste", "center"],
     build: () => ({
       deckCard: card("clubs", 13),
       flippedDeck: [card("diamonds", 1)],
@@ -233,6 +262,8 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     kind: "waste_center",
     objective: "Unload a pounce card",
     difficulty: "Warmup",
+    difficultyScore: 3,
+    tags: ["waste", "center"],
     build: ({ rng }) => {
       const targetValue = pickValue(rng, [3, 4, 5, 7, 8, 9, 10, 11]);
       return {
@@ -263,6 +294,8 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     kind: "free_slot",
     objective: "Unload a pounce card",
     difficulty: "Sharp",
+    difficultyScore: 4,
+    tags: ["free-slot", "pounce", "stack-shift"],
     build: () => ({
       deckCard: card("clubs", 13),
       flippedDeck: [card("hearts", 8)],
@@ -290,6 +323,8 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     kind: "free_slot",
     objective: "Unload a pounce card",
     difficulty: "Sharp",
+    difficultyScore: 4,
+    tags: ["free-slot", "pounce", "stack-shift"],
     build: ({ rng }) => {
       const movingValue = pickValue(rng, [3, 4, 5, 6, 7, 8, 9, 10]);
       return {
@@ -320,6 +355,8 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     kind: "combo",
     objective: "Unload a pounce card",
     difficulty: "Sharp",
+    difficultyScore: 5,
+    tags: ["deck", "solitaire", "pounce", "mixed-source"],
     build: () => ({
       deckCard: card("diamonds", 13),
       flippedDeck: [card("hearts", 6)],
@@ -347,6 +384,9 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     kind: "combo",
     objective: "Unload a pounce card",
     difficulty: "Combo",
+    difficultyScore: 6,
+    minPuzzleNumber: 8,
+    tags: ["uncover", "stack-shift", "solitaire", "center", "pounce"],
     build: () => ({
       deckCard: card("clubs", 13),
       flippedDeck: [card("hearts", 8)],
@@ -375,6 +415,9 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     kind: "free_slot",
     objective: "Unload a pounce card",
     difficulty: "Combo",
+    difficultyScore: 5,
+    minPuzzleNumber: 6,
+    tags: ["free-slot", "pounce", "stack-shift"],
     build: () => ({
       deckCard: card("clubs", 13),
       flippedDeck: [card("hearts", 8)],
@@ -402,6 +445,9 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     kind: "uncover_center",
     objective: "Unload a pounce card",
     difficulty: "Sharp",
+    difficultyScore: 6,
+    minPuzzleNumber: 8,
+    tags: ["uncover", "center", "stack-shift", "pounce"],
     build: () => ({
       deckCard: card("hearts", 13),
       flippedDeck: [card("hearts", 12)],
@@ -430,6 +476,9 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     kind: "combo",
     objective: "Unload a pounce card",
     difficulty: "Combo",
+    difficultyScore: 3,
+    minPuzzleNumber: 4,
+    tags: ["solitaire", "center", "pounce"],
     build: () => ({
       deckCard: card("diamonds", 13),
       flippedDeck: [card("clubs", 12)],
@@ -457,6 +506,9 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     kind: "combo",
     objective: "Unload a pounce card",
     difficulty: "Combo",
+    difficultyScore: 7,
+    minPuzzleNumber: 10,
+    tags: ["solitaire", "waste", "center", "mixed-source", "pounce"],
     build: ({ rng }) => {
       const targetValue = pickValue(rng, [4, 5, 6, 7, 8, 9]);
       const wasteValue = nextValue(targetValue);
@@ -490,6 +542,16 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     kind: "combo",
     objective: "Unload a pounce card",
     difficulty: "Combo",
+    difficultyScore: 8,
+    minPuzzleNumber: 14,
+    tags: [
+      "deck",
+      "solitaire",
+      "stack-shift",
+      "free-slot",
+      "mixed-source",
+      "pounce",
+    ],
     build: ({ rng }) => {
       const movingValue = pickValue(rng, [3, 4, 5, 6, 7, 8, 9, 10]);
       const deckValue = nextValue(movingValue);
@@ -523,6 +585,16 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     kind: "combo",
     objective: "Unload a pounce card",
     difficulty: "Combo",
+    difficultyScore: 8,
+    minPuzzleNumber: 14,
+    tags: [
+      "daily-hard",
+      "solitaire",
+      "waste",
+      "center",
+      "mixed-source",
+      "pounce",
+    ],
     build: ({ rng }) => {
       const firstValue = pickValue(rng, [3, 4, 5, 6, 7, 8, 9, 10]);
       const secondValue = nextValue(firstValue);
@@ -558,6 +630,9 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     kind: "uncover_center",
     objective: "Unload a pounce card",
     difficulty: "Combo",
+    difficultyScore: 7,
+    minPuzzleNumber: 10,
+    tags: ["uncover", "solitaire", "center", "pounce"],
     build: ({ rng }) => {
       const topValue = pickValue(rng, [3, 4, 5, 6, 7, 8, 9, 10]);
       const uncoveredValue = nextValue(topValue);
@@ -591,6 +666,9 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     kind: "combo",
     objective: "Unload a pounce card",
     difficulty: "Combo",
+    difficultyScore: 7,
+    minPuzzleNumber: 12,
+    tags: ["uncover", "free-slot", "center", "pounce"],
     build: () => ({
       deckCard: card("spades", 13),
       flippedDeck: [card("hearts", 12)],
@@ -643,6 +721,7 @@ export function getPounceRushPuzzleSummary(
 ): PounceRushPuzzleSummary {
   return {
     difficulty: puzzle.difficulty,
+    difficultyScore: puzzle.difficultyScore,
     id: puzzle.id,
     kind: puzzle.kind,
     objective: puzzle.objective,
@@ -749,6 +828,7 @@ export function createPounceRushPuzzle({
       return {
         board,
         difficulty: template.difficulty,
+        difficultyScore: template.difficultyScore,
         id: `${template.id}:${puzzleNumber}`,
         kind: template.kind,
         objective: template.objective,
@@ -875,31 +955,59 @@ function getSeededTemplate(
 }
 
 function getTemplatePool(seed: string, puzzleNumber: number): PuzzleTemplate[] {
-  if (seed.startsWith("daily-") && !seed.startsWith("daily-rush-")) {
-    return POUNCE_RUSH_TEMPLATES.filter(
-      (template) => template.difficulty === "Combo"
-    );
+  if (isDailyPuzzleSeed(seed)) {
+    return getDailyPuzzleTemplatePool();
   }
 
+  const [minDifficultyScore, maxDifficultyScore] =
+    getTargetDifficultyRange(puzzleNumber);
+  const eligibleTemplates = POUNCE_RUSH_TEMPLATES.filter(
+    (template) => puzzleNumber >= (template.minPuzzleNumber ?? 0)
+  );
+  const rangedTemplates = eligibleTemplates.filter(
+    (template) =>
+      template.difficultyScore >= minDifficultyScore &&
+      template.difficultyScore <= maxDifficultyScore
+  );
+
+  return rangedTemplates.length > 0 ? rangedTemplates : eligibleTemplates;
+}
+
+function isDailyPuzzleSeed(seed: string): boolean {
+  return seed.startsWith("daily-") && !seed.startsWith("daily-rush-");
+}
+
+function getDailyPuzzleTemplatePool(): PuzzleTemplate[] {
+  const hardDailyTemplates = POUNCE_RUSH_TEMPLATES.filter(
+    (template) =>
+      template.difficultyScore >= DAILY_PUZZLE_MIN_DIFFICULTY_SCORE &&
+      template.tags.includes("daily-hard")
+  );
+
+  if (hardDailyTemplates.length > 0) {
+    return hardDailyTemplates;
+  }
+
+  return POUNCE_RUSH_TEMPLATES.filter(
+    (template) =>
+      template.difficultyScore >= DAILY_PUZZLE_MIN_DIFFICULTY_SCORE
+  );
+}
+
+function getTargetDifficultyRange(puzzleNumber: number): [number, number] {
   if (puzzleNumber < 4) {
-    return POUNCE_RUSH_TEMPLATES.filter(
-      (template) => template.difficulty === "Warmup"
-    );
+    return [1, 3];
   }
-
   if (puzzleNumber < 10) {
-    return POUNCE_RUSH_TEMPLATES.filter(
-      (template) => template.difficulty !== "Combo"
-    );
+    return [3, 6];
   }
-
-  if (puzzleNumber >= 24) {
-    return POUNCE_RUSH_TEMPLATES.filter(
-      (template) => template.difficulty === "Combo"
-    );
+  if (puzzleNumber < 18) {
+    return [4, 8];
   }
-
-  return POUNCE_RUSH_TEMPLATES;
+  if (puzzleNumber < 24) {
+    return [5, 8];
+  }
+  return [6, 10];
 }
 
 function normalizePounceRushSeed(seed: string | undefined): string {
@@ -1332,6 +1440,7 @@ function assertNoUnexpectedLegalMoves(
   const puzzle: PounceRushPuzzle = {
     board: boardCopy,
     difficulty: "Warmup",
+    difficultyScore: 1,
     id: templateId,
     kind: "combo",
     objective: getTemplateObjective(templateId),

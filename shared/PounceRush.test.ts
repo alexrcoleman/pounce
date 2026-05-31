@@ -43,6 +43,7 @@ const firstRushPuzzle = createPounceRushPuzzle({
   socketId: "socket",
 });
 assert.equal(firstRushPuzzle.difficulty, "Warmup");
+assert.ok(firstRushPuzzle.difficultyScore <= 3);
 
 const dailyPuzzle = createPounceRushPuzzle({
   playerName: "Player",
@@ -52,6 +53,13 @@ const dailyPuzzle = createPounceRushPuzzle({
   socketId: "socket",
 });
 assert.equal(dailyPuzzle.difficulty, "Combo");
+assert.ok(dailyPuzzle.difficultyScore >= 8);
+assert.ok(dailyPuzzle.sequence.length >= 4);
+assertDifficultyRange("difficulty-ramp", 0, 1, 3);
+assertDifficultyRange("difficulty-ramp", 5, 3, 6);
+assertDifficultyRange("difficulty-ramp", 12, 4, 8);
+assertDifficultyRange("difficulty-ramp", 20, 5, 8);
+assertDifficultyRange("difficulty-ramp", 28, 6, 10);
 
 for (const seed of seeds) {
   for (let puzzleNumber = 0; puzzleNumber < puzzlesPerSeed; puzzleNumber++) {
@@ -65,6 +73,9 @@ for (const seed of seeds) {
 
     observedTemplateIds.add(puzzle.templateId);
     assert.ok(puzzle.sequence.length > 0, "puzzles need a solution sequence");
+    assert.ok(Number.isInteger(puzzle.difficultyScore));
+    assert.ok(puzzle.difficultyScore >= 1);
+    assert.ok(puzzle.difficultyScore <= 10);
     assert.equal(puzzle.objective, "Unload a pounce card");
     assert.equal(puzzle.board.players[0].deck.length, 1);
     assert.equal(puzzle.board.players[0].flippedDeck.length, 1);
@@ -150,6 +161,27 @@ console.log(
   `Validated ${seeds.length * puzzlesPerSeed} Pounce Rush puzzles across ` +
     `${observedTemplateIds.size} templates.`
 );
+
+function assertDifficultyRange(
+  seed: string,
+  puzzleNumber: number,
+  minScore: number,
+  maxScore: number
+): void {
+  const puzzle = createPounceRushPuzzle({
+    playerName: "Player",
+    playerSessionId: "session",
+    puzzleNumber,
+    seed,
+    socketId: "socket",
+  });
+
+  assert.ok(
+    puzzle.difficultyScore >= minScore &&
+      puzzle.difficultyScore <= maxScore,
+    `${puzzle.reportCode} expected D${minScore}-D${maxScore}, saw D${puzzle.difficultyScore}`
+  );
+}
 
 function hasDeckConnectorLine(sequence: Move[]): boolean {
   return sequence.some((move, index) => {
@@ -269,34 +301,47 @@ function getMoveSourceCard(
 }
 
 function assertPounceTuckAlternateAccepted(): void {
-  const puzzle = createPounceRushPuzzle({
-    playerName: "Player",
-    playerSessionId: "session",
-    puzzleNumber: 25,
-    seed: "qa-seed",
-    socketId: "socket",
-  });
-  const boardCopy = deepClone(puzzle.board);
-  for (let stepIndex = 0; stepIndex < puzzle.sequence.length; stepIndex++) {
-    const expectedMove = puzzle.sequence[stepIndex];
-    if (
-      expectedMove.type === "c2s" &&
-      expectedMove.source === "pounce" &&
-      boardCopy.players[0].stacks[expectedMove.dest].length === 0
-    ) {
-      const alternateMove: Move = {
-        type: "c2s",
-        source: "pounce",
-        dest: 0,
-      };
-      assert.notEqual(executeMove(deepClone(boardCopy), 0, alternateMove), null);
-      assert.equal(
-        isAcceptedPounceRushMove(boardCopy, alternateMove, expectedMove),
-        true
-      );
-      return;
+  for (const seed of ["qa-seed", "difficulty-ramp", "connector-coverage"]) {
+    for (let puzzleNumber = 0; puzzleNumber < puzzlesPerSeed; puzzleNumber++) {
+      const puzzle = createPounceRushPuzzle({
+        playerName: "Player",
+        playerSessionId: "session",
+        puzzleNumber,
+        seed,
+        socketId: "socket",
+      });
+      const boardCopy = deepClone(puzzle.board);
+
+      for (let stepIndex = 0; stepIndex < puzzle.sequence.length; stepIndex++) {
+        const expectedMove = puzzle.sequence[stepIndex];
+        if (
+          expectedMove.type === "c2s" &&
+          expectedMove.source === "pounce" &&
+          boardCopy.players[0].stacks[expectedMove.dest].length === 0
+        ) {
+          for (let dest = 0; dest < 4; dest++) {
+            if (dest === expectedMove.dest) {
+              continue;
+            }
+            const alternateMove: Move = {
+              type: "c2s",
+              source: "pounce",
+              dest,
+            };
+            if (executeMove(deepClone(boardCopy), 0, alternateMove) == null) {
+              continue;
+            }
+            assert.equal(
+              isAcceptedPounceRushMove(boardCopy, alternateMove, expectedMove),
+              true
+            );
+            return;
+          }
+        }
+
+        assert.notEqual(executeMove(boardCopy, 0, expectedMove), null);
+      }
     }
-    assert.notEqual(executeMove(boardCopy, 0, expectedMove), null);
   }
 
   assert.fail("expected a pounce tuck alternate regression puzzle");

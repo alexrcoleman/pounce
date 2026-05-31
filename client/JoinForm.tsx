@@ -395,7 +395,7 @@ export default function JoinForm({
               How to play Pounce
             </Link>
             <Link className={styles.rushLink} href="/rush">
-              Pounce Rush
+              Pounce Puzzles
             </Link>
           </div>
         ) : null}
