@@ -76,6 +76,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualMaxLabelsPerMovePair?: number;
   rlCounterfactualExcludedMovePairs?: readonly string[];
   rlCounterfactualRequireSameMoveType?: boolean;
+  rlCounterfactualRequireDifferentMoveType?: boolean;
   rlCounterfactualStopAfterLabels?: number;
   rlCounterfactualScoreRewardWeight?: number;
   rlCounterfactualPounceRewardWeight?: number;
@@ -194,6 +195,7 @@ export type NeuralTrainingResult = {
     counterfactualMovePairBudgetSkippedCount: number;
     counterfactualMovePairExcludedSkippedCount: number;
     counterfactualMoveTypeMismatchSkippedCount: number;
+    counterfactualMoveTypeMatchSkippedCount: number;
     counterfactualFeatureTieSkippedCount: number;
     counterfactualConnectorCycleSkippedCount: number;
     counterfactualWeakConnectorCycleSkippedCount: number;
@@ -293,6 +295,7 @@ export type CounterfactualRlLabelAudit = {
   movePairBudgetSkippedCount: number;
   movePairExcludedSkippedCount: number;
   moveTypeMismatchSkippedCount: number;
+  moveTypeMatchSkippedCount: number;
   featureTieSkippedCount: number;
   connectorCycleSkippedCount: number;
   weakConnectorCycleSkippedCount: number;
@@ -618,6 +621,8 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualExcludedMovePairs ?? [],
     counterfactualRequireSameMoveType:
       options.rlCounterfactualRequireSameMoveType ?? false,
+    counterfactualRequireDifferentMoveType:
+      options.rlCounterfactualRequireDifferentMoveType ?? false,
     counterfactualStopAfterLabels:
       options.rlCounterfactualStopAfterLabels ?? 0,
     counterfactualScoreRewardWeight:
@@ -1635,6 +1640,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualMaxLabelsPerMovePair: number;
     counterfactualExcludedMovePairs: readonly string[];
     counterfactualRequireSameMoveType: boolean;
+    counterfactualRequireDifferentMoveType: boolean;
     counterfactualStopAfterLabels: number;
     counterfactualScoreRewardWeight: number;
     counterfactualPounceRewardWeight: number;
@@ -1688,6 +1694,7 @@ export function trainPolicyGradientFromRollouts(
   let counterfactualMovePairBudgetSkippedCount = 0;
   let counterfactualMovePairExcludedSkippedCount = 0;
   let counterfactualMoveTypeMismatchSkippedCount = 0;
+  let counterfactualMoveTypeMatchSkippedCount = 0;
   let counterfactualFeatureTieSkippedCount = 0;
   let counterfactualConnectorCycleSkippedCount = 0;
   let counterfactualWeakConnectorCycleSkippedCount = 0;
@@ -1978,6 +1985,14 @@ export function trainPolicyGradientFromRollouts(
         }
         if (
           options.counterfactualTrainingMode !== "policy_gradient" &&
+          options.counterfactualRequireDifferentMoveType &&
+          isSameCounterfactualMoveTypePair(movePair)
+        ) {
+          counterfactualMoveTypeMatchSkippedCount += 1;
+          return;
+        }
+        if (
+          options.counterfactualTrainingMode !== "policy_gradient" &&
           isExcludedCounterfactualMovePair(
             movePair,
             options.counterfactualExcludedMovePairs
@@ -2244,6 +2259,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualMovePairBudgetSkippedCount,
     counterfactualMovePairExcludedSkippedCount,
     counterfactualMoveTypeMismatchSkippedCount,
+    counterfactualMoveTypeMatchSkippedCount,
     counterfactualFeatureTieSkippedCount,
     counterfactualConnectorCycleSkippedCount,
     counterfactualWeakConnectorCycleSkippedCount,
@@ -2305,6 +2321,7 @@ export function collectCounterfactualRlLabelAudit(
     counterfactualMaxLabelsPerMovePair: number;
     counterfactualExcludedMovePairs: readonly string[];
     counterfactualRequireSameMoveType: boolean;
+    counterfactualRequireDifferentMoveType: boolean;
     counterfactualStopAfterLabels: number;
     counterfactualScoreRewardWeight: number;
     counterfactualPounceRewardWeight: number;
@@ -2333,6 +2350,7 @@ export function collectCounterfactualRlLabelAudit(
   let movePairBudgetSkippedCount = 0;
   let movePairExcludedSkippedCount = 0;
   let moveTypeMismatchSkippedCount = 0;
+  let moveTypeMatchSkippedCount = 0;
   let featureTieSkippedCount = 0;
   let connectorCycleSkippedCount = 0;
   let weakConnectorCycleSkippedCount = 0;
@@ -2507,6 +2525,14 @@ export function collectCounterfactualRlLabelAudit(
       }
       if (
         options.counterfactualTrainingMode !== "policy_gradient" &&
+        options.counterfactualRequireDifferentMoveType &&
+        isSameCounterfactualMoveTypePair(movePair)
+      ) {
+        moveTypeMatchSkippedCount += 1;
+        return;
+      }
+      if (
+        options.counterfactualTrainingMode !== "policy_gradient" &&
         isExcludedCounterfactualMovePair(
           movePair,
           options.counterfactualExcludedMovePairs
@@ -2640,6 +2666,7 @@ export function collectCounterfactualRlLabelAudit(
     movePairBudgetSkippedCount,
     movePairExcludedSkippedCount,
     moveTypeMismatchSkippedCount,
+    moveTypeMatchSkippedCount,
     featureTieSkippedCount,
     connectorCycleSkippedCount,
     weakConnectorCycleSkippedCount,

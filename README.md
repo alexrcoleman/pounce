@@ -123,6 +123,21 @@ remaining issue is noisy same-family ordering rather than runaway move-type
 priority drift. The guard prevents the obvious bad cross-type generalization,
 but the same-family label stream is still too sparse and local to promote by
 itself.
+The next pass isolated the opposite experiment family: cross-type labels only,
+with same-family pairs filtered out. Five-rollout unanimity was too strict and
+accepted zero labels in 64 audited episodes, but five rollouts with a `0.8`
+behavior-win threshold found a small strategic stock-memory shape: two
+`cycle>c2s` labels where cycling revealed useful stock cards while the player
+was behind with a high pounce count. Those labels averaged `+14.37` point
+differential, `+8.30` score, and `+4.50` pounce-progress return over the
+deck-to-solitaire behavior. A narrow cycle-memory training run now uses
+`RL_COUNTERFACTUAL_REQUIRE_DIFFERENT_MOVE_TYPE=true` for this family. The
+stronger `LR=0.001` update flipped both accepted cycle labels but leaned
+negative in the quick gate (`-0.219 +/- 0.712` over 32 games), while lower or
+near-gap updates either tied the warmup exactly or did not flip deployed
+decisions. This is the best current candidate shape for actual divergent
+strategy, but it needs better contextual regularization or more near-deployable
+labels before promotion.
 Imitation training can now target a single fixed heuristic style with
 `IMITATION_TEACHER_STYLE="Alex 75%"`, and `action-ranking:imitation-by-style`
 reports top-action/equivalence/family agreement against each style. On the
@@ -729,6 +744,11 @@ counterfactual labels where the rollout winner and current behavior action have
 different coarse move types, such as `cycle>c2s` or `c2s>cycle`. This is useful
 for destination/order refinements after cross-type labels show broad
 generalization failures. It is disabled by default.
+`RL_COUNTERFACTUAL_REQUIRE_DIFFERENT_MOVE_TYPE=true` applies the complementary
+filter: it skips same-family labels such as `c2c>c2c`, `c2s>c2s`, and
+`s2s>s2s`. Use it for strategy-shift probes like stock-memory `cycle>c2s`,
+where same-family center/solitaire ordering labels would otherwise dominate a
+small score-gap budget. It is disabled by default.
 Supervised counterfactual modes also skip labels where the rollout winner and
 the current behavior action have identical action-feature vectors. Those labels
 can show up as same-move-type destination refinements, but if the model sees the

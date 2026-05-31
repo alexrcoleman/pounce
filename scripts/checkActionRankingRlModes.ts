@@ -639,6 +639,33 @@ assert.ok(
   "same-move-type filtering should only accept same-family move pairs"
 );
 
+const differentMoveTypeFiltered = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:different-move-type-filtered",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualStateSource: "greedy",
+  rlUpdateScope: "all",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualMinReturnGap: 0,
+  rlCounterfactualRequirePolicyChange: true,
+  rlCounterfactualRequireDifferentMoveType: true,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.ok(
+  differentMoveTypeFiltered.reinforcement.counterfactualUpdateCount > 0 ||
+    differentMoveTypeFiltered.reinforcement
+      .counterfactualMoveTypeMatchSkippedCount > 0,
+  "different-move-type filtering should either accept cross-type labels or skip same-family labels"
+);
+assert.ok(
+  Object.keys(
+    differentMoveTypeFiltered.reinforcement.counterfactualAcceptedMovePairCounts
+  ).every((pair) => !isSameMoveTypePair(pair)),
+  "different-move-type filtering should only accept cross-family move pairs"
+);
+
 const cappedScoreGapBudgetFiltered = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:capped-score-gap-budget-filtered",
@@ -742,6 +769,7 @@ console.log(
       movePairBudgetFiltered: summarize(movePairBudgetFiltered),
       movePairExcluded: summarize(movePairExcluded),
       sameMoveTypeFiltered: summarize(sameMoveTypeFiltered),
+      differentMoveTypeFiltered: summarize(differentMoveTypeFiltered),
       cappedScoreGapBudgetFiltered: summarize(cappedScoreGapBudgetFiltered),
       labelTargetStopped: summarize(labelTargetStopped),
       maxReturnGapFiltered: summarize(maxReturnGapFiltered),
@@ -812,6 +840,8 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.counterfactualMovePairExcludedSkippedCount,
     counterfactualMoveTypeMismatchSkippedCount:
       result.reinforcement.counterfactualMoveTypeMismatchSkippedCount,
+    counterfactualMoveTypeMatchSkippedCount:
+      result.reinforcement.counterfactualMoveTypeMatchSkippedCount,
     counterfactualFeatureTieSkippedCount:
       result.reinforcement.counterfactualFeatureTieSkippedCount,
     counterfactualConnectorCycleSkippedCount:

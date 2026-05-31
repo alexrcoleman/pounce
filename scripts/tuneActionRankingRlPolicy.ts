@@ -507,6 +507,10 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
       "RL_COUNTERFACTUAL_REQUIRE_SAME_MOVE_TYPE",
       false
     ),
+    rlCounterfactualRequireDifferentMoveType: readBooleanEnv(
+      "RL_COUNTERFACTUAL_REQUIRE_DIFFERENT_MOVE_TYPE",
+      false
+    ),
     rlCounterfactualStopAfterLabels: readIntegerEnv(
       "RL_COUNTERFACTUAL_STOP_AFTER_LABELS",
       0
