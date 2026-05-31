@@ -1,4 +1,5 @@
 import fs from "fs";
+import { getBasicAIStyleNames } from "../shared/ComputerV1";
 import { trainNeuralActionRankingPolicy } from "../shared/ActionRankingTraining";
 import type { NeuralActionRankingModel } from "../shared/NeuralActionRankingPolicy";
 
@@ -26,6 +27,7 @@ const options = {
   imitationEpochs: readIntegerEnv("IMITATION_EPOCHS", 4),
   imitationLearningRate: readNumberEnv("IMITATION_LR", 0.02),
   imitationEquivalentTargets: readBooleanEnv("IMITATION_EQUIVALENT_TARGETS", false),
+  imitationTeacherStyleName: readBasicAIStyleEnv("IMITATION_TEACHER_STYLE"),
   improvementStates: rlOnly ? 0 : readIntegerEnv("IMPROVEMENT_STATES", 0),
   improvementStateSource: readImprovementStateSourceEnv(
     "IMPROVEMENT_STATE_SOURCE",
@@ -372,6 +374,27 @@ function readBooleanEnv(name: string, fallback: boolean): boolean {
     return false;
   }
   return fallback;
+}
+
+function readBasicAIStyleEnv(name: string): string | undefined {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return undefined;
+  }
+
+  const requested = value.trim();
+  const style = getBasicAIStyleNames().find(
+    (candidate) => candidate.toLowerCase() === requested.toLowerCase()
+  );
+  if (!style) {
+    throw new Error(
+      `Unknown ${name} "${requested}". Known styles: ${getBasicAIStyleNames().join(
+        ", "
+      )}`
+    );
+  }
+
+  return style;
 }
 
 function readImprovementTrainingModeEnv(

@@ -1,4 +1,4 @@
-import { getBasicAIMove } from "./ComputerV1";
+import { getBasicAIMove, getBasicAIMoveForStyle } from "./ComputerV1";
 import deepClone from "./deepClone";
 import { isGameOver, type BoardState } from "./GameUtils";
 import {
@@ -51,6 +51,7 @@ export type ActionRankingImitationOptions = {
   maxTrials?: number;
   maxMovesPerTrial?: number;
   seed?: string;
+  teacherStyleName?: string;
 };
 
 export type ActionRankingImitationDataset = {
@@ -87,7 +88,8 @@ export function collectActionRankingImitationDataset(
       startBoard,
       trialIndex,
       `${seed}:${trialIndex}`,
-      maxMovesPerTrial
+      maxMovesPerTrial,
+      options.teacherStyleName
     );
     examples.push(...result.examples);
     matchedTeacherMoveCount += result.matchedTeacherMoveCount;
@@ -114,7 +116,8 @@ function collectActionRankingImitationTrial(
   startBoard: BoardState,
   trialIndex: number,
   seed: string,
-  maxMoves: number
+  maxMoves: number,
+  teacherStyleName: string | undefined
 ) {
   const random = createSeededRandom(seed);
   const board = deepClone(startBoard);
@@ -152,7 +155,9 @@ function collectActionRankingImitationTrial(
     }
 
     const candidates = enumerateActionRankingCandidates(board, playerIndex);
-    const teacherMove = getBasicAIMove(board, playerIndex, {});
+    const teacherMove = teacherStyleName
+      ? getBasicAIMoveForStyle(board, playerIndex, {}, teacherStyleName)
+      : getBasicAIMove(board, playerIndex, {});
     const selectedActionKey = teacherMove
       ? getActionRankingMoveKey(teacherMove)
       : null;

@@ -42,6 +42,7 @@ export type NeuralTrainingOptions = {
   imitationEpochs?: number;
   imitationLearningRate?: number;
   imitationEquivalentTargets?: boolean;
+  imitationTeacherStyleName?: string;
   rlEpisodes?: number;
   rlLearningRate?: number;
   rlTemperature?: number;
@@ -499,6 +500,7 @@ export function trainNeuralActionRankingPolicy(
     dealCount: imitationDeals,
     seed: `${seed}:imitation`,
     maxMovesPerGame,
+    teacherStyleName: options.imitationTeacherStyleName,
   });
   const imitationStats = policy.trainImitation(imitationExamples, {
     epochs: imitationEpochs,
@@ -1570,6 +1572,7 @@ export function collectImitationExamplesFromDeals(options: {
   dealCount: number;
   seed: string;
   maxMovesPerGame: number;
+  teacherStyleName?: string;
 }): ActionRankingImitationExample[] {
   const examples: ActionRankingImitationExample[] = [];
   for (let dealIndex = 0; dealIndex < options.dealCount; dealIndex++) {
@@ -1581,6 +1584,7 @@ export function collectImitationExamplesFromDeals(options: {
       maxTrials: 1,
       maxMovesPerTrial: options.maxMovesPerGame,
       seed: `${options.seed}:rollout:${dealIndex}`,
+      teacherStyleName: options.teacherStyleName,
     });
     examples.push(...dataset.examples);
   }

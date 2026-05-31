@@ -16,7 +16,7 @@ npm run action-ranking:train
 
 Useful training knobs:
 
-- `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`
+- `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`, `IMITATION_TEACHER_STYLE`
 - `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_MAX_SCORE_GAP`, `IMPROVEMENT_MAX_WINNER_SCORE_GAP`, `IMPROVEMENT_MAX_CANDIDATE_SCORE_GAP`, `IMPROVEMENT_POLICY_CANDIDATES`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_CONTINUATION`, `IMPROVEMENT_SCORE_WEIGHT`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_PAIRWISE_MARGIN`, `IMPROVEMENT_VALUE_SCALE`, `IMPROVEMENT_VALUE_CENTER`, `IMPROVEMENT_VALUE_TARGET_MODE`, `IMPROVEMENT_VALUE_HUBER`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_BEHAVIOR_GAP_SE_MULTIPLIER`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
 - `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_OPPONENT_MODE`, `RL_OPPONENT_MODEL`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_SCAN_EPISODES`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_CANDIDATES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MAX_RETURN_GAP`, `RL_COUNTERFACTUAL_REQUIRE_BEHAVIOR_GAP`, `RL_COUNTERFACTUAL_MIN_BEHAVIOR_IMPROVEMENT`, `RL_COUNTERFACTUAL_STATE_SOURCE`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_GAP_SE_MULTIPLIER`, `RL_COUNTERFACTUAL_MIN_BEHAVIOR_WIN_RATE`, `RL_COUNTERFACTUAL_MAX_POLICY_MARGIN`, `RL_COUNTERFACTUAL_REQUIRE_POLICY_CHANGE`, `RL_COUNTERFACTUAL_PREFERENCE_SCOPE`, `RL_COUNTERFACTUAL_PAIRWISE_MARGIN`, `RL_COUNTERFACTUAL_PAIRWISE_WEIGHT_MODE`, `RL_COUNTERFACTUAL_PAIRWISE_WEIGHT_SCALE`, `RL_COUNTERFACTUAL_PAIRWISE_MAX_WEIGHT`, `RL_COUNTERFACTUAL_MAX_SCORE_GAP`, `RL_COUNTERFACTUAL_SCORE_GAP_BUDGET`, `RL_COUNTERFACTUAL_MAX_LABELS_PER_MOVE_PAIR`, `RL_COUNTERFACTUAL_EXCLUDE_MOVE_PAIRS`, `RL_COUNTERFACTUAL_STOP_AFTER_LABELS`, `RL_COUNTERFACTUAL_SCORE_WEIGHT`, `RL_COUNTERFACTUAL_POUNCE_WEIGHT`, `RL_COUNTERFACTUAL_SKIP_CYCLE_OVER_CONNECTOR`, `RL_COUNTERFACTUAL_SKIP_WEAK_CYCLE_OVER_CONNECTOR`, `RL_COUNTERFACTUAL_SKIP_SOLITAIRE_OVER_USEFUL_CYCLE`, `RL_COUNTERFACTUAL_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_ANCHOR_TEMPERATURE`, `RL_COUNTERFACTUAL_BEHAVIOR_CORRECTION_WEIGHT`, `RL_COUNTERFACTUAL_BEHAVIOR_CORRECTION_MARGIN`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MARGIN`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MAX_POLICY_MARGIN`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MODE`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_TARGET_MODE`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_TRAINABLE_LAYERS`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `HIDDEN_LAYERS`, `MAX_MOVES`, `SEED`
@@ -26,9 +26,11 @@ Useful training knobs:
 - `RL_ONLY=true MODEL_IN=...\model.json npm run action-ranking:train` to run a pure RL fine-tune without accidental imitation or improvement updates
 - `MODEL_IN=...\model.json npm run action-ranking:evaluate` to evaluate saved weights
 - `MODEL_IN=...\model.json npm run action-ranking:evaluate-by-style` to evaluate saved weights against each fixed heuristic AI style
+- `MODEL_IN=...\model.json npm run action-ranking:imitation-by-style` to measure top-action agreement and move-family drift against each fixed heuristic AI style
 - `MODEL_IN=...\candidate.json BASELINE_MODEL=...\baseline.json npm run action-ranking:report` to summarize model size/features, fixed-heuristic strength, paired baseline comparison, and neural self-play comparison in one output
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare` to compare two models on paired deals/seats
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare-self-play` to compare two models sharing the same self-play table
+- `PLAYERS=3 GAMES=512 npm run action-ranking:tournament` to run fixed-style heuristic tournaments; add `MODEL_SPECS="label=path;other=path"` to include neural models
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:diagnose` to compare top-ranked actions on sampled teacher states
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:trace-divergences` to inspect the first policy-action divergence in paired games
 - `MODEL_IN=...\best.json npm run action-ranking:audit-labels` to audit rollout labels before training on them
@@ -93,6 +95,36 @@ close to the 118-input warmup in paired heuristic-seat play
 (`-0.042 +/- 0.057` over 128 games) and had a noisy positive neural self-play
 point estimate (`+0.297 +/- 0.328` over 64 games). Treat this as feature-surface
 preparation for reward/self-play work, not as a promoted stronger policy yet.
+Imitation training can now target a single fixed heuristic style with
+`IMITATION_TEACHER_STYLE="Alex 75%"`, and `action-ranking:imitation-by-style`
+reports top-action/equivalence/family agreement against each style. On the
+130-input mixed warmup over 16 deals per style, top-action agreement was roughly
+`92%` for Mom/Alex-v2/Alex 75%/Alex 66% and `86%` for Alex 1.0. A small Alex 75%
+continuation (`48` deals, `2` epochs, `IMITATION_LR=0.003`) improved Alex 75%
+top-action agreement to `93.4%`, equivalence agreement to `98.8%`, and nearly
+matched that teacher's cycle/deck-solitaire rates, but it did not improve
+gameplay: paired vs the mixed threat-context warmup measured
+`-0.331 +/- 0.555`, neural self-play tied at `+0.021 +/- 0.667`, and fixed-style
+evaluation still regressed. So single-style imitation is useful for controlled
+seeds and diagnostics, but it is not itself a strategic improvement.
+`action-ranking:tournament` now gives a direct baseline for that question. In
+the current code, a 3-player all-distinct fixed-style tournament with 512 deals
+per matchup and seat rotations (15,360 simulated rounds) did confirm
+`Alex 75%` as the best current heuristic, but the gap is modest rather than a
+60% round-win ceiling: `Alex 75%` scored `35.05% +/- 0.49%` score-win share and
+`+0.525 +/- 0.114` average point differential, followed by `Alex 66%` at
+`34.21% +/- 0.49%`, `Alex-v2` at `33.43% +/- 0.49%`, `Alex 1.0` at
+`32.99% +/- 0.48%`, and `Mom` at `30.99% +/- 0.48%`. The default 3-style
+3-player matchup (`Mom`, `Alex-v2`, `Alex 75%`) put `Alex 75%` at only
+`36.02% +/- 1.21%`, and even against two `Mom` opponents it measured
+`34.62% +/- 1.20%`. A 4-player all-distinct tournament likewise kept the top
+heuristic near the field (`Alex 75%` at `26.66% +/- 0.48%`). This means
+"mixed to best fixed heuristic" may be a much smaller supervised/RL target than
+expected under the current simulator and scoring metric. It also makes the
+existing `player.index`/`player.botIndex` action features suspicious for mixed
+teacher imitation: they let the model learn seat-conditioned teacher styles,
+which is useful for cloning the mixed bot table but awkward for learning one
+portable stronger policy.
 A first 118-input deck-context warmup from the 108-input solitaire-context
 checkpoint (`48` imitation deals, `2` epochs, `IMITATION_LR=0.005`) reached
 `92.97%` teacher accuracy and saved a `730 KB` model with 23,041 parameters. It
