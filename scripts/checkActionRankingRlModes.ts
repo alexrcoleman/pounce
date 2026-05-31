@@ -173,6 +173,19 @@ assert.equal(
   "delta-feature pairwise mode should not fall back to policy-gradient updates"
 );
 
+const tacticalPairwise = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:tactical-pairwise",
+  rlCounterfactualTrainingMode: "pairwise",
+  rlCounterfactualPairwiseFeatureMode: "tactical",
+});
+assertCounterfactualWork(tacticalPairwise, "pairwise");
+assert.equal(
+  tacticalPairwise.reinforcement.averagePolicyUpdates,
+  0,
+  "tactical-feature pairwise mode should not fall back to policy-gradient updates"
+);
+
 const outputOnlyInitialModel = createNeuralActionRankingModel(
   [16],
   "action-ranking-rl-mode-check:output-only-model"
@@ -871,6 +884,8 @@ console.log(
       ),
       value: summarize(value),
       weightedPairwise: summarize(weightedPairwise),
+      deltaPairwise: summarize(deltaPairwise),
+      tacticalPairwise: summarize(tacticalPairwise),
       outputOnlyValue: summarize(outputOnlyValue),
       scoreWeightedValue: summarize(scoreWeightedValue),
       pounceWeightedValue: summarize(pounceWeightedValue),

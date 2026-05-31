@@ -6,7 +6,10 @@ import {
 } from "./ActionRankingPolicy";
 import type { BoardState } from "./GameUtils";
 import type { Move } from "./MoveHandler";
-import type { ActionRankingImitationExample } from "./ActionRankingImitation";
+import type {
+  ActionRankingImitationCandidate,
+  ActionRankingImitationExample,
+} from "./ActionRankingImitation";
 
 export type NeuralActionRankingModelV1 = {
   version: 1;
@@ -64,7 +67,7 @@ export type RewardTargetTrainingOptions = ImitationTrainingOptions & {
   targetTemperature?: number;
 };
 
-export type PairwiseFeatureMode = "raw" | "delta";
+export type PairwiseFeatureMode = "raw" | "delta" | "tactical";
 
 export type PreferenceTrainingOptions = ImitationTrainingOptions & {
   minReturnGap?: number;
@@ -431,12 +434,7 @@ export class NeuralActionRankingPolicy {
 
           const effectiveLearningRate = learningRate * pairWeight;
           const [winnerTrainingFeatures, loserTrainingFeatures] =
-            featureMode === "delta"
-              ? getPairwiseDeltaTrainingFeatures(
-                  winner.features,
-                  loser.features
-                )
-              : [winner.features, loser.features];
+            getPairwiseTrainingFeatures(winner, loser, featureMode);
           this.applyScoreGradient(
             winnerTrainingFeatures,
             -mistakeProbability / temperature,
@@ -735,6 +733,29 @@ export class NeuralActionRankingPolicy {
   }
 }
 
+function getPairwiseTrainingFeatures(
+  winner: ActionRankingImitationCandidate,
+  loser: ActionRankingImitationCandidate,
+  featureMode: PairwiseFeatureMode
+): [number[], number[]] {
+  if (featureMode === "raw") {
+    return [winner.features, loser.features];
+  }
+
+  const [winnerDeltaFeatures, loserDeltaFeatures] =
+    getPairwiseDeltaTrainingFeatures(winner.features, loser.features);
+  if (featureMode === "delta") {
+    return [winnerDeltaFeatures, loserDeltaFeatures];
+  }
+
+  return [
+    getPairwiseTacticalTrainingFeatures(winner, winnerDeltaFeatures),
+    shouldSuppressPairwiseLoserFeatures(winner, loser)
+      ? loserDeltaFeatures.map(() => 0)
+      : getPairwiseTacticalTrainingFeatures(loser, loserDeltaFeatures),
+  ];
+}
+
 function getPairwiseDeltaTrainingFeatures(
   winnerFeatures: readonly number[],
   loserFeatures: readonly number[]
@@ -756,6 +777,79 @@ function getPairwiseDeltaTrainingFeatures(
     }
   }
   return [winnerTrainingFeatures, loserTrainingFeatures];
+}
+
+function getPairwiseTacticalTrainingFeatures(
+  candidate: ActionRankingImitationCandidate,
+  features: readonly number[]
+): number[] {
+  return features.map((value, featureIndex) =>
+    isPairwiseTacticalFeature(
+      ACTION_RANKING_FEATURE_NAMES[featureIndex],
+      candidate
+    )
+      ? value
+      : 0
+  );
+}
+
+function shouldSuppressPairwiseLoserFeatures(
+  winner: ActionRankingImitationCandidate,
+  loser: ActionRankingImitationCandidate
+): boolean {
+  return isCycleLikeMove(winner.move) !== isCycleLikeMove(loser.move);
+}
+
+function isPairwiseTacticalFeature(
+  featureName: string | undefined,
+  candidate: ActionRankingImitationCandidate
+): boolean {
+  if (!featureName || featureName === "bias") {
+    return false;
+  }
+
+  const moveType = candidate.move.type;
+  if (moveType === "cycle" || moveType === "flip_deck") {
+    return (
+      featureName.startsWith("cycle.") ||
+      featureName.startsWith("own.stockLookahead") ||
+      featureName.startsWith("own.waste") ||
+      featureName === "own.stockFraction" ||
+      featureName === "own.wasteFraction"
+    );
+  }
+
+  if (moveType === "c2s" || moveType === "s2s") {
+    return (
+      featureName.startsWith("solitaire.") ||
+      featureName.startsWith("source.exposed") ||
+      featureName === "source.exposesCard" ||
+      featureName === "card.canPlaySoon" ||
+      featureName === "card.matchesPounceParity" ||
+      featureName === "card.pounceConnectorCloseness" ||
+      featureName === "card.ownSolitaireDestinationCount" ||
+      featureName === "card.ownSolitaireConnectorForPounce" ||
+      featureName === "move.clearsPounce" ||
+      featureName === "move.immediatePointDelta" ||
+      featureName === "move.immediatePointDifferentialDelta"
+    );
+  }
+
+  if (moveType === "c2c") {
+    return (
+      featureName.startsWith("center.") ||
+      featureName === "card.centerPlayableDestinationCount" ||
+      featureName === "move.clearsPounce" ||
+      featureName === "move.immediatePointDelta" ||
+      featureName === "move.immediatePointDifferentialDelta"
+    );
+  }
+
+  return false;
+}
+
+function isCycleLikeMove(move: Move): boolean {
+  return move.type === "cycle" || move.type === "flip_deck";
 }
 
 function getImitationTargetProbabilities(

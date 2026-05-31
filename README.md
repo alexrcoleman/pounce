@@ -725,6 +725,12 @@ pairwise gradient. The default `raw` keeps the normal full-feature update. Delta
 mode is an experimental trust-region lever for same-family labels, where shared
 move-type and state features can otherwise teach a broad c2s/cycle preference
 instead of the destination-order difference that separated the candidates.
+`RL_COUNTERFACTUAL_PAIRWISE_FEATURE_MODE=tactical` starts from that delta mask
+and then drops broad identity features such as move family, source, destination,
+and bias. For cycle-vs-noncycle labels it also suppresses the loser's features,
+so the update boosts the winner's tactical explanation features instead of
+punishing the whole opposing move family. This is meant for stock-delay labels
+where raw pairwise updates too easily become a generic `cycle > c2s` rule.
 `RL_COUNTERFACTUAL_MAX_TRANSITIONS_PER_EPISODE` caps expensive counterfactual
 rollout probes per scanned episode. When set above `0`, the scanner first uses
 cheap current-policy filters, ranks eligible transitions by the top-action score
@@ -1576,6 +1582,20 @@ slightly negative (`-0.021 +/- 0.162`, despite raw score `+0.156`). So held-out
 validation is useful label-quality infrastructure, not a promotion by itself;
 the next update needs a narrower trust region or a broader validated label
 batch before spending large confirmation budgets.
+Two follow-up trust-region probes clarified that direction. A symmetric
+connector/cycle anchor on the validated strict scan was over-conservative: it
+accepted 5 labels but flipped only 1 label state, pushed the accepted-label
+winner margins farther negative, and measured `-0.034 +/- 0.072` point
+differential in a 1,536-game paired gate.
+`RL_COUNTERFACTUAL_PAIRWISE_FEATURE_MODE=tactical` is the cleaner shape so far.
+It accepted 4 validated `cycle>c2s` labels, flipped all 4 label states, and kept
+the accepted-label margin controlled (`+0.294` after training instead of the
+roughly `+2` margins from the earlier low-anchor branch). The paired gate was
+mildly positive but still well inside noise (`+0.016 +/- 0.082` point
+differential, `+0.032` raw score over 1,536 games), with only a `+0.15pp`
+cycle-rate nudge. Its style-safety sweep was also neutral in aggregate
+(`+0.032`, 95% CI `-0.084` to `+0.148`). This is useful infrastructure for
+stock-delay learning, not yet an improved checkpoint.
 
 ## Deploying
 

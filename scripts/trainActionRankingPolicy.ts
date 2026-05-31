@@ -642,13 +642,17 @@ function readPairwiseWeightModeEnv(
 
 function readPairwiseFeatureModeEnv(
   name: string,
-  fallback: "raw" | "delta"
-): "raw" | "delta" {
+  fallback: "raw" | "delta" | "tactical"
+): "raw" | "delta" | "tactical" {
   const value = process.env[name];
   if (value == null || value.trim() === "") {
     return fallback;
   }
-  return value.toLowerCase() === "delta" ? "delta" : fallback;
+  const normalized = value.toLowerCase();
+  if (normalized === "delta" || normalized === "tactical") {
+    return normalized;
+  }
+  return fallback;
 }
 
 function readTrainableLayersEnv(
