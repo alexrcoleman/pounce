@@ -207,16 +207,17 @@ a plausible local optimum, but the threshold edge is too thin to be the main RL
 target.
 `action-ranking:compare-styles` now provides a direct paired style check with
 deal-level confidence intervals. Over `32,768` deals with seat rotations in the
-`Alex 75%` / `Alex 66%` / `Mom` table, `Alex 75%` beat `Alex 66%` on average
-point differential by `+0.162` with a `95%` CI of `+0.078` to `+0.246`, and on
-raw score by `+0.108` with a `95%` CI of `+0.052` to `+0.164`. The full-table
-score-win-share delta was still not significant (`+0.38pp`, `95%` CI
-`-0.04pp` to `+0.80pp`), while the head-to-head score share was just barely
-above even (`50.41%`, `95%` CI `50.16%` to `50.66%`). Against the intentionally
-weak `No solitaire unless stuck` style, the same comparator over `4,096` deals
-found a decisive sanity-check gap: `+28.70 +/- 0.28` point differential and a
-`+87.99pp +/- 0.83pp` head-to-head win-rate delta for `Alex 75%`. Strategy
-matters in the simulator; the Alex threshold variants are simply very close.
+`Alex 75%` / `Alex 66%` / `Mom` table, a fresh confirmation run found
+`Alex 75%` ahead on average point differential by `+0.094` with a `95%` CI of
+`+0.010` to `+0.178`, and on raw score by `+0.063` with a `95%` CI of `+0.007`
+to `+0.118`. The full-table score-win-share delta was still not significant
+(`+0.16pp`, `95%` CI `-0.26pp` to `+0.57pp`), and the head-to-head score share
+was also statistically unclear (`50.20%`, `95%` CI `49.95%` to `50.45%`).
+Against the intentionally weak `No solitaire unless stuck` style, the same
+comparator over `4,096` deals found a decisive sanity-check gap:
+`+28.73 +/- 0.28` point differential and a `+87.78pp +/- 0.85pp`
+head-to-head win-rate delta for `Alex 75%`. Strategy matters in the simulator;
+the Alex threshold variants are simply very close.
 A first 118-input deck-context warmup from the 108-input solitaire-context
 checkpoint (`48` imitation deals, `2` epochs, `IMITATION_LR=0.005`) reached
 `92.97%` teacher accuracy and saved a `730 KB` model with 23,041 parameters. It
@@ -1501,6 +1502,40 @@ on divergences), but the larger 3,072-game confirmation still did not promote
 fast enough to iterate and can find real deployed-near labels, but the current
 same-family center/solitaire batch is still a thin signal rather than a stronger
 policy.
+
+A targeted cross-type champion audit using the transition budget found a more
+interesting but still thin stock-tempo signal. A strict `c2s`/`cycle` scan with
+policy-change, behavior-win, raw-score, and pounce-progress gates found no
+labels over 96 episodes. Relaxing the score/progress gates and scanning 128
+episodes with 16 transitions per episode accepted three `cycle>c2s` labels; all
+three preferred cycling over a deck-to-solitaire connector, with average return
+gap `+10.22`, average raw-score support `+10.17`, and average pounce-progress
+support `+4.83`. Training that 3-label batch from the 130-input threat-context
+warmup flipped all three accepted label states, but the 1,536-game paired gate
+was neutral (`+0.003 +/- 0.040`). Its trace stayed mostly localized
+(`3.1%` first-divergence rate, 20 of 24 first divergences were `cycle>c2s`) and
+the `cycle>c2s` divergences averaged positive point differential, but they still
+split `40%` model-A wins to `55%` baseline wins on that trace seed. Treat this
+as evidence that stock-memory `cycle>c2s` labels exist, not as a promoted
+strategy.
+
+Increasing the strict cross-type scan to 512 episodes with a 24-transition
+per-episode budget found seven clean `cycle>c2s` labels instead of one: average
+return gap `+8.07`, raw-score support `+3.71`, pounce-progress support `+2.79`,
+and average policy score gap `0.221` against cycling. A broad-anchor training
+pass (`anchor=0.75`, 1,024 anchor examples) moved only 1 of 7 label states and
+measured neutral (`-0.003 +/- 0.058`). A deliberately low-anchor diagnostic
+(`anchor=0.1`, 512 anchor examples, `RL_LR=0.003`, 10 epochs) moved 5 of 7 label
+states and produced the first statistically positive paired heuristic-seat
+confirmation from this path: over 3,072 paired games it measured
+`+0.101 +/- 0.070` point differential, `+0.093` raw score, a `+0.39pp`
+pounce-out-rate delta, and only a `+0.15pp` cycle-rate delta. Its 768-game trace
+also had the right shape: `7.6%` first-divergence rate, 41 of 58 first
+divergences were `cycle>c2s`, and those averaged `+1.42` point differential
+with model-A wins at `58.5%` versus `36.6%` for the baseline. A tiny 192-game
+neural self-play smoke was positive (`+0.259`) but too small for promotion. This
+candidate is promising enough for a larger self-play/style gate, but the
+low-anchor setting should still be treated as exploratory until that gate passes.
 
 ## Deploying
 

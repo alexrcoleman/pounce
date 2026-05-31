@@ -149,7 +149,6 @@ class AIStrategy {
       }
 
       if (this.getShouldUnblock()) {
-        console.log("We should unblock...");
         return true;
       }
       if (this.settings.ensureMoveSoon) {
@@ -280,7 +279,6 @@ class AIStrategy {
         return false;
       }
       if (this.getShouldUnblock()) {
-        console.log("We should unblock...");
         return true;
       }
       if (this.settings.ensureMoveSoon) {
@@ -372,9 +370,7 @@ class AIStrategy {
       return;
     }
 
-    if (this.getShouldUnblock()) {
-      console.log("We should unblock...");
-    } else {
+    if (!this.getShouldUnblock()) {
       if (this.settings.deckToCenterOnlyIfHelp && card) {
         const playableCards = [
           ...player.stacks.map((s) => peek(s)!),
