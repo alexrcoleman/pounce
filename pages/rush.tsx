@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 
 import { Button } from "antd";
 import Board from "../client/Board";
-import { ClientContext } from "../client/ClientContext";
+import { ClientProvider } from "../client/ClientContext";
+import { useClientSettingsStore } from "../client/ClientSettingsStore";
 import Head from "next/head";
 import Link from "next/link";
 import LoadingState from "../client/LoadingState";
@@ -10,7 +11,6 @@ import type { NextPage } from "next";
 import { observer } from "mobx-react-lite";
 import styles from "../client/PounceRush.module.css";
 import usePounceRushGame from "../client/usePounceRushGame";
-import useStoredBoolean from "../client/useStoredBoolean";
 import { useRouter } from "next/router";
 
 const PounceRushPage: NextPage<{
@@ -18,10 +18,8 @@ const PounceRushPage: NextPage<{
   setName: (name: string) => void;
 }> = observer(({ name, setName }) => {
   const router = useRouter();
-  const [easyReadCards] = useStoredBoolean("pounce::easy-read-cards", true);
-  const [leftHandedMode] = useState(false);
+  const settings = useClientSettingsStore({ scale: 0.94 });
   const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
-  const [scale] = useState(0.94);
   const visiblePlayerIndices = [0] as const;
   const playerName = name || "Player";
   const {
@@ -113,24 +111,20 @@ const PounceRushPage: NextPage<{
           isBoardAnimationSuppressed ? styles.suppressBoardAnimations : ""
         }`}
       >
-        <ClientContext.Provider value={{ state, socket }}>
+        <ClientProvider settings={settings} state={state} socket={socket}>
           <div className={styles.boardLayer}>
             <Board
-              easyReadCards={easyReadCards}
               executeMove={actions.executeMove}
               hintCard={hintCard}
               isDeckCyclingBlocked
               isInteractionDisabled={isInteractionDisabled}
-              isLeftHandedLayout={leftHandedMode}
               onBlockedMove={actions.onBlockedMove}
-              onOpenRoomSettings={() => undefined}
               onUpdateHand={actions.onUpdateHand}
               roomId="Rush"
               visiblePlayerIndices={visiblePlayerIndices}
-              zoom={scale}
             />
           </div>
-        </ClientContext.Provider>
+        </ClientProvider>
 
         <div className={styles.hud}>
           <div className={styles.hudGroup}>

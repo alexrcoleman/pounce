@@ -50,17 +50,13 @@ import {
 import { getPlayerLocation } from "../shared/CardLocations";
 type Props = {
   executeMove: (move: Move) => void;
-  onOpenRoomSettings: () => void;
   onUpdateHand: (location: CursorLocation) => void;
   hintCard?: CardState | null;
   isDeckCyclingBlocked?: boolean;
   isInteractionDisabled?: boolean;
-  isLeftHandedLayout: boolean;
-  easyReadCards: boolean;
   onBlockedMove?: () => void;
   roomId?: string | null;
   visiblePlayerIndices?: readonly number[];
-  zoom: number;
 };
 
 const DESKTOP_DND_BACKEND_OPTIONS = {
@@ -142,19 +138,15 @@ function useIsBoardAcceptingMoves(
 
 export default observer(function Board({
   executeMove,
-  easyReadCards,
   hintCard,
   isDeckCyclingBlocked = false,
   isInteractionDisabled = false,
-  isLeftHandedLayout,
   onBlockedMove,
-  onOpenRoomSettings,
   onUpdateHand,
   roomId,
   visiblePlayerIndices,
-  zoom,
 }: Props): JSX.Element | null {
-  const { state, socket } = useClientContext();
+  const { settings, state, socket } = useClientContext();
   const board = state.board!;
   const activePlayerIndex = state.getActivePlayerIndex();
   const activePlayer =
@@ -179,9 +171,9 @@ export default observer(function Board({
     activePlayerIndex,
     board,
     focusedPlayerIndex,
-    isLeftHanded: isLeftHandedLayout,
+    isLeftHanded: settings.leftHandedMode,
     isTouchDevice: useTouch === true,
-    zoom,
+    zoom: settings.scale,
   });
 
   useIsomorphicLayoutEffect(() => {
@@ -253,10 +245,10 @@ export default observer(function Board({
         boardRootRef={boardRootRef}
         onUpdateGrabbedItem={handleUpdateGrabbedItem}
       />
-      <MobileDragPreviewLayer enabled easyReadCards={easyReadCards} />
+      <MobileDragPreviewLayer enabled easyReadCards={settings.easyReadCards} />
       <div
         className={styles.root}
-        data-card-readability={easyReadCards ? "easy" : "standard"}
+        data-card-readability={settings.easyReadCards ? "easy" : "standard"}
         data-layout-ready={isLayoutReady ? "true" : "false"}
         data-layout-mode={layout.mode}
         data-layout-transitions={
@@ -266,10 +258,7 @@ export default observer(function Board({
       >
         <BoardLayoutProvider value={layout}>
           <div className={styles.rootInside} ref={ref}>
-            <PileSection
-              onOpenRoomSettings={onOpenRoomSettings}
-              roomId={roomId}
-            />
+            <PileSection roomId={roomId} />
             <ScoresTableTabOverlay board={board} />
             <HandPlatesLayer visiblePlayerIndices={visiblePlayerIndices} />
             {canInteractWithCards ? (
@@ -529,13 +518,11 @@ const PlayerZoomTargets = observer(function PlayerZoomTargets({
 });
 
 const PileSection = observer(function PileSection({
-  onOpenRoomSettings,
   roomId,
 }: {
-  onOpenRoomSettings: () => void;
   roomId?: string | null;
 }) {
-  const { state, socket } = useClientContext();
+  const { settings, state, socket } = useClientContext();
   const board = state.board!;
   const layout = useBoardLayout();
   const fieldArea = { type: "field" } as const;
@@ -701,7 +688,7 @@ const PileSection = observer(function PileSection({
                 <div className={styles.startActions}>
                   <Button
                     className={styles.roomSettingsButton}
-                    onClick={onOpenRoomSettings}
+                    onClick={() => settings.openSettings("room")}
                   >
                     Room settings
                   </Button>

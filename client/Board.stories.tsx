@@ -2,7 +2,8 @@ import type { Meta, StoryObj } from "@storybook/react";
 import { useMemo } from "react";
 
 import Board from "./Board";
-import { ClientContext } from "./ClientContext";
+import ClientSettingsStore from "./ClientSettingsStore";
+import { ClientProvider } from "./ClientContext";
 import SocketState from "./SocketState";
 import type { CardState, Suits, Values } from "../shared/GameUtils";
 import { scoreBoard } from "../shared/GameUtils";
@@ -113,9 +114,13 @@ function BoardStoryFrame({
       }),
     [fullSolitairePile, playerCount, postRound, readyRole]
   );
+  const settings = useMemo(
+    () => new ClientSettingsStore({ easyReadCards, scale: zoom }),
+    [easyReadCards, zoom]
+  );
 
   return (
-    <ClientContext.Provider value={{ socket: null, state }}>
+    <ClientProvider settings={settings} socket={null} state={state}>
       <div
         style={{
           background: "#cd9b60",
@@ -151,17 +156,13 @@ function BoardStoryFrame({
         ) : null}
         <div style={{ height: "100%", isolation: "isolate" }}>
           <Board
-            easyReadCards={easyReadCards}
             executeMove={() => undefined}
-            isLeftHandedLayout={false}
-            onOpenRoomSettings={() => undefined}
             onUpdateHand={() => undefined}
             roomId="storybook"
-            zoom={zoom}
           />
         </div>
       </div>
-    </ClientContext.Provider>
+    </ClientProvider>
   );
 }
 

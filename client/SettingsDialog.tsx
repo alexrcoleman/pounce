@@ -2,7 +2,7 @@ import styles from "./Header.module.css";
 import AudioMutedOutlined from "@ant-design/icons/AudioMutedOutlined";
 import CloseOutlined from "@ant-design/icons/CloseOutlined";
 import SoundOutlined from "@ant-design/icons/SoundOutlined";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { observer } from "mobx-react-lite";
 import { Button, Flex, Modal, Slider, Switch } from "antd";
 import { useClientContext } from "./ClientContext";
@@ -15,34 +15,9 @@ import useNetworkInformation, {
   type NetworkInformationSnapshot,
 } from "./useNetworkInformation";
 
-export type SettingsPage = "main" | "room" | "appearance";
-
-export type SettingsOpenRequest = {
-  id: number;
-  page: SettingsPage;
-};
-
 type SettingsDialogProps = {
   roomId?: string | null;
   onLeaveRoom: () => void;
-  isSettingsOpen: boolean;
-  onClose: () => void;
-  page: SettingsPage;
-  setPage: (page: SettingsPage) => void;
-  useAnimations: boolean;
-  setUseAnimations: (use: boolean) => void;
-  leftHandedMode: boolean;
-  setLeftHandedMode: (use: boolean) => void;
-  easyReadCards: boolean;
-  setEasyReadCards: (use: boolean) => void;
-  showFramerate: boolean;
-  setShowFramerate: (show: boolean) => void;
-  showNetworkStats: boolean;
-  setShowNetworkStats: (show: boolean) => void;
-  scale: number;
-  setScale: (scale: number) => void;
-  soundEffectVolume: number;
-  setSoundEffectVolume: (volume: number) => void;
 };
 
 const FAIR_HAND_ROTATION_HELP =
@@ -64,7 +39,7 @@ const CUSTOM_AI_MAX = 10;
 export default observer(function SettingsDialog({
   ...props
 }: SettingsDialogProps) {
-  const { state, socket } = useClientContext();
+  const { settings, state, socket } = useClientContext();
   const isStarted = state.board?.isActive ?? false;
   const isPaused = state.board?.isPaused ?? false;
   const isHost = state.getIsHost();
@@ -75,9 +50,6 @@ export default observer(function SettingsDialog({
   const buildDate = useLocalBuildDate(process.env.NEXT_PUBLIC_BUILD_DATE);
   const networkInformation = useNetworkInformation();
   const [isFairHandHelpOpen, setFairHandHelpOpen] = useState(false);
-  const previousSoundEffectVolumeRef = useRef(
-    props.soundEffectVolume > 0 ? props.soundEffectVolume : 100
-  );
   const [localAICount, setLocalAICount] = useState(serverAICount);
   const currentAISpeed = state.roomSettings.aiSpeed ?? 3;
   const [aiDifficultyMode, setAIDifficultyMode] = useState<AIDifficultyMode>(
@@ -86,7 +58,7 @@ export default observer(function SettingsDialog({
   const [customAISpeed, setCustomAISpeed] = useState(() =>
     normalizeCustomAISpeed(currentAISpeed)
   );
-  const page = props.page;
+  const page = settings.settingsPage;
   const canChangeAI = isHost && !isStarted;
   const roomLabel = props.roomId ?? "Unknown";
   const isOfflineRoom = props.roomId?.toLowerCase() === "offline";
@@ -121,25 +93,10 @@ export default observer(function SettingsDialog({
   };
 
   useEffect(() => {
-    if (!props.isSettingsOpen) {
+    if (!settings.isSettingsOpen) {
       setFairHandHelpOpen(false);
     }
-  }, [props.isSettingsOpen]);
-
-  useEffect(() => {
-    if (props.soundEffectVolume > 0) {
-      previousSoundEffectVolumeRef.current = props.soundEffectVolume;
-    }
-  }, [props.soundEffectVolume]);
-
-  const toggleSoundEffectMute = () => {
-    if (props.soundEffectVolume > 0) {
-      props.setSoundEffectVolume(0);
-      return;
-    }
-
-    props.setSoundEffectVolume(previousSoundEffectVolumeRef.current || 100);
-  };
+  }, [settings.isSettingsOpen]);
 
   return (
     <Modal
@@ -149,7 +106,7 @@ export default observer(function SettingsDialog({
             <button
               type="button"
               className={styles.backButton}
-              onClick={() => props.setPage("main")}
+              onClick={() => settings.setSettingsPage("main")}
               aria-label="Back to settings"
             >
               <ChevronLeftIcon
@@ -163,7 +120,7 @@ export default observer(function SettingsDialog({
           <button
             aria-label="Close settings"
             className={styles.settingsCloseButton}
-            onClick={props.onClose}
+            onClick={settings.closeSettings}
             type="button"
           >
             <CloseOutlined
@@ -177,8 +134,8 @@ export default observer(function SettingsDialog({
       rootClassName={styles.settingsModal}
       width={440}
       centered
-      open={props.isSettingsOpen}
-      onCancel={props.onClose}
+      open={settings.isSettingsOpen}
+      onCancel={settings.closeSettings}
       closable={false}
       footer={null}
     >
@@ -188,14 +145,14 @@ export default observer(function SettingsDialog({
             block
             size="large"
             className={styles.backToGameListButton}
-            onClick={props.onClose}
+            onClick={settings.closeSettings}
           >
             Back to game
           </Button>
           <button
             type="button"
             className={styles.settingsNavButton}
-            onClick={() => props.setPage("room")}
+            onClick={() => settings.setSettingsPage("room")}
           >
             <span>
               <strong>Room</strong>
@@ -205,7 +162,7 @@ export default observer(function SettingsDialog({
           <button
             type="button"
             className={styles.settingsNavButton}
-            onClick={() => props.setPage("appearance")}
+            onClick={() => settings.setSettingsPage("appearance")}
           >
             <span>
               <strong>Appearance</strong>
@@ -282,7 +239,7 @@ export default observer(function SettingsDialog({
                   disabled={!isStarted}
                   onClick={() => {
                     socket?.emit("set_paused", { paused: !isPaused });
-                    props.onClose();
+                    settings.closeSettings();
                   }}
                 >
                   {isPaused ? "Resume" : "Pause"}
@@ -294,7 +251,7 @@ export default observer(function SettingsDialog({
                   disabled={!isStarted}
                   onClick={() => {
                     socket?.emit("rotate_decks");
-                    props.onClose();
+                    settings.closeSettings();
                   }}
                 >
                   Rotate decks
@@ -303,7 +260,7 @@ export default observer(function SettingsDialog({
                   disabled={isStarted || disconnectedCount === 0}
                   onClick={() => {
                     socket?.emit("remove_disconnected_players");
-                    props.onClose();
+                    settings.closeSettings();
                   }}
                 >
                   Clear inactive
@@ -372,8 +329,8 @@ export default observer(function SettingsDialog({
               title="Animations"
               control={
                 <Switch
-                  checked={props.useAnimations}
-                  onChange={(v) => props.setUseAnimations(v)}
+                  checked={settings.useAnimations}
+                  onChange={(v) => settings.setUseAnimations(v)}
                 />
               }
             />
@@ -381,8 +338,8 @@ export default observer(function SettingsDialog({
               title="Easy-read cards"
               control={
                 <Switch
-                  checked={props.easyReadCards}
-                  onChange={(v) => props.setEasyReadCards(v)}
+                  checked={settings.easyReadCards}
+                  onChange={(v) => settings.setEasyReadCards(v)}
                 />
               }
             />
@@ -390,8 +347,8 @@ export default observer(function SettingsDialog({
               title="Left-handed mode"
               control={
                 <Switch
-                  checked={props.leftHandedMode}
-                  onChange={(v) => props.setLeftHandedMode(v)}
+                  checked={settings.leftHandedMode}
+                  onChange={(v) => settings.setLeftHandedMode(v)}
                 />
               }
             />
@@ -399,8 +356,8 @@ export default observer(function SettingsDialog({
               title="Show framerate"
               control={
                 <Switch
-                  checked={props.showFramerate}
-                  onChange={(v) => props.setShowFramerate(v)}
+                  checked={settings.showFramerate}
+                  onChange={(v) => settings.setShowFramerate(v)}
                 />
               }
             />
@@ -408,22 +365,22 @@ export default observer(function SettingsDialog({
               title="Show network stats"
               control={
                 <Switch
-                  checked={props.showNetworkStats}
-                  onChange={(v) => props.setShowNetworkStats(v)}
+                  checked={settings.showNetworkStats}
+                  onChange={(v) => settings.setShowNetworkStats(v)}
                 />
               }
             />
             <div className={styles.sliderBlock}>
               <div className={styles.sliderHeader}>
                 <span>Zoom</span>
-                <strong>{Math.round(props.scale * 100)}%</strong>
+                <strong>{Math.round(settings.scale * 100)}%</strong>
               </div>
               <Slider
                 min={0.5}
                 max={2}
                 step={0.025}
-                value={props.scale}
-                onChange={(v) => props.setScale(v)}
+                value={settings.scale}
+                onChange={(v) => settings.setScale(v)}
               />
             </div>
           </SettingsSection>
@@ -431,26 +388,26 @@ export default observer(function SettingsDialog({
             <div className={styles.volumeBlock}>
               <div className={styles.sliderHeader}>
                 <span>Sound effects</span>
-                <strong>{Math.round(props.soundEffectVolume)}%</strong>
+                <strong>{Math.round(settings.soundEffectVolume)}%</strong>
               </div>
               <div className={styles.volumeControl}>
                 <button
                   type="button"
                   className={styles.volumeMuteButton}
                   aria-label={
-                    props.soundEffectVolume > 0
+                    settings.soundEffectVolume > 0
                       ? "Mute sound effects"
                       : "Unmute sound effects"
                   }
-                  aria-pressed={props.soundEffectVolume === 0}
+                  aria-pressed={settings.soundEffectVolume === 0}
                   title={
-                    props.soundEffectVolume > 0
+                    settings.soundEffectVolume > 0
                       ? "Mute sound effects"
                       : "Unmute sound effects"
                   }
-                  onClick={toggleSoundEffectMute}
+                  onClick={settings.toggleSoundEffectMute}
                 >
-                  {props.soundEffectVolume > 0 ? (
+                  {settings.soundEffectVolume > 0 ? (
                     <SoundOutlined
                       aria-hidden="true"
                       className={styles.volumeIcon}
@@ -470,8 +427,8 @@ export default observer(function SettingsDialog({
                   min={0}
                   max={100}
                   step={5}
-                  value={props.soundEffectVolume}
-                  onChange={(v) => props.setSoundEffectVolume(v)}
+                  value={settings.soundEffectVolume}
+                  onChange={(v) => settings.setSoundEffectVolume(v)}
                 />
               </div>
             </div>

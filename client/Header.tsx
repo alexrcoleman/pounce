@@ -17,44 +17,21 @@ import {
   getStuckVoteStatus,
   getStuckVotingPlayerIndices,
 } from "../shared/StuckPlayers";
-import SettingsDialog, {
-  type SettingsOpenRequest,
-  type SettingsPage,
-} from "./SettingsDialog";
+import SettingsDialog from "./SettingsDialog";
 import useNetworkInformation, {
   getNetworkInformationTitle,
   getNetworkSummary,
 } from "./useNetworkInformation";
-
-export type { SettingsOpenRequest, SettingsPage } from "./SettingsDialog";
 
 const PENDING_MOVE_SYNC_BADGE_DELAY_MS = 2000;
 
 type Props = {
   roomId?: string | null;
   onLeaveRoom: () => void;
-  settingsRequest?: SettingsOpenRequest | null;
-  onSettingsRequestHandled?: () => void;
-  useAnimations: boolean;
-  setUseAnimations: (use: boolean) => void;
-  leftHandedMode: boolean;
-  setLeftHandedMode: (use: boolean) => void;
-  easyReadCards: boolean;
-  setEasyReadCards: (use: boolean) => void;
-  showFramerate: boolean;
-  setShowFramerate: (show: boolean) => void;
-  showNetworkStats: boolean;
-  setShowNetworkStats: (show: boolean) => void;
-  scale: number;
-  setScale: (scale: number) => void;
-  soundEffectVolume: number;
-  setSoundEffectVolume: (volume: number) => void;
 };
 
 export default observer(function Header(props: Props) {
-  const [isSettingsOpen, setSettingsOpen] = useState(false);
-  const [settingsPage, setSettingsPage] = useState<SettingsPage>("main");
-  const { state, socket } = useClientContext();
+  const { settings, state, socket } = useClientContext();
   const board = state.board;
   const isStarted = state.board?.isActive ?? false;
   const isPaused = state.board?.isPaused ?? false;
@@ -85,25 +62,6 @@ export default observer(function Header(props: Props) {
     !isHost &&
     props.roomId != null &&
     props.roomId.toLowerCase() !== "offline";
-  const openSettings = (page: SettingsPage) => {
-    setSettingsPage(page);
-    setSettingsOpen(true);
-  };
-  const closeSettings = () => {
-    setSettingsOpen(false);
-    setSettingsPage("main");
-  };
-
-  useEffect(() => {
-    const request = props.settingsRequest;
-    if (!request) {
-      return;
-    }
-    setSettingsPage(request.page);
-    setSettingsOpen(true);
-    props.onSettingsRequestHandled?.();
-  }, [props.settingsRequest, props.onSettingsRequestHandled]);
-
   return (
     <>
       {showRoomCode ? (
@@ -118,10 +76,10 @@ export default observer(function Header(props: Props) {
         aria-label="Game controls"
       >
         <PendingMoveSyncBadgeContainer />
-        {props.showNetworkStats ? (
+        {settings.showNetworkStats ? (
           <NetworkStatsIndicator roomId={props.roomId} />
         ) : null}
-        {props.showFramerate ? <FramerateIndicator /> : null}
+        {settings.showFramerate ? <FramerateIndicator /> : null}
         {canSendReactions ? (
           <HeaderReactionButton
             onSelectReaction={(reactionId) =>
@@ -152,7 +110,7 @@ export default observer(function Header(props: Props) {
         <DesktopOnlyTooltip title="Open settings">
           <button
             className={`${styles.floatingButton} ${styles.settingsButton}`}
-            onClick={() => openSettings("main")}
+            onClick={() => settings.openSettings("main")}
             aria-label="Open settings"
             type="button"
           >
@@ -165,28 +123,10 @@ export default observer(function Header(props: Props) {
           </button>
         </DesktopOnlyTooltip>
       </div>
-      {isSettingsOpen ? (
+      {settings.isSettingsOpen ? (
         <SettingsDialog
-          easyReadCards={props.easyReadCards}
-          isSettingsOpen={isSettingsOpen}
-          leftHandedMode={props.leftHandedMode}
-          onClose={closeSettings}
           onLeaveRoom={props.onLeaveRoom}
-          page={settingsPage}
           roomId={props.roomId}
-          scale={props.scale}
-          setEasyReadCards={props.setEasyReadCards}
-          setShowFramerate={props.setShowFramerate}
-          setLeftHandedMode={props.setLeftHandedMode}
-          setPage={setSettingsPage}
-          setScale={props.setScale}
-          setSoundEffectVolume={props.setSoundEffectVolume}
-          setShowNetworkStats={props.setShowNetworkStats}
-          setUseAnimations={props.setUseAnimations}
-          soundEffectVolume={props.soundEffectVolume}
-          showFramerate={props.showFramerate}
-          showNetworkStats={props.showNetworkStats}
-          useAnimations={props.useAnimations}
         />
       ) : null}
     </>

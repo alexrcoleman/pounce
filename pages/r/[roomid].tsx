@@ -1,24 +1,17 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 
 import Board from "../../client/Board";
 import Head from "next/head";
 import Header from "../../client/Header";
-import type { SettingsOpenRequest } from "../../client/Header";
-import JoinForm from "../../client/JoinForm";
 import LoadingState from "../../client/LoadingState";
 import type { NextPage } from "next";
 import joinClasses from "../../client/joinClasses";
 import styles from "../../client/Home.module.css";
-import {
-  DEFAULT_SOUND_EFFECT_VOLUME_PERCENT,
-  preloadSoundEffects,
-  setSoundEffectVolumePercent,
-} from "../../client/soundEffects";
+import { preloadSoundEffects } from "../../client/soundEffects";
+import { useClientSettingsStore } from "../../client/ClientSettingsStore";
 import useGameSocket from "../../client/useGameSocket";
-import useStoredBoolean from "../../client/useStoredBoolean";
-import useStoredNumber from "../../client/useStoredNumber";
 import { observer } from "mobx-react-lite";
-import { ClientContext } from "../../client/ClientContext";
+import { ClientProvider } from "../../client/ClientContext";
 import { useRouter } from "next/router";
 import { Button, Flex } from "antd";
 import Link from "next/link";
@@ -29,29 +22,7 @@ const RoomPage = observer(
       router.isReady && typeof router.query.roomid === "string"
         ? router.query.roomid
         : null;
-    const [animations, setAnimations] = useState(true);
-    const [settingsRequest, setSettingsRequest] =
-      useState<SettingsOpenRequest | null>(null);
-    const [leftHandedMode, setLeftHandedMode] = useState(false);
-    const [easyReadCards, setEasyReadCards] = useStoredBoolean(
-      "pounce::easy-read-cards",
-      true
-    );
-    const [showFramerate, setShowFramerate] = useStoredBoolean(
-      "pounce::show-framerate",
-      false
-    );
-    const [showNetworkStats, setShowNetworkStats] = useStoredBoolean(
-      "pounce::show-network-stats",
-      false
-    );
-    const [soundEffectVolume, setSoundEffectVolume] = useStoredNumber(
-      "pounce::sound-effect-volume",
-      DEFAULT_SOUND_EFFECT_VOLUME_PERCENT,
-      0,
-      100
-    );
-    const [scale, setScale] = useState(1);
+    const settings = useClientSettingsStore();
     const { actions, isConnected, state, socket, error } = useGameSocket(
       roomId,
       name
@@ -59,19 +30,6 @@ const RoomPage = observer(
     const onLeaveRoom = useCallback(() => {
       router.push("/");
     }, []);
-    const onOpenRoomSettings = useCallback(() => {
-      setSettingsRequest((current) => ({
-        id: (current?.id ?? 0) + 1,
-        page: "room",
-      }));
-    }, []);
-    const onSettingsRequestHandled = useCallback(() => {
-      setSettingsRequest(null);
-    }, []);
-
-    useEffect(() => {
-      setSoundEffectVolumePercent(soundEffectVolume);
-    }, [soundEffectVolume]);
 
     useEffect(() => {
       preloadSoundEffects();
@@ -134,44 +92,23 @@ const RoomPage = observer(
         <div
           className={joinClasses(
             styles.container,
-            !animations && styles.hideAnimations
+            !settings.useAnimations && styles.hideAnimations
           )}
         >
-          <ClientContext.Provider
-            value={{ state, socket: isConnected ? socket : null }}
+          <ClientProvider
+            settings={settings}
+            state={state}
+            socket={isConnected ? socket : null}
           >
-            <Header
-              useAnimations={animations}
-              setUseAnimations={setAnimations}
-              leftHandedMode={leftHandedMode}
-              setLeftHandedMode={setLeftHandedMode}
-              easyReadCards={easyReadCards}
-              setEasyReadCards={setEasyReadCards}
-              showFramerate={showFramerate}
-              setShowFramerate={setShowFramerate}
-              showNetworkStats={showNetworkStats}
-              setShowNetworkStats={setShowNetworkStats}
-              onLeaveRoom={onLeaveRoom}
-              settingsRequest={settingsRequest}
-              onSettingsRequestHandled={onSettingsRequestHandled}
-              roomId={roomId}
-              scale={scale}
-              setScale={setScale}
-              soundEffectVolume={soundEffectVolume}
-              setSoundEffectVolume={setSoundEffectVolume}
-            />
+            <Header onLeaveRoom={onLeaveRoom} roomId={roomId} />
             <div className={styles.boardWrapper}>
               <Board
                 onUpdateHand={actions.onUpdateHand}
                 executeMove={actions.executeMove}
-                isLeftHandedLayout={leftHandedMode}
-                easyReadCards={easyReadCards}
-                onOpenRoomSettings={onOpenRoomSettings}
                 roomId={roomId}
-                zoom={scale}
               />
             </div>
-          </ClientContext.Provider>
+          </ClientProvider>
         </div>
       </>
     );
