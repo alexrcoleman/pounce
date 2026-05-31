@@ -14,8 +14,10 @@ import {
   PounceRushMoveRejection,
   PounceRushPuzzle,
   PounceRushPuzzleSummary,
+  createPounceRushDailySeed,
   createPounceRushPuzzle,
   createPounceRushRunSeed,
+  getPounceRushDailyKey,
   getPounceRushMoveRejection,
   getPounceRushPuzzleSummary,
   isExpectedPounceRushMove,
@@ -28,13 +30,26 @@ const NEXT_PUZZLE_DELAY_MS = 720;
 const BOARD_ANIMATION_SUPPRESSION_MS = 90;
 
 type RushStatus = "idle" | "running" | "complete";
+type PounceRushRunKind = "daily" | "random";
 type RushFeedback = PounceRushMoveRejection & {
   id: number;
   tone: "blocked" | "success";
 };
+export type PounceRushDailyOutcome = {
+  completedAt: string;
+  dateKey: string;
+  puzzleCount: number;
+  score: number;
+  seed: string;
+};
+
+const DAILY_OUTCOME_STORAGE_KEY = "pounce::rush-daily-outcome";
 
 export default function usePounceRushGame(playerName: string) {
-  const initialSeedRef = useRef("");
+  const initialDailyDateKeyRef = useRef(getPounceRushDailyKey());
+  const initialSeedRef = useRef(
+    createPounceRushDailySeed(initialDailyDateKeyRef.current)
+  );
   const initialPuzzleRef = useRef<PounceRushPuzzle | null>(null);
   if (initialPuzzleRef.current == null) {
     initialPuzzleRef.current = createPounceRushPuzzle({
@@ -69,8 +84,14 @@ export default function usePounceRushGame(playerName: string) {
   const [puzzleHistory, setPuzzleHistory] = useState<
     PounceRushPuzzleSummary[]
   >([]);
+  const [dailyDateKey, setDailyDateKey] = useState(
+    initialDailyDateKeyRef.current
+  );
+  const [dailyOutcome, setDailyOutcome] =
+    useState<PounceRushDailyOutcome | null>(null);
   const [puzzleNumber, setPuzzleNumber] = useState(0);
   const [reviewPuzzleNumber, setReviewPuzzleNumber] = useState<number | null>(0);
+  const [runKind, setRunKind] = useState<PounceRushRunKind>("daily");
   const [score, setScore] = useState(0);
   const [seed, setSeedState] = useState(initialSeedRef.current);
   const [status, setStatus] = useState<RushStatus>("idle");
@@ -79,11 +100,15 @@ export default function usePounceRushGame(playerName: string) {
   const animationSuppressionTimeoutRef = useRef<number | null>(null);
   const boardRef = useRef<BoardState | null>(initialPuzzle?.board ?? null);
   const currentPuzzleRef = useRef<PounceRushPuzzle | null>(initialPuzzle);
+  const dailyDateKeyRef = useRef(initialDailyDateKeyRef.current);
+  const dailyOutcomeRef = useRef<PounceRushDailyOutcome | null>(null);
   const feedbackIdRef = useRef(0);
   const isAdvancingPuzzleRef = useRef(false);
   const nextPuzzleTimeoutRef = useRef<number | null>(null);
   const playerNameRef = useRef(playerName);
+  const puzzleHistoryRef = useRef<PounceRushPuzzleSummary[]>([]);
   const puzzleNumberRef = useRef(0);
+  const runKindRef = useRef<PounceRushRunKind>("daily");
   const scoreRef = useRef(0);
   const seedRef = useRef(initialSeedRef.current);
   const startTimeRef = useRef(Date.now());
@@ -156,11 +181,15 @@ export default function usePounceRushGame(playerName: string) {
 
       if (options.record) {
         const summary = getPounceRushPuzzleSummary(puzzle);
-        setPuzzleHistory((current) =>
-          current.some((entry) => entry.puzzleNumber === summary.puzzleNumber)
+        setPuzzleHistory((current) => {
+          const next = current.some(
+            (entry) => entry.puzzleNumber === summary.puzzleNumber
+          )
             ? current
-            : current.concat(summary)
-        );
+            : current.concat(summary);
+          puzzleHistoryRef.current = next;
+          return next;
+        });
         setReviewPuzzleNumber(null);
       } else {
         setReviewPuzzleNumber(nextPuzzleNumber);
@@ -169,34 +198,24 @@ export default function usePounceRushGame(playerName: string) {
     [state, suppressBoardAnimations]
   );
 
-  const setSeed = useCallback(
-    (nextSeed: string) => {
-      const normalizedSeed = nextSeed.trim();
-      seedRef.current = normalizedSeed;
-      setSeedState(normalizedSeed);
-      if (statusRef.current !== "running") {
-        installPuzzle(0, { record: false, seed: normalizedSeed });
-      }
-    },
-    [installPuzzle]
-  );
-
-  const randomizeSeed = useCallback(() => {
-    setSeed(createPounceRushRunSeed());
-  }, [setSeed]);
-
   const start = useCallback(
-    (requestedSeed = seedRef.current) => {
+    (
+      requestedSeed = seedRef.current,
+      nextRunKind: PounceRushRunKind = runKindRef.current
+    ) => {
       const nextSeed = requestedSeed.trim() || createPounceRushRunSeed();
       clearNextPuzzleTimeout();
       seedRef.current = nextSeed;
+      runKindRef.current = nextRunKind;
       statusRef.current = "running";
       scoreRef.current = 0;
       startTimeRef.current = Date.now();
       setFeedback(null);
+      puzzleHistoryRef.current = [];
       setPuzzleHistory([]);
       setRemainingMs(POUNCE_RUSH_DURATION_MS);
       setReviewPuzzleNumber(null);
+      setRunKind(nextRunKind);
       setScore(0);
       setSeedState(nextSeed);
       setStatus("running");
@@ -206,12 +225,64 @@ export default function usePounceRushGame(playerName: string) {
   );
 
   const restart = useCallback(() => {
-    start(seedRef.current);
+    start(seedRef.current, runKindRef.current);
   }, [start]);
 
-  const startWithNewSeed = useCallback(() => {
-    start(createPounceRushRunSeed());
+  const startRandom = useCallback(() => {
+    start(createPounceRushRunSeed(), "random");
   }, [start]);
+
+  const startDaily = useCallback(() => {
+    const todayKey = getPounceRushDailyKey();
+    const existingOutcome = dailyOutcomeRef.current;
+    dailyDateKeyRef.current = todayKey;
+    setDailyDateKey(todayKey);
+    if (existingOutcome?.dateKey === todayKey) {
+      runKindRef.current = "random";
+      setRunKind("random");
+      showFeedback({
+        title: "Daily complete",
+        detail: "Random puzzles are still open for practice.",
+      });
+      return;
+    }
+
+    start(createPounceRushDailySeed(todayKey), "daily");
+  }, [showFeedback, start]);
+
+  const selectRunKind = useCallback(
+    (nextRunKind: PounceRushRunKind) => {
+      if (statusRef.current === "running") {
+        return;
+      }
+
+      const todayKey = getPounceRushDailyKey();
+      dailyDateKeyRef.current = todayKey;
+      setDailyDateKey(todayKey);
+      if (
+        nextRunKind === "daily" &&
+        dailyOutcomeRef.current?.dateKey === todayKey
+      ) {
+        runKindRef.current = "random";
+        setRunKind("random");
+        showFeedback({
+          title: "Daily complete",
+          detail: "Try a random puzzle rush instead.",
+        });
+        installPuzzle(0, { record: false, seed: "" });
+        return;
+      }
+
+      runKindRef.current = nextRunKind;
+      setRunKind(nextRunKind);
+      installPuzzle(0, {
+        record: false,
+        seed:
+          nextRunKind === "daily" ? createPounceRushDailySeed(todayKey) : "",
+      });
+    },
+    [installPuzzle, showFeedback]
+  );
 
   const peekPuzzle = useCallback(
     (nextPuzzleNumber: number) => {
@@ -257,6 +328,27 @@ export default function usePounceRushGame(playerName: string) {
       });
     }, NEXT_PUZZLE_DELAY_MS);
   }, [clearNextPuzzleTimeout, installPuzzle, showFeedback]);
+
+  const finishRun = useCallback(() => {
+    clearNextPuzzleTimeout();
+    statusRef.current = "complete";
+    setStatus("complete");
+    setIsAdvancingPuzzle(false);
+    isAdvancingPuzzleRef.current = false;
+
+    if (runKindRef.current === "daily") {
+      const outcome: PounceRushDailyOutcome = {
+        completedAt: new Date().toISOString(),
+        dateKey: dailyDateKeyRef.current,
+        puzzleCount: puzzleHistoryRef.current.length,
+        score: scoreRef.current,
+        seed: seedRef.current,
+      };
+      dailyOutcomeRef.current = outcome;
+      setDailyOutcome(outcome);
+      saveDailyOutcome(outcome);
+    }
+  }, [clearNextPuzzleTimeout]);
 
   const executeRushMove = useCallback(
     (move: Move) => {
@@ -395,6 +487,27 @@ export default function usePounceRushGame(playerName: string) {
   }, [clearNextPuzzleTimeout, installPuzzle, state]);
 
   useEffect(() => {
+    const todayKey = getPounceRushDailyKey();
+    const outcome = loadDailyOutcome(todayKey);
+    dailyDateKeyRef.current = todayKey;
+    dailyOutcomeRef.current = outcome;
+    setDailyDateKey(todayKey);
+    setDailyOutcome(outcome);
+
+    if (statusRef.current !== "idle") {
+      return;
+    }
+
+    const nextRunKind: PounceRushRunKind = outcome ? "random" : "daily";
+    runKindRef.current = nextRunKind;
+    setRunKind(nextRunKind);
+    installPuzzle(0, {
+      record: false,
+      seed: nextRunKind === "daily" ? createPounceRushDailySeed(todayKey) : "",
+    });
+  }, [installPuzzle]);
+
+  useEffect(() => {
     const updateTime = () => {
       if (statusRef.current !== "running") {
         return;
@@ -406,18 +519,14 @@ export default function usePounceRushGame(playerName: string) {
       );
       setRemainingMs(remaining);
       if (remaining <= 0) {
-        clearNextPuzzleTimeout();
-        statusRef.current = "complete";
-        setStatus("complete");
-        setIsAdvancingPuzzle(false);
-        isAdvancingPuzzleRef.current = false;
+        finishRun();
       }
     };
 
     updateTime();
     const intervalId = window.setInterval(updateTime, 100);
     return () => window.clearInterval(intervalId);
-  }, [clearNextPuzzleTimeout]);
+  }, [finishRun]);
 
   return {
     actions: {
@@ -427,13 +536,14 @@ export default function usePounceRushGame(playerName: string) {
         socket.emit("update_hand", { location });
       },
       peekPuzzle,
-      randomizeSeed,
+      selectRunKind,
       restart,
-      setSeed,
-      start,
-      startWithNewSeed,
+      startDaily,
+      startRandom,
     },
     currentPuzzle,
+    dailyDateKey,
+    dailyOutcome,
     feedback,
     isAdvancingPuzzle,
     isBoardAnimationSuppressed,
@@ -442,6 +552,7 @@ export default function usePounceRushGame(playerName: string) {
     puzzleNumber,
     remainingMs,
     reviewPuzzleNumber,
+    runKind,
     score,
     seed,
     state,
@@ -489,4 +600,47 @@ function applyHandsUpdate(state: SocketState, hands: CursorState[]): void {
   runInAction(() => {
     state.updateHands(deepClone(hands));
   });
+}
+
+function loadDailyOutcome(dateKey: string): PounceRushDailyOutcome | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(DAILY_OUTCOME_STORAGE_KEY);
+    if (!storedValue) {
+      return null;
+    }
+
+    const outcome = JSON.parse(storedValue) as Partial<PounceRushDailyOutcome>;
+    if (
+      outcome.dateKey !== dateKey ||
+      typeof outcome.completedAt !== "string" ||
+      typeof outcome.puzzleCount !== "number" ||
+      typeof outcome.score !== "number" ||
+      typeof outcome.seed !== "string"
+    ) {
+      return null;
+    }
+
+    return outcome as PounceRushDailyOutcome;
+  } catch {
+    return null;
+  }
+}
+
+function saveDailyOutcome(outcome: PounceRushDailyOutcome): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      DAILY_OUTCOME_STORAGE_KEY,
+      JSON.stringify(outcome)
+    );
+  } catch {
+    // Private browsing or storage limits should not block finishing a run.
+  }
 }

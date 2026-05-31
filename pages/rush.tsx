@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { Button, Input } from "antd";
+import { Button } from "antd";
 import Board from "../client/Board";
 import { ClientContext } from "../client/ClientContext";
 import Head from "next/head";
@@ -26,6 +26,8 @@ const PounceRushPage: NextPage<{
   const {
     actions,
     currentPuzzle,
+    dailyDateKey,
+    dailyOutcome,
     feedback,
     isAdvancingPuzzle,
     isBoardAnimationSuppressed,
@@ -34,6 +36,7 @@ const PounceRushPage: NextPage<{
     puzzleNumber,
     remainingMs,
     reviewPuzzleNumber,
+    runKind,
     score,
     seed,
     state,
@@ -70,6 +73,8 @@ const PounceRushPage: NextPage<{
   const isInteractionDisabled = isIdle || isComplete || isAdvancingPuzzle;
   const sequenceLength = currentPuzzle.sequence.length;
   const displayedStep = Math.min(stepIndex + 1, sequenceLength);
+  const isDailyComplete = dailyOutcome?.dateKey === dailyDateKey;
+  const dailyLabel = formatDailyLabel(dailyDateKey);
 
   return (
     <>
@@ -148,30 +153,67 @@ const PounceRushPage: NextPage<{
           <div className={styles.startOverlay} role="dialog" aria-modal>
             <div className={styles.startPanel}>
               <h1 className={styles.startTitle}>Pounce Rush</h1>
-              <label className={styles.seedField} htmlFor="rush-seed">
-                Seed
-                <Input
-                  id="rush-seed"
-                  className={styles.seedInput}
-                  value={seed}
-                  onChange={(event) => actions.setSeed(event.target.value)}
-                  placeholder="Random on start"
-                  spellCheck={false}
-                />
-              </label>
+              <div className={styles.modeTabs} role="tablist">
+                <button
+                  aria-pressed={runKind === "daily"}
+                  className={styles.modeTab}
+                  data-complete={isDailyComplete ? "true" : "false"}
+                  onClick={() => actions.selectRunKind("daily")}
+                  type="button"
+                >
+                  <span>Daily Puzzle</span>
+                  <small>
+                    {isDailyComplete
+                      ? `${dailyOutcome.score} solved today`
+                      : dailyLabel}
+                  </small>
+                </button>
+                <button
+                  aria-pressed={runKind === "random"}
+                  className={styles.modeTab}
+                  onClick={() => actions.selectRunKind("random")}
+                  type="button"
+                >
+                  <span>Random Puzzle</span>
+                  <small>Fresh practice boards</small>
+                </button>
+              </div>
+              <div className={styles.modeSummary}>
+                {runKind === "daily" ? (
+                  isDailyComplete ? (
+                    <>
+                      <strong>Daily complete</strong>
+                      <span>Random puzzles are still open for practice.</span>
+                    </>
+                  ) : (
+                    <>
+                      <strong>One scored run today</strong>
+                      <span>Finish it once, then compare or practice random.</span>
+                    </>
+                  )
+                ) : (
+                  <>
+                    <strong>Unlimited practice</strong>
+                    <span>New generated boards for finding rough edges.</span>
+                  </>
+                )}
+              </div>
               <div className={styles.startActions}>
                 <Button
-                  className={styles.secondaryButton}
-                  onClick={actions.randomizeSeed}
-                >
-                  Random seed
-                </Button>
-                <Button
                   className={`${styles.primaryButton} ${styles.startButton}`}
-                  onClick={() => actions.start(seed)}
+                  disabled={runKind === "daily" && isDailyComplete}
+                  onClick={
+                    runKind === "daily"
+                      ? actions.startDaily
+                      : actions.startRandom
+                  }
                   type="primary"
                 >
-                  Start
+                  {runKind === "daily"
+                    ? isDailyComplete
+                      ? "Daily complete"
+                      : "Start daily"
+                    : "Start random"}
                 </Button>
               </div>
             </div>
@@ -181,16 +223,18 @@ const PounceRushPage: NextPage<{
         {isComplete ? (
           <div className={styles.completionOverlay} role="dialog" aria-modal>
             <div className={styles.completionPanel}>
-              <h1 className={styles.completionTitle}>Time</h1>
+              <h1 className={styles.completionTitle}>
+                {runKind === "daily" ? "Daily Complete" : "Time"}
+              </h1>
               <div className={styles.completionScore}>
                 <strong>{score}</strong>
                 <span>
                   {score === 1 ? "puzzle completed" : "puzzles completed"}
                 </span>
               </div>
-              <div className={styles.seedSummary}>
-                <span>Seed</span>
-                <strong>{seed}</strong>
+              <div className={styles.reportSummary}>
+                <span>{runKind === "daily" ? "Daily puzzle" : "Report code"}</span>
+                <strong>{runKind === "daily" ? dailyLabel : seed}</strong>
               </div>
               <div className={styles.reviewList}>
                 {puzzleHistory.map((entry) => (
@@ -210,18 +254,23 @@ const PounceRushPage: NextPage<{
                 ))}
               </div>
               <div className={styles.completionActions}>
+                {runKind === "random" ? (
+                  <Button
+                    className={`${styles.completionButton} ${styles.primaryButton}`}
+                    onClick={actions.restart}
+                    type="primary"
+                  >
+                    Replay set
+                  </Button>
+                ) : null}
                 <Button
-                  className={`${styles.completionButton} ${styles.primaryButton}`}
-                  onClick={actions.restart}
-                  type="primary"
+                  className={`${styles.completionButton} ${
+                    runKind === "daily" ? styles.primaryButton : ""
+                  }`}
+                  onClick={actions.startRandom}
+                  type={runKind === "daily" ? "primary" : "default"}
                 >
-                  Same seed
-                </Button>
-                <Button
-                  className={styles.completionButton}
-                  onClick={actions.startWithNewSeed}
-                >
-                  New seed
+                  {runKind === "daily" ? "Random puzzle" : "New random"}
                 </Button>
                 <Button
                   className={styles.completionButton}
@@ -243,6 +292,19 @@ function formatRemainingTime(remainingMs: number): string {
   const minutes = Math.floor(totalSeconds / 60);
   const seconds = totalSeconds % 60;
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function formatDailyLabel(dateKey: string): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  if (!year || !month || !day) {
+    return dateKey;
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(year, month - 1, day));
 }
 
 export default PounceRushPage;

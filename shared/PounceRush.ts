@@ -57,11 +57,15 @@ export type PounceRushMoveRejection = {
 };
 
 type PuzzleTemplate = {
-  build: () => PuzzleSetup;
+  build: (context: PuzzleBuildContext) => PuzzleSetup;
   difficulty: PounceRushPuzzle["difficulty"];
   id: string;
   kind: PounceRushPuzzleKind;
   objective: PounceRushObjective;
+};
+
+type PuzzleBuildContext = {
+  rng: () => number;
 };
 
 type PuzzleSetup = {
@@ -75,6 +79,7 @@ type PuzzleSetup = {
 
 const PLAYER_INDEX = 0;
 const DEFAULT_POUNCE_RUSH_SEED = "rush";
+const MAX_PUZZLE_GENERATION_ATTEMPTS = 24;
 const CENTER_PILE_LOCS: [number, number, number][] = [
   [0.13, 0.16, 0.02],
   [0.66, 0.18, 0.31],
@@ -134,6 +139,62 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     }),
   },
   {
+    id: "pounce-center-generated",
+    kind: "pounce_center",
+    objective: "Unload a pounce card",
+    difficulty: "Warmup",
+    build: ({ rng }) => {
+      const targetValue = pickValue(rng, [4, 5, 7, 8, 9, 10]);
+      return {
+        deckCard: card("spades", 13),
+        flippedDeck: [card("clubs", 12)],
+        pounceDeck: [card("diamonds", 12), card("hearts", targetValue)],
+        stacks: singleStacks(
+          card("clubs", 13),
+          card("diamonds", 10),
+          card("spades", 8),
+          card("clubs", 6)
+        ),
+        piles: [
+          suitedPile("hearts", previousValue(targetValue)),
+          suitedPile("spades", 5),
+          suitedPile("diamonds", 3),
+          suitedPile("clubs", 3),
+        ],
+        sequence: [{ type: "c2c", source: { type: "pounce" }, dest: 0 }],
+      };
+    },
+  },
+  {
+    id: "solitaire-center-generated",
+    kind: "solitaire_center",
+    objective: "Make a center play",
+    difficulty: "Warmup",
+    build: ({ rng }) => {
+      const targetValue = pickValue(rng, [4, 5, 7, 8, 9, 10]);
+      return {
+        deckCard: card("spades", 13),
+        flippedDeck: [card("diamonds", 12)],
+        pounceDeck: [card("clubs", 6), card("hearts", 13)],
+        stacks: singleStacks(
+          card("diamonds", 13),
+          card("clubs", 12),
+          card("hearts", targetValue),
+          card("spades", 11)
+        ),
+        piles: [
+          suitedPile("hearts", previousValue(targetValue)),
+          suitedPile("spades", 5),
+          suitedPile("diamonds", 3),
+          suitedPile("clubs", 3),
+        ],
+        sequence: [
+          { type: "c2c", source: { type: "solitaire", index: 2 }, dest: 0 },
+        ],
+      };
+    },
+  },
+  {
     id: "waste-ace-center",
     kind: "waste_center",
     objective: "Make a center play",
@@ -156,6 +217,33 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
       ],
       sequence: [{ type: "c2c", source: { type: "deck" }, dest: 3 }],
     }),
+  },
+  {
+    id: "waste-center-generated",
+    kind: "waste_center",
+    objective: "Make a center play",
+    difficulty: "Warmup",
+    build: ({ rng }) => {
+      const targetValue = pickValue(rng, [4, 5, 7, 8, 9, 10]);
+      return {
+        deckCard: card("clubs", 13),
+        flippedDeck: [card("hearts", targetValue)],
+        pounceDeck: [card("spades", 12), card("clubs", 11)],
+        stacks: singleStacks(
+          card("spades", 13),
+          card("diamonds", 11),
+          card("clubs", 8),
+          card("diamonds", 6)
+        ),
+        piles: [
+          suitedPile("hearts", previousValue(targetValue)),
+          suitedPile("spades", 5),
+          suitedPile("diamonds", 3),
+          suitedPile("clubs", 3),
+        ],
+        sequence: [{ type: "c2c", source: { type: "deck" }, dest: 0 }],
+      };
+    },
   },
   {
     id: "free-slot-pounce",
@@ -183,6 +271,36 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
         { type: "c2s", source: "pounce", dest: 0 },
       ],
     }),
+  },
+  {
+    id: "free-slot-pounce-generated",
+    kind: "free_slot",
+    objective: "Unload a pounce card",
+    difficulty: "Sharp",
+    build: ({ rng }) => {
+      const movingValue = pickValue(rng, [5, 6, 7, 8]);
+      return {
+        deckCard: card("clubs", 13),
+        flippedDeck: [card("hearts", 12)],
+        pounceDeck: [card("diamonds", 12), card("clubs", 10)],
+        stacks: singleStacks(
+          card("clubs", movingValue),
+          card("diamonds", nextValue(movingValue)),
+          card("diamonds", 13),
+          card("spades", 9)
+        ),
+        piles: [
+          suitedPile("hearts", 4),
+          suitedPile("spades", 5),
+          suitedPile("diamonds", 3),
+          suitedPile("clubs", 3),
+        ],
+        sequence: [
+          { type: "s2s", source: 0, dest: 1, count: 1 },
+          { type: "c2s", source: "pounce", dest: 0 },
+        ],
+      };
+    },
   },
   {
     id: "uncover-center",
@@ -277,6 +395,19 @@ export function createPounceRushRunSeed(now = Date.now()): string {
   return `rush-${now.toString(36)}-${randomPart}`;
 }
 
+export function getPounceRushDailyKey(date = new Date()): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+export function createPounceRushDailySeed(
+  dateKey = getPounceRushDailyKey()
+): string {
+  return `daily-${dateKey}`;
+}
+
 export function getPounceRushPuzzleSummary(
   puzzle: PounceRushPuzzle
 ): PounceRushPuzzleSummary {
@@ -348,80 +479,59 @@ export function createPounceRushPuzzle({
   socketId,
 }: CreatePounceRushPuzzleOptions): PounceRushPuzzle {
   const normalizedSeed = normalizePounceRushSeed(seed);
-  const puzzleRng = createSeededRng(`${normalizedSeed}:puzzle:${puzzleNumber}`);
   const template = getSeededTemplate(normalizedSeed, puzzleNumber);
-  const hiddenPlayerCount = puzzleRng() < 0.42 ? 1 : 2;
-  const centerOwners = Array.from(
-    { length: hiddenPlayerCount },
-    (_, index) => index + 1
-  );
-  const setup = assignCenterPileOwners(
-    transformPuzzleSetup(template.build(), createSeededSuitMap(puzzleRng)),
-    centerOwners
-  );
-  const board = createBoard(1 + hiddenPlayerCount);
-  const player = board.players[PLAYER_INDEX];
+  let lastError: unknown = null;
 
-  board.isActive = true;
-  board.isDealt = true;
-  board.isPaused = false;
-  board.pouncer = undefined;
-  board.roundStartsAt = undefined;
-  board.ticksSinceMove = 0;
-  board.piles = setup.piles;
-  board.pileLocs = CENTER_PILE_LOCS.map(([x, y, rotation]) => [
-    x,
-    y,
-    rotation,
-  ]);
+  for (
+    let attempt = 0;
+    attempt < MAX_PUZZLE_GENERATION_ATTEMPTS;
+    attempt++
+  ) {
+    const puzzleRng = createSeededRng(
+      `${normalizedSeed}:puzzle:${puzzleNumber}:attempt:${attempt}`
+    );
+    const hiddenPlayerCount = puzzleRng() < 0.42 ? 1 : 2;
+    const centerOwners = Array.from(
+      { length: hiddenPlayerCount },
+      (_, index) => index + 1
+    );
+    const setup = assignCenterPileOwners(
+      createGeneratedPuzzleSetup(template, puzzleRng),
+      centerOwners
+    );
+    const board = createPounceRushBoard({
+      hiddenPlayerCount,
+      playerName,
+      playerSessionId,
+      setup,
+      socketId,
+    });
 
-  player.name = playerName || "Player";
-  player.socketId = socketId;
-  player.playerSessionId = playerSessionId;
-  player.isReadyForRound = false;
-  player.isSpectating = false;
-  player.isWaitingForDeal = false;
-  player.disconnected = false;
-  player.currentPoints = 0;
-  player.deck = [setup.deckCard];
-  player.flippedDeck = setup.flippedDeck;
-  player.pounceDeck = setup.pounceDeck;
-  player.scores = [];
-  player.stacks = setup.stacks;
-  player.totalPoints = 0;
+    try {
+      assertUniqueCards(board, template.id);
+      assertSequenceIsLegal(board, setup.sequence, template.id);
+      assertNoUnexpectedLegalMoves(board, setup.sequence, template.id);
 
-  for (let playerIndex = 1; playerIndex < board.players.length; playerIndex++) {
-    const hiddenPlayer = board.players[playerIndex];
-    hiddenPlayer.name = `Puzzle deck ${playerIndex}`;
-    hiddenPlayer.socketId = null;
-    hiddenPlayer.playerSessionId = null;
-    hiddenPlayer.isSpectating = true;
-    hiddenPlayer.isWaitingForDeal = false;
-    hiddenPlayer.deck = [];
-    hiddenPlayer.flippedDeck = [];
-    hiddenPlayer.pounceDeck = [];
-    hiddenPlayer.stacks = [[], [], [], []];
-    hiddenPlayer.currentPoints = 0;
-    hiddenPlayer.scores = [];
-    hiddenPlayer.totalPoints = 0;
+      return {
+        board,
+        difficulty: template.difficulty,
+        id: `${template.id}:${puzzleNumber}`,
+        kind: template.kind,
+        objective: template.objective,
+        puzzleNumber,
+        reportCode: `${normalizedSeed}#${puzzleNumber + 1}`,
+        seed: normalizedSeed,
+        sequence: setup.sequence,
+        templateId: template.id,
+      };
+    } catch (error) {
+      lastError = error;
+    }
   }
 
-  assertUniqueCards(board, template.id);
-  assertSequenceIsLegal(board, setup.sequence, template.id);
-  assertNoUnexpectedLegalMoves(board, setup.sequence, template.id);
-
-  return {
-    board,
-    difficulty: template.difficulty,
-    id: `${template.id}:${puzzleNumber}`,
-    kind: template.kind,
-    objective: template.objective,
-    puzzleNumber,
-    reportCode: `${normalizedSeed}#${puzzleNumber + 1}`,
-    seed: normalizedSeed,
-    sequence: setup.sequence,
-    templateId: template.id,
-  };
+  throw lastError instanceof Error
+    ? lastError
+    : new Error(`Pounce Rush puzzle ${template.id} could not be generated`);
 }
 
 export function isExpectedPounceRushMove(
@@ -496,6 +606,80 @@ function normalizePounceRushSeed(seed: string | undefined): string {
   return normalized || DEFAULT_POUNCE_RUSH_SEED;
 }
 
+function createGeneratedPuzzleSetup(
+  template: PuzzleTemplate,
+  rng: () => number
+): PuzzleSetup {
+  return transformPuzzleSetup(template.build({ rng }), {
+    pileMap: createIndexPermutation(rng, 4),
+    stackMap: createIndexPermutation(rng, 4),
+    suitMap: createSeededSuitMap(rng),
+  });
+}
+
+function createPounceRushBoard({
+  hiddenPlayerCount,
+  playerName,
+  playerSessionId,
+  setup,
+  socketId,
+}: {
+  hiddenPlayerCount: number;
+  playerName: string;
+  playerSessionId: string;
+  setup: PuzzleSetup;
+  socketId: string;
+}): BoardState {
+  const board = createBoard(1 + hiddenPlayerCount);
+  const player = board.players[PLAYER_INDEX];
+
+  board.isActive = true;
+  board.isDealt = true;
+  board.isPaused = false;
+  board.pouncer = undefined;
+  board.roundStartsAt = undefined;
+  board.ticksSinceMove = 0;
+  board.piles = setup.piles;
+  board.pileLocs = CENTER_PILE_LOCS.map(([x, y, rotation]) => [
+    x,
+    y,
+    rotation,
+  ]);
+
+  player.name = playerName || "Player";
+  player.socketId = socketId;
+  player.playerSessionId = playerSessionId;
+  player.isReadyForRound = false;
+  player.isSpectating = false;
+  player.isWaitingForDeal = false;
+  player.disconnected = false;
+  player.currentPoints = 0;
+  player.deck = [setup.deckCard];
+  player.flippedDeck = setup.flippedDeck;
+  player.pounceDeck = setup.pounceDeck;
+  player.scores = [];
+  player.stacks = setup.stacks;
+  player.totalPoints = 0;
+
+  for (let playerIndex = 1; playerIndex < board.players.length; playerIndex++) {
+    const hiddenPlayer = board.players[playerIndex];
+    hiddenPlayer.name = `Puzzle deck ${playerIndex}`;
+    hiddenPlayer.socketId = null;
+    hiddenPlayer.playerSessionId = null;
+    hiddenPlayer.isSpectating = true;
+    hiddenPlayer.isWaitingForDeal = false;
+    hiddenPlayer.deck = [];
+    hiddenPlayer.flippedDeck = [];
+    hiddenPlayer.pounceDeck = [];
+    hiddenPlayer.stacks = [[], [], [], []];
+    hiddenPlayer.currentPoints = 0;
+    hiddenPlayer.scores = [];
+    hiddenPlayer.totalPoints = 0;
+  }
+
+  return board;
+}
+
 function createSeededSuitMap(
   rng: () => number
 ): Record<Suits, Suits> {
@@ -517,24 +701,75 @@ function createSeededSuitMap(
 
 function transformPuzzleSetup(
   setup: PuzzleSetup,
-  suitMap: Record<Suits, Suits>
+  transforms: {
+    pileMap: number[];
+    stackMap: number[];
+    suitMap: Record<Suits, Suits>;
+  }
 ): PuzzleSetup {
+  const piles: CardState[][] = [];
+  const stacks: CardState[][] = [];
+  setup.piles.forEach((pile, pileIndex) => {
+    piles[transforms.pileMap[pileIndex]] = pile.map((cardState) =>
+      transformCard(cardState, transforms.suitMap)
+    );
+  });
+  setup.stacks.forEach((stack, stackIndex) => {
+    stacks[transforms.stackMap[stackIndex]] = stack.map((cardState) =>
+      transformCard(cardState, transforms.suitMap)
+    );
+  });
+
   return {
-    deckCard: transformCard(setup.deckCard, suitMap),
+    deckCard: transformCard(setup.deckCard, transforms.suitMap),
     flippedDeck: setup.flippedDeck.map((cardState) =>
-      transformCard(cardState, suitMap)
+      transformCard(cardState, transforms.suitMap)
     ),
-    piles: setup.piles.map((pile) =>
-      pile.map((cardState) => transformCard(cardState, suitMap))
-    ),
+    piles,
     pounceDeck: setup.pounceDeck.map((cardState) =>
-      transformCard(cardState, suitMap)
+      transformCard(cardState, transforms.suitMap)
     ),
-    sequence: deepClone(setup.sequence),
-    stacks: setup.stacks.map((stack) =>
-      stack.map((cardState) => transformCard(cardState, suitMap))
-    ) as [CardState[], CardState[], CardState[], CardState[]],
+    sequence: setup.sequence.map((move) => transformMove(move, transforms)),
+    stacks: stacks as [CardState[], CardState[], CardState[], CardState[]],
   };
+}
+
+function transformMove(
+  move: Move,
+  transforms: {
+    pileMap: number[];
+    stackMap: number[];
+  }
+): Move {
+  switch (move.type) {
+    case "c2c":
+      return {
+        ...move,
+        dest: transforms.pileMap[move.dest],
+        source:
+          move.source.type === "solitaire"
+            ? {
+                type: "solitaire",
+                index: transforms.stackMap[move.source.index],
+              }
+            : move.source,
+      };
+    case "c2s":
+      return {
+        ...move,
+        dest: transforms.stackMap[move.dest],
+      };
+    case "s2s":
+      return {
+        ...move,
+        dest: transforms.stackMap[move.dest],
+        source: transforms.stackMap[move.source],
+      };
+    case "cycle":
+    case "flip_deck":
+    case "move_field_stack":
+      return deepClone(move);
+  }
 }
 
 function assignCenterPileOwners(
@@ -874,6 +1109,18 @@ function shuffle<T>(items: T[], rng: () => number): T[] {
   return result;
 }
 
+function createIndexPermutation(rng: () => number, length: number): number[] {
+  const shuffled = shuffle(
+    Array.from({ length }, (_, index) => index),
+    rng
+  );
+  const map: number[] = [];
+  shuffled.forEach((originalIndex, nextIndex) => {
+    map[originalIndex] = nextIndex;
+  });
+  return map;
+}
+
 function createSeededRng(seed: string): () => number {
   let state = hashString(seed) || 1;
   return () => {
@@ -919,6 +1166,18 @@ function card(suit: Suits, value: Values): CardState {
     suit,
     value,
   };
+}
+
+function pickValue(rng: () => number, values: number[]): Values {
+  return values[Math.floor(rng() * values.length)] as Values;
+}
+
+function previousValue(value: Values): Values {
+  return (value - 1) as Values;
+}
+
+function nextValue(value: Values): Values {
+  return (value + 1) as Values;
 }
 
 function suitedPile(suit: Suits, topValue: Values): CardState[] {
