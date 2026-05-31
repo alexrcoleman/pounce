@@ -485,6 +485,10 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
       "RL_COUNTERFACTUAL_SCORE_GAP_BUDGET",
       0
     ),
+    rlCounterfactualMaxLabelsPerMovePair: readIntegerEnv(
+      "RL_COUNTERFACTUAL_MAX_LABELS_PER_MOVE_PAIR",
+      0
+    ),
     rlCounterfactualStopAfterLabels: readIntegerEnv(
       "RL_COUNTERFACTUAL_STOP_AFTER_LABELS",
       0

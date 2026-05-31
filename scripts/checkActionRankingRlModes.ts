@@ -544,6 +544,29 @@ assert.ok(
   "score-gap budget filtering should keep only the closest deployable labels"
 );
 
+const movePairBudgetFiltered = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:move-pair-budget-filtered",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualStateSource: "greedy",
+  rlUpdateScope: "all",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualMinReturnGap: 0,
+  rlCounterfactualRequirePolicyChange: true,
+  rlCounterfactualScoreGapBudget: 8,
+  rlCounterfactualMaxLabelsPerMovePair: 1,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.ok(
+  movePairBudgetFiltered.reinforcement.counterfactualUpdateCount > 0 &&
+    Object.values(
+      movePairBudgetFiltered.reinforcement.counterfactualAcceptedMovePairCounts
+    ).every((count) => count <= 1),
+  "move-pair budget filtering should cap accepted labels by winner-vs-behavior move pair"
+);
+
 const cappedScoreGapBudgetFiltered = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:capped-score-gap-budget-filtered",
@@ -639,6 +662,7 @@ console.log(
       policyChangeFiltered: summarize(policyChangeFiltered),
       behaviorCorrectionValue: summarize(behaviorCorrectionValue),
       scoreGapBudgetFiltered: summarize(scoreGapBudgetFiltered),
+      movePairBudgetFiltered: summarize(movePairBudgetFiltered),
       cappedScoreGapBudgetFiltered: summarize(cappedScoreGapBudgetFiltered),
       labelTargetStopped: summarize(labelTargetStopped),
       maxReturnGapFiltered: summarize(maxReturnGapFiltered),
@@ -703,12 +727,16 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.counterfactualScoreGapSkippedCount,
     counterfactualScoreGapBudgetSkippedCount:
       result.reinforcement.counterfactualScoreGapBudgetSkippedCount,
+    counterfactualMovePairBudgetSkippedCount:
+      result.reinforcement.counterfactualMovePairBudgetSkippedCount,
     counterfactualFeatureTieSkippedCount:
       result.reinforcement.counterfactualFeatureTieSkippedCount,
     counterfactualConnectorCycleSkippedCount:
       result.reinforcement.counterfactualConnectorCycleSkippedCount,
     counterfactualUsefulCycleSkippedCount:
       result.reinforcement.counterfactualUsefulCycleSkippedCount,
+    counterfactualAcceptedMovePairCounts:
+      result.reinforcement.counterfactualAcceptedMovePairCounts,
     averageCounterfactualBehaviorWinRate:
       result.reinforcement.averageCounterfactualBehaviorWinRate,
     counterfactualAveragePairWeight:

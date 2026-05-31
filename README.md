@@ -18,7 +18,7 @@ Useful training knobs:
 
 - `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`
 - `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_MAX_SCORE_GAP`, `IMPROVEMENT_MAX_WINNER_SCORE_GAP`, `IMPROVEMENT_MAX_CANDIDATE_SCORE_GAP`, `IMPROVEMENT_POLICY_CANDIDATES`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_CONTINUATION`, `IMPROVEMENT_SCORE_WEIGHT`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_PAIRWISE_MARGIN`, `IMPROVEMENT_VALUE_SCALE`, `IMPROVEMENT_VALUE_CENTER`, `IMPROVEMENT_VALUE_TARGET_MODE`, `IMPROVEMENT_VALUE_HUBER`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_BEHAVIOR_GAP_SE_MULTIPLIER`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
-- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_OPPONENT_MODE`, `RL_OPPONENT_MODEL`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_SCAN_EPISODES`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_CANDIDATES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MAX_RETURN_GAP`, `RL_COUNTERFACTUAL_REQUIRE_BEHAVIOR_GAP`, `RL_COUNTERFACTUAL_MIN_BEHAVIOR_IMPROVEMENT`, `RL_COUNTERFACTUAL_STATE_SOURCE`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_GAP_SE_MULTIPLIER`, `RL_COUNTERFACTUAL_MIN_BEHAVIOR_WIN_RATE`, `RL_COUNTERFACTUAL_MAX_POLICY_MARGIN`, `RL_COUNTERFACTUAL_REQUIRE_POLICY_CHANGE`, `RL_COUNTERFACTUAL_PREFERENCE_SCOPE`, `RL_COUNTERFACTUAL_PAIRWISE_MARGIN`, `RL_COUNTERFACTUAL_PAIRWISE_WEIGHT_MODE`, `RL_COUNTERFACTUAL_PAIRWISE_WEIGHT_SCALE`, `RL_COUNTERFACTUAL_PAIRWISE_MAX_WEIGHT`, `RL_COUNTERFACTUAL_MAX_SCORE_GAP`, `RL_COUNTERFACTUAL_SCORE_GAP_BUDGET`, `RL_COUNTERFACTUAL_STOP_AFTER_LABELS`, `RL_COUNTERFACTUAL_SCORE_WEIGHT`, `RL_COUNTERFACTUAL_POUNCE_WEIGHT`, `RL_COUNTERFACTUAL_SKIP_CYCLE_OVER_CONNECTOR`, `RL_COUNTERFACTUAL_SKIP_SOLITAIRE_OVER_USEFUL_CYCLE`, `RL_COUNTERFACTUAL_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_ANCHOR_TEMPERATURE`, `RL_COUNTERFACTUAL_BEHAVIOR_CORRECTION_WEIGHT`, `RL_COUNTERFACTUAL_BEHAVIOR_CORRECTION_MARGIN`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MARGIN`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MAX_POLICY_MARGIN`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MODE`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_TARGET_MODE`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_TRAINABLE_LAYERS`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
+- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_OPPONENT_MODE`, `RL_OPPONENT_MODEL`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_SCAN_EPISODES`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_CANDIDATES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MAX_RETURN_GAP`, `RL_COUNTERFACTUAL_REQUIRE_BEHAVIOR_GAP`, `RL_COUNTERFACTUAL_MIN_BEHAVIOR_IMPROVEMENT`, `RL_COUNTERFACTUAL_STATE_SOURCE`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_GAP_SE_MULTIPLIER`, `RL_COUNTERFACTUAL_MIN_BEHAVIOR_WIN_RATE`, `RL_COUNTERFACTUAL_MAX_POLICY_MARGIN`, `RL_COUNTERFACTUAL_REQUIRE_POLICY_CHANGE`, `RL_COUNTERFACTUAL_PREFERENCE_SCOPE`, `RL_COUNTERFACTUAL_PAIRWISE_MARGIN`, `RL_COUNTERFACTUAL_PAIRWISE_WEIGHT_MODE`, `RL_COUNTERFACTUAL_PAIRWISE_WEIGHT_SCALE`, `RL_COUNTERFACTUAL_PAIRWISE_MAX_WEIGHT`, `RL_COUNTERFACTUAL_MAX_SCORE_GAP`, `RL_COUNTERFACTUAL_SCORE_GAP_BUDGET`, `RL_COUNTERFACTUAL_MAX_LABELS_PER_MOVE_PAIR`, `RL_COUNTERFACTUAL_STOP_AFTER_LABELS`, `RL_COUNTERFACTUAL_SCORE_WEIGHT`, `RL_COUNTERFACTUAL_POUNCE_WEIGHT`, `RL_COUNTERFACTUAL_SKIP_CYCLE_OVER_CONNECTOR`, `RL_COUNTERFACTUAL_SKIP_SOLITAIRE_OVER_USEFUL_CYCLE`, `RL_COUNTERFACTUAL_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_ANCHOR_TEMPERATURE`, `RL_COUNTERFACTUAL_BEHAVIOR_CORRECTION_WEIGHT`, `RL_COUNTERFACTUAL_BEHAVIOR_CORRECTION_MARGIN`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MARGIN`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MAX_POLICY_MARGIN`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MODE`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_TARGET_MODE`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_TRAINABLE_LAYERS`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `HIDDEN_LAYERS`, `MAX_MOVES`, `SEED`
 - `HIDDEN` and `HIDDEN_LAYERS` accept comma-separated layer sizes, for example `HIDDEN=192,96`
 - `MODEL_OUT=C:\tmp\pounce-action-ranking-model.json` to save model weights
@@ -137,6 +137,19 @@ pure RL update avoided the large regression but still did not promote:
 the behavior-scope checkpoint. The lesson is that the extra solitaire context is
 useful infrastructure, but the small 8-label pairwise recipe remains too noisy
 or underpowered to create a stronger deployed policy by itself.
+The policy-shift diagnostic now makes that visible before full evaluation. A
+guarded all-layer 16-label pairwise probe at `RL_LR=0.001` flipped 3 of 16
+accepted-label greedy actions and looked positive over 384 paired games
+(`+0.0417 +/- 0.0380`), but a 1,536-game confirmation rejected it
+(`-0.0169 +/- 0.0222`) and traced 24 of 31 first divergences to harmful
+`cycle>c2s` flips. Broadening the cycle-over-connector guard improved the shape
+but still tied the warmup over 1,536 games (`-0.00065 +/- 0.0151`) with a small
+raw-score gain. `RL_COUNTERFACTUAL_MAX_LABELS_PER_MOVE_PAIR` now adds a label
+mix budget: the first capped probe selected 8 labels, two each from
+`s2s>s2s`, `c2c>c2c`, `cycle>c2s`, and `c2s>c2s`, but measured
+`-0.010 +/- 0.032` over 384 games. So label-mix budgeting is useful tooling,
+not yet a promoted strategy; the remaining blocker is deciding which
+cycle-vs-solitaire reward labels deserve enough trust to change deployed play.
 The global visible-pressure inputs count own and opponent pounce/deck/solitaire
 cards that are playable on center now, plus pounce cards close to center play;
 those are intended to help reward training learn tempo and opponent-help costs
@@ -518,6 +531,12 @@ closest N are trained. It can be combined with
 then the budget keeps the closest remaining labels. This keeps the deployed-label
 miner focused on near-margin behavior changes without starving every run when a
 fixed score-gap cap is too narrow for the current checkpoint.
+`RL_COUNTERFACTUAL_MAX_LABELS_PER_MOVE_PAIR` can cap how many accepted
+supervised labels share the same winner-vs-behavior move-type pair, such as
+`cycle>c2s`. It composes with `RL_COUNTERFACTUAL_SCORE_GAP_BUDGET`, selecting
+near-margin labels while preventing one tactical family from dominating a tiny
+batch. Training and audit output report `acceptedMovePairCounts` plus the
+move-pair budget skip count.
 `RL_COUNTERFACTUAL_STOP_AFTER_LABELS` can stop supervised counterfactual scans
 early after that many post-filter labels have been collected, while still
 running at least `RL_EPISODES` episodes when episode metrics are requested. This
@@ -537,9 +556,11 @@ pounceProgressReturn`, where pounce progress is the starting pounce count minus
 the final pounce count. The default `0` preserves the existing objective.
 `RL_COUNTERFACTUAL_SKIP_CYCLE_OVER_CONNECTOR=true` skips supervised labels where
 the rollout winner is cycling while an evaluated card-to-solitaire move has an
-active post-move connector feature. This is a targeted guardrail for the observed
-failure mode where a small counterfactual batch teaches broad `cycle > c2s`
-changes against live connector moves. It is disabled by default.
+active post-move connector feature, directly supports the pounce card, or is a
+deck move with high remaining stock and matching pounce-build parity. This is a
+targeted guardrail for the observed failure mode where a small counterfactual
+batch teaches broad `cycle > c2s` changes against live solitaire support moves.
+It is disabled by default.
 `RL_COUNTERFACTUAL_SKIP_SOLITAIRE_OVER_USEFUL_CYCLE=true` skips the mirror
 failure mode: supervised labels where the rollout winner is a solitaire move
 while an evaluated cycle action would reveal, reset toward, or look ahead to a

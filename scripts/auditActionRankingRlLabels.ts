@@ -141,6 +141,10 @@ const options = {
     "RL_COUNTERFACTUAL_SCORE_GAP_BUDGET",
     0
   ),
+  counterfactualMaxLabelsPerMovePair: readIntegerEnv(
+    "RL_COUNTERFACTUAL_MAX_LABELS_PER_MOVE_PAIR",
+    0
+  ),
   counterfactualStopAfterLabels: readIntegerEnv(
     "RL_COUNTERFACTUAL_STOP_AFTER_LABELS",
     0
@@ -203,9 +207,11 @@ console.log(
         confidenceSkippedCount: audit.confidenceSkippedCount,
         scoreGapSkippedCount: audit.scoreGapSkippedCount,
         scoreGapBudgetSkippedCount: audit.scoreGapBudgetSkippedCount,
+        movePairBudgetSkippedCount: audit.movePairBudgetSkippedCount,
         featureTieSkippedCount: audit.featureTieSkippedCount,
         connectorCycleSkippedCount: audit.connectorCycleSkippedCount,
         usefulCycleSkippedCount: audit.usefulCycleSkippedCount,
+        acceptedMovePairCounts: audit.acceptedMovePairCounts,
         maxReturnGapSkippedCount: audit.maxReturnGapSkippedCount,
         averageCounterfactualReturnGap:
           audit.averageCounterfactualReturnGap,

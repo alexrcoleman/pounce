@@ -71,6 +71,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualPairwiseMaxWeight?: number;
   rlCounterfactualMaxScoreGap?: number;
   rlCounterfactualScoreGapBudget?: number;
+  rlCounterfactualMaxLabelsPerMovePair?: number;
   rlCounterfactualStopAfterLabels?: number;
   rlCounterfactualScoreRewardWeight?: number;
   rlCounterfactualPounceRewardWeight?: number;
@@ -185,9 +186,11 @@ export type NeuralTrainingResult = {
     counterfactualConfidenceSkippedCount: number;
     counterfactualScoreGapSkippedCount: number;
     counterfactualScoreGapBudgetSkippedCount: number;
+    counterfactualMovePairBudgetSkippedCount: number;
     counterfactualFeatureTieSkippedCount: number;
     counterfactualConnectorCycleSkippedCount: number;
     counterfactualUsefulCycleSkippedCount: number;
+    counterfactualAcceptedMovePairCounts: Record<string, number>;
     averageCounterfactualScoreGap: number;
     averageCounterfactualBehaviorWinRate: number;
     counterfactualAveragePairWeight: number;
@@ -278,9 +281,11 @@ export type CounterfactualRlLabelAudit = {
   confidenceSkippedCount: number;
   scoreGapSkippedCount: number;
   scoreGapBudgetSkippedCount: number;
+  movePairBudgetSkippedCount: number;
   featureTieSkippedCount: number;
   connectorCycleSkippedCount: number;
   usefulCycleSkippedCount: number;
+  acceptedMovePairCounts: Record<string, number>;
   maxReturnGapSkippedCount: number;
   averageCounterfactualReturnGap: number;
   averageCounterfactualCandidateCount: number;
@@ -325,6 +330,7 @@ type CounterfactualSupervisedLabel = {
   candidateCount: number;
   behaviorWinRate: number;
   scoreGap: number | null;
+  movePair: string;
 };
 
 export type CounterfactualPolicyShiftStats = {
@@ -570,6 +576,8 @@ export function trainNeuralActionRankingPolicy(
     counterfactualMaxScoreGap: options.rlCounterfactualMaxScoreGap ?? 0,
     counterfactualScoreGapBudget:
       options.rlCounterfactualScoreGapBudget ?? 0,
+    counterfactualMaxLabelsPerMovePair:
+      options.rlCounterfactualMaxLabelsPerMovePair ?? 0,
     counterfactualStopAfterLabels:
       options.rlCounterfactualStopAfterLabels ?? 0,
     counterfactualScoreRewardWeight:
@@ -1580,6 +1588,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualPairwiseMaxWeight: number;
     counterfactualMaxScoreGap: number;
     counterfactualScoreGapBudget: number;
+    counterfactualMaxLabelsPerMovePair: number;
     counterfactualStopAfterLabels: number;
     counterfactualScoreRewardWeight: number;
     counterfactualPounceRewardWeight: number;
@@ -1629,6 +1638,7 @@ export function trainPolicyGradientFromRollouts(
   let counterfactualConfidenceSkippedCount = 0;
   let counterfactualScoreGapSkippedCount = 0;
   let counterfactualScoreGapBudgetSkippedCount = 0;
+  let counterfactualMovePairBudgetSkippedCount = 0;
   let counterfactualFeatureTieSkippedCount = 0;
   let counterfactualConnectorCycleSkippedCount = 0;
   let counterfactualUsefulCycleSkippedCount = 0;
@@ -1956,6 +1966,7 @@ export function trainPolicyGradientFromRollouts(
             candidateCount: result.candidates.length,
             behaviorWinRate: result.behaviorWinRate,
             scoreGap,
+            movePair: getCounterfactualMovePair(transition, result),
           });
           return;
         }
@@ -2012,17 +2023,24 @@ export function trainPolicyGradientFromRollouts(
     }
   }
 
-  const selectedCounterfactualLabels = selectCounterfactualSupervisedLabels(
+  const labelSelection = selectCounterfactualSupervisedLabels(
     counterfactualSupervisedLabels,
-    options.counterfactualScoreGapBudget
+    options.counterfactualScoreGapBudget,
+    options.counterfactualMaxLabelsPerMovePair
   );
+  const selectedCounterfactualLabels = labelSelection.labels;
   if (
     options.counterfactualTrainingMode !== "policy_gradient" &&
     options.counterfactualScoreGapBudget > 0
   ) {
     counterfactualScoreGapBudgetSkippedCount +=
-      counterfactualSupervisedLabels.length - selectedCounterfactualLabels.length;
+      labelSelection.scoreGapBudgetSkippedCount;
   }
+  counterfactualMovePairBudgetSkippedCount +=
+    labelSelection.movePairBudgetSkippedCount;
+  const counterfactualAcceptedMovePairCounts = getMovePairCounts(
+    selectedCounterfactualLabels
+  );
   selectedCounterfactualLabels.forEach((label) => {
     counterfactualReturnGapTotal += label.returnGap;
     counterfactualCandidateCountTotal += label.candidateCount;
@@ -2144,9 +2162,11 @@ export function trainPolicyGradientFromRollouts(
     counterfactualConfidenceSkippedCount,
     counterfactualScoreGapSkippedCount,
     counterfactualScoreGapBudgetSkippedCount,
+    counterfactualMovePairBudgetSkippedCount,
     counterfactualFeatureTieSkippedCount,
     counterfactualConnectorCycleSkippedCount,
     counterfactualUsefulCycleSkippedCount,
+    counterfactualAcceptedMovePairCounts,
     averageCounterfactualScoreGap:
       counterfactualScoreGapCount === 0
         ? 0
@@ -2199,6 +2219,7 @@ export function collectCounterfactualRlLabelAudit(
     counterfactualRequirePolicyChange: boolean;
     counterfactualMaxScoreGap: number;
     counterfactualScoreGapBudget: number;
+    counterfactualMaxLabelsPerMovePair: number;
     counterfactualStopAfterLabels: number;
     counterfactualScoreRewardWeight: number;
     counterfactualPounceRewardWeight: number;
@@ -2223,6 +2244,7 @@ export function collectCounterfactualRlLabelAudit(
   let policyChangeSkippedCount = 0;
   let scoreGapSkippedCount = 0;
   let scoreGapBudgetSkippedCount = 0;
+  let movePairBudgetSkippedCount = 0;
   let featureTieSkippedCount = 0;
   let connectorCycleSkippedCount = 0;
   let usefulCycleSkippedCount = 0;
@@ -2424,18 +2446,19 @@ export function collectCounterfactualRlLabelAudit(
         return;
       }
 
-      counterfactualSupervisedLabels.push({
-        example: createCounterfactualSupervisedExample(
-          transition,
-          result,
-          episode,
-          transitionIndex
-        ),
-        returnGap: Math.abs(counterfactualGap),
-        candidateCount: result.candidates.length,
-        behaviorWinRate: result.behaviorWinRate,
-        scoreGap,
-      });
+        counterfactualSupervisedLabels.push({
+          example: createCounterfactualSupervisedExample(
+            transition,
+            result,
+            episode,
+            transitionIndex
+          ),
+          returnGap: Math.abs(counterfactualGap),
+          candidateCount: result.candidates.length,
+          behaviorWinRate: result.behaviorWinRate,
+          scoreGap,
+          movePair: getCounterfactualMovePair(transition, result),
+        });
     });
 
     counterfactualScannedEpisodes += 1;
@@ -2451,17 +2474,22 @@ export function collectCounterfactualRlLabelAudit(
     }
   }
 
-  const selectedCounterfactualLabels = selectCounterfactualSupervisedLabels(
+  const labelSelection = selectCounterfactualSupervisedLabels(
     counterfactualSupervisedLabels,
-    options.counterfactualScoreGapBudget
+    options.counterfactualScoreGapBudget,
+    options.counterfactualMaxLabelsPerMovePair
   );
+  const selectedCounterfactualLabels = labelSelection.labels;
   if (
     options.counterfactualTrainingMode !== "policy_gradient" &&
     options.counterfactualScoreGapBudget > 0
   ) {
-    scoreGapBudgetSkippedCount +=
-      counterfactualSupervisedLabels.length - selectedCounterfactualLabels.length;
+    scoreGapBudgetSkippedCount += labelSelection.scoreGapBudgetSkippedCount;
   }
+  movePairBudgetSkippedCount += labelSelection.movePairBudgetSkippedCount;
+  const acceptedMovePairCounts = getMovePairCounts(
+    selectedCounterfactualLabels
+  );
   selectedCounterfactualLabels.forEach((label) => {
     counterfactualReturnGapTotal += label.returnGap;
     counterfactualCandidateCountTotal += label.candidateCount;
@@ -2490,9 +2518,11 @@ export function collectCounterfactualRlLabelAudit(
     policyChangeSkippedCount,
     scoreGapSkippedCount,
     scoreGapBudgetSkippedCount,
+    movePairBudgetSkippedCount,
     featureTieSkippedCount,
     connectorCycleSkippedCount,
     usefulCycleSkippedCount,
+    acceptedMovePairCounts,
     maxReturnGapSkippedCount,
     averageCounterfactualReturnGap:
       examples.length === 0 ? 0 : counterfactualReturnGapTotal / examples.length,
@@ -3079,14 +3109,24 @@ function getCounterfactualBestVsGreedyScoreGap(
 
 function selectCounterfactualSupervisedLabels(
   labels: CounterfactualSupervisedLabel[],
-  scoreGapBudget: number
-): CounterfactualSupervisedLabel[] {
-  const budget = Math.floor(scoreGapBudget);
-  if (budget <= 0 || labels.length <= budget) {
-    return labels;
+  scoreGapBudget: number,
+  maxLabelsPerMovePair: number
+): {
+  labels: CounterfactualSupervisedLabel[];
+  scoreGapBudgetSkippedCount: number;
+  movePairBudgetSkippedCount: number;
+} {
+  const totalBudget = Math.floor(scoreGapBudget);
+  const pairBudget = Math.floor(maxLabelsPerMovePair);
+  if (totalBudget <= 0 && pairBudget <= 0) {
+    return {
+      labels,
+      scoreGapBudgetSkippedCount: 0,
+      movePairBudgetSkippedCount: 0,
+    };
   }
 
-  return labels
+  const orderedLabels = labels
     .map((label, index) => ({ label, index }))
     .sort((left, right) => {
       const scoreGapDelta =
@@ -3099,8 +3139,36 @@ function selectCounterfactualSupervisedLabels(
       const returnGapDelta = right.label.returnGap - left.label.returnGap;
       return returnGapDelta !== 0 ? returnGapDelta : left.index - right.index;
     })
-    .slice(0, budget)
     .map((item) => item.label);
+  const selected: CounterfactualSupervisedLabel[] = [];
+  const pairCounts = new Map<string, number>();
+  let movePairBudgetSkippedCount = 0;
+
+  for (const label of orderedLabels) {
+    if (totalBudget > 0 && selected.length >= totalBudget) {
+      break;
+    }
+
+    const pairCount = pairCounts.get(label.movePair) ?? 0;
+    if (pairBudget > 0 && pairCount >= pairBudget) {
+      movePairBudgetSkippedCount += 1;
+      continue;
+    }
+
+    selected.push(label);
+    pairCounts.set(label.movePair, pairCount + 1);
+  }
+
+  const scoreGapBudgetSkippedCount =
+    totalBudget > 0
+      ? Math.max(0, labels.length - selected.length - movePairBudgetSkippedCount)
+      : 0;
+
+  return {
+    labels: selected,
+    scoreGapBudgetSkippedCount,
+    movePairBudgetSkippedCount,
+  };
 }
 
 function getSortableCounterfactualScoreGap(
@@ -3139,6 +3207,24 @@ function getCounterfactualBestCandidate(
       ? candidate
       : winner
   );
+}
+
+function getCounterfactualMovePair(
+  transition: RolloutTransition,
+  result: CounterfactualTransitionResult
+): string {
+  const winner = getCounterfactualBestCandidate(result).candidate;
+  const behavior = transition.candidates[transition.greedyCandidateIndex];
+  return `${winner.move.type}>${behavior?.move.type ?? "unknown"}`;
+}
+
+function getMovePairCounts(
+  labels: readonly CounterfactualSupervisedLabel[]
+): Record<string, number> {
+  return labels.reduce<Record<string, number>>((counts, label) => {
+    counts[label.movePair] = (counts[label.movePair] ?? 0) + 1;
+    return counts;
+  }, {});
 }
 
 function shouldSkipCycleOverConnectorLabel(
@@ -3207,11 +3293,27 @@ function isSupportedConnectorCandidate(
   if (candidate.move.type !== "c2s") {
     return false;
   }
+  if (getCandidateFeature(candidate, "source.pounce") > 0) {
+    return true;
+  }
   return (
     getCandidateFeature(candidate, "solitaire.postTopConnectorCount") > 0 ||
     getCandidateFeature(candidate, "solitaire.postTopConnectorCloseness") > 0 ||
     getCandidateFeature(candidate, "solitaire.postTopConnectsPounce") > 0 ||
-    getCandidateFeature(candidate, "solitaire.postTopConnectsStackRoot") > 0
+    getCandidateFeature(candidate, "solitaire.postTopConnectsStackRoot") > 0 ||
+    getCandidateFeature(candidate, "solitaire.makesPouncePlayable") > 0 ||
+    getCandidateFeature(candidate, "card.ownSolitaireConnectorForPounce") > 0 ||
+    isDeckPounceParitySupportCandidate(candidate)
+  );
+}
+
+function isDeckPounceParitySupportCandidate(
+  candidate: ActionRankingCandidate
+): boolean {
+  return (
+    getCandidateFeature(candidate, "source.deck") > 0 &&
+    getCandidateFeature(candidate, "card.matchesPounceParity") > 0 &&
+    getCandidateFeature(candidate, "solitaire.deckStockFraction") >= 0.5
   );
 }
 
