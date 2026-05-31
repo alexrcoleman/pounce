@@ -642,6 +642,11 @@ counterfactual point-differential return minus the greedy action's return, gated
 by `RL_COUNTERFACTUAL_MIN_RETURN_GAP`. This is slower, but it attacks the main
 credit-assignment problem from episode-level REINFORCE: a good or bad final score
 usually cannot be attributed to every sampled decision in the game.
+`action-ranking:train` and `action-ranking:tune` default to counterfactual credit
+when any `RL_COUNTERFACTUAL_*` environment variable is supplied. An explicit
+`RL_CREDIT_MODE` still wins. This avoids accidentally setting
+`RL_COUNTERFACTUAL_MODE=pairwise` or `value` while training the older
+episode-level policy-gradient objective.
 `RL_COUNTERFACTUAL_MODE=pairwise` trains counterfactual labels as direct
 pairwise preferences instead of a listwise policy-gradient update. By default
 the counterfactual rollout compares the sampled action and the greedy action;
@@ -1596,6 +1601,23 @@ differential, `+0.032` raw score over 1,536 games), with only a `+0.15pp`
 cycle-rate nudge. Its style-safety sweep was also neutral in aggregate
 (`+0.032`, 95% CI `-0.084` to `+0.148`). This is useful infrastructure for
 stock-delay learning, not yet an improved checkpoint.
+A stricter candidate-support variant added `RL_COUNTERFACTUAL_MAX_SCORE_GAP=1`
+so the rollout only trained on near-policy alternatives. At the same 256x2 audit
+scale, this reduced the validated label stream from 4 labels to 1, but the
+survivor was much cleaner: a `cycle>c2s` correction only `0.336` policy-score
+points below the current greedy deck-to-solitaire move, with `+6.17` mining
+point-differential gap and `+8.33` held-out gap. Scaling the matching tactical
+training recipe to a 1,024x2 scan stopped after 6 validated near-policy
+`cycle>c2s` labels, all with 2/2 behavior wins and 2/2 held-out wins. The
+candidate flipped 5 of 6 label states and produced the best stock-delay gate so
+far: first paired comparison `+0.091 +/- 0.101` point differential and `+0.132`
+raw score over 1,536 games, style safety `+0.160` with 95% CI `+0.025` to
+`+0.294`, and neutral self-play smoke. A larger 3,072-game paired confirmation
+softened to `+0.035 +/- 0.070`, so it is still not a promoted checkpoint. The
+trace is nevertheless directionally right: 83 of 93 first divergences were
+`cycle>c2s`, averaging `+0.56` point differential and better pounce progress,
+but with enough severe losses that the next work should improve stock-delay
+state context or label volume rather than just push the same six labels harder.
 
 ## Deploying
 

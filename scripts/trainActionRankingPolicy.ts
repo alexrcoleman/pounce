@@ -109,7 +109,10 @@ const options = {
   rlOpponentMode: readRlOpponentModeEnv("RL_OPPONENT_MODE", "teacher"),
   rlBaselineMode: readRlBaselineModeEnv("RL_BASELINE_MODE", "teacher"),
   rlCommonRandom: readBooleanEnv("RL_COMMON_RANDOM", true),
-  rlCreditMode: readRlCreditModeEnv("RL_CREDIT_MODE", "episode"),
+  rlCreditMode: readRlCreditModeEnv(
+    "RL_CREDIT_MODE",
+    getDefaultRlCreditMode()
+  ),
   rlCounterfactualScanEpisodes: readIntegerEnv(
     "RL_COUNTERFACTUAL_SCAN_EPISODES",
     readIntegerEnv("RL_EPISODES", 32)
@@ -579,6 +582,14 @@ function readRlCreditModeEnv(
   return value.toLowerCase() === "counterfactual"
     ? "counterfactual"
     : fallback;
+}
+
+function getDefaultRlCreditMode(): "episode" | "counterfactual" {
+  return Object.keys(process.env).some((name) =>
+    name.startsWith("RL_COUNTERFACTUAL_")
+  )
+    ? "counterfactual"
+    : "episode";
 }
 
 function readRlCounterfactualTrainingModeEnv(
