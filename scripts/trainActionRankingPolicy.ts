@@ -212,6 +212,10 @@ const options = {
     "RL_COUNTERFACTUAL_SKIP_CYCLE_OVER_CONNECTOR",
     false
   ),
+  rlCounterfactualSkipWeakCycleOverConnector: readBooleanEnv(
+    "RL_COUNTERFACTUAL_SKIP_WEAK_CYCLE_OVER_CONNECTOR",
+    false
+  ),
   rlCounterfactualSkipSolitaireOverUsefulCycle: readBooleanEnv(
     "RL_COUNTERFACTUAL_SKIP_SOLITAIRE_OVER_USEFUL_CYCLE",
     false

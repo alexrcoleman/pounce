@@ -781,6 +781,8 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.counterfactualFeatureTieSkippedCount,
     counterfactualConnectorCycleSkippedCount:
       result.reinforcement.counterfactualConnectorCycleSkippedCount,
+    counterfactualWeakConnectorCycleSkippedCount:
+      result.reinforcement.counterfactualWeakConnectorCycleSkippedCount,
     counterfactualUsefulCycleSkippedCount:
       result.reinforcement.counterfactualUsefulCycleSkippedCount,
     counterfactualAcceptedMovePairCounts:

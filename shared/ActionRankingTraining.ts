@@ -78,6 +78,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualScoreRewardWeight?: number;
   rlCounterfactualPounceRewardWeight?: number;
   rlCounterfactualSkipCycleOverConnector?: boolean;
+  rlCounterfactualSkipWeakCycleOverConnector?: boolean;
   rlCounterfactualSkipSolitaireOverUsefulCycle?: boolean;
   rlCounterfactualAnchorWeight?: number;
   rlCounterfactualAnchorMaxExamples?: number;
@@ -192,6 +193,7 @@ export type NeuralTrainingResult = {
     counterfactualMovePairExcludedSkippedCount: number;
     counterfactualFeatureTieSkippedCount: number;
     counterfactualConnectorCycleSkippedCount: number;
+    counterfactualWeakConnectorCycleSkippedCount: number;
     counterfactualUsefulCycleSkippedCount: number;
     counterfactualAcceptedMovePairCounts: Record<string, number>;
     counterfactualAcceptedMovePairSummaries: CounterfactualMovePairSummary[];
@@ -289,6 +291,7 @@ export type CounterfactualRlLabelAudit = {
   movePairExcludedSkippedCount: number;
   featureTieSkippedCount: number;
   connectorCycleSkippedCount: number;
+  weakConnectorCycleSkippedCount: number;
   usefulCycleSkippedCount: number;
   acceptedMovePairCounts: Record<string, number>;
   acceptedMovePairSummaries: CounterfactualMovePairSummary[];
@@ -616,6 +619,8 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualPounceRewardWeight ?? 0,
     counterfactualSkipCycleOverConnector:
       options.rlCounterfactualSkipCycleOverConnector ?? false,
+    counterfactualSkipWeakCycleOverConnector:
+      options.rlCounterfactualSkipWeakCycleOverConnector ?? false,
     counterfactualSkipSolitaireOverUsefulCycle:
       options.rlCounterfactualSkipSolitaireOverUsefulCycle ?? false,
     counterfactualAnchorWeight: options.rlCounterfactualAnchorWeight ?? 0,
@@ -1624,6 +1629,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualScoreRewardWeight: number;
     counterfactualPounceRewardWeight: number;
     counterfactualSkipCycleOverConnector: boolean;
+    counterfactualSkipWeakCycleOverConnector: boolean;
     counterfactualSkipSolitaireOverUsefulCycle: boolean;
     counterfactualAnchorWeight: number;
     counterfactualAnchorMaxExamples: number;
@@ -1673,6 +1679,7 @@ export function trainPolicyGradientFromRollouts(
   let counterfactualMovePairExcludedSkippedCount = 0;
   let counterfactualFeatureTieSkippedCount = 0;
   let counterfactualConnectorCycleSkippedCount = 0;
+  let counterfactualWeakConnectorCycleSkippedCount = 0;
   let counterfactualUsefulCycleSkippedCount = 0;
   let counterfactualBehaviorWinRateTotal = 0;
   let counterfactualScoreGapTotal = 0;
@@ -1970,6 +1977,14 @@ export function trainPolicyGradientFromRollouts(
         }
         if (
           options.counterfactualTrainingMode !== "policy_gradient" &&
+          options.counterfactualSkipWeakCycleOverConnector &&
+          shouldSkipWeakCycleOverConnectorLabel(result)
+        ) {
+          counterfactualWeakConnectorCycleSkippedCount += 1;
+          return;
+        }
+        if (
+          options.counterfactualTrainingMode !== "policy_gradient" &&
           options.counterfactualSkipSolitaireOverUsefulCycle &&
           shouldSkipSolitaireOverUsefulCycleLabel(result)
         ) {
@@ -2211,6 +2226,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualMovePairExcludedSkippedCount,
     counterfactualFeatureTieSkippedCount,
     counterfactualConnectorCycleSkippedCount,
+    counterfactualWeakConnectorCycleSkippedCount,
     counterfactualUsefulCycleSkippedCount,
     counterfactualAcceptedMovePairCounts,
     counterfactualAcceptedMovePairSummaries,
@@ -2272,6 +2288,7 @@ export function collectCounterfactualRlLabelAudit(
     counterfactualScoreRewardWeight: number;
     counterfactualPounceRewardWeight: number;
     counterfactualSkipCycleOverConnector: boolean;
+    counterfactualSkipWeakCycleOverConnector: boolean;
     counterfactualSkipSolitaireOverUsefulCycle: boolean;
     updateScope: PolicyGradientUpdateScope;
     maxMovesPerGame: number;
@@ -2296,6 +2313,7 @@ export function collectCounterfactualRlLabelAudit(
   let movePairExcludedSkippedCount = 0;
   let featureTieSkippedCount = 0;
   let connectorCycleSkippedCount = 0;
+  let weakConnectorCycleSkippedCount = 0;
   let usefulCycleSkippedCount = 0;
   let counterfactualReturnGapTotal = 0;
   let counterfactualCandidateCountTotal = 0;
@@ -2477,6 +2495,14 @@ export function collectCounterfactualRlLabelAudit(
       }
       if (
         options.counterfactualTrainingMode !== "policy_gradient" &&
+        options.counterfactualSkipWeakCycleOverConnector &&
+        shouldSkipWeakCycleOverConnectorLabel(result)
+      ) {
+        weakConnectorCycleSkippedCount += 1;
+        return;
+      }
+      if (
+        options.counterfactualTrainingMode !== "policy_gradient" &&
         options.counterfactualSkipSolitaireOverUsefulCycle &&
         shouldSkipSolitaireOverUsefulCycleLabel(result)
       ) {
@@ -2585,6 +2611,7 @@ export function collectCounterfactualRlLabelAudit(
     movePairExcludedSkippedCount,
     featureTieSkippedCount,
     connectorCycleSkippedCount,
+    weakConnectorCycleSkippedCount,
     usefulCycleSkippedCount,
     acceptedMovePairCounts,
     acceptedMovePairSummaries,
@@ -3558,6 +3585,45 @@ function shouldSkipCycleOverConnectorLabel(
       candidate.candidate.key !== best.candidate.key &&
       isSupportedConnectorCandidate(candidate.candidate)
   );
+}
+
+function shouldSkipWeakCycleOverConnectorLabel(
+  result: CounterfactualTransitionResult
+): boolean {
+  const best = getCounterfactualBestCandidate(result);
+  if (best.candidate.move.type !== "cycle") {
+    return false;
+  }
+
+  const bestSupportedConnector = result.candidates
+    .filter(
+      (candidate) =>
+        candidate.candidate.key !== best.candidate.key &&
+        isSupportedConnectorCandidate(candidate.candidate)
+    )
+    .reduce<CounterfactualCandidateReturn | null>(
+      (bestConnector, candidate) => {
+        if (
+          bestConnector == null ||
+          candidate.rolloutObjectiveReturn >
+            bestConnector.rolloutObjectiveReturn
+        ) {
+          return candidate;
+        }
+        return bestConnector;
+      },
+      null
+    );
+  if (!bestSupportedConnector) {
+    return false;
+  }
+
+  const pounceProgressGap =
+    best.rolloutPounceProgressReturn -
+    bestSupportedConnector.rolloutPounceProgressReturn;
+  const scoreGap =
+    best.rolloutScoreReturn - bestSupportedConnector.rolloutScoreReturn;
+  return pounceProgressGap <= 0 || scoreGap < 0;
 }
 
 function shouldSkipSolitaireOverUsefulCycleLabel(

@@ -165,6 +165,10 @@ const options = {
     "RL_COUNTERFACTUAL_SKIP_CYCLE_OVER_CONNECTOR",
     false
   ),
+  counterfactualSkipWeakCycleOverConnector: readBooleanEnv(
+    "RL_COUNTERFACTUAL_SKIP_WEAK_CYCLE_OVER_CONNECTOR",
+    false
+  ),
   counterfactualSkipSolitaireOverUsefulCycle: readBooleanEnv(
     "RL_COUNTERFACTUAL_SKIP_SOLITAIRE_OVER_USEFUL_CYCLE",
     false
@@ -215,6 +219,8 @@ console.log(
         movePairExcludedSkippedCount: audit.movePairExcludedSkippedCount,
         featureTieSkippedCount: audit.featureTieSkippedCount,
         connectorCycleSkippedCount: audit.connectorCycleSkippedCount,
+        weakConnectorCycleSkippedCount:
+          audit.weakConnectorCycleSkippedCount,
         usefulCycleSkippedCount: audit.usefulCycleSkippedCount,
         acceptedMovePairCounts: audit.acceptedMovePairCounts,
         acceptedMovePairSummaries: audit.acceptedMovePairSummaries,
