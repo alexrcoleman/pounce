@@ -217,6 +217,7 @@ console.log(
         connectorCycleSkippedCount: audit.connectorCycleSkippedCount,
         usefulCycleSkippedCount: audit.usefulCycleSkippedCount,
         acceptedMovePairCounts: audit.acceptedMovePairCounts,
+        acceptedMovePairSummaries: audit.acceptedMovePairSummaries,
         maxReturnGapSkippedCount: audit.maxReturnGapSkippedCount,
         averageCounterfactualReturnGap:
           audit.averageCounterfactualReturnGap,

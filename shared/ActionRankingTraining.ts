@@ -27,6 +27,7 @@ import {
 import { executeMove, type Move } from "./MoveHandler";
 import {
   collectActionRankingImitationDataset,
+  type ActionRankingImitationCandidate,
   type ActionRankingImitationExample,
 } from "./ActionRankingImitation";
 
@@ -193,6 +194,7 @@ export type NeuralTrainingResult = {
     counterfactualConnectorCycleSkippedCount: number;
     counterfactualUsefulCycleSkippedCount: number;
     counterfactualAcceptedMovePairCounts: Record<string, number>;
+    counterfactualAcceptedMovePairSummaries: CounterfactualMovePairSummary[];
     averageCounterfactualScoreGap: number;
     averageCounterfactualBehaviorWinRate: number;
     counterfactualAveragePairWeight: number;
@@ -289,11 +291,34 @@ export type CounterfactualRlLabelAudit = {
   connectorCycleSkippedCount: number;
   usefulCycleSkippedCount: number;
   acceptedMovePairCounts: Record<string, number>;
+  acceptedMovePairSummaries: CounterfactualMovePairSummary[];
   maxReturnGapSkippedCount: number;
   averageCounterfactualReturnGap: number;
   averageCounterfactualCandidateCount: number;
   averageCounterfactualScoreGap: number;
   averageCounterfactualBehaviorWinRate: number;
+};
+
+export type CounterfactualNumericSummary = {
+  count: number;
+  mean: number;
+  stdDev: number;
+  min: number;
+  max: number;
+};
+
+export type CounterfactualMovePairSummary = {
+  pair: string;
+  count: number;
+  returnGap: CounterfactualNumericSummary;
+  candidateCount: CounterfactualNumericSummary;
+  behaviorWinRate: CounterfactualNumericSummary;
+  policyScoreGap: CounterfactualNumericSummary;
+  objectiveGapVsBehavior: CounterfactualNumericSummary;
+  pointDifferentialGapVsBehavior: CounterfactualNumericSummary;
+  scoreGapVsBehavior: CounterfactualNumericSummary;
+  pounceProgressGapVsBehavior: CounterfactualNumericSummary;
+  immediatePointDifferentialGapVsBehavior: CounterfactualNumericSummary;
 };
 
 type RolloutTransition = {
@@ -2059,6 +2084,8 @@ export function trainPolicyGradientFromRollouts(
   const counterfactualAcceptedMovePairCounts = getMovePairCounts(
     selectedCounterfactualLabels
   );
+  const counterfactualAcceptedMovePairSummaries =
+    summarizeCounterfactualMovePairLabels(selectedCounterfactualLabels);
   selectedCounterfactualLabels.forEach((label) => {
     counterfactualReturnGapTotal += label.returnGap;
     counterfactualCandidateCountTotal += label.candidateCount;
@@ -2186,6 +2213,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualConnectorCycleSkippedCount,
     counterfactualUsefulCycleSkippedCount,
     counterfactualAcceptedMovePairCounts,
+    counterfactualAcceptedMovePairSummaries,
     averageCounterfactualScoreGap:
       counterfactualScoreGapCount === 0
         ? 0
@@ -2522,6 +2550,9 @@ export function collectCounterfactualRlLabelAudit(
   const acceptedMovePairCounts = getMovePairCounts(
     selectedCounterfactualLabels
   );
+  const acceptedMovePairSummaries = summarizeCounterfactualMovePairLabels(
+    selectedCounterfactualLabels
+  );
   selectedCounterfactualLabels.forEach((label) => {
     counterfactualReturnGapTotal += label.returnGap;
     counterfactualCandidateCountTotal += label.candidateCount;
@@ -2556,6 +2587,7 @@ export function collectCounterfactualRlLabelAudit(
     connectorCycleSkippedCount,
     usefulCycleSkippedCount,
     acceptedMovePairCounts,
+    acceptedMovePairSummaries,
     maxReturnGapSkippedCount,
     averageCounterfactualReturnGap:
       examples.length === 0 ? 0 : counterfactualReturnGapTotal / examples.length,
@@ -3276,6 +3308,241 @@ function getMovePairCounts(
     counts[label.movePair] = (counts[label.movePair] ?? 0) + 1;
     return counts;
   }, {});
+}
+
+type CounterfactualNumericAccumulator = {
+  count: number;
+  total: number;
+  totalSquared: number;
+  min: number;
+  max: number;
+};
+
+type CounterfactualMovePairSummaryAccumulator = {
+  pair: string;
+  count: number;
+  returnGap: CounterfactualNumericAccumulator;
+  candidateCount: CounterfactualNumericAccumulator;
+  behaviorWinRate: CounterfactualNumericAccumulator;
+  policyScoreGap: CounterfactualNumericAccumulator;
+  objectiveGapVsBehavior: CounterfactualNumericAccumulator;
+  pointDifferentialGapVsBehavior: CounterfactualNumericAccumulator;
+  scoreGapVsBehavior: CounterfactualNumericAccumulator;
+  pounceProgressGapVsBehavior: CounterfactualNumericAccumulator;
+  immediatePointDifferentialGapVsBehavior: CounterfactualNumericAccumulator;
+};
+
+function summarizeCounterfactualMovePairLabels(
+  labels: readonly CounterfactualSupervisedLabel[]
+): CounterfactualMovePairSummary[] {
+  const byPair = new Map<string, CounterfactualMovePairSummaryAccumulator>();
+
+  labels.forEach((label) => {
+    const accumulator = getCounterfactualMovePairSummaryAccumulator(
+      byPair,
+      label.movePair
+    );
+    const winner = getSelectedImitationCandidate(label.example);
+    const behavior = getBehaviorImitationCandidate(label.example);
+
+    accumulator.count += 1;
+    addCounterfactualNumericValue(accumulator.returnGap, label.returnGap);
+    addCounterfactualNumericValue(
+      accumulator.candidateCount,
+      label.candidateCount
+    );
+    addCounterfactualNumericValue(
+      accumulator.behaviorWinRate,
+      label.behaviorWinRate
+    );
+    addCounterfactualNumericValue(accumulator.policyScoreGap, label.scoreGap);
+
+    if (winner && behavior) {
+      addCounterfactualNumericValue(
+        accumulator.objectiveGapVsBehavior,
+        getCounterfactualNumberGap(
+          getCounterfactualTrainingReturn(winner),
+          getCounterfactualTrainingReturn(behavior)
+        )
+      );
+      addCounterfactualNumericValue(
+        accumulator.pointDifferentialGapVsBehavior,
+        getCounterfactualNumberGap(
+          winner.rolloutPointDifferentialReturn,
+          behavior.rolloutPointDifferentialReturn
+        )
+      );
+      addCounterfactualNumericValue(
+        accumulator.scoreGapVsBehavior,
+        getCounterfactualNumberGap(
+          winner.rolloutScoreReturn,
+          behavior.rolloutScoreReturn
+        )
+      );
+      addCounterfactualNumericValue(
+        accumulator.pounceProgressGapVsBehavior,
+        getCounterfactualNumberGap(
+          winner.rolloutPounceProgressReturn,
+          behavior.rolloutPounceProgressReturn
+        )
+      );
+      addCounterfactualNumericValue(
+        accumulator.immediatePointDifferentialGapVsBehavior,
+        winner.immediatePointDifferentialDelta -
+          behavior.immediatePointDifferentialDelta
+      );
+    }
+  });
+
+  return Array.from(byPair.values())
+    .map((accumulator) => ({
+      pair: accumulator.pair,
+      count: accumulator.count,
+      returnGap: summarizeCounterfactualNumericAccumulator(
+        accumulator.returnGap
+      ),
+      candidateCount: summarizeCounterfactualNumericAccumulator(
+        accumulator.candidateCount
+      ),
+      behaviorWinRate: summarizeCounterfactualNumericAccumulator(
+        accumulator.behaviorWinRate
+      ),
+      policyScoreGap: summarizeCounterfactualNumericAccumulator(
+        accumulator.policyScoreGap
+      ),
+      objectiveGapVsBehavior: summarizeCounterfactualNumericAccumulator(
+        accumulator.objectiveGapVsBehavior
+      ),
+      pointDifferentialGapVsBehavior: summarizeCounterfactualNumericAccumulator(
+        accumulator.pointDifferentialGapVsBehavior
+      ),
+      scoreGapVsBehavior: summarizeCounterfactualNumericAccumulator(
+        accumulator.scoreGapVsBehavior
+      ),
+      pounceProgressGapVsBehavior: summarizeCounterfactualNumericAccumulator(
+        accumulator.pounceProgressGapVsBehavior
+      ),
+      immediatePointDifferentialGapVsBehavior:
+        summarizeCounterfactualNumericAccumulator(
+          accumulator.immediatePointDifferentialGapVsBehavior
+        ),
+    }))
+    .sort(
+      (left, right) =>
+        right.count - left.count || left.pair.localeCompare(right.pair)
+    );
+}
+
+function getCounterfactualMovePairSummaryAccumulator(
+  summaries: Map<string, CounterfactualMovePairSummaryAccumulator>,
+  pair: string
+): CounterfactualMovePairSummaryAccumulator {
+  let accumulator = summaries.get(pair);
+  if (!accumulator) {
+    accumulator = {
+      pair,
+      count: 0,
+      returnGap: createCounterfactualNumericAccumulator(),
+      candidateCount: createCounterfactualNumericAccumulator(),
+      behaviorWinRate: createCounterfactualNumericAccumulator(),
+      policyScoreGap: createCounterfactualNumericAccumulator(),
+      objectiveGapVsBehavior: createCounterfactualNumericAccumulator(),
+      pointDifferentialGapVsBehavior: createCounterfactualNumericAccumulator(),
+      scoreGapVsBehavior: createCounterfactualNumericAccumulator(),
+      pounceProgressGapVsBehavior: createCounterfactualNumericAccumulator(),
+      immediatePointDifferentialGapVsBehavior:
+        createCounterfactualNumericAccumulator(),
+    };
+    summaries.set(pair, accumulator);
+  }
+  return accumulator;
+}
+
+function createCounterfactualNumericAccumulator(): CounterfactualNumericAccumulator {
+  return {
+    count: 0,
+    total: 0,
+    totalSquared: 0,
+    min: Number.POSITIVE_INFINITY,
+    max: Number.NEGATIVE_INFINITY,
+  };
+}
+
+function addCounterfactualNumericValue(
+  accumulator: CounterfactualNumericAccumulator,
+  value: number | null | undefined
+): void {
+  if (value == null || !Number.isFinite(value)) {
+    return;
+  }
+
+  accumulator.count += 1;
+  accumulator.total += value;
+  accumulator.totalSquared += value * value;
+  accumulator.min = Math.min(accumulator.min, value);
+  accumulator.max = Math.max(accumulator.max, value);
+}
+
+function summarizeCounterfactualNumericAccumulator(
+  accumulator: CounterfactualNumericAccumulator
+): CounterfactualNumericSummary {
+  if (accumulator.count === 0) {
+    return { count: 0, mean: 0, stdDev: 0, min: 0, max: 0 };
+  }
+
+  const mean = accumulator.total / accumulator.count;
+  const variance =
+    accumulator.count <= 1
+      ? 0
+      : (accumulator.totalSquared - accumulator.count * mean * mean) /
+        (accumulator.count - 1);
+
+  return {
+    count: accumulator.count,
+    mean,
+    stdDev: Math.sqrt(Math.max(0, variance)),
+    min: accumulator.min,
+    max: accumulator.max,
+  };
+}
+
+function getSelectedImitationCandidate(
+  example: ActionRankingImitationExample
+): ActionRankingImitationCandidate | null {
+  const index = example.selectedCandidateIndex;
+  if (index == null || index < 0 || index >= example.candidates.length) {
+    return null;
+  }
+  return example.candidates[index] ?? null;
+}
+
+function getBehaviorImitationCandidate(
+  example: ActionRankingImitationExample
+): ActionRankingImitationCandidate | null {
+  if (!example.behaviorActionKey) {
+    return null;
+  }
+  return (
+    example.candidates.find(
+      (candidate) => candidate.key === example.behaviorActionKey
+    ) ?? null
+  );
+}
+
+function getCounterfactualNumberGap(
+  winnerValue: number | null | undefined,
+  behaviorValue: number | null | undefined
+): number | null {
+  if (
+    winnerValue == null ||
+    behaviorValue == null ||
+    !Number.isFinite(winnerValue) ||
+    !Number.isFinite(behaviorValue)
+  ) {
+    return null;
+  }
+
+  return winnerValue - behaviorValue;
 }
 
 function shouldSkipCycleOverConnectorLabel(
