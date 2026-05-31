@@ -138,6 +138,7 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       playerCount,
       maxMovesPerGame,
       ...recipe.options,
+      actionOptions: recipe.options.actionOptions ?? readActionOptionsEnv(),
       initialModel: bestModel,
       rlOpponentModel:
         recipe.options.rlOpponentModel ??
@@ -519,6 +520,10 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
       "RL_COUNTERFACTUAL_MAX_LABELS_PER_MOVE_PAIR",
       0
     ),
+    rlCounterfactualIncludedMovePairs: readStringListEnv(
+      "RL_COUNTERFACTUAL_INCLUDE_MOVE_PAIRS",
+      []
+    ),
     rlCounterfactualExcludedMovePairs: readStringListEnv(
       "RL_COUNTERFACTUAL_EXCLUDE_MOVE_PAIRS",
       []
@@ -840,12 +845,21 @@ function parseMoveTypeEnvValue(name: string, value: string): Move["type"] {
     "s2s",
     "cycle",
     "flip_deck",
+    "wait",
+    "premove",
     "move_field_stack",
   ];
   if (!moveTypes.includes(normalized)) {
     throw new Error(`${name} contains unknown move type: ${value}`);
   }
   return normalized;
+}
+
+function readActionOptionsEnv() {
+  return {
+    includeWait: readBooleanEnv("RL_INCLUDE_WAIT_ACTIONS", false),
+    includePremove: readBooleanEnv("RL_INCLUDE_PREMOVE_ACTIONS", false),
+  };
 }
 
 function sanitizeFilePart(value: string): string {
@@ -1150,6 +1164,8 @@ function createMoveTypeCounts(): MoveTypeCounts {
     s2s: 0,
     cycle: 0,
     flip_deck: 0,
+    wait: 0,
+    premove: 0,
     move_field_stack: 0,
   };
 }

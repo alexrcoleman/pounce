@@ -40,6 +40,7 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
     playerCount,
     initialModel: bestModel,
     seed: `${seed}:round:${roundNumber}`,
+    actionOptions: readActionOptionsEnv(),
     imitationDeals: readIntegerEnv("IMITATION_DEALS", 0),
     imitationEpochs: readIntegerEnv("IMITATION_EPOCHS", 1),
     imitationLearningRate: readNumberEnv("IMITATION_LR", 0.02),
@@ -221,6 +222,14 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
     rlCounterfactualMaxScoreGap: readNumberEnv(
       "RL_COUNTERFACTUAL_MAX_SCORE_GAP",
       0
+    ),
+    rlCounterfactualIncludedMovePairs: readStringListEnv(
+      "RL_COUNTERFACTUAL_INCLUDE_MOVE_PAIRS",
+      []
+    ),
+    rlCounterfactualExcludedMovePairs: readStringListEnv(
+      "RL_COUNTERFACTUAL_EXCLUDE_MOVE_PAIRS",
+      []
     ),
     rlCounterfactualBehaviorMoveTypes: readMoveTypeListEnv(
       "RL_COUNTERFACTUAL_BEHAVIOR_MOVE_TYPES",
@@ -442,6 +451,18 @@ function readBooleanEnv(name: string, fallback: boolean): boolean {
   return fallback;
 }
 
+function readStringListEnv(name: string, fallback: string[]): string[] {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  const parsed = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return parsed.length > 0 ? parsed : fallback;
+}
+
 function readMoveTypeListEnv(
   name: string,
   fallback: Move["type"][]
@@ -466,12 +487,21 @@ function parseMoveTypeEnvValue(name: string, value: string): Move["type"] {
     "s2s",
     "cycle",
     "flip_deck",
+    "wait",
+    "premove",
     "move_field_stack",
   ];
   if (!moveTypes.includes(normalized)) {
     throw new Error(`${name} contains unknown move type: ${value}`);
   }
   return normalized;
+}
+
+function readActionOptionsEnv() {
+  return {
+    includeWait: readBooleanEnv("RL_INCLUDE_WAIT_ACTIONS", false),
+    includePremove: readBooleanEnv("RL_INCLUDE_PREMOVE_ACTIONS", false),
+  };
 }
 
 function readImprovementTrainingModeEnv(

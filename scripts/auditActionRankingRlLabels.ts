@@ -58,6 +58,8 @@ const MOVE_TYPES: MoveType[] = [
   "s2s",
   "cycle",
   "flip_deck",
+  "wait",
+  "premove",
   "move_field_stack",
 ];
 
@@ -165,6 +167,10 @@ const options = {
     "RL_COUNTERFACTUAL_MAX_LABELS_PER_MOVE_PAIR",
     0
   ),
+  counterfactualIncludedMovePairs: readStringListEnv(
+    "RL_COUNTERFACTUAL_INCLUDE_MOVE_PAIRS",
+    []
+  ),
   counterfactualExcludedMovePairs: readStringListEnv(
     "RL_COUNTERFACTUAL_EXCLUDE_MOVE_PAIRS",
     []
@@ -225,6 +231,7 @@ const options = {
     "RL_COUNTERFACTUAL_SKIP_SOLITAIRE_OVER_USEFUL_CYCLE",
     false
   ),
+  actionOptions: readActionOptionsEnv(),
   updateScope: readUpdateScopeEnv("RL_UPDATE_SCOPE", "exploratory"),
   maxMovesPerGame,
 };
@@ -275,6 +282,7 @@ console.log(
         scoreGapSkippedCount: audit.scoreGapSkippedCount,
         scoreGapBudgetSkippedCount: audit.scoreGapBudgetSkippedCount,
         movePairBudgetSkippedCount: audit.movePairBudgetSkippedCount,
+        movePairIncludedSkippedCount: audit.movePairIncludedSkippedCount,
         movePairExcludedSkippedCount: audit.movePairExcludedSkippedCount,
         behaviorMoveTypeSkippedCount: audit.behaviorMoveTypeSkippedCount,
         moveTypeMismatchSkippedCount: audit.moveTypeMismatchSkippedCount,
@@ -939,12 +947,21 @@ function parseMoveTypeEnvValue(name: string, value: string): MoveType {
     "s2s",
     "cycle",
     "flip_deck",
+    "wait",
+    "premove",
     "move_field_stack",
   ];
   if (!moveTypes.includes(normalized)) {
     throw new Error(`${name} contains unknown move type: ${value}`);
   }
   return normalized;
+}
+
+function readActionOptionsEnv() {
+  return {
+    includeWait: readBooleanEnv("RL_INCLUDE_WAIT_ACTIONS", false),
+    includePremove: readBooleanEnv("RL_INCLUDE_PREMOVE_ACTIONS", false),
+  };
 }
 
 function readNumberEnv(name: string, fallback: number): number {

@@ -3,6 +3,7 @@ import {
   enumerateActionRankingCandidates,
   type ActionRankingCandidate,
   type ActionRankingFeatureName,
+  type ActionRankingOptions,
 } from "./ActionRankingPolicy";
 import type { BoardState } from "./GameUtils";
 import type { Move } from "./MoveHandler";
@@ -153,9 +154,18 @@ export class NeuralActionRankingPolicy {
   chooseMove(
     board: BoardState,
     playerIndex: number,
-    options: { temperature?: number; random?: () => number; sample?: boolean } = {}
+    options: {
+      temperature?: number;
+      random?: () => number;
+      sample?: boolean;
+      actionOptions?: ActionRankingOptions;
+    } = {}
   ): Move | undefined {
-    const candidates = enumerateActionRankingCandidates(board, playerIndex);
+    const candidates = enumerateActionRankingCandidates(
+      board,
+      playerIndex,
+      options.actionOptions
+    );
     const selected = this.chooseCandidate(candidates, options);
     return selected?.move;
   }

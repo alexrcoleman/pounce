@@ -12,7 +12,11 @@ import {
   NeuralActionRankingPolicy,
   type NeuralActionRankingModelV2,
 } from "../shared/NeuralActionRankingPolicy";
-import { createBoard, type CardState } from "../shared/GameUtils";
+import {
+  createBoard,
+  type CardState,
+  type CursorState,
+} from "../shared/GameUtils";
 
 const commonOptions = {
   playerCount: 4,
@@ -702,6 +706,33 @@ assert.ok(
   "move-pair exclusion should remove excluded pairs from accepted labels"
 );
 
+const movePairIncluded = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:move-pair-included",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualStateSource: "greedy",
+  rlUpdateScope: "all",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualMinReturnGap: 0,
+  rlCounterfactualRequirePolicyChange: true,
+  rlCounterfactualIncludedMovePairs: ["c2c>cycle"],
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.ok(
+  Object.keys(
+    movePairIncluded.reinforcement.counterfactualAcceptedMovePairCounts
+  ).every((pair) => pair === "c2c>cycle"),
+  "move-pair inclusion should only accept listed winner-vs-behavior pairs"
+);
+assert.ok(
+  movePairIncluded.reinforcement.counterfactualUpdateCount > 0 ||
+    movePairIncluded.reinforcement.counterfactualMovePairIncludedSkippedCount >
+      0,
+  "move-pair inclusion should either train included pairs or record filtered labels"
+);
+
 const sameMoveTypeFiltered = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:same-move-type-filtered",
@@ -908,6 +939,7 @@ console.log(
       scoreGapBudgetFiltered: summarize(scoreGapBudgetFiltered),
       movePairBudgetFiltered: summarize(movePairBudgetFiltered),
       movePairExcluded: summarize(movePairExcluded),
+      movePairIncluded: summarize(movePairIncluded),
       sameMoveTypeFiltered: summarize(sameMoveTypeFiltered),
       differentMoveTypeFiltered: summarize(differentMoveTypeFiltered),
       cappedScoreGapBudgetFiltered: summarize(cappedScoreGapBudgetFiltered),
@@ -1229,10 +1261,45 @@ function assertTacticalFeatureSurface() {
   board.players[1].flippedDeck = [card("diamonds", 5, 1)];
   board.players[1].stacks = [[card("hearts", 5, 1)], [], [], []];
 
+  const expandedActionOptions = { includeWait: true, includePremove: true };
   const cycleCandidate = enumerateActionRankingCandidates(board, 0).find(
     (candidate) => candidate.move.type === "cycle"
   );
   assert.ok(cycleCandidate, "feature check should include a cycle candidate");
+  const expandedCandidates = enumerateActionRankingCandidates(
+    board,
+    0,
+    expandedActionOptions
+  );
+  const waitCandidate = expandedCandidates.find(
+    (candidate) => candidate.move.type === "wait"
+  );
+  assert.ok(waitCandidate, "feature check should include a wait candidate");
+  assert.equal(
+    getFeature(waitCandidate, "move.wait"),
+    1,
+    "wait candidates should carry an explicit wait feature"
+  );
+
+  const deckPremoveCandidate = expandedCandidates.find(
+    (candidate) =>
+      candidate.move.type === "premove" &&
+      candidate.move.source.type === "deck"
+  );
+  assert.ok(
+    deckPremoveCandidate,
+    "feature check should include a deck premove candidate"
+  );
+  assert.equal(
+    getFeature(deckPremoveCandidate, "move.premove"),
+    1,
+    "premove candidates should carry an explicit premove feature"
+  );
+  assert.equal(
+    getFeature(deckPremoveCandidate, "premove.centerDistance"),
+    1 / 13,
+    "premove candidates should expose distance to the closest center pile"
+  );
 
   assert.equal(
     getFeature(cycleCandidate, "cycle.resetRevealsCard"),
@@ -1296,6 +1363,11 @@ function assertTacticalFeatureSurface() {
   assert.ok(
     getFeature(cycleCandidate, "own.wastePounceConnectorCloseness") > 0,
     "deck context should expose waste-card pounce connector closeness"
+  );
+  assert.equal(
+    getFeature(cycleCandidate, "own.wasteCenterDistance"),
+    1 / 13,
+    "deck context should expose waste-card distance to the closest center pile"
   );
   assert.equal(
     getFeature(cycleCandidate, "own.wasteFraction"),
@@ -1526,6 +1598,126 @@ function assertTacticalFeatureSurface() {
     "cycle context should stay inactive on non-cycle actions"
   );
 
+  const hands: CursorState[] = [
+    {
+      location: card("hearts", 5, 0),
+      item: card("hearts", 5, 0),
+      items: [card("hearts", 5, 0)],
+    },
+    {
+      location: card("hearts", 5, 1),
+      item: card("hearts", 5, 1),
+      items: [card("hearts", 5, 1), card("hearts", 6, 1)],
+    },
+  ];
+  const handAwareCenterCandidate = enumerateActionRankingCandidates(
+    centerPressureBoard,
+    0,
+    { hands }
+  ).find(
+    (candidate) =>
+      candidate.move.type === "c2c" &&
+      candidate.move.source.type === "deck"
+  );
+  assert.ok(
+    handAwareCenterCandidate,
+    "feature check should include a hand-aware center move"
+  );
+  assert.equal(
+    getFeature(handAwareCenterCandidate, "own.handHoldingCard"),
+    1,
+    "hand context should mark when this AI is holding a premoved card"
+  );
+  assert.equal(
+    getFeature(handAwareCenterCandidate, "own.handCenterDistance"),
+    1 / 13,
+    "hand context should expose own held-card center distance"
+  );
+  assert.equal(
+    getFeature(handAwareCenterCandidate, "own.handCanPlaySoon"),
+    1,
+    "hand context should expose whether the held card can play soon"
+  );
+  assert.equal(
+    getFeature(handAwareCenterCandidate, "opponent.handVisibleCount"),
+    2 / 6,
+    "hand context should count visible opponent hand cards"
+  );
+  assert.equal(
+    getFeature(
+      handAwareCenterCandidate,
+      "opponent.handCenterPlayableCount"
+    ),
+    1 / 6,
+    "hand context should count opponent hand cards playable right now"
+  );
+  assert.equal(
+    getFeature(handAwareCenterCandidate, "opponent.handCanPlaySoonCount"),
+    2 / 6,
+    "hand context should count opponent hand cards that can play soon"
+  );
+  assert.equal(
+    getFeature(handAwareCenterCandidate, "opponent.handMinCenterDistance"),
+    1 / 13,
+    "hand context should expose the closest opponent held card to center play"
+  );
+  assert.ok(
+    getFeature(handAwareCenterCandidate, "opponent.handMaxPouncePressure") > 0,
+    "hand context should weight held opponent cards by pounce urgency"
+  );
+  assert.equal(
+    getFeature(
+      handAwareCenterCandidate,
+      "center.opponentHandCanFollowAfter"
+    ),
+    1,
+    "center follow features should see opponent held follow-up cards"
+  );
+  assert.equal(
+    getFeature(
+      handAwareCenterCandidate,
+      "center.opponentHandCanPlaySameNow"
+    ),
+    1,
+    "center follow features should see opponent held race cards"
+  );
+
+  const wrappedDistanceBoard = createBoard(2);
+  wrappedDistanceBoard.isActive = true;
+  wrappedDistanceBoard.isDealt = true;
+  wrappedDistanceBoard.piles = [
+    [card("clubs", 12, -1)],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+  ];
+  wrappedDistanceBoard.players[0].pounceDeck = [card("hearts", 4, 0)];
+  wrappedDistanceBoard.players[0].deck = [];
+  wrappedDistanceBoard.players[0].flippedDeck = [card("clubs", 11, 0)];
+  wrappedDistanceBoard.players[0].stacks = [[], [], [], []];
+  const wrappedDistanceCandidate = enumerateActionRankingCandidates(
+    wrappedDistanceBoard,
+    0,
+    expandedActionOptions
+  ).find(
+    (candidate) =>
+      candidate.move.type === "premove" &&
+      candidate.move.source.type === "deck"
+  );
+  assert.ok(
+    wrappedDistanceCandidate,
+    "feature check should include a premove for center-distance wrap cases"
+  );
+  assert.equal(
+    getFeature(wrappedDistanceCandidate, "card.centerDistance"),
+    11 / 13,
+    "center distance should treat a jack under only a queen as eleven away via an empty pile"
+  );
+
   return {
     featureCount: ACTION_RANKING_FEATURE_NAMES.length,
     cycleResetRevealedValue: getFeature(
@@ -1543,6 +1735,13 @@ function assertTacticalFeatureSurface() {
     opponentPouncePressure: getFeature(
       cycleCandidate,
       "opponent.pounceCenterPlayableCount"
+    ),
+    waitFeature: getFeature(waitCandidate, "move.wait"),
+    premoveFeature: getFeature(deckPremoveCandidate, "move.premove"),
+    wasteCenterDistance: getFeature(cycleCandidate, "own.wasteCenterDistance"),
+    opponentHandVisibleCount: getFeature(
+      handAwareCenterCandidate,
+      "opponent.handVisibleCount"
     ),
     cycleOwnPounceCount: getFeature(stockLookaheadCycle, "cycle.ownPounceCount"),
   };

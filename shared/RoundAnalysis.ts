@@ -1028,6 +1028,12 @@ function getMoveDescription(
   if (move.type === "move_field_stack") {
     return "moved a center pile";
   }
+  if (move.type === "wait") {
+    return undefined;
+  }
+  if (move.type === "premove") {
+    return "readied a card";
+  }
   if (move.type === "c2c") {
     const movedCard = getMovedCenterCard(snapshot, previousSnapshot);
     if (!movedCard) {

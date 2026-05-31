@@ -129,7 +129,8 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       rememberAIActiveCenterPile(room, index, now);
       const currentDragMove = getCurrentAIDragMove(board, index, hand);
       const visibleBoard = getVisibleBoard(room, index, now);
-      const move = currentDragMove ?? getAIMove(visibleBoard, index, hand);
+      const move =
+        currentDragMove ?? getAIMove(visibleBoard, index, hand, room.hands);
 
       if (move) {
         rememberAIMoveFocus(room, index, move, now);

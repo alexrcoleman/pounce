@@ -30,6 +30,8 @@ const MOVE_TYPES: MoveType[] = [
   "s2s",
   "cycle",
   "flip_deck",
+  "wait",
+  "premove",
   "move_field_stack",
 ];
 

@@ -8,6 +8,7 @@ import {
   getCurrentPointsFromCards,
   getPointDifferential,
   type ActionRankingCandidate,
+  type ActionRankingOptions,
 } from "./ActionRankingPolicy";
 import { executeMove, type Move } from "./MoveHandler";
 
@@ -52,6 +53,7 @@ export type ActionRankingImitationOptions = {
   maxMovesPerTrial?: number;
   seed?: string;
   teacherStyleName?: string;
+  actionOptions?: ActionRankingOptions;
 };
 
 export type ActionRankingImitationDataset = {
@@ -89,7 +91,8 @@ export function collectActionRankingImitationDataset(
       trialIndex,
       `${seed}:${trialIndex}`,
       maxMovesPerTrial,
-      options.teacherStyleName
+      options.teacherStyleName,
+      options.actionOptions
     );
     examples.push(...result.examples);
     matchedTeacherMoveCount += result.matchedTeacherMoveCount;
@@ -117,7 +120,8 @@ function collectActionRankingImitationTrial(
   trialIndex: number,
   seed: string,
   maxMoves: number,
-  teacherStyleName: string | undefined
+  teacherStyleName: string | undefined,
+  actionOptions: ActionRankingOptions | undefined
 ) {
   const random = createSeededRandom(seed);
   const board = deepClone(startBoard);
@@ -154,7 +158,11 @@ function collectActionRankingImitationTrial(
       break;
     }
 
-    const candidates = enumerateActionRankingCandidates(board, playerIndex);
+    const candidates = enumerateActionRankingCandidates(
+      board,
+      playerIndex,
+      actionOptions
+    );
     const teacherMove = teacherStyleName
       ? getBasicAIMoveForStyle(board, playerIndex, {}, teacherStyleName)
       : getBasicAIMove(board, playerIndex, {});

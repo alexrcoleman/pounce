@@ -55,7 +55,8 @@ type HeldCardSource =
 export type AIMoveProvider = (
   boardState: BoardState,
   playerIndex: number,
-  cursor: CursorState
+  cursor: CursorState,
+  hands?: readonly CursorState[]
 ) => Move | undefined;
 
 let aiMoveProvider: AIMoveProvider | null = null;
@@ -770,11 +771,11 @@ export function getBasicAIMove(
 export function getAIMove(
   boardState: BoardState,
   playerIndex: number,
-  cursor: CursorState
+  cursor: CursorState,
+  hands?: readonly CursorState[]
 ): Move | undefined {
-  return aiMoveProvider?.(boardState, playerIndex, cursor) ?? getBasicAIMove(
-    boardState,
-    playerIndex,
-    cursor
+  return (
+    aiMoveProvider?.(boardState, playerIndex, cursor, hands) ??
+    getBasicAIMove(boardState, playerIndex, cursor)
   );
 }

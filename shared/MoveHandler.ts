@@ -36,6 +36,14 @@ export type Move =
     }
   | { type: "cycle" }
   | { type: "flip_deck" }
+  | { type: "wait" }
+  | {
+      type: "premove";
+      source:
+        | { type: "pounce" }
+        | { type: "deck" }
+        | { type: "solitaire"; index: number };
+    }
   | { type: "move_field_stack"; index: number; position: [number, number] };
 type MoveResult = {
   cursorMove?: CursorLocation;
@@ -70,6 +78,8 @@ export function isProductiveMove(move: Move): boolean {
   return (
     move.type !== "cycle" &&
     move.type !== "flip_deck" &&
+    move.type !== "wait" &&
+    move.type !== "premove" &&
     move.type !== "move_field_stack"
   );
 }
@@ -83,9 +93,17 @@ function getSourceCard(
   if (
     move.type === "cycle" ||
     move.type === "flip_deck" ||
+    move.type === "wait" ||
     move.type === "move_field_stack"
   ) {
     return null;
+  }
+  if (move.type === "premove") {
+    return move.source.type === "pounce"
+      ? peek(player.pounceDeck)
+      : move.source.type === "deck"
+      ? peek(player.flippedDeck)
+      : peek(player.stacks[move.source.index]);
   }
   if (move.type === "s2s") {
     return player.stacks[move.source][
@@ -120,6 +138,11 @@ export function executeMove(
       throw new Error("Spectating player cannot move");
     }
     let moveResult: MoveResult;
+    if (move.type === "wait") {
+      moveResult = { boardChanged: false };
+      board.ticksSinceMove += 1 / board.players.length;
+      return moveResult;
+    }
     const card = getSourceCard(board, player, move);
 
     if (aiCursor?.item != null && !cardEquals(card, aiCursor.item)) {
@@ -183,12 +206,25 @@ export function executeMove(
       board.pileLocs[move.index][1] = move.position[1];
       fixBoardPiles(board, move.index);
       moveResult = {};
+    } else if (move.type === "premove") {
+      if (card == null) {
+        throw new Error("No card to premove");
+      }
+      if (
+        aiCursor &&
+        cursorLocationEqualsCard(aiCursor.location, card) &&
+        cardEquals(aiCursor.item, card)
+      ) {
+        moveResult = { boardChanged: false };
+      } else {
+        moveResult = { cursorMove: card, cursorMoveItem: card };
+      }
     } else {
       const _unused: never = move;
       throw new Error("Invalid move type");
     }
 
-    if (moveResult.cursorMove == null) {
+    if (moveResult.cursorMove == null && moveResult.boardChanged !== false) {
       moveResult.boardChanged = true;
     }
 

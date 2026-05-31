@@ -17,6 +17,7 @@ import {
   getCurrentPointsFromCards,
   getPointDifferential,
   type ActionRankingCandidate,
+  type ActionRankingOptions,
 } from "./ActionRankingPolicy";
 import {
   createSeededRandom,
@@ -37,6 +38,7 @@ export type NeuralTrainingOptions = {
   hiddenSize?: number;
   hiddenLayerSizes?: number[];
   initialModel?: NeuralActionRankingModel;
+  actionOptions?: ActionRankingOptions;
   rlOpponentModel?: NeuralActionRankingModel;
   seed?: string;
   imitationDeals?: number;
@@ -80,6 +82,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualMaxScoreGap?: number;
   rlCounterfactualScoreGapBudget?: number;
   rlCounterfactualMaxLabelsPerMovePair?: number;
+  rlCounterfactualIncludedMovePairs?: readonly string[];
   rlCounterfactualExcludedMovePairs?: readonly string[];
   rlCounterfactualBehaviorMoveTypes?: readonly Move["type"][];
   rlCounterfactualRequireSameMoveType?: boolean;
@@ -209,6 +212,7 @@ export type NeuralTrainingResult = {
     counterfactualScoreGapSkippedCount: number;
     counterfactualScoreGapBudgetSkippedCount: number;
     counterfactualMovePairBudgetSkippedCount: number;
+    counterfactualMovePairIncludedSkippedCount: number;
     counterfactualMovePairExcludedSkippedCount: number;
     counterfactualBehaviorMoveTypeSkippedCount: number;
     counterfactualMoveTypeMismatchSkippedCount: number;
@@ -318,6 +322,7 @@ export type CounterfactualRlLabelAudit = {
   scoreGapSkippedCount: number;
   scoreGapBudgetSkippedCount: number;
   movePairBudgetSkippedCount: number;
+  movePairIncludedSkippedCount: number;
   movePairExcludedSkippedCount: number;
   behaviorMoveTypeSkippedCount: number;
   moveTypeMismatchSkippedCount: number;
@@ -528,6 +533,8 @@ const MOVE_TYPES: Move["type"][] = [
   "s2s",
   "cycle",
   "flip_deck",
+  "wait",
+  "premove",
   "move_field_stack",
 ];
 
@@ -557,6 +564,7 @@ export function trainNeuralActionRankingPolicy(
     seed: `${seed}:imitation`,
     maxMovesPerGame,
     teacherStyleName: options.imitationTeacherStyleName,
+    actionOptions: options.actionOptions,
   });
   const imitationStats = policy.trainImitation(imitationExamples, {
     epochs: imitationEpochs,
@@ -590,6 +598,7 @@ export function trainNeuralActionRankingPolicy(
     scoreRewardWeight: options.improvementScoreRewardWeight ?? 0,
     seed: `${seed}:improvement`,
     maxMovesPerGame,
+    actionOptions: options.actionOptions,
   });
   const improvementStats =
     improvement.examples.length === 0
@@ -677,6 +686,8 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualScoreGapBudget ?? 0,
     counterfactualMaxLabelsPerMovePair:
       options.rlCounterfactualMaxLabelsPerMovePair ?? 0,
+    counterfactualIncludedMovePairs:
+      options.rlCounterfactualIncludedMovePairs ?? [],
     counterfactualExcludedMovePairs:
       options.rlCounterfactualExcludedMovePairs ?? [],
     counterfactualBehaviorMoveTypes:
@@ -746,6 +757,7 @@ export function trainNeuralActionRankingPolicy(
     normalizeAdvantages: options.rlNormalizeAdvantages ?? true,
     advantageClip: options.rlAdvantageClip ?? 3,
     maxMovesPerGame,
+    actionOptions: options.actionOptions,
   });
 
   return {
@@ -829,6 +841,7 @@ export function collectRewardImprovementExamples(options: {
   scoreRewardWeight: number;
   seed: string;
   maxMovesPerGame: number;
+  actionOptions?: ActionRankingOptions;
 }): RewardImprovementCollection {
   if (options.maxStates <= 0 || options.candidateLimit <= 0) {
     return {
@@ -901,7 +914,11 @@ export function collectRewardImprovementExamples(options: {
       }
 
       const teacherMove = getBasicAIMove(board, playerIndex, {});
-      const candidates = enumerateActionRankingCandidates(board, playerIndex);
+      const candidates = enumerateActionRankingCandidates(
+        board,
+        playerIndex,
+        options.actionOptions
+      );
       const behaviorMove = getImprovementStateBehaviorMove(
         board,
         playerIndex,
@@ -1751,6 +1768,7 @@ export function collectImitationExamplesFromDeals(options: {
   seed: string;
   maxMovesPerGame: number;
   teacherStyleName?: string;
+  actionOptions?: ActionRankingOptions;
 }): ActionRankingImitationExample[] {
   const examples: ActionRankingImitationExample[] = [];
   for (let dealIndex = 0; dealIndex < options.dealCount; dealIndex++) {
@@ -1763,6 +1781,7 @@ export function collectImitationExamplesFromDeals(options: {
       maxMovesPerTrial: options.maxMovesPerGame,
       seed: `${options.seed}:rollout:${dealIndex}`,
       teacherStyleName: options.teacherStyleName,
+      actionOptions: options.actionOptions,
     });
     examples.push(...dataset.examples);
   }
@@ -1811,6 +1830,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualMaxScoreGap: number;
     counterfactualScoreGapBudget: number;
     counterfactualMaxLabelsPerMovePair: number;
+    counterfactualIncludedMovePairs: readonly string[];
     counterfactualExcludedMovePairs: readonly string[];
     counterfactualBehaviorMoveTypes: readonly Move["type"][];
     counterfactualRequireSameMoveType: boolean;
@@ -1849,6 +1869,7 @@ export function trainPolicyGradientFromRollouts(
     normalizeAdvantages: boolean;
     advantageClip: number;
     maxMovesPerGame: number;
+    actionOptions?: ActionRankingOptions;
   }
 ) {
   let finalPointDifferentialTotal = 0;
@@ -1875,6 +1896,7 @@ export function trainPolicyGradientFromRollouts(
   let counterfactualScoreGapSkippedCount = 0;
   let counterfactualScoreGapBudgetSkippedCount = 0;
   let counterfactualMovePairBudgetSkippedCount = 0;
+  let counterfactualMovePairIncludedSkippedCount = 0;
   let counterfactualMovePairExcludedSkippedCount = 0;
   let counterfactualBehaviorMoveTypeSkippedCount = 0;
   let counterfactualMoveTypeMismatchSkippedCount = 0;
@@ -1976,6 +1998,7 @@ export function trainPolicyGradientFromRollouts(
           sample: false,
           maxMovesPerGame: options.maxMovesPerGame,
           neuralPlayerIndices: [],
+          actionOptions: options.actionOptions,
         })
       : null;
     const teacherBaselineDifferential = getMeanPlayerPointDifferential(
@@ -1992,6 +2015,7 @@ export function trainPolicyGradientFromRollouts(
           maxMovesPerGame: options.maxMovesPerGame,
           neuralPlayerIndices: rolloutNeuralPlayerIndices,
           policyByPlayer,
+          actionOptions: options.actionOptions,
         })
       : null;
     const greedyBaselineDifferential = getMeanPlayerPointDifferential(
@@ -2011,6 +2035,7 @@ export function trainPolicyGradientFromRollouts(
       capturePlayerIndices: learningPlayerIndices,
       captureTransitions: useGreedyCounterfactualStates,
       captureTransitionBoards: creditMode === "counterfactual",
+      actionOptions: options.actionOptions,
     });
     const finalDifferential = getMeanPlayerPointDifferential(
       rollout,
@@ -2128,7 +2153,9 @@ export function trainPolicyGradientFromRollouts(
             ? learningPlayerIndices
             : [transition.playerIndex],
           useChampionOpponents ? options.opponentPolicy : undefined,
-          getCounterfactualMoveTypeCandidateFilter(options)
+          getCounterfactualMoveTypeCandidateFilter(options),
+          options.counterfactualIncludedMovePairs,
+          options.actionOptions
         );
         const counterfactualGap =
           options.counterfactualTrainingMode === "policy_gradient"
@@ -2261,6 +2288,16 @@ export function trainPolicyGradientFromRollouts(
         }
         if (
           options.counterfactualTrainingMode !== "policy_gradient" &&
+          !isIncludedCounterfactualMovePair(
+            movePair,
+            options.counterfactualIncludedMovePairs
+          )
+        ) {
+          counterfactualMovePairIncludedSkippedCount += 1;
+          return;
+        }
+        if (
+          options.counterfactualTrainingMode !== "policy_gradient" &&
           isExcludedCounterfactualMovePair(
             movePair,
             options.counterfactualExcludedMovePairs
@@ -2329,7 +2366,8 @@ export function trainPolicyGradientFromRollouts(
                 useSelfPlayOpponents || useChampionOpponents
                   ? learningPlayerIndices
                   : [transition.playerIndex],
-                useChampionOpponents ? options.opponentPolicy : undefined
+                useChampionOpponents ? options.opponentPolicy : undefined,
+                options.actionOptions
               )
             : null;
         if (
@@ -2570,6 +2608,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualScoreGapSkippedCount,
     counterfactualScoreGapBudgetSkippedCount,
     counterfactualMovePairBudgetSkippedCount,
+    counterfactualMovePairIncludedSkippedCount,
     counterfactualMovePairExcludedSkippedCount,
     counterfactualBehaviorMoveTypeSkippedCount,
     counterfactualMoveTypeMismatchSkippedCount,
@@ -2654,6 +2693,7 @@ export function collectCounterfactualRlLabelAudit(
     counterfactualMaxScoreGap: number;
     counterfactualScoreGapBudget: number;
     counterfactualMaxLabelsPerMovePair: number;
+    counterfactualIncludedMovePairs: readonly string[];
     counterfactualExcludedMovePairs: readonly string[];
     counterfactualBehaviorMoveTypes: readonly Move["type"][];
     counterfactualRequireSameMoveType: boolean;
@@ -2671,6 +2711,7 @@ export function collectCounterfactualRlLabelAudit(
     counterfactualSkipSolitaireOverUsefulCycle: boolean;
     updateScope: PolicyGradientUpdateScope;
     maxMovesPerGame: number;
+    actionOptions?: ActionRankingOptions;
   }
 ): CounterfactualRlLabelAudit {
   const counterfactualSupervisedLabels: CounterfactualSupervisedLabel[] = [];
@@ -2690,6 +2731,7 @@ export function collectCounterfactualRlLabelAudit(
   let transitionBudgetSkippedCount = 0;
   let scoreGapBudgetSkippedCount = 0;
   let movePairBudgetSkippedCount = 0;
+  let movePairIncludedSkippedCount = 0;
   let movePairExcludedSkippedCount = 0;
   let behaviorMoveTypeSkippedCount = 0;
   let moveTypeMismatchSkippedCount = 0;
@@ -2771,6 +2813,7 @@ export function collectCounterfactualRlLabelAudit(
       capturePlayerIndices: learningPlayerIndices,
       captureTransitions: useGreedyCounterfactualStates,
       captureTransitionBoards: true,
+      actionOptions: options.actionOptions,
     });
 
     sampledDecisionCount += rollout.transitions.length;
@@ -2850,7 +2893,9 @@ export function collectCounterfactualRlLabelAudit(
           ? learningPlayerIndices
           : [transition.playerIndex],
         useChampionOpponents ? options.opponentPolicy : undefined,
-        getCounterfactualMoveTypeCandidateFilter(options)
+        getCounterfactualMoveTypeCandidateFilter(options),
+        options.counterfactualIncludedMovePairs,
+        options.actionOptions
       );
       const counterfactualGap =
         options.counterfactualTrainingMode === "policy_gradient"
@@ -2988,6 +3033,16 @@ export function collectCounterfactualRlLabelAudit(
       }
       if (
         options.counterfactualTrainingMode !== "policy_gradient" &&
+        !isIncludedCounterfactualMovePair(
+          movePair,
+          options.counterfactualIncludedMovePairs
+        )
+      ) {
+        movePairIncludedSkippedCount += 1;
+        return;
+      }
+      if (
+        options.counterfactualTrainingMode !== "policy_gradient" &&
         isExcludedCounterfactualMovePair(
           movePair,
           options.counterfactualExcludedMovePairs
@@ -3057,7 +3112,8 @@ export function collectCounterfactualRlLabelAudit(
               useSelfPlayOpponents || useChampionOpponents
                 ? learningPlayerIndices
                 : [transition.playerIndex],
-              useChampionOpponents ? options.opponentPolicy : undefined
+              useChampionOpponents ? options.opponentPolicy : undefined,
+              options.actionOptions
             )
           : null;
       if (
@@ -3156,6 +3212,7 @@ export function collectCounterfactualRlLabelAudit(
     scoreGapSkippedCount,
     scoreGapBudgetSkippedCount,
     movePairBudgetSkippedCount,
+    movePairIncludedSkippedCount,
     movePairExcludedSkippedCount,
     behaviorMoveTypeSkippedCount,
     moveTypeMismatchSkippedCount,
@@ -4041,6 +4098,20 @@ function getCounterfactualMovePair(
   return `${winner.move.type}>${behavior?.move.type ?? "unknown"}`;
 }
 
+function isIncludedCounterfactualMovePair(
+  movePair: string,
+  includedMovePairs: readonly string[]
+): boolean {
+  if (includedMovePairs.length === 0) {
+    return true;
+  }
+  const normalizedMovePair = normalizeMovePair(movePair);
+  return includedMovePairs.some(
+    (includedMovePair) =>
+      normalizeMovePair(includedMovePair) === normalizedMovePair
+  );
+}
+
 function isExcludedCounterfactualMovePair(
   movePair: string,
   excludedMovePairs: readonly string[]
@@ -4664,7 +4735,9 @@ function getCounterfactualTransitionResult(
   pounceRewardWeight: number,
   continuationNeuralPlayerIndices: readonly number[] = [transition.playerIndex],
   opponentPolicy?: NeuralActionRankingPolicy,
-  moveTypeCandidateFilter: CounterfactualMoveTypeCandidateFilter = "none"
+  moveTypeCandidateFilter: CounterfactualMoveTypeCandidateFilter = "none",
+  includedMovePairs: readonly string[] = [],
+  actionOptions?: ActionRankingOptions
 ): CounterfactualTransitionResult | null {
   if (
     !transition.board ||
@@ -4681,7 +4754,8 @@ function getCounterfactualTransitionResult(
     policy,
     candidateLimit,
     maxScoreGap,
-    moveTypeCandidateFilter
+    moveTypeCandidateFilter,
+    includedMovePairs
   );
   if (candidateIndices.length < 2) {
     return null;
@@ -4700,7 +4774,8 @@ function getCounterfactualTransitionResult(
       continuationNeuralPlayerIndices,
       opponentPolicy,
       candidateIndex,
-      index
+      index,
+      actionOptions
     )
   );
   const selectedCandidate = candidates.find(
@@ -4774,7 +4849,8 @@ function createCounterfactualCandidateReturn(
   continuationNeuralPlayerIndices: readonly number[],
   opponentPolicy: NeuralActionRankingPolicy | undefined,
   candidateIndex: number,
-  seedCandidateIndex: number
+  seedCandidateIndex: number,
+  actionOptions?: ActionRankingOptions
 ): CounterfactualCandidateReturn {
   const candidate = transition.candidates[candidateIndex];
   if (!transition.board || !candidate) {
@@ -4800,7 +4876,8 @@ function createCounterfactualCandidateReturn(
     maxMoves,
     policy,
     continuationNeuralPlayerIndices,
-    opponentPolicy
+    opponentPolicy,
+    actionOptions
   );
   const pointDifferentialReturns = outcomes.map(
     (outcome) => outcome.pointDifferential - transition.pointDifferentialBefore
@@ -4839,7 +4916,8 @@ function getCounterfactualValidationResult(
   scoreRewardWeight: number,
   pounceRewardWeight: number,
   continuationNeuralPlayerIndices: readonly number[],
-  opponentPolicy?: NeuralActionRankingPolicy
+  opponentPolicy?: NeuralActionRankingPolicy,
+  actionOptions?: ActionRankingOptions
 ): CounterfactualValidationResult | null {
   const safeRolloutCount = Math.max(0, Math.floor(rolloutCount));
   if (safeRolloutCount <= 0 || !transition.board) {
@@ -4863,7 +4941,8 @@ function getCounterfactualValidationResult(
     continuationNeuralPlayerIndices,
     opponentPolicy,
     winner.candidateIndex,
-    0
+    0,
+    actionOptions
   );
   const validationBehavior = createCounterfactualCandidateReturn(
     transition,
@@ -4877,7 +4956,8 @@ function getCounterfactualValidationResult(
     continuationNeuralPlayerIndices,
     opponentPolicy,
     behavior.candidateIndex,
-    1
+    1,
+    actionOptions
   );
   const winStats = getCounterfactualReturnGapWinStats(
     validationWinner,
@@ -4996,7 +5076,8 @@ function getCounterfactualCandidateIndices(
   policy: NeuralActionRankingPolicy,
   candidateLimit: number,
   maxScoreGap: number,
-  moveTypeFilter: CounterfactualMoveTypeCandidateFilter = "none"
+  moveTypeFilter: CounterfactualMoveTypeCandidateFilter = "none",
+  includedMovePairs: readonly string[] = []
 ): number[] {
   const safeLimit = Math.max(2, Math.floor(candidateLimit));
   const scoreByIndex = transition.candidates.map((candidate) =>
@@ -5020,11 +5101,16 @@ function getCounterfactualCandidateIndices(
       candidateIndex >= 0 &&
       candidateIndex < transition.candidates.length &&
       (forceInclude ||
-        isCounterfactualCandidateMoveTypeAllowed(
+        (isCounterfactualCandidateMoveTypeAllowed(
           transition.candidates[candidateIndex],
           behaviorMoveType,
           moveTypeFilter
-        )) &&
+        ) &&
+          isCounterfactualCandidateIncludedForBehavior(
+            transition.candidates[candidateIndex],
+            behaviorMoveType,
+            includedMovePairs
+          ))) &&
       isCounterfactualCandidateWithinScoreGap(
         candidateIndex,
         transition.greedyCandidateIndex,
@@ -5103,6 +5189,21 @@ function isCounterfactualCandidateMoveTypeAllowed(
     : candidateMoveType !== behaviorMoveType;
 }
 
+function isCounterfactualCandidateIncludedForBehavior(
+  candidate: ActionRankingCandidate | undefined,
+  behaviorMoveType: Move["type"] | undefined,
+  includedMovePairs: readonly string[]
+): boolean {
+  if (includedMovePairs.length === 0) {
+    return true;
+  }
+  if (!candidate || !behaviorMoveType) {
+    return false;
+  }
+  const candidateMovePair = `${candidate.move.type}>${behaviorMoveType}`;
+  return isIncludedCounterfactualMovePair(candidateMovePair, includedMovePairs);
+}
+
 function isCounterfactualCandidateWithinScoreGap(
   candidateIndex: number,
   greedyCandidateIndex: number,
@@ -5131,7 +5232,8 @@ function getCounterfactualPolicyPointDifferential(
   maxMoves: number,
   policy: NeuralActionRankingPolicy,
   continuationNeuralPlayerIndices: readonly number[] = [playerIndex],
-  opponentPolicy?: NeuralActionRankingPolicy
+  opponentPolicy?: NeuralActionRankingPolicy,
+  actionOptions?: ActionRankingOptions
 ): number {
   return meanNumbers(
     getCounterfactualPolicyOutcomes(
@@ -5142,7 +5244,8 @@ function getCounterfactualPolicyPointDifferential(
       maxMoves,
       policy,
       continuationNeuralPlayerIndices,
-      opponentPolicy
+      opponentPolicy,
+      actionOptions
     ).map((outcome) => outcome.pointDifferential)
   );
 }
@@ -5155,7 +5258,8 @@ function getCounterfactualPolicyOutcomes(
   maxMoves: number,
   policy: NeuralActionRankingPolicy,
   continuationNeuralPlayerIndices: readonly number[] = [playerIndex],
-  opponentPolicy?: NeuralActionRankingPolicy
+  opponentPolicy?: NeuralActionRankingPolicy,
+  actionOptions?: ActionRankingOptions
 ): CounterfactualOutcome[] {
   const safeSeeds = seeds.length > 0 ? seeds : ["policy-counterfactual"];
   return safeSeeds.map((seed) =>
@@ -5167,7 +5271,8 @@ function getCounterfactualPolicyOutcomes(
       maxMoves,
       policy,
       continuationNeuralPlayerIndices,
-      opponentPolicy
+      opponentPolicy,
+      actionOptions
     )
   );
 }
@@ -5180,7 +5285,8 @@ function getCounterfactualPolicyOutcome(
   maxMoves: number,
   policy: NeuralActionRankingPolicy,
   continuationNeuralPlayerIndices: readonly number[] = [playerIndex],
-  opponentPolicy?: NeuralActionRankingPolicy
+  opponentPolicy?: NeuralActionRankingPolicy,
+  actionOptions?: ActionRankingOptions
 ): CounterfactualOutcome {
   const nextBoard = deepClone(board);
   executeMove(nextBoard, playerIndex, move);
@@ -5201,6 +5307,7 @@ function getCounterfactualPolicyOutcome(
             ? policy
             : opponentPolicy
       : undefined,
+    actionOptions,
   });
   return {
     pointDifferential: rollout.finalPointDifferentials[playerIndex] ?? 0,
@@ -5789,6 +5896,7 @@ function runPolicyRollout(
     captureTransitions?: boolean;
     captureTransitionBoards?: boolean;
     basicMoveProvider?: BasicMoveProvider;
+    actionOptions?: ActionRankingOptions;
   }
 ): RolloutResult {
   const board = deepClone(startBoard);
@@ -5893,10 +6001,15 @@ function chooseNeuralMove(
     captureTransitions?: boolean;
     captureTransitionBoards?: boolean;
     captureTransition?: boolean;
+    actionOptions?: ActionRankingOptions;
   },
   transitions: RolloutTransition[]
 ): Move | undefined {
-  const candidates = enumerateActionRankingCandidates(board, playerIndex);
+  const candidates = enumerateActionRankingCandidates(
+    board,
+    playerIndex,
+    options.actionOptions
+  );
   if (candidates.length === 0) {
     return;
   }
@@ -6068,6 +6181,12 @@ function getMoveDelay(
   const jitter = 0.72 + random() * 0.56;
   if (moveType === "cycle" || moveType === "flip_deck") {
     return 0.34 * jitter;
+  }
+  if (moveType === "premove") {
+    return 0.42 * jitter;
+  }
+  if (moveType === "wait") {
+    return 0.55 * jitter;
   }
   if (moveType === "s2s") {
     return 0.88 * jitter;

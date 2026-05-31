@@ -24,6 +24,7 @@ const options = {
   playerCount: readIntegerEnv("PLAYERS", 4),
   hiddenLayerSizes,
   seed: process.env.SEED ?? "action-ranking-training",
+  actionOptions: readActionOptionsEnv(),
   imitationDeals: rlOnly ? 0 : readIntegerEnv("IMITATION_DEALS", 24),
   imitationEpochs: readIntegerEnv("IMITATION_EPOCHS", 4),
   imitationLearningRate: readNumberEnv("IMITATION_LR", 0.02),
@@ -217,6 +218,10 @@ const options = {
   rlCounterfactualMaxLabelsPerMovePair: readIntegerEnv(
     "RL_COUNTERFACTUAL_MAX_LABELS_PER_MOVE_PAIR",
     0
+  ),
+  rlCounterfactualIncludedMovePairs: readStringListEnv(
+    "RL_COUNTERFACTUAL_INCLUDE_MOVE_PAIRS",
+    []
   ),
   rlCounterfactualExcludedMovePairs: readStringListEnv(
     "RL_COUNTERFACTUAL_EXCLUDE_MOVE_PAIRS",
@@ -438,12 +443,21 @@ function parseMoveTypeEnvValue(name: string, value: string): Move["type"] {
     "s2s",
     "cycle",
     "flip_deck",
+    "wait",
+    "premove",
     "move_field_stack",
   ];
   if (!moveTypes.includes(normalized)) {
     throw new Error(`${name} contains unknown move type: ${value}`);
   }
   return normalized;
+}
+
+function readActionOptionsEnv() {
+  return {
+    includeWait: readBooleanEnv("RL_INCLUDE_WAIT_ACTIONS", false),
+    includePremove: readBooleanEnv("RL_INCLUDE_PREMOVE_ACTIONS", false),
+  };
 }
 
 function readNumberEnv(name: string, fallback: number): number {

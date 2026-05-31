@@ -495,6 +495,8 @@ function createMoveTypeCounts(): MoveTypeCounts {
     s2s: 0,
     cycle: 0,
     flip_deck: 0,
+    wait: 0,
+    premove: 0,
     move_field_stack: 0,
   };
 }

@@ -67,6 +67,10 @@ function describeRejectedMove({
       return genericRejectedMove(reason ?? "The deck could not be cycled.");
     case "flip_deck":
       return genericRejectedMove(reason ?? "The deck could not be flipped.");
+    case "wait":
+      return genericRejectedMove(reason ?? "Waiting is not available now.");
+    case "premove":
+      return genericRejectedMove(reason ?? "That card could not be readied.");
     case "move_field_stack":
       return genericRejectedMove(reason ?? "That center pile could not move.");
   }

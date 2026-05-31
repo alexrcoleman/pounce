@@ -22,7 +22,10 @@ export function hasNeuralAIModel(): boolean {
 export function getNeuralAIMove(
   boardState: BoardState,
   playerIndex: number,
-  _cursor: CursorState
+  _cursor: CursorState,
+  hands?: readonly CursorState[]
 ): Move | undefined {
-  return neuralAIPolicy?.chooseMove(boardState, playerIndex);
+  return neuralAIPolicy?.chooseMove(boardState, playerIndex, {
+    actionOptions: { hands, includeWait: true, includePremove: true },
+  });
 }

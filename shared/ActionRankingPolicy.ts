@@ -6,7 +6,12 @@ import {
   peek,
 } from "./CardUtils";
 import deepClone from "./deepClone";
-import type { BoardState, CardState, PlayerState } from "./GameUtils";
+import type {
+  BoardState,
+  CardState,
+  CursorState,
+  PlayerState,
+} from "./GameUtils";
 import { executeMove, type Move } from "./MoveHandler";
 
 export const ACTION_RANKING_FEATURE_NAMES = [
@@ -145,6 +150,21 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "cycle.ownPointDifferential",
   "cycle.opponentMinPounceCount",
   "cycle.opponentMaxPouncePressure",
+  "move.wait",
+  "move.premove",
+  "card.centerDistance",
+  "own.wasteCenterDistance",
+  "own.handHoldingCard",
+  "own.handCenterDistance",
+  "own.handCanPlaySoon",
+  "opponent.handVisibleCount",
+  "opponent.handCenterPlayableCount",
+  "opponent.handCanPlaySoonCount",
+  "opponent.handMinCenterDistance",
+  "opponent.handMaxPouncePressure",
+  "center.opponentHandCanFollowAfter",
+  "center.opponentHandCanPlaySameNow",
+  "premove.centerDistance",
 ] as const;
 
 export type ActionRankingFeatureName =
@@ -162,9 +182,12 @@ export type ActionRankingCandidate = {
   endsRound: boolean;
 };
 
-type ActionRankingOptions = {
+export type ActionRankingOptions = {
   includeCycle?: boolean;
   includeFlipDeck?: boolean;
+  includeWait?: boolean;
+  includePremove?: boolean;
+  hands?: readonly CursorState[];
 };
 
 type MoveSource =
@@ -186,7 +209,7 @@ export function enumerateActionRankingCandidates(
 
   const moves = enumerateLegalMoves(board, playerIndex, options);
   return moves.map((move) =>
-    createActionRankingCandidate(board, playerIndex, move)
+    createActionRankingCandidate(board, playerIndex, move, options)
   );
 }
 
@@ -206,6 +229,14 @@ export function enumerateLegalMoves(
   enumerateSolitaireToSolitaireMoves(player).forEach((move) =>
     moves.push(move)
   );
+
+  if (options.includePremove) {
+    enumeratePremoveMoves(player).forEach((move) => moves.push(move));
+  }
+
+  if (options.includeWait) {
+    moves.push({ type: "wait" });
+  }
 
   if (options.includeCycle ?? true) {
     if (player.deck.length > 0 || player.flippedDeck.length > 0) {
@@ -235,6 +266,9 @@ export function getActionRankingMoveKey(move: Move): string {
   }
   if (move.type === "s2s") {
     return [move.type, move.source, move.dest, move.count].join(":");
+  }
+  if (move.type === "premove") {
+    return [move.type, getPremoveSourceKey(move.source)].join(":");
   }
   if (move.type === "move_field_stack") {
     return [
@@ -300,7 +334,8 @@ export function getCurrentPointsFromCards(player: PlayerState): number {
 function createActionRankingCandidate(
   board: BoardState,
   playerIndex: number,
-  move: Move
+  move: Move,
+  options: ActionRankingOptions
 ): ActionRankingCandidate {
   const outcome = getMoveOutcome(board, playerIndex, move);
   return {
@@ -311,6 +346,7 @@ function createActionRankingCandidate(
       board,
       playerIndex,
       move,
+      options,
       outcome.immediatePointDelta,
       outcome.immediatePointDifferentialDelta
     ),
@@ -386,10 +422,27 @@ function enumerateSolitaireToSolitaireMoves(player: PlayerState): Move[] {
   });
 }
 
+function enumeratePremoveMoves(player: PlayerState): Move[] {
+  const sources: Extract<Move, { type: "premove" }>["source"][] = [
+    { type: "pounce" },
+    { type: "deck" },
+    ...player.stacks.map((_, index) => ({
+      type: "solitaire" as const,
+      index,
+    })),
+  ];
+
+  return sources.flatMap((source) => {
+    const card = getPremoveSourceCard(player, source);
+    return card ? [{ type: "premove" as const, source }] : [];
+  });
+}
+
 function buildActionRankingFeatures(
   board: BoardState,
   playerIndex: number,
   move: Move,
+  options: ActionRankingOptions,
   immediatePointDelta: number,
   immediatePointDifferentialDelta: number
 ): ActionRankingFeatureVector {
@@ -399,7 +452,14 @@ function buildActionRankingFeatures(
   const cardShape = getCardShapeFeatures(player, card);
   const sourceShape = getSourceShapeFeatures(board, player, move, card);
   const cycleShape = getCycleShapeFeatures(board, player, move);
-  const centerFollow = getCenterFollowFeatures(board, playerIndex, move, card);
+  const handContext = getHandContextFeatures(board, playerIndex, options.hands);
+  const centerFollow = getCenterFollowFeatures(
+    board,
+    playerIndex,
+    move,
+    card,
+    handContext
+  );
   const deckContext = getOwnDeckContextFeatures(board, player);
   const cardAlternatives = getCardAlternativeFeatures(
     board,
@@ -416,6 +476,7 @@ function buildActionRankingFeatures(
   const pressureFeatures = getVisiblePressureFeatures(board, playerIndex);
   const solitaireContext = getOwnSolitaireContextFeatures(board, player);
   const ownPounceCard = player ? peek(player.pounceDeck) : undefined;
+  const cardCenterDistance = getCenterDistanceToCard(board, card);
   const ownCurrentPoints = player
     ? getCurrentPointsFromCards(player)
     : undefined;
@@ -581,6 +642,21 @@ function buildActionRankingFeatures(
     cycleContextActive
       ? normalize(pressureFeatures.opponentMaxPouncePressure, 1)
       : 0,
+    bool(move.type === "wait"),
+    bool(move.type === "premove"),
+    normalize(cardCenterDistance, 13),
+    normalize(deckContext.wasteCenterDistance, 13),
+    bool(handContext.ownHandHoldingCard),
+    normalize(handContext.ownHandCenterDistance, 13),
+    bool(handContext.ownHandCanPlaySoon),
+    normalize(handContext.opponentHandVisibleCount, 6),
+    normalize(handContext.opponentHandCenterPlayableCount, 6),
+    normalize(handContext.opponentHandCanPlaySoonCount, 6),
+    normalize(handContext.opponentHandMinCenterDistance, 13),
+    normalize(handContext.opponentHandMaxPouncePressure, 1),
+    bool(centerFollow.opponentHandCanFollowAfter),
+    bool(centerFollow.opponentHandCanPlaySameNow),
+    move.type === "premove" ? normalize(cardCenterDistance, 13) : 0,
   ];
 }
 
@@ -919,6 +995,7 @@ function getOwnDeckContextFeatures(
     wasteOwnSolitaireConnectorForPounce: false,
     wasteMatchesPounceParity: false,
     wastePounceConnectorCloseness: 0,
+    wasteCenterDistance: 0,
     stockFraction: 0,
     wasteFraction: 0,
     stockLookaheadCenterPlayableReach: 0,
@@ -960,6 +1037,7 @@ function getOwnDeckContextFeatures(
         getStackCompatibilityParity(pounceCard),
     wastePounceConnectorCloseness:
       wasteCard && pounceCard ? getConnectorCloseness(wasteCard, pounceCard) : 0,
+    wasteCenterDistance: getCenterDistanceToCard(board, wasteCard),
     stockFraction: deckTotal <= 0 ? 0 : player.deck.length / deckTotal,
     wasteFraction: deckTotal <= 0 ? 0 : player.flippedDeck.length / deckTotal,
     stockLookaheadCenterPlayableReach: lookahead.lookaheadCenterPlayableReach,
@@ -1168,6 +1246,9 @@ function getSolitaireSourceIndex(move: Move): number | undefined {
     return move.source;
   }
   if (move.type === "c2c" && move.source.type === "solitaire") {
+    return move.source.index;
+  }
+  if (move.type === "premove" && move.source.type === "solitaire") {
     return move.source.index;
   }
 }
@@ -1420,7 +1501,8 @@ function getCenterFollowFeatures(
   board: BoardState,
   playerIndex: number,
   move: Move,
-  card: CardState | undefined
+  card: CardState | undefined,
+  handContext: HandContextFeatures
 ) {
   if (move.type !== "c2c" || !card) {
     return {
@@ -1437,6 +1519,8 @@ function getCenterFollowFeatures(
       opponentFollowPressureAfter: 0,
       opponentPounceFollowPressureAfter: 0,
       opponentSameNowPressure: 0,
+      opponentHandCanFollowAfter: false,
+      opponentHandCanPlaySameNow: false,
     };
   }
 
@@ -1449,7 +1533,7 @@ function getCenterFollowFeatures(
   const canFollowAfter = (visibleCard: CardState) =>
     visibleCard.suit === card.suit && visibleCard.value === card.value + 1;
 
-  return getVisibleCardSources(board).reduce(
+  const visibleFeatures = getVisibleCardSources(board).reduce(
     (result, visible) => {
       if (visible.player === playerIndex) {
         if (!cardEquals(visible.card, card) && canFollowAfter(visible.card)) {
@@ -1511,7 +1595,83 @@ function getCenterFollowFeatures(
       opponentFollowPressureAfter: 0,
       opponentPounceFollowPressureAfter: 0,
       opponentSameNowPressure: 0,
+      opponentHandCanFollowAfter: false,
+      opponentHandCanPlaySameNow: false,
     }
+  );
+
+  handContext.opponentHandCards.forEach((handCard) => {
+    if (canFollowAfter(handCard)) {
+      visibleFeatures.opponentHandCanFollowAfter = true;
+    }
+    if (canPlaySameNow(handCard)) {
+      visibleFeatures.opponentHandCanPlaySameNow = true;
+    }
+  });
+
+  return visibleFeatures;
+}
+
+type HandContextFeatures = {
+  ownHandHoldingCard: boolean;
+  ownHandCenterDistance: number;
+  ownHandCanPlaySoon: boolean;
+  opponentHandCards: CardState[];
+  opponentHandVisibleCount: number;
+  opponentHandCenterPlayableCount: number;
+  opponentHandCanPlaySoonCount: number;
+  opponentHandMinCenterDistance: number;
+  opponentHandMaxPouncePressure: number;
+};
+
+function getHandContextFeatures(
+  board: BoardState,
+  playerIndex: number,
+  hands: readonly CursorState[] | undefined
+): HandContextFeatures {
+  const ownCards = getCursorCards(hands?.[playerIndex]);
+  const opponentCards = (hands ?? [])
+    .flatMap((hand, index) => {
+      if (index === playerIndex || board.players[index]?.isSpectating) {
+        return [];
+      }
+      return getCursorCards(hand);
+    })
+    .filter((card) => card.player !== playerIndex);
+  const ownCard = ownCards[0];
+  const opponentCenterDistances = opponentCards.map((card) =>
+    getCenterDistanceToCard(board, card)
+  );
+
+  return {
+    ownHandHoldingCard: ownCard != null,
+    ownHandCenterDistance: getCenterDistanceToCard(board, ownCard),
+    ownHandCanPlaySoon: ownCard != null && getCanPlaySoon(ownCard, board, 4),
+    opponentHandCards: opponentCards,
+    opponentHandVisibleCount: opponentCards.length,
+    opponentHandCenterPlayableCount: opponentCards.filter((card) =>
+      board.piles.some((pile) => canPlayOnCenterPile(pile, card))
+    ).length,
+    opponentHandCanPlaySoonCount: opponentCards.filter((card) =>
+      getCanPlaySoon(card, board, 4)
+    ).length,
+    opponentHandMinCenterDistance:
+      opponentCenterDistances.length === 0
+        ? 0
+        : Math.min(...opponentCenterDistances),
+    opponentHandMaxPouncePressure: opponentCards.reduce((pressure, card) => {
+      return Math.max(pressure, getPouncePressure(board.players[card.player]));
+    }, 0),
+  };
+}
+
+function getCursorCards(cursor: CursorState | undefined): CardState[] {
+  return [
+    ...(cursor?.item ? [cursor.item] : []),
+    ...(cursor?.items ?? []),
+  ].filter(
+    (card, index, cards) =>
+      cards.findIndex((candidate) => cardEquals(candidate, card)) === index
   );
 }
 
@@ -1605,6 +1765,9 @@ function getMoveCard(
   if (move.type === "s2s") {
     const source = player.stacks[move.source];
     return source[source.length - move.count];
+  }
+  if (move.type === "premove") {
+    return getPremoveSourceCard(player, move.source);
   }
 }
 
@@ -1776,6 +1939,28 @@ function getCanPlaySoon(
   return getCanPlaySoonOnCenterPiles(target, sourceBoard.piles, threshold);
 }
 
+function getCenterDistanceToCard(
+  board: BoardState,
+  card: CardState | undefined
+): number {
+  if (!card) {
+    return 0;
+  }
+
+  const distances = board.piles.flatMap((pile) => {
+    const topCard = peek(pile);
+    if (!topCard) {
+      return [card.value];
+    }
+    if (topCard.suit !== card.suit || topCard.value >= card.value) {
+      return [];
+    }
+    return [card.value - topCard.value];
+  });
+
+  return distances.length === 0 ? 13 : Math.min(...distances);
+}
+
 function getCanPlaySoonOnCenterPiles(
   target: CardState,
   piles: BoardState["piles"],
@@ -1823,28 +2008,56 @@ function getCenterSourceKey(
   return source.type;
 }
 
+function getPremoveSourceKey(
+  source: Extract<Move, { type: "premove" }>["source"]
+) {
+  if (source.type === "solitaire") {
+    return `solitaire:${source.index}`;
+  }
+  return source.type;
+}
+
+function getPremoveSourceCard(
+  player: PlayerState,
+  source: Extract<Move, { type: "premove" }>["source"]
+): CardState | undefined {
+  if (source.type === "pounce") {
+    return peek(player.pounceDeck);
+  }
+  if (source.type === "deck") {
+    return peek(player.flippedDeck);
+  }
+  return peek(player.stacks[source.index]);
+}
+
 function isPounceSource(move: Move): boolean {
   return (
     (move.type === "c2c" && move.source.type === "pounce") ||
-    (move.type === "c2s" && move.source === "pounce")
+    (move.type === "c2s" && move.source === "pounce") ||
+    (move.type === "premove" && move.source.type === "pounce")
   );
 }
 
 function isDeckSource(move: Move): boolean {
   return (
     (move.type === "c2c" && move.source.type === "deck") ||
-    (move.type === "c2s" && move.source === "deck")
+    (move.type === "c2s" && move.source === "deck") ||
+    (move.type === "premove" && move.source.type === "deck")
   );
 }
 
 function isSolitaireSource(move: Move): boolean {
   return (
     (move.type === "c2c" && move.source.type === "solitaire") ||
-    move.type === "s2s"
+    move.type === "s2s" ||
+    (move.type === "premove" && move.source.type === "solitaire")
   );
 }
 
 function getMoveCardCount(move: Move): number {
+  if (move.type === "wait") {
+    return 0;
+  }
   return move.type === "s2s" ? move.count : move.type === "cycle" ? 3 : 1;
 }
 
