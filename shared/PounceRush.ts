@@ -85,7 +85,12 @@ const CENTER_PILE_LOCS: [number, number, number][] = [
   [0.66, 0.18, 0.31],
   [0.21, 0.64, 0.68],
   [0.73, 0.62, 0.47],
+  [0.4, 0.12, 0.78],
+  [0.46, 0.76, 0.18],
+  [0.08, 0.43, 0.61],
+  [0.88, 0.38, 0.91],
 ];
+const SUITS: Suits[] = ["hearts", "spades", "diamonds", "clubs"];
 
 const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
   {
@@ -145,10 +150,10 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     objective: "Unload a pounce card",
     difficulty: "Warmup",
     build: ({ rng }) => {
-      const targetValue = pickValue(rng, [4, 5, 7, 8, 9, 10]);
+      const targetValue = pickValue(rng, [3, 4, 5, 7, 8, 9, 10, 11]);
       return {
         deckCard: card("spades", 13),
-        flippedDeck: [card("clubs", 12)],
+        flippedDeck: [card("diamonds", 2)],
         pounceDeck: [card("diamonds", 12), card("hearts", targetValue)],
         stacks: singleStacks(
           card("clubs", 13),
@@ -172,7 +177,7 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     objective: "Unload a pounce card",
     difficulty: "Warmup",
     build: ({ rng }) => {
-      const targetValue = pickValue(rng, [4, 5, 7, 8, 9]);
+      const targetValue = pickValue(rng, [3, 4, 5, 7, 8, 9, 10]);
       return {
         deckCard: card("clubs", 13),
         flippedDeck: [card("diamonds", 2)],
@@ -229,7 +234,7 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     objective: "Unload a pounce card",
     difficulty: "Warmup",
     build: ({ rng }) => {
-      const targetValue = pickValue(rng, [4, 5, 7, 8, 9, 10]);
+      const targetValue = pickValue(rng, [3, 4, 5, 7, 8, 9, 10, 11]);
       return {
         deckCard: card("clubs", 13),
         flippedDeck: [card("hearts", targetValue)],
@@ -286,7 +291,7 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     objective: "Unload a pounce card",
     difficulty: "Sharp",
     build: ({ rng }) => {
-      const movingValue = pickValue(rng, [5, 6, 7, 8]);
+      const movingValue = pickValue(rng, [3, 4, 5, 6, 7, 8, 9, 10]);
       return {
         deckCard: card("clubs", 13),
         flippedDeck: [card("hearts", 12)],
@@ -481,6 +486,107 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     },
   },
   {
+    id: "deck-shift-open-slot-pounce",
+    kind: "combo",
+    objective: "Unload a pounce card",
+    difficulty: "Combo",
+    build: ({ rng }) => {
+      const movingValue = pickValue(rng, [3, 4, 5, 6, 7, 8, 9, 10]);
+      const deckValue = nextValue(movingValue);
+      const baseValue = nextValue(deckValue);
+      return {
+        deckCard: card("diamonds", 2),
+        flippedDeck: [card("hearts", deckValue)],
+        pounceDeck: [card("diamonds", 11), card("clubs", 13)],
+        stacks: [
+          [card("clubs", movingValue)],
+          [card("spades", baseValue)],
+          [card("spades", 13), card("diamonds", 12)],
+          [card("hearts", 13), card("clubs", 12)],
+        ],
+        piles: [
+          suitedPile("hearts", 2),
+          suitedPile("spades", 4),
+          suitedPile("diamonds", 5),
+          suitedPile("clubs", 3),
+        ],
+        sequence: [
+          { type: "c2s", source: "deck", dest: 1 },
+          { type: "s2s", source: 0, dest: 1, count: 1 },
+          { type: "c2s", source: "pounce", dest: 0 },
+        ],
+      };
+    },
+  },
+  {
+    id: "double-solitaire-waste-center-pounce",
+    kind: "combo",
+    objective: "Unload a pounce card",
+    difficulty: "Combo",
+    build: ({ rng }) => {
+      const firstValue = pickValue(rng, [3, 4, 5, 6, 7, 8, 9, 10]);
+      const secondValue = nextValue(firstValue);
+      const wasteValue = nextValue(secondValue);
+      const pounceValue = nextValue(wasteValue);
+      return {
+        deckCard: card("diamonds", 13),
+        flippedDeck: [card("clubs", wasteValue)],
+        pounceDeck: [card("diamonds", 11), card("clubs", pounceValue)],
+        stacks: [
+          [card("hearts", nextValue(firstValue)), card("clubs", firstValue)],
+          [card("clubs", secondValue)],
+          [card("spades", 13), card("diamonds", 12)],
+          [card("hearts", 10), card("spades", 9)],
+        ],
+        piles: [
+          suitedPile("clubs", previousValue(firstValue)),
+          suitedPile("hearts", 4),
+          suitedPile("diamonds", 3),
+          suitedPile("spades", 5),
+        ],
+        sequence: [
+          { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
+          { type: "c2c", source: { type: "solitaire", index: 1 }, dest: 0 },
+          { type: "c2c", source: { type: "deck" }, dest: 0 },
+          { type: "c2c", source: { type: "pounce" }, dest: 0 },
+        ],
+      };
+    },
+  },
+  {
+    id: "uncover-center-chain-pounce",
+    kind: "uncover_center",
+    objective: "Unload a pounce card",
+    difficulty: "Combo",
+    build: ({ rng }) => {
+      const topValue = pickValue(rng, [3, 4, 5, 6, 7, 8, 9, 10]);
+      const uncoveredValue = nextValue(topValue);
+      const pounceValue = nextValue(uncoveredValue);
+      return {
+        deckCard: card("diamonds", 13),
+        flippedDeck: [card("diamonds", 2)],
+        pounceDeck: [card("spades", 11), card("hearts", pounceValue)],
+        stacks: [
+          [card("hearts", uncoveredValue), card("clubs", topValue)],
+          [card("spades", 13), card("diamonds", 12)],
+          [card("spades", 10), card("hearts", 9)],
+          [card("clubs", 8), card("diamonds", 7)],
+        ],
+        piles: [
+          suitedPile("clubs", previousValue(topValue)),
+          suitedPile("hearts", topValue),
+          suitedPile("diamonds", 3),
+          suitedPile("spades", 5),
+        ],
+        sequence: [
+          { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
+          { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 1 },
+          { type: "c2c", source: { type: "pounce" }, dest: 1 },
+        ],
+      };
+    },
+  },
+  {
     id: "uncover-free-pounce",
     kind: "combo",
     objective: "Unload a pounce card",
@@ -609,13 +715,20 @@ export function createPounceRushPuzzle({
     const puzzleRng = createSeededRng(
       `${normalizedSeed}:puzzle:${puzzleNumber}:attempt:${attempt}`
     );
-    const hiddenPlayerCount = puzzleRng() < 0.42 ? 1 : 2;
+    const hiddenPlayerCount = getHiddenCenterOwnerCount(
+      puzzleNumber,
+      puzzleRng
+    );
     const centerOwners = Array.from(
       { length: hiddenPlayerCount },
       (_, index) => index + 1
     );
-    const setup = assignCenterPileOwners(
-      createGeneratedPuzzleSetup(template, puzzleRng),
+    const setup = addCenterPileDecoys(
+      assignCenterPileOwners(
+        createGeneratedPuzzleSetup(template, puzzleRng, puzzleNumber),
+        centerOwners
+      ),
+      getCenterPileTargetCount(puzzleNumber),
       centerOwners
     );
     const board = createPounceRushBoard({
@@ -693,6 +806,44 @@ export function isExpectedPounceRushMove(
   }
 }
 
+export function isAcceptedPounceRushMove(
+  board: BoardState,
+  actual: Move,
+  expected: Move | undefined
+): boolean {
+  if (isExpectedPounceRushMove(actual, expected)) {
+    return true;
+  }
+
+  return isEquivalentPounceToSolitaireClear(board, actual, expected);
+}
+
+function isEquivalentPounceToSolitaireClear(
+  board: BoardState,
+  actual: Move,
+  expected: Move | undefined
+): boolean {
+  if (
+    expected?.type !== "c2s" ||
+    expected.source !== "pounce" ||
+    actual.type !== "c2s" ||
+    actual.source !== "pounce" ||
+    !isEmptySolitaireStack(board, expected.dest)
+  ) {
+    return false;
+  }
+
+  const boardCopy = deepClone(board);
+  const startingPounceCount =
+    boardCopy.players[PLAYER_INDEX]?.pounceDeck.length ?? 0;
+  const result = executeMove(boardCopy, PLAYER_INDEX, actual);
+  return (
+    result != null &&
+    boardCopy.players[PLAYER_INDEX].pounceDeck.length ===
+      startingPounceCount - 1
+  );
+}
+
 function centerSourcesMatch(
   actual: Extract<Move, { type: "c2c" }>["source"],
   expected: Extract<Move, { type: "c2c" }>["source"]
@@ -742,6 +893,12 @@ function getTemplatePool(seed: string, puzzleNumber: number): PuzzleTemplate[] {
     );
   }
 
+  if (puzzleNumber >= 24) {
+    return POUNCE_RUSH_TEMPLATES.filter(
+      (template) => template.difficulty === "Combo"
+    );
+  }
+
   return POUNCE_RUSH_TEMPLATES;
 }
 
@@ -752,13 +909,179 @@ function normalizePounceRushSeed(seed: string | undefined): string {
 
 function createGeneratedPuzzleSetup(
   template: PuzzleTemplate,
-  rng: () => number
+  rng: () => number,
+  puzzleNumber: number
 ): PuzzleSetup {
-  return transformPuzzleSetup(template.build({ rng }), {
+  const setup = addSolitaireStackDepth(
+    template.build({ rng }),
+    rng,
+    puzzleNumber
+  );
+  return transformPuzzleSetup(setup, {
     pileMap: createIndexPermutation(rng, 4),
     stackMap: createIndexPermutation(rng, 4),
     suitMap: createSeededSuitMap(rng),
   });
+}
+
+function getHiddenCenterOwnerCount(
+  puzzleNumber: number,
+  rng: () => number
+): number {
+  return puzzleNumber >= 6 || rng() >= 0.42 ? 2 : 1;
+}
+
+function getCenterPileTargetCount(puzzleNumber: number): number {
+  if (puzzleNumber >= 18) {
+    return 8;
+  }
+  if (puzzleNumber >= 10) {
+    return 6;
+  }
+  return 4;
+}
+
+function addCenterPileDecoys(
+  setup: PuzzleSetup,
+  targetCount: number,
+  centerOwners: number[]
+): PuzzleSetup {
+  if (setup.piles.length >= targetCount) {
+    return setup;
+  }
+
+  const piles = setup.piles.map((pile) =>
+    pile.map((cardState) => ({
+      ...cardState,
+    }))
+  );
+  const usedSuitByOwner = new Map<number, Set<Suits>>();
+  piles.forEach((pile) => {
+    const topCard = getTopCard(pile);
+    if (!topCard) {
+      return;
+    }
+    const usedSuits = usedSuitByOwner.get(topCard.player) ?? new Set<Suits>();
+    usedSuits.add(topCard.suit);
+    usedSuitByOwner.set(topCard.player, usedSuits);
+  });
+
+  for (const owner of centerOwners) {
+    const usedSuits = usedSuitByOwner.get(owner) ?? new Set<Suits>();
+    for (const suit of SUITS) {
+      if (piles.length >= targetCount) {
+        break;
+      }
+      if (usedSuits.has(suit)) {
+        continue;
+      }
+      piles.push(
+        suitedPile(suit, 13).map((cardState) => ({
+          ...cardState,
+          player: owner,
+        }))
+      );
+      usedSuits.add(suit);
+    }
+    usedSuitByOwner.set(owner, usedSuits);
+  }
+
+  return {
+    ...setup,
+    piles,
+  };
+}
+
+function addSolitaireStackDepth(
+  setup: PuzzleSetup,
+  rng: () => number,
+  puzzleNumber: number
+): PuzzleSetup {
+  const safeStackIndices = getSafeStackDepthIndices(setup.sequence);
+  const targetExtraCards = puzzleNumber >= 18 ? 4 : puzzleNumber >= 8 ? 2 : 0;
+  if (targetExtraCards === 0 || safeStackIndices.length === 0) {
+    return setup;
+  }
+
+  const usedCards = getSetupCardKeys(setup);
+  const stacks = setup.stacks.map((stack) =>
+    stack.map((cardState) => ({ ...cardState }))
+  ) as [CardState[], CardState[], CardState[], CardState[]];
+  let addedCards = 0;
+  const shuffledIndices = shuffle(safeStackIndices, rng);
+
+  for (const stackIndex of shuffledIndices) {
+    if (addedCards >= targetExtraCards) {
+      break;
+    }
+    const desiredDepth = puzzleNumber >= 18 && rng() < 0.62 ? 3 : 2;
+    while (
+      addedCards < targetExtraCards &&
+      stacks[stackIndex].length < desiredDepth
+    ) {
+      const addedCard = prependSolitaireDepthCard(
+        stacks[stackIndex],
+        usedCards
+      );
+      if (!addedCard) {
+        break;
+      }
+      addedCards += 1;
+    }
+  }
+
+  return {
+    ...setup,
+    stacks,
+  };
+}
+
+function getSafeStackDepthIndices(sequence: Move[]): number[] {
+  const unsafe = new Set<number>();
+  sequence.forEach((move) => {
+    if (move.type === "s2s") {
+      unsafe.add(move.source);
+    } else if (move.type === "c2c" && move.source.type === "solitaire") {
+      unsafe.add(move.source.index);
+    }
+  });
+  return [0, 1, 2, 3].filter((index) => !unsafe.has(index));
+}
+
+function prependSolitaireDepthCard(
+  stack: CardState[],
+  usedCards: Set<string>
+): CardState | null {
+  const bottomCard = stack[0];
+  if (!bottomCard || bottomCard.value >= 13) {
+    return null;
+  }
+
+  const nextValueForDepth = nextValue(bottomCard.value);
+  const candidateSuit = SUITS.find(
+    (suit) =>
+      isBlackSuit(suit) !== isBlackSuit(bottomCard.suit) &&
+      !usedCards.has(getCardKey(card(suit, nextValueForDepth)))
+  );
+  if (!candidateSuit) {
+    return null;
+  }
+
+  const nextCard = card(candidateSuit, nextValueForDepth);
+  stack.unshift(nextCard);
+  usedCards.add(getCardKey(nextCard));
+  return nextCard;
+}
+
+function getSetupCardKeys(setup: PuzzleSetup): Set<string> {
+  const cards = [
+    setup.deckCard,
+    ...setup.flippedDeck,
+    ...setup.pounceDeck,
+    ...setup.stacks.flat(),
+    ...setup.piles.flat(),
+  ];
+  return new Set(cards.map(getCardKey));
 }
 
 function createPounceRushBoard({
@@ -784,11 +1107,9 @@ function createPounceRushBoard({
   board.roundStartsAt = undefined;
   board.ticksSinceMove = 0;
   board.piles = setup.piles;
-  board.pileLocs = CENTER_PILE_LOCS.map(([x, y, rotation]) => [
-    x,
-    y,
-    rotation,
-  ]);
+  board.pileLocs = CENTER_PILE_LOCS.slice(0, setup.piles.length).map(
+    ([x, y, rotation]) => [x, y, rotation]
+  );
 
   player.name = playerName || "Player";
   player.socketId = socketId;
@@ -1023,7 +1344,7 @@ function assertNoUnexpectedLegalMoves(
 
   sequence.forEach((expectedMove, stepIndex) => {
     getLegalPounceRushMoves(boardCopy).forEach((move) => {
-      if (isExpectedPounceRushMove(move, expectedMove)) {
+      if (isAcceptedPounceRushMove(boardCopy, move, expectedMove)) {
         return;
       }
       if (
@@ -1104,14 +1425,25 @@ function getCodifiedSubparMoveMessage(
 
   if (
     expectedMove.type === "c2s" &&
-    expectedMove.source === "pounce" &&
-    isEmptySolitaireStack(board, expectedMove.dest) &&
-    move.type !== "c2c" &&
+    expectedMove.source === "deck" &&
     !isExpectedPounceRushMove(move, expectedMove)
   ) {
     return {
+      title: "Waste first",
+      detail: "The waste card sets up the pounce clear.",
+    };
+  }
+
+  if (
+    expectedMove.type === "c2s" &&
+    expectedMove.source === "pounce" &&
+    !isAcceptedPounceRushMove(board, move, expectedMove)
+  ) {
+    return {
       title: "Use the pounce card",
-      detail: "The open slot is for unloading pounce.",
+      detail: isEmptySolitaireStack(board, expectedMove.dest)
+        ? "The open slot is for unloading pounce."
+        : "The pounce card is connected now.",
     };
   }
 
@@ -1334,12 +1666,16 @@ function assertUniqueCards(board: BoardState, templateId: string): void {
   cards.push(...board.piles.flat());
 
   cards.forEach((cardState) => {
-    const key = `${cardState.player}:${cardState.suit}:${cardState.value}`;
+    const key = getCardKey(cardState);
     if (seen.has(key)) {
       throw new Error(`Pounce Rush puzzle ${templateId} duplicates ${key}`);
     }
     seen.add(key);
   });
+}
+
+function getCardKey(cardState: CardState): string {
+  return `${cardState.player}:${cardState.suit}:${cardState.value}`;
 }
 
 function canStackOnSolitaire(cardState: CardState, lowerCard: CardState): boolean {

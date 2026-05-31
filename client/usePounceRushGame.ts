@@ -20,7 +20,7 @@ import {
   getPounceRushDailyKey,
   getPounceRushMoveRejection,
   getPounceRushPuzzleSummary,
-  isExpectedPounceRushMove,
+  isAcceptedPounceRushMove,
 } from "../shared/PounceRush";
 
 const POUNCE_RUSH_SOCKET_ID = "pounce-rush-player";
@@ -586,7 +586,7 @@ export default function usePounceRushGame(playerName: string) {
       }
 
       const expectedMove = puzzle.sequence[stepIndexRef.current];
-      if (!isExpectedPounceRushMove(move, expectedMove)) {
+      if (!isAcceptedPounceRushMove(board, move, expectedMove)) {
         recordDailyMiss();
         showFeedback(
           getPounceRushMoveRejection(
