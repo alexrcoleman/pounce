@@ -377,6 +377,8 @@ type CounterfactualSupervisedLabel = {
   movePair: string;
 };
 
+type CounterfactualMoveTypeCandidateFilter = "none" | "same" | "different";
+
 export type CounterfactualPolicyShiftStats = {
   examples: number;
   winnerExamples: number;
@@ -1907,7 +1909,8 @@ export function trainPolicyGradientFromRollouts(
           useSelfPlayOpponents || useChampionOpponents
             ? learningPlayerIndices
             : [transition.playerIndex],
-          useChampionOpponents ? options.opponentPolicy : undefined
+          useChampionOpponents ? options.opponentPolicy : undefined,
+          getCounterfactualMoveTypeCandidateFilter(options)
         );
         const counterfactualGap =
           options.counterfactualTrainingMode === "policy_gradient"
@@ -2472,7 +2475,10 @@ export function collectCounterfactualRlLabelAudit(
           ? 0
           : options.counterfactualMaxScoreGap,
         options.counterfactualScoreRewardWeight,
-        options.counterfactualPounceRewardWeight
+        options.counterfactualPounceRewardWeight,
+        [transition.playerIndex],
+        undefined,
+        getCounterfactualMoveTypeCandidateFilter(options)
       );
       const counterfactualGap =
         options.counterfactualTrainingMode === "policy_gradient"
@@ -4089,7 +4095,8 @@ function getCounterfactualTransitionResult(
   scoreRewardWeight: number,
   pounceRewardWeight: number,
   continuationNeuralPlayerIndices: readonly number[] = [transition.playerIndex],
-  opponentPolicy?: NeuralActionRankingPolicy
+  opponentPolicy?: NeuralActionRankingPolicy,
+  moveTypeCandidateFilter: CounterfactualMoveTypeCandidateFilter = "none"
 ): CounterfactualTransitionResult | null {
   if (
     !transition.board ||
@@ -4105,7 +4112,8 @@ function getCounterfactualTransitionResult(
     transition,
     policy,
     candidateLimit,
-    maxScoreGap
+    maxScoreGap,
+    moveTypeCandidateFilter
   );
   if (candidateIndices.length < 2) {
     return null;
@@ -4274,7 +4282,8 @@ function getCounterfactualCandidateIndices(
   transition: RolloutTransition,
   policy: NeuralActionRankingPolicy,
   candidateLimit: number,
-  maxScoreGap: number
+  maxScoreGap: number,
+  moveTypeFilter: CounterfactualMoveTypeCandidateFilter = "none"
 ): number[] {
   const safeLimit = Math.max(2, Math.floor(candidateLimit));
   const scoreByIndex = transition.candidates.map((candidate) =>
@@ -4287,11 +4296,22 @@ function getCounterfactualCandidateIndices(
       : null;
   const safeMaxScoreGap =
     Number.isFinite(maxScoreGap) && maxScoreGap > 0 ? maxScoreGap : 0;
+  const behaviorMoveType =
+    transition.greedyCandidateIndex >= 0 &&
+    transition.greedyCandidateIndex < transition.candidates.length
+      ? transition.candidates[transition.greedyCandidateIndex]?.move.type
+      : undefined;
   const indices: number[] = [];
-  const addIndex = (candidateIndex: number) => {
+  const addIndex = (candidateIndex: number, forceInclude = false) => {
     if (
       candidateIndex >= 0 &&
       candidateIndex < transition.candidates.length &&
+      (forceInclude ||
+        isCounterfactualCandidateMoveTypeAllowed(
+          transition.candidates[candidateIndex],
+          behaviorMoveType,
+          moveTypeFilter
+        )) &&
       isCounterfactualCandidateWithinScoreGap(
         candidateIndex,
         transition.greedyCandidateIndex,
@@ -4305,8 +4325,8 @@ function getCounterfactualCandidateIndices(
     }
   };
 
-  addIndex(transition.selectedCandidateIndex);
-  addIndex(transition.greedyCandidateIndex);
+  addIndex(transition.selectedCandidateIndex, true);
+  addIndex(transition.greedyCandidateIndex, true);
 
   if (indices.length < safeLimit) {
     transition.candidates
@@ -4323,6 +4343,37 @@ function getCounterfactualCandidateIndices(
   }
 
   return indices.slice(0, safeLimit);
+}
+
+function getCounterfactualMoveTypeCandidateFilter(options: {
+  counterfactualTrainingMode: "policy_gradient" | "pairwise" | "value";
+  counterfactualRequireSameMoveType: boolean;
+  counterfactualRequireDifferentMoveType: boolean;
+}): CounterfactualMoveTypeCandidateFilter {
+  if (options.counterfactualTrainingMode === "policy_gradient") {
+    return "none";
+  }
+  if (options.counterfactualRequireSameMoveType) {
+    return "same";
+  }
+  if (options.counterfactualRequireDifferentMoveType) {
+    return "different";
+  }
+  return "none";
+}
+
+function isCounterfactualCandidateMoveTypeAllowed(
+  candidate: ActionRankingCandidate | undefined,
+  behaviorMoveType: Move["type"] | undefined,
+  moveTypeFilter: CounterfactualMoveTypeCandidateFilter
+): boolean {
+  if (moveTypeFilter === "none" || !candidate || !behaviorMoveType) {
+    return true;
+  }
+  const candidateMoveType = candidate.move.type;
+  return moveTypeFilter === "same"
+    ? candidateMoveType === behaviorMoveType
+    : candidateMoveType !== behaviorMoveType;
 }
 
 function isCounterfactualCandidateWithinScoreGap(

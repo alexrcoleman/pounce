@@ -156,6 +156,9 @@ const traces = results
     (left, right) =>
       left.final.pointDifferentialDelta - right.final.pointDifferentialDelta
   );
+const worstForModelA = maxExamples > 0 ? traces.slice(0, maxExamples) : [];
+const bestForModelA =
+  maxExamples > 0 ? traces.slice(-maxExamples).reverse() : [];
 
 console.log(
   JSON.stringify(
@@ -179,8 +182,8 @@ console.log(
         seeds,
       },
       summary: summarizeTraces(traces, results.length),
-      worstForModelA: traces.slice(0, maxExamples),
-      bestForModelA: traces.slice(-maxExamples).reverse(),
+      worstForModelA,
+      bestForModelA,
     },
     null,
     2

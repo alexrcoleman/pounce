@@ -147,6 +147,11 @@ stock-memory labels above; two same-family labels were skipped before the local
 support filters, and no accepted label failed the score/pounce gates. This gives
 the next training sweep a cleaner way to ask for "cycle because it advances the
 stock toward useful score/pounce progress" rather than generic cycle preference.
+The follow-up no-promotion sweep confirmed the label quality but not the policy
+improvement: output-only and all-layer candidates still changed deployed behavior
+in fewer than `1.1%` of traced games, with the `cycle>c2s` divergences skewing
+negative, and the anchored candidate made no deployed changes. Treat these
+stock-memory labels as audit clues, not as a ready training target.
 Imitation training can now target a single fixed heuristic style with
 `IMITATION_TEACHER_STYLE="Alex 75%"`, and `action-ranking:imitation-by-style`
 reports top-action/equivalence/family agreement against each style. On the
@@ -758,12 +763,16 @@ label batch.
 counterfactual labels where the rollout winner and current behavior action have
 different coarse move types, such as `cycle>c2s` or `c2s>cycle`. This is useful
 for destination/order refinements after cross-type labels show broad
-generalization failures. It is disabled by default.
+generalization failures. Supervised collection now also uses this filter while
+choosing rollout candidates, so scarce candidate slots are spent on same-family
+alternatives instead of moves that would be rejected later. It is disabled by
+default.
 `RL_COUNTERFACTUAL_REQUIRE_DIFFERENT_MOVE_TYPE=true` applies the complementary
 filter: it skips same-family labels such as `c2c>c2c`, `c2s>c2s`, and
 `s2s>s2s`. Use it for strategy-shift probes like stock-memory `cycle>c2s`,
 where same-family center/solitaire ordering labels would otherwise dominate a
-small score-gap budget. It is disabled by default.
+small score-gap budget. It also prefilters rollout candidates for supervised
+collection. It is disabled by default.
 Supervised counterfactual modes also skip labels where the rollout winner and
 the current behavior action have identical action-feature vectors. Those labels
 can show up as same-move-type destination refinements, but if the model sees the
@@ -1327,6 +1336,17 @@ positive point differential and better pounce remaining, but still included
 large losses when behind with 13 pounce cards. The guard is a useful filter, but
 we still need better reliability/state-context selection before training
 cycle-over-connector labels hard.
+The next check shifted away from cross-type cycling and mined same-type solitaire
+destination refinements with `RL_COUNTERFACTUAL_REQUIRE_SAME_MOVE_TYPE=true`,
+`RL_COUNTERFACTUAL_EXCLUDE_MOVE_PAIRS=c2c>c2c`, and a pounce-progress support
+gap. A 64-episode audit found one clean `c2s>c2s` label: `pounce->stack:2` over
+`pounce->stack:0`, only `0.008` policy-score points behind, with `+6.73`
+rollout point-differential gap, `+2.6` raw-score gap, and `+2.2` pounce-progress
+gap. Training shards did not find any accepted labels, even after a stronger
+pairwise update recipe, so this looks like a promising but very sparse strategic
+shape. The same/different move-type filters now prefilter rollout candidate
+slots; the audit's mismatch skips dropped to zero, but the next improvement still
+needs targeted state mining rather than stronger updates.
 
 ## Deploying
 

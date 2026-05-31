@@ -626,11 +626,10 @@ const sameMoveTypeFiltered = trainNeuralActionRankingPolicy({
   rlCounterfactualValueCenterTargets: true,
   rlCounterfactualValueHuberDelta: 0,
 });
-assert.ok(
-  sameMoveTypeFiltered.reinforcement.counterfactualUpdateCount > 0 ||
-    sameMoveTypeFiltered.reinforcement
-      .counterfactualMoveTypeMismatchSkippedCount > 0,
-  "same-move-type filtering should either accept same-family labels or skip mismatched labels"
+assert.equal(
+  sameMoveTypeFiltered.reinforcement.counterfactualMoveTypeMismatchSkippedCount,
+  0,
+  "same-move-type filtering should prefilter mismatched rollout candidates"
 );
 assert.ok(
   Object.keys(
@@ -653,11 +652,10 @@ const differentMoveTypeFiltered = trainNeuralActionRankingPolicy({
   rlCounterfactualValueCenterTargets: true,
   rlCounterfactualValueHuberDelta: 0,
 });
-assert.ok(
-  differentMoveTypeFiltered.reinforcement.counterfactualUpdateCount > 0 ||
-    differentMoveTypeFiltered.reinforcement
-      .counterfactualMoveTypeMatchSkippedCount > 0,
-  "different-move-type filtering should either accept cross-type labels or skip same-family labels"
+assert.equal(
+  differentMoveTypeFiltered.reinforcement.counterfactualMoveTypeMatchSkippedCount,
+  0,
+  "different-move-type filtering should prefilter same-family rollout candidates"
 );
 assert.ok(
   Object.keys(
