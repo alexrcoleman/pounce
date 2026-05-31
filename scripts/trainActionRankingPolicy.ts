@@ -159,6 +159,10 @@ const options = {
     "RL_COUNTERFACTUAL_MIN_BEHAVIOR_WIN_RATE",
     0
   ),
+  rlCounterfactualMinBehaviorWins: readIntegerEnv(
+    "RL_COUNTERFACTUAL_MIN_BEHAVIOR_WINS",
+    0
+  ),
   rlCounterfactualMaxPolicyMargin: readNumberEnv(
     "RL_COUNTERFACTUAL_MAX_POLICY_MARGIN",
     0

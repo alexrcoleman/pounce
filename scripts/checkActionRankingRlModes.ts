@@ -527,6 +527,25 @@ assert.ok(
   "behavior-win-rate filtering should skip labels whose winner is not consistently better than greedy behavior"
 );
 
+const behaviorWinsFiltered = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:behavior-wins-filtered",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualRolloutCount: 3,
+  rlCounterfactualRolloutMoves: 40,
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualMinReturnGap: 0,
+  rlCounterfactualMinBehaviorWins: 3,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.ok(
+  behaviorWinsFiltered.reinforcement
+    .counterfactualBehaviorWinRateSkippedCount > 0,
+  "behavior-win-count filtering should skip labels that do not beat greedy behavior enough times"
+);
+
 const policyMarginFiltered = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:policy-margin-filtered",

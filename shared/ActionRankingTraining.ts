@@ -66,6 +66,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualTrainingMode?: "policy_gradient" | "pairwise" | "value";
   rlCounterfactualGapStandardErrorMultiplier?: number;
   rlCounterfactualMinBehaviorWinRate?: number;
+  rlCounterfactualMinBehaviorWins?: number;
   rlCounterfactualMaxPolicyMargin?: number;
   rlCounterfactualRequirePolicyChange?: boolean;
   rlCounterfactualPreferenceScope?: "all" | "behavior";
@@ -440,6 +441,8 @@ type CounterfactualTransitionResult = {
   behaviorGap: number;
   behaviorGapStandardError: number;
   behaviorWinRate: number;
+  behaviorWinCount: number;
+  behaviorComparisonCount: number;
 };
 
 type CounterfactualOutcome = {
@@ -619,6 +622,8 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualGapStandardErrorMultiplier ?? 0,
     counterfactualMinBehaviorWinRate:
       options.rlCounterfactualMinBehaviorWinRate ?? 0,
+    counterfactualMinBehaviorWins:
+      options.rlCounterfactualMinBehaviorWins ?? 0,
     counterfactualMaxPolicyMargin:
       options.rlCounterfactualMaxPolicyMargin ?? 0,
     counterfactualRequirePolicyChange:
@@ -1668,6 +1673,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualTrainingMode: CounterfactualTrainingMode;
     counterfactualGapStandardErrorMultiplier: number;
     counterfactualMinBehaviorWinRate: number;
+    counterfactualMinBehaviorWins: number;
     counterfactualMaxPolicyMargin: number;
     counterfactualRequirePolicyChange: boolean;
     counterfactualPreferenceScope: "all" | "behavior";
@@ -2028,6 +2034,15 @@ export function trainPolicyGradientFromRollouts(
             0 &&
           result.behaviorWinRate <
             getSafeWinRateThreshold(options.counterfactualMinBehaviorWinRate)
+        ) {
+          counterfactualBehaviorWinRateSkippedCount += 1;
+          return;
+        }
+        if (
+          options.counterfactualTrainingMode !== "policy_gradient" &&
+          getSafeWinCountThreshold(options.counterfactualMinBehaviorWins) > 0 &&
+          result.behaviorWinCount <
+            getSafeWinCountThreshold(options.counterfactualMinBehaviorWins)
         ) {
           counterfactualBehaviorWinRateSkippedCount += 1;
           return;
@@ -2425,6 +2440,7 @@ export function collectCounterfactualRlLabelAudit(
     counterfactualTrainingMode: CounterfactualTrainingMode;
     counterfactualGapStandardErrorMultiplier: number;
     counterfactualMinBehaviorWinRate: number;
+    counterfactualMinBehaviorWins: number;
     counterfactualMaxPolicyMargin: number;
     counterfactualRequirePolicyChange: boolean;
     counterfactualMaxScoreGap: number;
@@ -2634,6 +2650,15 @@ export function collectCounterfactualRlLabelAudit(
         getSafeWinRateThreshold(options.counterfactualMinBehaviorWinRate) > 0 &&
         result.behaviorWinRate <
           getSafeWinRateThreshold(options.counterfactualMinBehaviorWinRate)
+      ) {
+        behaviorWinRateSkippedCount += 1;
+        return;
+      }
+      if (
+        options.counterfactualTrainingMode !== "policy_gradient" &&
+        getSafeWinCountThreshold(options.counterfactualMinBehaviorWins) > 0 &&
+        result.behaviorWinCount <
+          getSafeWinCountThreshold(options.counterfactualMinBehaviorWins)
       ) {
         behaviorWinRateSkippedCount += 1;
         return;
@@ -4404,6 +4429,9 @@ function getCounterfactualTransitionResult(
   const trainingGap =
     bestCandidate.rolloutObjectiveReturn - worstCandidate.rolloutObjectiveReturn;
   const behaviorGap = bestCandidate.rolloutObjectiveReturn - greedyReturn;
+  const behaviorWinStats = greedyCandidate
+    ? getCounterfactualReturnGapWinStats(bestCandidate, greedyCandidate)
+    : { winRate: 0, winCount: 0, comparisonCount: 0 };
 
   return {
     candidates,
@@ -4428,9 +4456,9 @@ function getCounterfactualTransitionResult(
     behaviorGapStandardError: greedyCandidate
       ? getCounterfactualReturnGapStandardError(bestCandidate, greedyCandidate)
       : 0,
-    behaviorWinRate: greedyCandidate
-      ? getCounterfactualReturnGapWinRate(bestCandidate, greedyCandidate)
-      : 0,
+    behaviorWinRate: behaviorWinStats.winRate,
+    behaviorWinCount: behaviorWinStats.winCount,
+    behaviorComparisonCount: behaviorWinStats.comparisonCount,
   };
 }
 
@@ -4441,19 +4469,26 @@ function getSafeWinRateThreshold(value: number): number {
   return Math.min(1, Math.max(0, value));
 }
 
-function getCounterfactualReturnGapWinRate(
+function getSafeWinCountThreshold(value: number): number {
+  if (!Number.isFinite(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.floor(value));
+}
+
+function getCounterfactualReturnGapWinStats(
   winner: CounterfactualCandidateReturn,
   loser: CounterfactualCandidateReturn
-): number {
-  if (winner.candidate.key === loser.candidate.key) {
-    return 1;
-  }
+): { winRate: number; winCount: number; comparisonCount: number } {
   const count = Math.min(
     winner.rolloutObjectiveReturns.length,
     loser.rolloutObjectiveReturns.length
   );
   if (count === 0) {
-    return 0;
+    return { winRate: 0, winCount: 0, comparisonCount: 0 };
+  }
+  if (winner.candidate.key === loser.candidate.key) {
+    return { winRate: 1, winCount: count, comparisonCount: count };
   }
   let winCount = 0;
   for (let index = 0; index < count; index++) {
@@ -4464,7 +4499,7 @@ function getCounterfactualReturnGapWinRate(
       winCount += 1;
     }
   }
-  return winCount / count;
+  return { winRate: winCount / count, winCount, comparisonCount: count };
 }
 
 function getCounterfactualReturnGapStandardError(
