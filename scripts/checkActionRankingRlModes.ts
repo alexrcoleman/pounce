@@ -798,6 +798,30 @@ assert.ok(
   "score-gap cap should keep accepted labels inside the configured score gap"
 );
 
+const validationFiltered = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:validation-filtered",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualStateSource: "greedy",
+  rlUpdateScope: "all",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualMinReturnGap: 0,
+  rlCounterfactualValidationRolloutCount: 1,
+  rlCounterfactualMinValidationWins: 2,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.ok(
+  validationFiltered.reinforcement.counterfactualValidationSkippedCount > 0,
+  "held-out validation should skip labels that miss the validation win threshold"
+);
+assert.equal(
+  validationFiltered.reinforcement.counterfactualUpdateCount,
+  0,
+  "an impossible held-out validation win threshold should reject every label"
+);
+
 const labelTargetStopped = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:label-target-stopped",
@@ -872,6 +896,7 @@ console.log(
       sameMoveTypeFiltered: summarize(sameMoveTypeFiltered),
       differentMoveTypeFiltered: summarize(differentMoveTypeFiltered),
       cappedScoreGapBudgetFiltered: summarize(cappedScoreGapBudgetFiltered),
+      validationFiltered: summarize(validationFiltered),
       labelTargetStopped: summarize(labelTargetStopped),
       maxReturnGapFiltered: summarize(maxReturnGapFiltered),
     },
@@ -945,6 +970,8 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.counterfactualMoveTypeMismatchSkippedCount,
     counterfactualMoveTypeMatchSkippedCount:
       result.reinforcement.counterfactualMoveTypeMatchSkippedCount,
+    counterfactualValidationSkippedCount:
+      result.reinforcement.counterfactualValidationSkippedCount,
     counterfactualScoreReturnGapSkippedCount:
       result.reinforcement.counterfactualScoreReturnGapSkippedCount,
     counterfactualPounceProgressGapSkippedCount:
@@ -961,6 +988,10 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.counterfactualAcceptedMovePairCounts,
     averageCounterfactualBehaviorWinRate:
       result.reinforcement.averageCounterfactualBehaviorWinRate,
+    averageCounterfactualValidationReturnGap:
+      result.reinforcement.averageCounterfactualValidationReturnGap,
+    averageCounterfactualValidationWinRate:
+      result.reinforcement.averageCounterfactualValidationWinRate,
     counterfactualAveragePairWeight:
       result.reinforcement.counterfactualAveragePairWeight,
     counterfactualAnchorExamples:

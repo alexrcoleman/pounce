@@ -84,6 +84,9 @@ export type NeuralTrainingOptions = {
   rlCounterfactualRequireSameMoveType?: boolean;
   rlCounterfactualRequireDifferentMoveType?: boolean;
   rlCounterfactualStopAfterLabels?: number;
+  rlCounterfactualValidationRolloutCount?: number;
+  rlCounterfactualMinValidationReturnGap?: number;
+  rlCounterfactualMinValidationWins?: number;
   rlCounterfactualScoreRewardWeight?: number;
   rlCounterfactualPounceRewardWeight?: number;
   rlCounterfactualMinScoreReturnGap?: number;
@@ -209,6 +212,7 @@ export type NeuralTrainingResult = {
     counterfactualBehaviorMoveTypeSkippedCount: number;
     counterfactualMoveTypeMismatchSkippedCount: number;
     counterfactualMoveTypeMatchSkippedCount: number;
+    counterfactualValidationSkippedCount: number;
     counterfactualScoreReturnGapSkippedCount: number;
     counterfactualPounceProgressGapSkippedCount: number;
     counterfactualFeatureTieSkippedCount: number;
@@ -219,6 +223,8 @@ export type NeuralTrainingResult = {
     counterfactualAcceptedMovePairSummaries: CounterfactualMovePairSummary[];
     averageCounterfactualScoreGap: number;
     averageCounterfactualBehaviorWinRate: number;
+    averageCounterfactualValidationReturnGap: number;
+    averageCounterfactualValidationWinRate: number;
     counterfactualAveragePairWeight: number;
     counterfactualAnchorExamples: number;
     counterfactualAnchorUpdates: number;
@@ -315,6 +321,7 @@ export type CounterfactualRlLabelAudit = {
   behaviorMoveTypeSkippedCount: number;
   moveTypeMismatchSkippedCount: number;
   moveTypeMatchSkippedCount: number;
+  validationSkippedCount: number;
   scoreReturnGapSkippedCount: number;
   pounceProgressGapSkippedCount: number;
   featureTieSkippedCount: number;
@@ -328,6 +335,8 @@ export type CounterfactualRlLabelAudit = {
   averageCounterfactualCandidateCount: number;
   averageCounterfactualScoreGap: number;
   averageCounterfactualBehaviorWinRate: number;
+  averageCounterfactualValidationReturnGap: number;
+  averageCounterfactualValidationWinRate: number;
 };
 
 export type CounterfactualNumericSummary = {
@@ -344,6 +353,8 @@ export type CounterfactualMovePairSummary = {
   returnGap: CounterfactualNumericSummary;
   candidateCount: CounterfactualNumericSummary;
   behaviorWinRate: CounterfactualNumericSummary;
+  validationReturnGap: CounterfactualNumericSummary;
+  validationWinRate: CounterfactualNumericSummary;
   policyScoreGap: CounterfactualNumericSummary;
   objectiveGapVsBehavior: CounterfactualNumericSummary;
   pointDifferentialGapVsBehavior: CounterfactualNumericSummary;
@@ -388,6 +399,8 @@ type CounterfactualSupervisedLabel = {
   returnGap: number;
   candidateCount: number;
   behaviorWinRate: number;
+  validationReturnGap: number | null;
+  validationWinRate: number | null;
   scoreGap: number | null;
   movePair: string;
 };
@@ -446,6 +459,17 @@ type CounterfactualTransitionResult = {
   behaviorWinRate: number;
   behaviorWinCount: number;
   behaviorComparisonCount: number;
+};
+
+type CounterfactualValidationResult = {
+  returnGap: number;
+  returnGapStandardError: number;
+  pointDifferentialGap: number;
+  scoreGap: number;
+  pounceProgressGap: number;
+  winRate: number;
+  winCount: number;
+  comparisonCount: number;
 };
 
 type CounterfactualOutcome = {
@@ -660,6 +684,12 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualRequireDifferentMoveType ?? false,
     counterfactualStopAfterLabels:
       options.rlCounterfactualStopAfterLabels ?? 0,
+    counterfactualValidationRolloutCount:
+      options.rlCounterfactualValidationRolloutCount ?? 0,
+    counterfactualMinValidationReturnGap:
+      options.rlCounterfactualMinValidationReturnGap ?? 0,
+    counterfactualMinValidationWins:
+      options.rlCounterfactualMinValidationWins ?? 0,
     counterfactualScoreRewardWeight:
       options.rlCounterfactualScoreRewardWeight ?? 0,
     counterfactualPounceRewardWeight:
@@ -1782,6 +1812,9 @@ export function trainPolicyGradientFromRollouts(
     counterfactualRequireSameMoveType: boolean;
     counterfactualRequireDifferentMoveType: boolean;
     counterfactualStopAfterLabels: number;
+    counterfactualValidationRolloutCount: number;
+    counterfactualMinValidationReturnGap: number;
+    counterfactualMinValidationWins: number;
     counterfactualScoreRewardWeight: number;
     counterfactualPounceRewardWeight: number;
     counterfactualMinScoreReturnGap: number;
@@ -1842,6 +1875,7 @@ export function trainPolicyGradientFromRollouts(
   let counterfactualBehaviorMoveTypeSkippedCount = 0;
   let counterfactualMoveTypeMismatchSkippedCount = 0;
   let counterfactualMoveTypeMatchSkippedCount = 0;
+  let counterfactualValidationSkippedCount = 0;
   let counterfactualScoreReturnGapSkippedCount = 0;
   let counterfactualPounceProgressGapSkippedCount = 0;
   let counterfactualFeatureTieSkippedCount = 0;
@@ -1849,6 +1883,9 @@ export function trainPolicyGradientFromRollouts(
   let counterfactualWeakConnectorCycleSkippedCount = 0;
   let counterfactualUsefulCycleSkippedCount = 0;
   let counterfactualBehaviorWinRateTotal = 0;
+  let counterfactualValidationReturnGapTotal = 0;
+  let counterfactualValidationWinRateTotal = 0;
+  let counterfactualValidationCount = 0;
   let counterfactualScoreGapTotal = 0;
   let counterfactualScoreGapCount = 0;
   const updates: PolicyGradientUpdate[] = [];
@@ -2273,6 +2310,36 @@ export function trainPolicyGradientFromRollouts(
           counterfactualScoreGapSkippedCount += 1;
           return;
         }
+        const validation =
+          options.counterfactualTrainingMode !== "policy_gradient"
+            ? getCounterfactualValidationResult(
+                transition,
+                result,
+                policy,
+                `${scanSeed}:validation:${episode}:${transitionIndex}`,
+                options.counterfactualValidationRolloutCount,
+                options.commonRandom,
+                options.counterfactualRolloutMoves,
+                options.counterfactualScoreRewardWeight,
+                options.counterfactualPounceRewardWeight,
+                useSelfPlayOpponents || useChampionOpponents
+                  ? learningPlayerIndices
+                  : [transition.playerIndex],
+                useChampionOpponents ? options.opponentPolicy : undefined
+              )
+            : null;
+        if (
+          options.counterfactualTrainingMode !== "policy_gradient" &&
+          !doesCounterfactualValidationPass(validation, {
+            validationRolloutCount: options.counterfactualValidationRolloutCount,
+            minValidationReturnGap:
+              options.counterfactualMinValidationReturnGap,
+            minValidationWins: options.counterfactualMinValidationWins,
+          })
+        ) {
+          counterfactualValidationSkippedCount += 1;
+          return;
+        }
         if (options.counterfactualTrainingMode !== "policy_gradient") {
           counterfactualSupervisedLabels.push({
             example: createCounterfactualSupervisedExample(
@@ -2284,6 +2351,8 @@ export function trainPolicyGradientFromRollouts(
             returnGap: Math.abs(counterfactualGap),
             candidateCount: result.candidates.length,
             behaviorWinRate: result.behaviorWinRate,
+            validationReturnGap: validation?.returnGap ?? null,
+            validationWinRate: validation?.winRate ?? null,
             scoreGap,
             movePair,
           });
@@ -2366,6 +2435,11 @@ export function trainPolicyGradientFromRollouts(
     counterfactualReturnGapTotal += label.returnGap;
     counterfactualCandidateCountTotal += label.candidateCount;
     counterfactualBehaviorWinRateTotal += label.behaviorWinRate;
+    if (label.validationReturnGap != null && label.validationWinRate != null) {
+      counterfactualValidationReturnGapTotal += label.validationReturnGap;
+      counterfactualValidationWinRateTotal += label.validationWinRate;
+      counterfactualValidationCount += 1;
+    }
     if (label.scoreGap != null) {
       counterfactualScoreGapTotal += label.scoreGap;
       counterfactualScoreGapCount += 1;
@@ -2495,6 +2569,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualBehaviorMoveTypeSkippedCount,
     counterfactualMoveTypeMismatchSkippedCount,
     counterfactualMoveTypeMatchSkippedCount,
+    counterfactualValidationSkippedCount,
     counterfactualScoreReturnGapSkippedCount,
     counterfactualPounceProgressGapSkippedCount,
     counterfactualFeatureTieSkippedCount,
@@ -2511,6 +2586,15 @@ export function trainPolicyGradientFromRollouts(
       counterfactualUpdateCount === 0
         ? 0
         : counterfactualBehaviorWinRateTotal / counterfactualUpdateCount,
+    averageCounterfactualValidationReturnGap:
+      counterfactualValidationCount === 0
+        ? 0
+        : counterfactualValidationReturnGapTotal /
+          counterfactualValidationCount,
+    averageCounterfactualValidationWinRate:
+      counterfactualValidationCount === 0
+        ? 0
+        : counterfactualValidationWinRateTotal / counterfactualValidationCount,
     counterfactualAveragePairWeight: advantageStats.averagePairWeight,
     counterfactualAnchorExamples: advantageStats.anchorExamples,
     counterfactualAnchorUpdates: advantageStats.anchorUpdates,
@@ -2570,6 +2654,9 @@ export function collectCounterfactualRlLabelAudit(
     counterfactualRequireSameMoveType: boolean;
     counterfactualRequireDifferentMoveType: boolean;
     counterfactualStopAfterLabels: number;
+    counterfactualValidationRolloutCount: number;
+    counterfactualMinValidationReturnGap: number;
+    counterfactualMinValidationWins: number;
     counterfactualScoreRewardWeight: number;
     counterfactualPounceRewardWeight: number;
     counterfactualMinScoreReturnGap: number;
@@ -2602,6 +2689,7 @@ export function collectCounterfactualRlLabelAudit(
   let behaviorMoveTypeSkippedCount = 0;
   let moveTypeMismatchSkippedCount = 0;
   let moveTypeMatchSkippedCount = 0;
+  let validationSkippedCount = 0;
   let scoreReturnGapSkippedCount = 0;
   let pounceProgressGapSkippedCount = 0;
   let featureTieSkippedCount = 0;
@@ -2611,6 +2699,9 @@ export function collectCounterfactualRlLabelAudit(
   let counterfactualReturnGapTotal = 0;
   let counterfactualCandidateCountTotal = 0;
   let counterfactualBehaviorWinRateTotal = 0;
+  let counterfactualValidationReturnGapTotal = 0;
+  let counterfactualValidationWinRateTotal = 0;
+  let counterfactualValidationCount = 0;
   let counterfactualScoreGapTotal = 0;
   let counterfactualScoreGapCount = 0;
   let counterfactualScannedEpisodes = 0;
@@ -2946,20 +3037,51 @@ export function collectCounterfactualRlLabelAudit(
         scoreGapSkippedCount += 1;
         return;
       }
+      const validation =
+        options.counterfactualTrainingMode !== "policy_gradient"
+          ? getCounterfactualValidationResult(
+              transition,
+              result,
+              policy,
+              `${scanSeed}:validation:${episode}:${transitionIndex}`,
+              options.counterfactualValidationRolloutCount,
+              options.commonRandom,
+              options.counterfactualRolloutMoves,
+              options.counterfactualScoreRewardWeight,
+              options.counterfactualPounceRewardWeight,
+              useSelfPlayOpponents || useChampionOpponents
+                ? learningPlayerIndices
+                : [transition.playerIndex],
+              useChampionOpponents ? options.opponentPolicy : undefined
+            )
+          : null;
+      if (
+        options.counterfactualTrainingMode !== "policy_gradient" &&
+        !doesCounterfactualValidationPass(validation, {
+          validationRolloutCount: options.counterfactualValidationRolloutCount,
+          minValidationReturnGap: options.counterfactualMinValidationReturnGap,
+          minValidationWins: options.counterfactualMinValidationWins,
+        })
+      ) {
+        validationSkippedCount += 1;
+        return;
+      }
 
-        counterfactualSupervisedLabels.push({
-          example: createCounterfactualSupervisedExample(
-            transition,
-            result,
-            scanIndex,
-            transitionIndex
-          ),
-          returnGap: Math.abs(counterfactualGap),
-          candidateCount: result.candidates.length,
-          behaviorWinRate: result.behaviorWinRate,
-          scoreGap,
-          movePair,
-        });
+      counterfactualSupervisedLabels.push({
+        example: createCounterfactualSupervisedExample(
+          transition,
+          result,
+          scanIndex,
+          transitionIndex
+        ),
+        returnGap: Math.abs(counterfactualGap),
+        candidateCount: result.candidates.length,
+        behaviorWinRate: result.behaviorWinRate,
+        validationReturnGap: validation?.returnGap ?? null,
+        validationWinRate: validation?.winRate ?? null,
+        scoreGap,
+        movePair,
+      });
     });
 
     counterfactualScannedEpisodes += 1;
@@ -2998,6 +3120,11 @@ export function collectCounterfactualRlLabelAudit(
     counterfactualReturnGapTotal += label.returnGap;
     counterfactualCandidateCountTotal += label.candidateCount;
     counterfactualBehaviorWinRateTotal += label.behaviorWinRate;
+    if (label.validationReturnGap != null && label.validationWinRate != null) {
+      counterfactualValidationReturnGapTotal += label.validationReturnGap;
+      counterfactualValidationWinRateTotal += label.validationWinRate;
+      counterfactualValidationCount += 1;
+    }
     if (label.scoreGap != null) {
       counterfactualScoreGapTotal += label.scoreGap;
       counterfactualScoreGapCount += 1;
@@ -3028,6 +3155,7 @@ export function collectCounterfactualRlLabelAudit(
     behaviorMoveTypeSkippedCount,
     moveTypeMismatchSkippedCount,
     moveTypeMatchSkippedCount,
+    validationSkippedCount,
     scoreReturnGapSkippedCount,
     pounceProgressGapSkippedCount,
     featureTieSkippedCount,
@@ -3051,6 +3179,15 @@ export function collectCounterfactualRlLabelAudit(
       examples.length === 0
         ? 0
         : counterfactualBehaviorWinRateTotal / examples.length,
+    averageCounterfactualValidationReturnGap:
+      counterfactualValidationCount === 0
+        ? 0
+        : counterfactualValidationReturnGapTotal /
+          counterfactualValidationCount,
+    averageCounterfactualValidationWinRate:
+      counterfactualValidationCount === 0
+        ? 0
+        : counterfactualValidationWinRateTotal / counterfactualValidationCount,
   };
 }
 
@@ -3947,6 +4084,8 @@ type CounterfactualMovePairSummaryAccumulator = {
   returnGap: CounterfactualNumericAccumulator;
   candidateCount: CounterfactualNumericAccumulator;
   behaviorWinRate: CounterfactualNumericAccumulator;
+  validationReturnGap: CounterfactualNumericAccumulator;
+  validationWinRate: CounterfactualNumericAccumulator;
   policyScoreGap: CounterfactualNumericAccumulator;
   objectiveGapVsBehavior: CounterfactualNumericAccumulator;
   pointDifferentialGapVsBehavior: CounterfactualNumericAccumulator;
@@ -3977,6 +4116,14 @@ function summarizeCounterfactualMovePairLabels(
     addCounterfactualNumericValue(
       accumulator.behaviorWinRate,
       label.behaviorWinRate
+    );
+    addCounterfactualNumericValue(
+      accumulator.validationReturnGap,
+      label.validationReturnGap
+    );
+    addCounterfactualNumericValue(
+      accumulator.validationWinRate,
+      label.validationWinRate
     );
     addCounterfactualNumericValue(accumulator.policyScoreGap, label.scoreGap);
 
@@ -4030,6 +4177,12 @@ function summarizeCounterfactualMovePairLabels(
       behaviorWinRate: summarizeCounterfactualNumericAccumulator(
         accumulator.behaviorWinRate
       ),
+      validationReturnGap: summarizeCounterfactualNumericAccumulator(
+        accumulator.validationReturnGap
+      ),
+      validationWinRate: summarizeCounterfactualNumericAccumulator(
+        accumulator.validationWinRate
+      ),
       policyScoreGap: summarizeCounterfactualNumericAccumulator(
         accumulator.policyScoreGap
       ),
@@ -4068,6 +4221,8 @@ function getCounterfactualMovePairSummaryAccumulator(
       returnGap: createCounterfactualNumericAccumulator(),
       candidateCount: createCounterfactualNumericAccumulator(),
       behaviorWinRate: createCounterfactualNumericAccumulator(),
+      validationReturnGap: createCounterfactualNumericAccumulator(),
+      validationWinRate: createCounterfactualNumericAccumulator(),
       policyScoreGap: createCounterfactualNumericAccumulator(),
       objectiveGapVsBehavior: createCounterfactualNumericAccumulator(),
       pointDifferentialGapVsBehavior: createCounterfactualNumericAccumulator(),
@@ -4525,56 +4680,22 @@ function getCounterfactualTransitionResult(
     return null;
   }
 
-  const safeScoreWeight = Number.isFinite(scoreRewardWeight)
-    ? scoreRewardWeight
-    : 0;
-  const safePounceWeight = Number.isFinite(pounceRewardWeight)
-    ? pounceRewardWeight
-    : 0;
-  const candidates = candidateIndices.map((candidateIndex, index) => {
-    const candidate = transition.candidates[candidateIndex];
-    const outcomes = getCounterfactualPolicyOutcomes(
-      transition.board!,
-      transition.playerIndex,
-      candidate.move,
-      getCounterfactualSeeds(seed, index, rolloutCount, commonRandom),
-      maxMoves,
+  const candidates = candidateIndices.map((candidateIndex, index) =>
+    createCounterfactualCandidateReturn(
+      transition,
       policy,
+      seed,
+      rolloutCount,
+      commonRandom,
+      maxMoves,
+      scoreRewardWeight,
+      pounceRewardWeight,
       continuationNeuralPlayerIndices,
-      opponentPolicy
-    );
-    const pointDifferentialReturns = outcomes.map(
-      (outcome) => outcome.pointDifferential - transition.pointDifferentialBefore
-    );
-    const scoreReturns = outcomes.map(
-      (outcome) => outcome.score - transition.scoreBefore
-    );
-    const pounceProgressReturns = outcomes.map(
-      (outcome) =>
-        transition.pounceRemainingBefore - outcome.pounceRemaining
-    );
-    const objectiveReturns = pointDifferentialReturns.map(
-      (value, outcomeIndex) =>
-        value +
-        safeScoreWeight * (scoreReturns[outcomeIndex] ?? 0) +
-        safePounceWeight * (pounceProgressReturns[outcomeIndex] ?? 0)
-    );
-    const rolloutPointDifferentialReturn = meanNumbers(
-      pointDifferentialReturns
-    );
-    const rolloutScoreReturn = meanNumbers(scoreReturns);
-    const rolloutPounceProgressReturn = meanNumbers(pounceProgressReturns);
-    const rolloutObjectiveReturn = meanNumbers(objectiveReturns);
-    return {
-      candidate,
+      opponentPolicy,
       candidateIndex,
-      rolloutPointDifferentialReturn,
-      rolloutScoreReturn,
-      rolloutPounceProgressReturn,
-      rolloutObjectiveReturn,
-      rolloutObjectiveReturns: objectiveReturns,
-    };
-  });
+      index
+    )
+  );
   const selectedCandidate = candidates.find(
     (candidate) => candidate.candidateIndex === transition.selectedCandidateIndex
   );
@@ -4632,6 +4753,175 @@ function getCounterfactualTransitionResult(
     behaviorWinCount: behaviorWinStats.winCount,
     behaviorComparisonCount: behaviorWinStats.comparisonCount,
   };
+}
+
+function createCounterfactualCandidateReturn(
+  transition: RolloutTransition,
+  policy: NeuralActionRankingPolicy,
+  seed: string,
+  rolloutCount: number,
+  commonRandom: boolean,
+  maxMoves: number,
+  scoreRewardWeight: number,
+  pounceRewardWeight: number,
+  continuationNeuralPlayerIndices: readonly number[],
+  opponentPolicy: NeuralActionRankingPolicy | undefined,
+  candidateIndex: number,
+  seedCandidateIndex: number
+): CounterfactualCandidateReturn {
+  const candidate = transition.candidates[candidateIndex];
+  if (!transition.board || !candidate) {
+    throw new Error("Cannot evaluate missing counterfactual candidate.");
+  }
+
+  const safeScoreWeight = Number.isFinite(scoreRewardWeight)
+    ? scoreRewardWeight
+    : 0;
+  const safePounceWeight = Number.isFinite(pounceRewardWeight)
+    ? pounceRewardWeight
+    : 0;
+  const outcomes = getCounterfactualPolicyOutcomes(
+    transition.board,
+    transition.playerIndex,
+    candidate.move,
+    getCounterfactualSeeds(
+      seed,
+      seedCandidateIndex,
+      rolloutCount,
+      commonRandom
+    ),
+    maxMoves,
+    policy,
+    continuationNeuralPlayerIndices,
+    opponentPolicy
+  );
+  const pointDifferentialReturns = outcomes.map(
+    (outcome) => outcome.pointDifferential - transition.pointDifferentialBefore
+  );
+  const scoreReturns = outcomes.map(
+    (outcome) => outcome.score - transition.scoreBefore
+  );
+  const pounceProgressReturns = outcomes.map(
+    (outcome) => transition.pounceRemainingBefore - outcome.pounceRemaining
+  );
+  const objectiveReturns = pointDifferentialReturns.map(
+    (value, outcomeIndex) =>
+      value +
+      safeScoreWeight * (scoreReturns[outcomeIndex] ?? 0) +
+      safePounceWeight * (pounceProgressReturns[outcomeIndex] ?? 0)
+  );
+  return {
+    candidate,
+    candidateIndex,
+    rolloutPointDifferentialReturn: meanNumbers(pointDifferentialReturns),
+    rolloutScoreReturn: meanNumbers(scoreReturns),
+    rolloutPounceProgressReturn: meanNumbers(pounceProgressReturns),
+    rolloutObjectiveReturn: meanNumbers(objectiveReturns),
+    rolloutObjectiveReturns: objectiveReturns,
+  };
+}
+
+function getCounterfactualValidationResult(
+  transition: RolloutTransition,
+  result: CounterfactualTransitionResult,
+  policy: NeuralActionRankingPolicy,
+  seed: string,
+  rolloutCount: number,
+  commonRandom: boolean,
+  maxMoves: number,
+  scoreRewardWeight: number,
+  pounceRewardWeight: number,
+  continuationNeuralPlayerIndices: readonly number[],
+  opponentPolicy?: NeuralActionRankingPolicy
+): CounterfactualValidationResult | null {
+  const safeRolloutCount = Math.max(0, Math.floor(rolloutCount));
+  if (safeRolloutCount <= 0 || !transition.board) {
+    return null;
+  }
+  const winner = getCounterfactualBestCandidate(result);
+  const behavior = getCounterfactualBehaviorCandidate(transition, result);
+  if (!behavior) {
+    return null;
+  }
+
+  const validationWinner = createCounterfactualCandidateReturn(
+    transition,
+    policy,
+    seed,
+    safeRolloutCount,
+    commonRandom,
+    maxMoves,
+    scoreRewardWeight,
+    pounceRewardWeight,
+    continuationNeuralPlayerIndices,
+    opponentPolicy,
+    winner.candidateIndex,
+    0
+  );
+  const validationBehavior = createCounterfactualCandidateReturn(
+    transition,
+    policy,
+    seed,
+    safeRolloutCount,
+    commonRandom,
+    maxMoves,
+    scoreRewardWeight,
+    pounceRewardWeight,
+    continuationNeuralPlayerIndices,
+    opponentPolicy,
+    behavior.candidateIndex,
+    1
+  );
+  const winStats = getCounterfactualReturnGapWinStats(
+    validationWinner,
+    validationBehavior
+  );
+  return {
+    returnGap:
+      validationWinner.rolloutObjectiveReturn -
+      validationBehavior.rolloutObjectiveReturn,
+    returnGapStandardError: getCounterfactualReturnGapStandardError(
+      validationWinner,
+      validationBehavior
+    ),
+    pointDifferentialGap:
+      validationWinner.rolloutPointDifferentialReturn -
+      validationBehavior.rolloutPointDifferentialReturn,
+    scoreGap:
+      validationWinner.rolloutScoreReturn -
+      validationBehavior.rolloutScoreReturn,
+    pounceProgressGap:
+      validationWinner.rolloutPounceProgressReturn -
+      validationBehavior.rolloutPounceProgressReturn,
+    winRate: winStats.winRate,
+    winCount: winStats.winCount,
+    comparisonCount: winStats.comparisonCount,
+  };
+}
+
+function doesCounterfactualValidationPass(
+  validation: CounterfactualValidationResult | null,
+  options: {
+    validationRolloutCount: number;
+    minValidationReturnGap: number;
+    minValidationWins: number;
+  }
+): boolean {
+  const safeRolloutCount = Math.max(0, Math.floor(options.validationRolloutCount));
+  if (safeRolloutCount <= 0) {
+    return true;
+  }
+  if (!validation) {
+    return false;
+  }
+  if (
+    validation.returnGap <
+    Math.max(0, options.minValidationReturnGap)
+  ) {
+    return false;
+  }
+  const minWins = getSafeWinCountThreshold(options.minValidationWins);
+  return minWins <= 0 || validation.winCount >= minWins;
 }
 
 function getSafeWinRateThreshold(value: number): number {

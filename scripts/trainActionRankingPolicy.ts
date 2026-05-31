@@ -231,6 +231,18 @@ const options = {
     "RL_COUNTERFACTUAL_STOP_AFTER_LABELS",
     0
   ),
+  rlCounterfactualValidationRolloutCount: readIntegerEnv(
+    "RL_COUNTERFACTUAL_VALIDATION_ROLLOUTS",
+    0
+  ),
+  rlCounterfactualMinValidationReturnGap: readNumberEnv(
+    "RL_COUNTERFACTUAL_MIN_VALIDATION_RETURN_GAP",
+    0
+  ),
+  rlCounterfactualMinValidationWins: readIntegerEnv(
+    "RL_COUNTERFACTUAL_MIN_VALIDATION_WINS",
+    0
+  ),
   rlCounterfactualScoreRewardWeight: readNumberEnv(
     "RL_COUNTERFACTUAL_SCORE_WEIGHT",
     0

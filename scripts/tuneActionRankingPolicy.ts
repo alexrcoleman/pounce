@@ -227,6 +227,18 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       "RL_COUNTERFACTUAL_REQUIRE_DIFFERENT_MOVE_TYPE",
       false
     ),
+    rlCounterfactualValidationRolloutCount: readIntegerEnv(
+      "RL_COUNTERFACTUAL_VALIDATION_ROLLOUTS",
+      0
+    ),
+    rlCounterfactualMinValidationReturnGap: readNumberEnv(
+      "RL_COUNTERFACTUAL_MIN_VALIDATION_RETURN_GAP",
+      0
+    ),
+    rlCounterfactualMinValidationWins: readIntegerEnv(
+      "RL_COUNTERFACTUAL_MIN_VALIDATION_WINS",
+      0
+    ),
     rlCounterfactualScoreRewardWeight: readNumberEnv(
       "RL_COUNTERFACTUAL_SCORE_WEIGHT",
       0

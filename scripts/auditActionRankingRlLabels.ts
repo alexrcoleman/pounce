@@ -185,6 +185,18 @@ const options = {
     "RL_COUNTERFACTUAL_STOP_AFTER_LABELS",
     0
   ),
+  counterfactualValidationRolloutCount: readIntegerEnv(
+    "RL_COUNTERFACTUAL_VALIDATION_ROLLOUTS",
+    0
+  ),
+  counterfactualMinValidationReturnGap: readNumberEnv(
+    "RL_COUNTERFACTUAL_MIN_VALIDATION_RETURN_GAP",
+    0
+  ),
+  counterfactualMinValidationWins: readIntegerEnv(
+    "RL_COUNTERFACTUAL_MIN_VALIDATION_WINS",
+    0
+  ),
   counterfactualScoreRewardWeight: readNumberEnv(
     "RL_COUNTERFACTUAL_SCORE_WEIGHT",
     0
@@ -267,6 +279,7 @@ console.log(
         behaviorMoveTypeSkippedCount: audit.behaviorMoveTypeSkippedCount,
         moveTypeMismatchSkippedCount: audit.moveTypeMismatchSkippedCount,
         moveTypeMatchSkippedCount: audit.moveTypeMatchSkippedCount,
+        validationSkippedCount: audit.validationSkippedCount,
         scoreReturnGapSkippedCount: audit.scoreReturnGapSkippedCount,
         pounceProgressGapSkippedCount: audit.pounceProgressGapSkippedCount,
         featureTieSkippedCount: audit.featureTieSkippedCount,
@@ -285,6 +298,10 @@ console.log(
           audit.averageCounterfactualScoreGap,
         averageCounterfactualBehaviorWinRate:
           audit.averageCounterfactualBehaviorWinRate,
+        averageCounterfactualValidationReturnGap:
+          audit.averageCounterfactualValidationReturnGap,
+        averageCounterfactualValidationWinRate:
+          audit.averageCounterfactualValidationWinRate,
       },
       diagnostics,
     },
