@@ -30,6 +30,7 @@ Useful training knobs:
 - `MODEL_IN=...\candidate.json BASELINE_MODEL=...\baseline.json npm run action-ranking:report` to summarize model size/features, fixed-heuristic strength, paired baseline comparison, and neural self-play comparison in one output
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare` to compare two models on paired deals/seats
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare-self-play` to compare two models sharing the same self-play table
+- `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare-by-style` to compare two models against each fixed heuristic style
 - `STYLE_A="Alex 75%" STYLE_B="Alex 66%" OPPONENTS="Mom" GAMES=8192 npm run action-ranking:compare-styles` to compare fixed heuristic styles with paired deal-level confidence intervals
 - `PLAYERS=3 GAMES=512 npm run action-ranking:tournament` to run fixed-style heuristic tournaments; add `MODEL_SPECS="label=path;other=path"` to include neural models
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:diagnose` to compare top-ranked actions on sampled teacher states
@@ -42,6 +43,11 @@ Useful training knobs:
 - `EVAL_RUNS=4` or `EVAL_SEEDS=seedA,seedB` to evaluate saved weights across multiple seeds
 - `EVAL_GAMES=0` can skip the small built-in evaluation in `action-ranking:train` when running quick training smoke checks
 - `POUNCE_NEURAL_AI_MODEL=...\model.json npm run dev` to run Socket.IO bots with saved weights
+
+For exact one-off counterfactual RL recipes, prefer `action-ranking:train` with
+`RL_ONLY=true`. `action-ranking:tune-rl` is a sweeper: unless `RL_TUNE_RECIPES`
+is supplied, it runs its built-in recipe set rather than treating every `RL_*`
+environment variable as a single direct recipe.
 
 Evaluation output includes same-seat teacher baseline metrics plus behavior
 diagnostics such as decision count, center/solitaire/cycle move rates, pounce
@@ -1536,6 +1542,21 @@ with model-A wins at `58.5%` versus `36.6%` for the baseline. A tiny 192-game
 neural self-play smoke was positive (`+0.259`) but too small for promotion. This
 candidate is promising enough for a larger self-play/style gate, but the
 low-anchor setting should still be treated as exploratory until that gate passes.
+
+The larger gates rejected that early stock-tempo candidate. Its style-safety run
+found a meaningful regression against `Mom` (`-0.118` baseline-adjusted point
+differential with a 95% CI of roughly `-0.166` to `-0.070`). Adding a symmetric
+connector/cycle anchor fixed the style-regression shape and looked positive in a
+small paired/self-play gate, but the 3,072-game confirmation erased the signal
+(`-0.001 +/- 0.043`). A multiseed low-anchor version accepted eight strict
+labels and was cleaner by style, yet its 3,072-game confirmation was still
+statistically unclear (`+0.037 +/- 0.090`, raw score nearly flat). Expanding the
+strict cross-type budget to 13 accepted `cycle>c2s` labels flipped every label
+state but also pushed the margin too hard; its first 1,536-game gate stayed
+noisy (`+0.049 +/- 0.155`) with slightly negative raw score. The takeaway is
+that the stock-delay label family is real, but not yet robust enough to promote:
+the next useful work is either better label reliability/horizon selection or a
+tighter trust-region that changes fewer unrelated deck/solitaire priorities.
 
 ## Deploying
 

@@ -14,6 +14,7 @@
     "action-ranking:report": "ts-node --transpile-only scripts/reportActionRankingPolicy.ts",
     "action-ranking:compare": "ts-node --transpile-only scripts/compareActionRankingPolicies.ts",
     "action-ranking:compare-self-play": "ts-node --transpile-only scripts/compareActionRankingPoliciesSelfPlay.ts",
+    "action-ranking:compare-by-style": "ts-node --transpile-only scripts/compareActionRankingPoliciesByStyle.ts",
     "action-ranking:compare-styles": "ts-node --transpile-only scripts/compareBasicAIStyles.ts",
     "action-ranking:tournament": "ts-node --transpile-only scripts/runActionRankingTournament.ts",
     "action-ranking:diagnose": "ts-node --transpile-only scripts/diagnoseActionRankingPolicyDifferences.ts",
