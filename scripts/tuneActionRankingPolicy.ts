@@ -214,6 +214,10 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       "RL_COUNTERFACTUAL_PAIRWISE_FEATURE_MODE",
       "raw"
     ),
+    rlCounterfactualPairwiseStopMargin: readNumberEnv(
+      "RL_COUNTERFACTUAL_PAIRWISE_STOP_MARGIN",
+      -1
+    ),
     rlCounterfactualMaxScoreGap: readNumberEnv(
       "RL_COUNTERFACTUAL_MAX_SCORE_GAP",
       0

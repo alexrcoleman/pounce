@@ -140,6 +140,11 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "center.opponentFollowPressureAfter",
   "center.opponentPounceFollowPressureAfter",
   "center.opponentSameNowPressure",
+  "cycle.ownPounceCount",
+  "cycle.ownCurrentPoints",
+  "cycle.ownPointDifferential",
+  "cycle.opponentMinPounceCount",
+  "cycle.opponentMaxPouncePressure",
 ] as const;
 
 export type ActionRankingFeatureName =
@@ -411,6 +416,13 @@ function buildActionRankingFeatures(
   const pressureFeatures = getVisiblePressureFeatures(board, playerIndex);
   const solitaireContext = getOwnSolitaireContextFeatures(board, player);
   const ownPounceCard = player ? peek(player.pounceDeck) : undefined;
+  const ownCurrentPoints = player
+    ? getCurrentPointsFromCards(player)
+    : undefined;
+  const ownPointDifferential = player
+    ? getPointDifferential(board, playerIndex)
+    : undefined;
+  const cycleContextActive = move.type === "cycle" || move.type === "flip_deck";
   const botIndex = player
     ? board.players
         .filter((candidate) => candidate.socketId == null)
@@ -471,11 +483,8 @@ function buildActionRankingFeatures(
     normalize(cycleShape.stockFractionAfter, 1),
     normalize(cycleShape.cardsAdvanced, 3),
     normalize(player?.stacks.filter((stack) => stack.length === 0).length, 4),
-    normalizeSigned(player ? getCurrentPointsFromCards(player) : undefined, 52),
-    normalizeSigned(
-      player ? getPointDifferential(board, playerIndex) : undefined,
-      52
-    ),
+    normalizeSigned(ownCurrentPoints, 52),
+    normalizeSigned(ownPointDifferential, 52),
     normalize(board.ticksSinceMove, 30),
     normalizeSigned(immediatePointDelta, 3),
     normalizeSigned(immediatePointDifferentialDelta, 3),
@@ -563,6 +572,15 @@ function buildActionRankingFeatures(
     normalize(centerFollow.opponentFollowPressureAfter, 1),
     normalize(centerFollow.opponentPounceFollowPressureAfter, 1),
     normalize(centerFollow.opponentSameNowPressure, 1),
+    cycleContextActive ? normalize(player?.pounceDeck.length, 13) : 0,
+    cycleContextActive ? normalizeSigned(ownCurrentPoints, 52) : 0,
+    cycleContextActive ? normalizeSigned(ownPointDifferential, 52) : 0,
+    cycleContextActive
+      ? normalize(pressureFeatures.opponentMinPounceCount, 13)
+      : 0,
+    cycleContextActive
+      ? normalize(pressureFeatures.opponentMaxPouncePressure, 1)
+      : 0,
   ];
 }
 

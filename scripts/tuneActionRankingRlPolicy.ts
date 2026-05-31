@@ -499,6 +499,10 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
       "RL_COUNTERFACTUAL_PAIRWISE_FEATURE_MODE",
       "raw"
     ),
+    rlCounterfactualPairwiseStopMargin: readNumberEnv(
+      "RL_COUNTERFACTUAL_PAIRWISE_STOP_MARGIN",
+      -1
+    ),
     rlCounterfactualMaxTransitionsPerEpisode: readIntegerEnv(
       "RL_COUNTERFACTUAL_MAX_TRANSITIONS_PER_EPISODE",
       0

@@ -79,6 +79,7 @@ export type PreferenceTrainingOptions = ImitationTrainingOptions & {
   pairWeightScale?: number;
   pairWeightMax?: number;
   featureMode?: PairwiseFeatureMode;
+  stopMargin?: number;
 };
 
 export type ValueRegressionTrainingOptions = ImitationTrainingOptions & {
@@ -385,6 +386,8 @@ export class NeuralActionRankingPolicy {
     );
     const pairWeightMax = Math.max(0, options.pairWeightMax ?? 1);
     const featureMode = options.featureMode ?? "raw";
+    const stopMargin = options.stopMargin ?? -1;
+    const hasStopMargin = Number.isFinite(stopMargin) && stopMargin >= 0;
     const random = createSeededRandom(options.shuffleSeed ?? "preferences");
     let totalLoss = 0;
     let totalExamples = 0;
@@ -423,6 +426,12 @@ export class NeuralActionRankingPolicy {
           const winnerScore = this.scoreFeatures(winner.features);
           const loserScore = this.scoreFeatures(loser.features);
           const margin = (winnerScore - loserScore) / temperature;
+          if (hasStopMargin && margin >= stopMargin) {
+            if (winnerScore > loserScore) {
+              correct += 1;
+            }
+            return;
+          }
           const marginError = targetMargin - margin;
           const mistakeProbability = sigmoid(marginError);
           totalLoss += pairWeight * softplus(marginError);

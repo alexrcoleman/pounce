@@ -75,6 +75,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualPairwiseWeightScale?: number;
   rlCounterfactualPairwiseMaxWeight?: number;
   rlCounterfactualPairwiseFeatureMode?: PairwiseFeatureMode;
+  rlCounterfactualPairwiseStopMargin?: number;
   rlCounterfactualMaxTransitionsPerEpisode?: number;
   rlCounterfactualMaxScoreGap?: number;
   rlCounterfactualScoreGapBudget?: number;
@@ -667,6 +668,8 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualPairwiseMaxWeight ?? 1,
     counterfactualPairwiseFeatureMode:
       options.rlCounterfactualPairwiseFeatureMode ?? "raw",
+    counterfactualPairwiseStopMargin:
+      options.rlCounterfactualPairwiseStopMargin ?? -1,
     counterfactualMaxTransitionsPerEpisode:
       options.rlCounterfactualMaxTransitionsPerEpisode ?? 0,
     counterfactualMaxScoreGap: options.rlCounterfactualMaxScoreGap ?? 0,
@@ -1803,6 +1806,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualPairwiseWeightScale: number;
     counterfactualPairwiseMaxWeight: number;
     counterfactualPairwiseFeatureMode: PairwiseFeatureMode;
+    counterfactualPairwiseStopMargin: number;
     counterfactualMaxTransitionsPerEpisode: number;
     counterfactualMaxScoreGap: number;
     counterfactualScoreGapBudget: number;
@@ -2464,6 +2468,7 @@ export function trainPolicyGradientFromRollouts(
           pairwiseWeightScale: options.counterfactualPairwiseWeightScale,
           pairwiseMaxWeight: options.counterfactualPairwiseMaxWeight,
           pairwiseFeatureMode: options.counterfactualPairwiseFeatureMode,
+          pairwiseStopMargin: options.counterfactualPairwiseStopMargin,
           anchorExamples: counterfactualAnchorExamples,
           anchorWeight: options.counterfactualAnchorWeight,
           anchorMaxExamples: options.counterfactualAnchorMaxExamples,
@@ -3277,6 +3282,7 @@ function trainCounterfactualSupervisedBatch(
     pairwiseWeightScale: number;
     pairwiseMaxWeight: number;
     pairwiseFeatureMode: PairwiseFeatureMode;
+    pairwiseStopMargin: number;
     anchorExamples: ActionRankingImitationExample[];
     anchorWeight: number;
     anchorMaxExamples: number;
@@ -3342,6 +3348,7 @@ function trainCounterfactualSupervisedBatch(
           pairWeightScale: options.pairwiseWeightScale,
           pairWeightMax: options.pairwiseMaxWeight,
           featureMode: options.pairwiseFeatureMode,
+          stopMargin: options.pairwiseStopMargin,
           trainableLayers: options.trainableLayers,
           shuffleSeed: options.shuffleSeed,
         });

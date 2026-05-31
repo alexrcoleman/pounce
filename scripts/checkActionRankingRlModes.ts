@@ -1437,6 +1437,10 @@ function assertTacticalFeatureSurface() {
     1,
     "deck context should expose the stock fraction to every action"
   );
+  assert.ok(
+    getFeature(stockLookaheadCycle, "cycle.ownPounceCount") > 0,
+    "cycle context should expose pounce count only on cycle-like actions"
+  );
 
   const centerPressureBoard = createBoard(2);
   centerPressureBoard.isActive = true;
@@ -1516,6 +1520,11 @@ function assertTacticalFeatureSurface() {
     getFeature(centerPressureCandidate, "opponent.maxPouncePressure") > 0,
     "visible pressure should expose low-pounce opponent urgency"
   );
+  assert.equal(
+    getFeature(centerPressureCandidate, "cycle.ownPounceCount"),
+    0,
+    "cycle context should stay inactive on non-cycle actions"
+  );
 
   return {
     featureCount: ACTION_RANKING_FEATURE_NAMES.length,
@@ -1535,6 +1544,7 @@ function assertTacticalFeatureSurface() {
       cycleCandidate,
       "opponent.pounceCenterPlayableCount"
     ),
+    cycleOwnPounceCount: getFeature(stockLookaheadCycle, "cycle.ownPounceCount"),
   };
 }
 
