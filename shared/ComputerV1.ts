@@ -26,6 +26,7 @@ export type StrategySettings = {
   solitaireFromDeck?: boolean;
   solitaireFromDeckOnlyIfHelp?: boolean;
   solitaireFromDeckOnlyIfHelpV2?: boolean;
+  solitaireOnlyIfStuck?: boolean;
   ensureMoveSoon?: boolean;
   solitaireSwapUnblocker?: boolean;
   deckToCenterOnlyIfHelp?: boolean;
@@ -39,6 +40,7 @@ export type AIStrategyProfile = {
   lean: AIStrategyLean;
   summary: string;
   strategy: StrategySettings;
+  includeInDefaultRotation?: boolean;
 };
 
 type CardToCenterMove = Extract<Move, { type: "c2c" }>;
@@ -126,6 +128,9 @@ class AIStrategy {
     if (!pounceCard) {
       return;
     }
+    if (!this.getCanPlaySolitaireSetup()) {
+      return;
+    }
     const pounceToTuckIndex = !player.stacks.some((s) => s.length === 0)
       ? -1
       : player.stacks.findIndex(
@@ -165,6 +170,10 @@ class AIStrategy {
     player: PlayerState,
     boardState: BoardState
   ): Move | undefined {
+    if (!this.getCanPlaySolitaireSetup()) {
+      return;
+    }
+
     const solitairePlay = player.stacks
       .map((stack, fromIndex) => {
         const toIndex = player.stacks.findIndex((stack2) =>
@@ -245,6 +254,10 @@ class AIStrategy {
     return this.boardState.ticksSinceMove >= 30;
   }
 
+  private getCanPlaySolitaireSetup() {
+    return !this.settings.solitaireOnlyIfStuck || this.getShouldUnblock();
+  }
+
   private getDeckToSolitaireMove(
     player: PlayerState,
     boardState: BoardState
@@ -255,6 +268,9 @@ class AIStrategy {
     const solitaireFromDeckOnlyIfHelpV2 =
       this.settings.solitaireFromDeckOnlyIfHelpV2 ?? false;
     if (!solitaireFromDeck) {
+      return;
+    }
+    if (!this.getCanPlaySolitaireSetup()) {
       return;
     }
     // Play solitaire moves from deck too
@@ -660,6 +676,16 @@ const playerStyles: AIStrategyProfile[] = [
       ensureMoveSoon: true,
     },
   },
+  {
+    id: "no-solitaire-unless-stuck",
+    name: "No solitaire unless stuck",
+    lean: "center",
+    summary: "Avoids solitaire setup unless the board appears stuck.",
+    includeInDefaultRotation: false,
+    strategy: {
+      solitaireOnlyIfStuck: true,
+    },
+  },
   // Somewhat proven worse:
   // {
   //   name: "Safe-Solitaire",
@@ -681,7 +707,13 @@ export const defaultHumanAnalysisStrategyProfile = playerStyles[3];
 export function getAIPlayerStrategyProfileByBotIndex(
   botIndex: number
 ): AIStrategyProfile {
-  return playerStyles[Math.max(0, botIndex) % playerStyles.length];
+  const defaultPlayerStyles = playerStyles.filter(
+    (style) => style.includeInDefaultRotation !== false
+  );
+  return (
+    defaultPlayerStyles[Math.max(0, botIndex) % defaultPlayerStyles.length] ??
+    playerStyles[0]
+  );
 }
 
 export function getBasicAIStyleNames(): string[] {
@@ -710,7 +742,7 @@ export function getAIPlayerStrategyProfile(
 ): AIStrategyProfile {
   const player = boardState.players[playerIndex];
   if (!player) {
-    return;
+    return defaultHumanAnalysisStrategyProfile;
   }
   const botIndex = boardState.players
     .filter((p) => p.socketId == null)

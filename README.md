@@ -125,6 +125,14 @@ existing `player.index`/`player.botIndex` action features suspicious for mixed
 teacher imitation: they let the model learn seat-conditioned teacher styles,
 which is useful for cloning the mixed bot table but awkward for learning one
 portable stronger policy.
+The intentionally weak `No solitaire unless stuck` style is available for
+tournament diagnostics but is excluded from the normal rotating AI styles. A
+3-player all-distinct tournament with this sixth participant (`128` deals per
+matchup, `7,680` simulated rounds) put it far below the heuristic family:
+`2.08% +/- 0.23%` score-win share, `-18.996 +/- 0.139` average point
+differential, and only a `0.68%` pounce-out rate. This is a useful simulator
+sanity check: broad solitaire/center strategy choices do matter, even if the
+Alex threshold variants are clustered tightly.
 A first 118-input deck-context warmup from the 108-input solitaire-context
 checkpoint (`48` imitation deals, `2` epochs, `IMITATION_LR=0.005`) reached
 `92.97%` teacher accuracy and saved a `730 KB` model with 23,041 parameters. It
