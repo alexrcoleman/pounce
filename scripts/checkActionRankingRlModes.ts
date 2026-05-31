@@ -612,6 +612,33 @@ assert.ok(
   "move-pair exclusion should remove excluded pairs from accepted labels"
 );
 
+const sameMoveTypeFiltered = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:same-move-type-filtered",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualStateSource: "greedy",
+  rlUpdateScope: "all",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualMinReturnGap: 0,
+  rlCounterfactualRequirePolicyChange: true,
+  rlCounterfactualRequireSameMoveType: true,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.ok(
+  sameMoveTypeFiltered.reinforcement.counterfactualUpdateCount > 0 ||
+    sameMoveTypeFiltered.reinforcement
+      .counterfactualMoveTypeMismatchSkippedCount > 0,
+  "same-move-type filtering should either accept same-family labels or skip mismatched labels"
+);
+assert.ok(
+  Object.keys(
+    sameMoveTypeFiltered.reinforcement.counterfactualAcceptedMovePairCounts
+  ).every(isSameMoveTypePair),
+  "same-move-type filtering should only accept same-family move pairs"
+);
+
 const cappedScoreGapBudgetFiltered = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:capped-score-gap-budget-filtered",
@@ -714,6 +741,7 @@ console.log(
       scoreGapBudgetFiltered: summarize(scoreGapBudgetFiltered),
       movePairBudgetFiltered: summarize(movePairBudgetFiltered),
       movePairExcluded: summarize(movePairExcluded),
+      sameMoveTypeFiltered: summarize(sameMoveTypeFiltered),
       cappedScoreGapBudgetFiltered: summarize(cappedScoreGapBudgetFiltered),
       labelTargetStopped: summarize(labelTargetStopped),
       maxReturnGapFiltered: summarize(maxReturnGapFiltered),
@@ -782,6 +810,8 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.counterfactualMovePairBudgetSkippedCount,
     counterfactualMovePairExcludedSkippedCount:
       result.reinforcement.counterfactualMovePairExcludedSkippedCount,
+    counterfactualMoveTypeMismatchSkippedCount:
+      result.reinforcement.counterfactualMoveTypeMismatchSkippedCount,
     counterfactualFeatureTieSkippedCount:
       result.reinforcement.counterfactualFeatureTieSkippedCount,
     counterfactualConnectorCycleSkippedCount:
@@ -815,6 +845,15 @@ function summarize(result: NeuralTrainingResult) {
     averageRawAdvantage: result.reinforcement.averageRawAdvantage,
     rawAdvantageStdDev: result.reinforcement.rawAdvantageStdDev,
   };
+}
+
+function isSameMoveTypePair(movePair: string): boolean {
+  const [winnerType, behaviorType] = movePair.split(">");
+  return (
+    winnerType != null &&
+    behaviorType != null &&
+    winnerType.trim().toLowerCase() === behaviorType.trim().toLowerCase()
+  );
 }
 
 function assertLegacyFeatureExpansion() {

@@ -202,6 +202,10 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       "RL_COUNTERFACTUAL_MAX_SCORE_GAP",
       0
     ),
+    rlCounterfactualRequireSameMoveType: readBooleanEnv(
+      "RL_COUNTERFACTUAL_REQUIRE_SAME_MOVE_TYPE",
+      false
+    ),
     rlCounterfactualScoreRewardWeight: readNumberEnv(
       "RL_COUNTERFACTUAL_SCORE_WEIGHT",
       0

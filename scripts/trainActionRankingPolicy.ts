@@ -198,6 +198,10 @@ const options = {
     "RL_COUNTERFACTUAL_EXCLUDE_MOVE_PAIRS",
     []
   ),
+  rlCounterfactualRequireSameMoveType: readBooleanEnv(
+    "RL_COUNTERFACTUAL_REQUIRE_SAME_MOVE_TYPE",
+    false
+  ),
   rlCounterfactualStopAfterLabels: readIntegerEnv(
     "RL_COUNTERFACTUAL_STOP_AFTER_LABELS",
     0

@@ -106,6 +106,23 @@ labels and applied `12` pairwise updates, but produced zero label-state
 top-action flips and exact ties in paired, fixed-style, and self-play gates. The
 next useful lever is therefore update calibration or targeted deployed-state
 mining, not larger confirmation budgets for this exact recipe.
+A stronger calibrated retry from the same 130-input warmup confirmed the current
+failure mode. An all-layer `RL_LR=0.005`, `RL_UPDATE_EPOCHS=5`,
+return-gap-weighted pairwise recipe moved 2 of 8 accepted label states, but
+generalized into broad `cycle>c2s` drift and regressed by `-0.120` average point
+differential over 768 paired heuristic-seat games. Tracing found 131
+`cycle>c2s` first divergences averaging `-1.170` points. Adding
+`RL_COUNTERFACTUAL_REQUIRE_SAME_MOVE_TYPE=true` filtered that batch to
+same-family labels only: a 512-episode scan accepted 8 labels
+(`c2c>c2c:7`, `c2s>c2s:1`), skipped 17 move-type mismatches, changed 2 of 8
+label-state top actions, and measured essentially neutral against the warmup
+(`-0.030 +/- 0.044` over 768 games). A first-divergence trace found only 18
+divergences in those 768 games, mostly `c2c>c2c` ordering changes; the
+divergent games skewed negative (`-1.278` average point differential), so the
+remaining issue is noisy same-family ordering rather than runaway move-type
+priority drift. The guard prevents the obvious bad cross-type generalization,
+but the same-family label stream is still too sparse and local to promote by
+itself.
 Imitation training can now target a single fixed heuristic style with
 `IMITATION_TEACHER_STYLE="Alex 75%"`, and `action-ranking:imitation-by-style`
 reports top-action/equivalence/family agreement against each style. On the
@@ -707,6 +724,11 @@ immediately, or can play soon while also connecting to the player's
 pounce/solitaire shape. This is disabled by default and is intended for
 self-play recipes that otherwise over-learn `c2s > cycle` from a tiny accepted
 label batch.
+`RL_COUNTERFACTUAL_REQUIRE_SAME_MOVE_TYPE=true` skips supervised
+counterfactual labels where the rollout winner and current behavior action have
+different coarse move types, such as `cycle>c2s` or `c2s>cycle`. This is useful
+for destination/order refinements after cross-type labels show broad
+generalization failures. It is disabled by default.
 Supervised counterfactual modes also skip labels where the rollout winner and
 the current behavior action have identical action-feature vectors. Those labels
 can show up as same-move-type destination refinements, but if the model sees the

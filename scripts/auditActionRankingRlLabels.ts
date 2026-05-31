@@ -149,6 +149,10 @@ const options = {
     "RL_COUNTERFACTUAL_EXCLUDE_MOVE_PAIRS",
     []
   ),
+  counterfactualRequireSameMoveType: readBooleanEnv(
+    "RL_COUNTERFACTUAL_REQUIRE_SAME_MOVE_TYPE",
+    false
+  ),
   counterfactualStopAfterLabels: readIntegerEnv(
     "RL_COUNTERFACTUAL_STOP_AFTER_LABELS",
     0
@@ -217,6 +221,7 @@ console.log(
         scoreGapBudgetSkippedCount: audit.scoreGapBudgetSkippedCount,
         movePairBudgetSkippedCount: audit.movePairBudgetSkippedCount,
         movePairExcludedSkippedCount: audit.movePairExcludedSkippedCount,
+        moveTypeMismatchSkippedCount: audit.moveTypeMismatchSkippedCount,
         featureTieSkippedCount: audit.featureTieSkippedCount,
         connectorCycleSkippedCount: audit.connectorCycleSkippedCount,
         weakConnectorCycleSkippedCount:
