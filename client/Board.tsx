@@ -58,6 +58,7 @@ type Props = {
   easyReadCards: boolean;
   onBlockedMove?: () => void;
   roomId?: string | null;
+  visiblePlayerIndices?: readonly number[];
   zoom: number;
 };
 
@@ -148,6 +149,7 @@ export default observer(function Board({
   onOpenRoomSettings,
   onUpdateHand,
   roomId,
+  visiblePlayerIndices,
   zoom,
 }: Props): JSX.Element | null {
   const { state, socket } = useClientContext();
@@ -267,7 +269,7 @@ export default observer(function Board({
               roomId={roomId}
             />
             <ScoresTableTabOverlay board={board} />
-            <HandPlatesLayer />
+            <HandPlatesLayer visiblePlayerIndices={visiblePlayerIndices} />
             {canInteractWithCards ? (
               <>
                 <ActivePlayerStackTargets
@@ -287,12 +289,18 @@ export default observer(function Board({
               executeMove={executeMove}
               isDeckCyclingBlocked={isDeckCyclingBlocked}
               onBlockedMove={onBlockedMove}
+              visiblePlayerIndices={visiblePlayerIndices}
             />
             <RoundStartOverlay board={board} state={state} />
-            {board.players.map((p, i) => (
-              <PlayerArea player={p} playerIndex={i} key={p.socketId ?? i} />
-            ))}
-            <PlayerZoomTargets onTogglePlayer={togglePlayerFocus} />
+            {board.players.map((p, i) =>
+              isPlayerVisible(i, visiblePlayerIndices) ? (
+                <PlayerArea player={p} playerIndex={i} key={p.socketId ?? i} />
+              ) : null
+            )}
+            <PlayerZoomTargets
+              onTogglePlayer={togglePlayerFocus}
+              visiblePlayerIndices={visiblePlayerIndices}
+            />
             <HandsLayer />
             <ReactionBubbles />
             <PauseOverlay />
@@ -303,6 +311,15 @@ export default observer(function Board({
     </DndProvider>
   );
 });
+
+function isPlayerVisible(
+  playerIndex: number,
+  visiblePlayerIndices: readonly number[] | undefined
+): boolean {
+  return (
+    visiblePlayerIndices == null || visiblePlayerIndices.includes(playerIndex)
+  );
+}
 
 function RoundStartOverlay({
   board,
@@ -427,8 +444,10 @@ const PLAYER_ZOOM_HIT_HEIGHT = PLAYER_HEIGHT;
 
 const PlayerZoomTargets = observer(function PlayerZoomTargets({
   onTogglePlayer,
+  visiblePlayerIndices,
 }: {
   onTogglePlayer: (playerIndex: number) => void;
+  visiblePlayerIndices?: readonly number[];
 }) {
   const { state } = useClientContext();
   const board = state.board;
@@ -445,6 +464,9 @@ const PlayerZoomTargets = observer(function PlayerZoomTargets({
       {board.players.map((player, playerIndex) => {
         const isActivePlayer = playerIndex === activePlayerIndex;
         const isFocusedPlayer = layout.focusedPlayerIndex === playerIndex;
+        if (!isPlayerVisible(playerIndex, visiblePlayerIndices)) {
+          return null;
+        }
         if (
           (layout.focusedPlayerIndex == null && isActivePlayer) ||
           (layout.focusedPlayerIndex != null && !isFocusedPlayer)

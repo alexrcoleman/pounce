@@ -14,11 +14,13 @@ export default observer(function CardsLayer({
   isDeckCyclingBlocked = false,
   executeMove,
   onBlockedMove,
+  visiblePlayerIndices,
 }: {
   canInteract: boolean;
   isDeckCyclingBlocked?: boolean;
   executeMove: (move: Move) => void;
   onBlockedMove?: () => void;
+  visiblePlayerIndices?: readonly number[];
 }) {
   const { state } = useClientContext();
   const board = state.board!;
@@ -81,6 +83,13 @@ export default observer(function CardsLayer({
     )
     .concat(
       board.players.flatMap((player, playerIndex) => {
+        if (
+          visiblePlayerIndices != null &&
+          !visiblePlayerIndices.includes(playerIndex)
+        ) {
+          return [];
+        }
+
         const isActivePlayer = playerIndex === activePlayerIndex;
         return [
           player.deck.map((card, index) => {

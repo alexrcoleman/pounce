@@ -15,7 +15,11 @@ export const ACTIVE_HAND_PLATE_HEIGHT = 209;
 export const COMPACT_ACTIVE_HAND_PLATE_TOP_OFFSET = -1;
 export const COMPACT_ACTIVE_HAND_PLATE_HEIGHT = 225;
 
-export default observer(function HandPlatesLayer() {
+export default observer(function HandPlatesLayer({
+  visiblePlayerIndices,
+}: {
+  visiblePlayerIndices?: readonly number[];
+}) {
   const { state } = useClientContext();
   const board = state.board!;
   const layout = useBoardLayout();
@@ -24,7 +28,11 @@ export default observer(function HandPlatesLayer() {
   return (
     <>
       {board.players.map((player, playerIndex) => {
-        if (player.isSpectating) {
+        if (
+          player.isSpectating ||
+          (visiblePlayerIndices != null &&
+            !visiblePlayerIndices.includes(playerIndex))
+        ) {
           return null;
         }
 

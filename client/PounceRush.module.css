@@ -12,6 +12,10 @@
   inset: 0;
 }
 
+.suppressBoardAnimations .boardLayer * {
+  transition: none !important;
+}
+
 .hud {
   position: absolute;
   z-index: 70000;
@@ -126,7 +130,7 @@
   border-color: rgba(126, 35, 38, 0.36);
 }
 
-.blockedCue {
+.feedbackCue {
   position: absolute;
   z-index: 71000;
   top: calc(env(safe-area-inset-top, 0px) + 78px);
@@ -134,21 +138,47 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  max-width: min(520px, calc(100% - 24px));
+  padding: 8px 13px;
   color: #ffffff;
   font-size: 13px;
   font-weight: 900;
-  line-height: 1;
+  line-height: 1.1;
   background: rgba(126, 35, 38, 0.95);
   border: 1px solid rgba(255, 230, 210, 0.42);
   border-radius: 999px;
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.28);
   transform: translateX(-50%);
-  animation: blockedCue 780ms ease-out forwards;
+  animation: feedbackCue 1150ms ease-out forwards;
   pointer-events: none;
 }
 
-.blockedIcon {
+.feedbackCue > span:last-child {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.feedbackCue strong,
+.feedbackCue small {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feedbackCue small {
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.feedbackSuccess {
+  background: rgba(16, 105, 58, 0.96);
+  border-color: rgba(219, 255, 230, 0.42);
+}
+
+.feedbackIcon {
   position: relative;
   width: 16px;
   height: 16px;
@@ -157,7 +187,7 @@
   border-radius: 50%;
 }
 
-.blockedIcon::after {
+.feedbackIcon::after {
   content: "";
   position: absolute;
   left: 2px;
@@ -167,6 +197,76 @@
   background: currentColor;
   transform: translateY(-50%) rotate(-45deg);
   transform-origin: center;
+}
+
+.feedbackSuccess .feedbackIcon::after {
+  left: 3px;
+  right: auto;
+  top: 6px;
+  width: 8px;
+  height: 4px;
+  background: transparent;
+  border-left: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+}
+
+.startOverlay {
+  position: absolute;
+  z-index: 72000;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(34, 22, 12, 0.38);
+  backdrop-filter: blur(2px);
+}
+
+.startPanel {
+  width: min(100%, 360px);
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  color: #241b13;
+  background: #fff9eb;
+  border: 1px solid rgba(73, 47, 26, 0.22);
+  border-radius: 8px;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
+}
+
+.startTitle {
+  margin: 0;
+  color: #20170f;
+  font-size: 30px;
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+}
+
+.seedField {
+  display: grid;
+  gap: 7px;
+  color: #594631;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.seedInput:global(.ant-input) {
+  height: 42px;
+  border-color: rgba(76, 54, 34, 0.24);
+  border-radius: 6px;
+  color: #241b13;
+  font-weight: 800;
+  text-transform: none;
+}
+
+.startActions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
 }
 
 .completionOverlay {
@@ -182,7 +282,8 @@
 }
 
 .completionPanel {
-  width: min(100%, 380px);
+  width: min(100%, 460px);
+  max-height: min(720px, calc(100vh - 48px));
   display: grid;
   gap: 16px;
   padding: 22px;
@@ -192,6 +293,7 @@
   border: 1px solid rgba(73, 47, 26, 0.22);
   border-radius: 8px;
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.34);
+  overflow: auto;
 }
 
 .completionTitle {
@@ -221,25 +323,137 @@
   line-height: 1.2;
 }
 
+.seedSummary {
+  min-width: 0;
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  text-align: left;
+  background: #f2ead9;
+  border: 1px solid rgba(73, 47, 26, 0.16);
+  border-radius: 6px;
+}
+
+.seedSummary span {
+  color: #6a5b4d;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.seedSummary strong {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #241b13;
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.15;
+}
+
+.reviewList {
+  display: grid;
+  gap: 8px;
+  max-height: 210px;
+  overflow-y: auto;
+}
+
+.reviewItem {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(92px, 0.62fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  color: #2c2118;
+  text-align: left;
+  background: #fffdf6;
+  border: 1px solid rgba(73, 47, 26, 0.16);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.reviewItem:hover,
+.reviewItem:focus {
+  border-color: rgba(11, 109, 45, 0.42);
+  background: #f8fbf2;
+}
+
+.reviewItem[aria-pressed="true"] {
+  border-color: rgba(11, 109, 45, 0.6);
+  background: #edf7eb;
+}
+
+.reviewItem span,
+.reviewItem strong {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.reviewItem span {
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.reviewItem small {
+  min-width: 0;
+  overflow: hidden;
+  color: #776753;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.reviewItem strong {
+  overflow: hidden;
+  color: #241b13;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .completionActions {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px;
 }
 
-.completionButton:global(.ant-btn) {
+.completionButton:global(.ant-btn),
+.primaryButton:global(.ant-btn),
+.secondaryButton:global(.ant-btn) {
   min-width: 0;
   height: 42px;
   border-radius: 6px;
   font-weight: 900;
 }
 
-.completionPrimary:global(.ant-btn-primary):not(:disabled) {
+.primaryButton:global(.ant-btn-primary):not(:disabled) {
   background: #0b6d2d;
   border-color: #0b6d2d;
 }
 
-@keyframes blockedCue {
+.primaryButton:global(.ant-btn-primary):not(:disabled):hover,
+.primaryButton:global(.ant-btn-primary):not(:disabled):focus {
+  background: #0f7c38;
+  border-color: #0f7c38;
+}
+
+.secondaryButton:global(.ant-btn) {
+  border-color: rgba(65, 45, 27, 0.28);
+  color: #2c251d;
+  background: #fffdf6;
+}
+
+.startButton:global(.ant-btn) {
+  font-size: 15px;
+}
+
+@keyframes feedbackCue {
   0% {
     opacity: 0;
     transform: translate(-50%, -8px) scale(0.96);
@@ -273,7 +487,7 @@
     justify-content: flex-end;
   }
 
-  .blockedCue {
+  .feedbackCue {
     top: calc(env(safe-area-inset-top, 0px) + 112px);
   }
 }
@@ -298,7 +512,12 @@
     padding: 0 10px;
   }
 
+  .startActions,
   .completionActions {
+    grid-template-columns: 1fr;
+  }
+
+  .reviewItem {
     grid-template-columns: 1fr;
   }
 }

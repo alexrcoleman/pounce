@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { Button } from "antd";
+import { Button, Input } from "antd";
 import Board from "../client/Board";
 import { ClientContext } from "../client/ClientContext";
 import Head from "next/head";
@@ -21,16 +21,21 @@ const PounceRushPage: NextPage<{
   const [easyReadCards] = useStoredBoolean("pounce::easy-read-cards", true);
   const [leftHandedMode] = useState(false);
   const [scale] = useState(0.94);
+  const visiblePlayerIndices = [0] as const;
   const playerName = name || "Player";
   const {
     actions,
-    blockedAttemptCount,
     currentPuzzle,
+    feedback,
     isAdvancingPuzzle,
+    isBoardAnimationSuppressed,
     isConnected,
+    puzzleHistory,
     puzzleNumber,
     remainingMs,
+    reviewPuzzleNumber,
     score,
+    seed,
     state,
     status,
     stepIndex,
@@ -61,15 +66,21 @@ const PounceRushPage: NextPage<{
   }
 
   const isComplete = status === "complete";
-  const isInteractionDisabled = isComplete || isAdvancingPuzzle;
+  const isIdle = status === "idle";
+  const isInteractionDisabled = isIdle || isComplete || isAdvancingPuzzle;
   const sequenceLength = currentPuzzle.sequence.length;
+  const displayedStep = Math.min(stepIndex + 1, sequenceLength);
 
   return (
     <>
       <Head>
         <title>Pounce Rush | Pounce</title>
       </Head>
-      <div className={styles.root}>
+      <div
+        className={`${styles.root} ${
+          isBoardAnimationSuppressed ? styles.suppressBoardAnimations : ""
+        }`}
+      >
         <ClientContext.Provider value={{ state, socket }}>
           <div className={styles.boardLayer}>
             <Board
@@ -82,6 +93,7 @@ const PounceRushPage: NextPage<{
               onOpenRoomSettings={() => undefined}
               onUpdateHand={actions.onUpdateHand}
               roomId="Rush"
+              visiblePlayerIndices={visiblePlayerIndices}
               zoom={scale}
             />
           </div>
@@ -106,7 +118,7 @@ const PounceRushPage: NextPage<{
             </div>
             <div className={styles.objectiveMeta}>
               Puzzle {puzzleNumber + 1} / {currentPuzzle.difficulty}{" "}
-              {stepIndex + 1}/{sequenceLength}
+              {displayedStep}/{sequenceLength}
             </div>
           </div>
           <div className={`${styles.hudGroup} ${styles.hudGroupRight}`}>
@@ -116,14 +128,53 @@ const PounceRushPage: NextPage<{
           </div>
         </div>
 
-        {blockedAttemptCount > 0 ? (
+        {feedback ? (
           <div
-            className={styles.blockedCue}
-            key={blockedAttemptCount}
+            className={`${styles.feedbackCue} ${
+              feedback.tone === "success" ? styles.feedbackSuccess : ""
+            }`}
+            key={feedback.id}
             role="status"
           >
-            <span className={styles.blockedIcon} aria-hidden="true" />
-            Blocked
+            <span className={styles.feedbackIcon} aria-hidden="true" />
+            <span>
+              <strong>{feedback.title}</strong>
+              {feedback.detail ? <small>{feedback.detail}</small> : null}
+            </span>
+          </div>
+        ) : null}
+
+        {isIdle ? (
+          <div className={styles.startOverlay} role="dialog" aria-modal>
+            <div className={styles.startPanel}>
+              <h1 className={styles.startTitle}>Pounce Rush</h1>
+              <label className={styles.seedField} htmlFor="rush-seed">
+                Seed
+                <Input
+                  id="rush-seed"
+                  className={styles.seedInput}
+                  value={seed}
+                  onChange={(event) => actions.setSeed(event.target.value)}
+                  placeholder="Random on start"
+                  spellCheck={false}
+                />
+              </label>
+              <div className={styles.startActions}>
+                <Button
+                  className={styles.secondaryButton}
+                  onClick={actions.randomizeSeed}
+                >
+                  Random seed
+                </Button>
+                <Button
+                  className={`${styles.primaryButton} ${styles.startButton}`}
+                  onClick={() => actions.start(seed)}
+                  type="primary"
+                >
+                  Start
+                </Button>
+              </div>
+            </div>
           </div>
         ) : null}
 
@@ -137,13 +188,40 @@ const PounceRushPage: NextPage<{
                   {score === 1 ? "puzzle completed" : "puzzles completed"}
                 </span>
               </div>
+              <div className={styles.seedSummary}>
+                <span>Seed</span>
+                <strong>{seed}</strong>
+              </div>
+              <div className={styles.reviewList}>
+                {puzzleHistory.map((entry) => (
+                  <button
+                    aria-pressed={reviewPuzzleNumber === entry.puzzleNumber}
+                    className={styles.reviewItem}
+                    key={entry.reportCode}
+                    onClick={() => actions.peekPuzzle(entry.puzzleNumber)}
+                    type="button"
+                  >
+                    <span>
+                      Puzzle {entry.puzzleNumber + 1}
+                      <small>{entry.reportCode}</small>
+                    </span>
+                    <strong>{entry.objective}</strong>
+                  </button>
+                ))}
+              </div>
               <div className={styles.completionActions}>
                 <Button
-                  className={`${styles.completionButton} ${styles.completionPrimary}`}
+                  className={`${styles.completionButton} ${styles.primaryButton}`}
                   onClick={actions.restart}
                   type="primary"
                 >
-                  Play again
+                  Same seed
+                </Button>
+                <Button
+                  className={styles.completionButton}
+                  onClick={actions.startWithNewSeed}
+                >
+                  New seed
                 </Button>
                 <Button
                   className={styles.completionButton}
