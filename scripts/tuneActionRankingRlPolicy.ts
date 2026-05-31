@@ -430,6 +430,10 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
       "RL_COUNTERFACTUAL_SCAN_EPISODES",
       readIntegerEnv("RL_EPISODES", 64)
     ),
+    rlCounterfactualScanSeedCount: readIntegerEnv(
+      "RL_COUNTERFACTUAL_SCAN_SEED_COUNT",
+      1
+    ),
     rlCounterfactualRolloutCount: readIntegerEnv("RL_COUNTERFACTUAL_ROLLOUTS", 1),
     rlCounterfactualRolloutMoves: readIntegerEnv(
       "RL_COUNTERFACTUAL_ROLLOUT_MOVES",

@@ -324,6 +324,30 @@ assert.ok(
   "supervised counterfactual scan budget should add accepted label opportunities"
 );
 
+const multiSeedScanValue = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:multi-seed-scan-value",
+  rlEpisodes: 2,
+  rlCounterfactualScanEpisodes: 3,
+  rlCounterfactualScanSeedCount: 2,
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualStateSource: "greedy",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.equal(
+  multiSeedScanValue.reinforcement.counterfactualScannedEpisodes,
+  6,
+  "supervised counterfactual scan seed count should multiply the scan budget"
+);
+assert.ok(
+  multiSeedScanValue.reinforcement.counterfactualUpdateCount >
+    multiSeedScanValue.reinforcement.episodes,
+  "multi-seed scans should collect additional counterfactual labels"
+);
+
 const anchoredValue = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:anchored-value",

@@ -84,6 +84,10 @@ const options = {
   seed,
   temperature: readNumberEnv("RL_TEMPERATURE", 1),
   commonRandom: readBooleanEnv("RL_COMMON_RANDOM", true),
+  counterfactualScanSeedCount: readIntegerEnv(
+    "RL_COUNTERFACTUAL_SCAN_SEED_COUNT",
+    1
+  ),
   counterfactualRolloutCount: readIntegerEnv("RL_COUNTERFACTUAL_ROLLOUTS", 1),
   counterfactualRolloutMoves: readIntegerEnv(
     "RL_COUNTERFACTUAL_ROLLOUT_MOVES",

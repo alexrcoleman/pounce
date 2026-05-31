@@ -53,6 +53,7 @@ export type NeuralTrainingOptions = {
   rlCommonRandom?: boolean;
   rlCreditMode?: "episode" | "counterfactual";
   rlCounterfactualScanEpisodes?: number;
+  rlCounterfactualScanSeedCount?: number;
   rlCounterfactualRolloutCount?: number;
   rlCounterfactualRolloutMoves?: number;
   rlCounterfactualCandidateLimit?: number;
@@ -594,6 +595,8 @@ export function trainNeuralActionRankingPolicy(
     creditMode: options.rlCreditMode ?? "episode",
     counterfactualScanEpisodes:
       options.rlCounterfactualScanEpisodes ?? rlEpisodes,
+    counterfactualScanSeedCount:
+      options.rlCounterfactualScanSeedCount ?? 1,
     counterfactualRolloutCount: options.rlCounterfactualRolloutCount ?? 1,
     counterfactualRolloutMoves:
       options.rlCounterfactualRolloutMoves ?? Math.min(450, maxMovesPerGame),
@@ -1605,6 +1608,10 @@ function shuffleCopy<T>(items: readonly T[], random: () => number): T[] {
   return shuffled;
 }
 
+function getCounterfactualScanSeed(seed: string, scanSeedIndex: number): string {
+  return scanSeedIndex === 0 ? seed : `${seed}:scan-seed:${scanSeedIndex}`;
+}
+
 export function collectImitationExamplesFromDeals(options: {
   playerCount: number;
   dealCount: number;
@@ -1645,6 +1652,7 @@ export function trainPolicyGradientFromRollouts(
     commonRandom: boolean;
     creditMode: PolicyGradientCreditMode;
     counterfactualScanEpisodes: number;
+    counterfactualScanSeedCount: number;
     counterfactualRolloutCount: number;
     counterfactualRolloutMoves: number;
     counterfactualCandidateLimit: number;
@@ -1764,11 +1772,22 @@ export function trainPolicyGradientFromRollouts(
             : options.episodes
         )
       : options.episodes;
+  const counterfactualScanSeedCount =
+    creditMode === "counterfactual" &&
+    options.counterfactualTrainingMode !== "policy_gradient"
+      ? Math.max(1, Math.floor(options.counterfactualScanSeedCount))
+      : 1;
+  const counterfactualScanCount =
+    counterfactualScannedEpisodes * counterfactualScanSeedCount;
   let completedCounterfactualScanEpisodes = 0;
   let counterfactualStoppedAfterLabelTarget = false;
 
-  for (let episode = 0; episode < counterfactualScannedEpisodes; episode++) {
-    const includeEpisodeMetrics = episode < options.episodes;
+  for (let scanIndex = 0; scanIndex < counterfactualScanCount; scanIndex++) {
+    const scanSeedIndex = Math.floor(scanIndex / counterfactualScannedEpisodes);
+    const episode = scanIndex % counterfactualScannedEpisodes;
+    const scanSeed = getCounterfactualScanSeed(options.seed, scanSeedIndex);
+    const includeEpisodeMetrics =
+      scanSeedIndex === 0 && episode < options.episodes;
     const neuralPlayerIndex = episode % options.playerCount;
     const activePlayerIndices = Array.from(
       { length: options.playerCount },
@@ -1792,18 +1811,18 @@ export function trainPolicyGradientFromRollouts(
       : undefined;
     const board = createTrainingBoard(
       options.playerCount,
-      `${options.seed}:deal:${episode}`
+      `${scanSeed}:deal:${episode}`
     );
-    const sharedTimingSeed = `${options.seed}:timing:${episode}`;
+    const sharedTimingSeed = `${scanSeed}:timing:${episode}`;
     const teacherTimingSeed = options.commonRandom
       ? sharedTimingSeed
-      : `${options.seed}:teacher-timing:${episode}`;
+      : `${scanSeed}:teacher-timing:${episode}`;
     const greedyTimingSeed = options.commonRandom
       ? sharedTimingSeed
-      : `${options.seed}:greedy-timing:${episode}`;
+      : `${scanSeed}:greedy-timing:${episode}`;
     const sampleTimingSeed = options.commonRandom
       ? sharedTimingSeed
-      : `${options.seed}:sample-timing:${episode}`;
+      : `${scanSeed}:sample-timing:${episode}`;
     const teacherBaseline = includeEpisodeMetrics
       ? runPolicyRollout(board, {
           policy,
@@ -1822,7 +1841,7 @@ export function trainPolicyGradientFromRollouts(
       ? runPolicyRollout(board, {
           policy,
           random: createSeededRandom(greedyTimingSeed),
-          decisionRandom: createSeededRandom(`${options.seed}:greedy:${episode}`),
+          decisionRandom: createSeededRandom(`${scanSeed}:greedy:${episode}`),
           temperature: 1,
           sample: false,
           maxMovesPerGame: options.maxMovesPerGame,
@@ -1837,7 +1856,7 @@ export function trainPolicyGradientFromRollouts(
     const rollout = runPolicyRollout(board, {
       policy,
       random: createSeededRandom(sampleTimingSeed),
-      decisionRandom: createSeededRandom(`${options.seed}:sample:${episode}`),
+      decisionRandom: createSeededRandom(`${scanSeed}:sample:${episode}`),
       temperature: useGreedyCounterfactualStates ? 1 : options.temperature,
       sample: !useGreedyCounterfactualStates,
       maxMovesPerGame: options.maxMovesPerGame,
@@ -1883,7 +1902,7 @@ export function trainPolicyGradientFromRollouts(
         counterfactualAnchorExamples.push(
           createCounterfactualAnchorExample(
             transition,
-            episode,
+            scanIndex,
             transitionIndex
           )
         );
@@ -1926,7 +1945,7 @@ export function trainPolicyGradientFromRollouts(
         const result = getCounterfactualTransitionResult(
           transition,
           policy,
-          `${options.seed}:counterfactual:${episode}:${transitionIndex}`,
+          `${scanSeed}:counterfactual:${episode}:${transitionIndex}`,
           options.counterfactualRolloutCount,
           options.commonRandom,
           options.counterfactualRolloutMoves,
@@ -2124,7 +2143,7 @@ export function trainPolicyGradientFromRollouts(
             example: createCounterfactualSupervisedExample(
               transition,
               result,
-              episode,
+              scanIndex,
               transitionIndex
             ),
             returnGap: Math.abs(counterfactualGap),
@@ -2181,7 +2200,7 @@ export function trainPolicyGradientFromRollouts(
         options.counterfactualStopAfterLabels,
         options.counterfactualTrainingMode
       ) &&
-      episode + 1 >= options.episodes
+      completedCounterfactualScanEpisodes >= options.episodes
     ) {
       counterfactualStoppedAfterLabelTarget = true;
       break;
@@ -2388,6 +2407,7 @@ export function collectCounterfactualRlLabelAudit(
     seed: string;
     temperature: number;
     commonRandom: boolean;
+    counterfactualScanSeedCount: number;
     counterfactualRolloutCount: number;
     counterfactualRolloutMoves: number;
     counterfactualCandidateLimit: number;
@@ -2456,21 +2476,29 @@ export function collectCounterfactualRlLabelAudit(
   const useGreedyCounterfactualStates =
     options.counterfactualStateSource === "greedy" &&
     options.counterfactualTrainingMode !== "policy_gradient";
+  const counterfactualScanSeedCount =
+    options.counterfactualTrainingMode !== "policy_gradient"
+      ? Math.max(1, Math.floor(options.counterfactualScanSeedCount))
+      : 1;
+  const counterfactualScanCount = options.episodes * counterfactualScanSeedCount;
 
-  for (let episode = 0; episode < options.episodes; episode++) {
+  for (let scanIndex = 0; scanIndex < counterfactualScanCount; scanIndex++) {
+    const scanSeedIndex = Math.floor(scanIndex / options.episodes);
+    const episode = scanIndex % options.episodes;
+    const scanSeed = getCounterfactualScanSeed(options.seed, scanSeedIndex);
     const neuralPlayerIndex = episode % options.playerCount;
     const board = createTrainingBoard(
       options.playerCount,
-      `${options.seed}:deal:${episode}`
+      `${scanSeed}:deal:${episode}`
     );
-    const sharedTimingSeed = `${options.seed}:timing:${episode}`;
+    const sharedTimingSeed = `${scanSeed}:timing:${episode}`;
     const sampleTimingSeed = options.commonRandom
       ? sharedTimingSeed
-      : `${options.seed}:sample-timing:${episode}`;
+      : `${scanSeed}:sample-timing:${episode}`;
     const rollout = runPolicyRollout(board, {
       policy,
       random: createSeededRandom(sampleTimingSeed),
-      decisionRandom: createSeededRandom(`${options.seed}:sample:${episode}`),
+      decisionRandom: createSeededRandom(`${scanSeed}:sample:${episode}`),
       temperature: useGreedyCounterfactualStates ? 1 : options.temperature,
       sample: !useGreedyCounterfactualStates,
       maxMovesPerGame: options.maxMovesPerGame,
@@ -2519,7 +2547,7 @@ export function collectCounterfactualRlLabelAudit(
       const result = getCounterfactualTransitionResult(
         transition,
         policy,
-        `${options.seed}:counterfactual:${episode}:${transitionIndex}`,
+        `${scanSeed}:counterfactual:${episode}:${transitionIndex}`,
         options.counterfactualRolloutCount,
         options.commonRandom,
         options.counterfactualRolloutMoves,
@@ -2721,7 +2749,7 @@ export function collectCounterfactualRlLabelAudit(
           example: createCounterfactualSupervisedExample(
             transition,
             result,
-            episode,
+            scanIndex,
             transitionIndex
           ),
           returnGap: Math.abs(counterfactualGap),
