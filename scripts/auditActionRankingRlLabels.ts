@@ -149,6 +149,10 @@ const options = {
     "RL_COUNTERFACTUAL_REQUIRE_POLICY_CHANGE",
     false
   ),
+  counterfactualMaxTransitionsPerEpisode: readIntegerEnv(
+    "RL_COUNTERFACTUAL_MAX_TRANSITIONS_PER_EPISODE",
+    0
+  ),
   counterfactualMaxScoreGap: readNumberEnv(
     "RL_COUNTERFACTUAL_MAX_SCORE_GAP",
     0
@@ -255,6 +259,7 @@ console.log(
           audit.behaviorConfidenceSkippedCount,
         behaviorWinRateSkippedCount: audit.behaviorWinRateSkippedCount,
         confidenceSkippedCount: audit.confidenceSkippedCount,
+        transitionBudgetSkippedCount: audit.transitionBudgetSkippedCount,
         scoreGapSkippedCount: audit.scoreGapSkippedCount,
         scoreGapBudgetSkippedCount: audit.scoreGapBudgetSkippedCount,
         movePairBudgetSkippedCount: audit.movePairBudgetSkippedCount,

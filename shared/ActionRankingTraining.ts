@@ -75,6 +75,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualPairwiseWeightScale?: number;
   rlCounterfactualPairwiseMaxWeight?: number;
   rlCounterfactualPairwiseFeatureMode?: PairwiseFeatureMode;
+  rlCounterfactualMaxTransitionsPerEpisode?: number;
   rlCounterfactualMaxScoreGap?: number;
   rlCounterfactualScoreGapBudget?: number;
   rlCounterfactualMaxLabelsPerMovePair?: number;
@@ -200,6 +201,7 @@ export type NeuralTrainingResult = {
     counterfactualPolicyMarginSkippedCount: number;
     counterfactualPolicyChangeSkippedCount: number;
     counterfactualConfidenceSkippedCount: number;
+    counterfactualTransitionBudgetSkippedCount: number;
     counterfactualScoreGapSkippedCount: number;
     counterfactualScoreGapBudgetSkippedCount: number;
     counterfactualMovePairBudgetSkippedCount: number;
@@ -305,6 +307,7 @@ export type CounterfactualRlLabelAudit = {
   behaviorConfidenceSkippedCount: number;
   behaviorWinRateSkippedCount: number;
   confidenceSkippedCount: number;
+  transitionBudgetSkippedCount: number;
   scoreGapSkippedCount: number;
   scoreGapBudgetSkippedCount: number;
   movePairBudgetSkippedCount: number;
@@ -640,6 +643,8 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualPairwiseMaxWeight ?? 1,
     counterfactualPairwiseFeatureMode:
       options.rlCounterfactualPairwiseFeatureMode ?? "raw",
+    counterfactualMaxTransitionsPerEpisode:
+      options.rlCounterfactualMaxTransitionsPerEpisode ?? 0,
     counterfactualMaxScoreGap: options.rlCounterfactualMaxScoreGap ?? 0,
     counterfactualScoreGapBudget:
       options.rlCounterfactualScoreGapBudget ?? 0,
@@ -1423,6 +1428,92 @@ function getPolicyTopScoreGap(
   return ranked.length <= 1 ? null : ranked[0].score - ranked[1].score;
 }
 
+function selectCounterfactualTransitionBudget(
+  transitions: readonly RolloutTransition[],
+  policy: NeuralActionRankingPolicy,
+  options: {
+    maxTransitionsPerEpisode: number;
+    counterfactualMaxPolicyMargin: number;
+    counterfactualTrainingMode: CounterfactualTrainingMode;
+    counterfactualBehaviorMoveTypes: readonly Move["type"][];
+    updateScope: PolicyGradientUpdateScope;
+    useGreedyCounterfactualStates: boolean;
+  }
+): Set<number> | null {
+  const budget = Math.floor(options.maxTransitionsPerEpisode);
+  if (budget <= 0) {
+    return null;
+  }
+
+  const applyExploratoryFilter =
+    options.updateScope === "exploratory" &&
+    !options.useGreedyCounterfactualStates;
+  const eligible = transitions
+    .map((transition, transitionIndex) => {
+      const isExploratoryDecision =
+        transition.selectedCandidateIndex !== transition.greedyCandidateIndex;
+      if (applyExploratoryFilter && !isExploratoryDecision) {
+        return null;
+      }
+
+      const policyTopScoreGap = getPolicyTopScoreGap(
+        transition.candidates,
+        policy
+      );
+      if (
+        options.counterfactualMaxPolicyMargin > 0 &&
+        policyTopScoreGap != null &&
+        policyTopScoreGap > options.counterfactualMaxPolicyMargin
+      ) {
+        return null;
+      }
+
+      if (
+        options.counterfactualTrainingMode !== "policy_gradient" &&
+        !isCounterfactualBehaviorMoveTypeAllowed(
+          transition,
+          options.counterfactualBehaviorMoveTypes
+        )
+      ) {
+        return null;
+      }
+
+      return {
+        transitionIndex,
+        policyTopScoreGap:
+          policyTopScoreGap == null
+            ? Number.POSITIVE_INFINITY
+            : Math.max(0, policyTopScoreGap),
+        candidateCount: transition.candidates.length,
+      };
+    })
+    .filter(
+      (
+        item
+      ): item is {
+        transitionIndex: number;
+        policyTopScoreGap: number;
+        candidateCount: number;
+      } => item != null
+    );
+
+  if (eligible.length <= budget) {
+    return null;
+  }
+
+  return new Set(
+    eligible
+      .sort(
+        (left, right) =>
+          left.policyTopScoreGap - right.policyTopScoreGap ||
+          right.candidateCount - left.candidateCount ||
+          left.transitionIndex - right.transitionIndex
+      )
+      .slice(0, budget)
+      .map((item) => item.transitionIndex)
+  );
+}
+
 function getPolicyWinnerScoreGap(
   example: ActionRankingImitationExample,
   policy: NeuralActionRankingPolicy | undefined
@@ -1682,6 +1773,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualPairwiseWeightScale: number;
     counterfactualPairwiseMaxWeight: number;
     counterfactualPairwiseFeatureMode: PairwiseFeatureMode;
+    counterfactualMaxTransitionsPerEpisode: number;
     counterfactualMaxScoreGap: number;
     counterfactualScoreGapBudget: number;
     counterfactualMaxLabelsPerMovePair: number;
@@ -1742,6 +1834,7 @@ export function trainPolicyGradientFromRollouts(
   let counterfactualPolicyMarginSkippedCount = 0;
   let counterfactualPolicyChangeSkippedCount = 0;
   let counterfactualConfidenceSkippedCount = 0;
+  let counterfactualTransitionBudgetSkippedCount = 0;
   let counterfactualScoreGapSkippedCount = 0;
   let counterfactualScoreGapBudgetSkippedCount = 0;
   let counterfactualMovePairBudgetSkippedCount = 0;
@@ -1902,6 +1995,21 @@ export function trainPolicyGradientFromRollouts(
       sampledDecisionCountTotal += rollout.transitions.length;
     }
     counterfactualScannedDecisionCountTotal += rollout.transitions.length;
+    const counterfactualTransitionBudget =
+      creditMode === "counterfactual"
+        ? selectCounterfactualTransitionBudget(rollout.transitions, policy, {
+            maxTransitionsPerEpisode:
+              options.counterfactualMaxTransitionsPerEpisode,
+            counterfactualMaxPolicyMargin:
+              options.counterfactualMaxPolicyMargin,
+            counterfactualTrainingMode:
+              options.counterfactualTrainingMode,
+            counterfactualBehaviorMoveTypes:
+              options.counterfactualBehaviorMoveTypes,
+            updateScope,
+            useGreedyCounterfactualStates,
+          })
+        : null;
     rollout.transitions.forEach((transition, transitionIndex) => {
       if (
         creditMode === "counterfactual" &&
@@ -1951,6 +2059,13 @@ export function trainPolicyGradientFromRollouts(
           )
         ) {
           counterfactualBehaviorMoveTypeSkippedCount += 1;
+          return;
+        }
+        if (
+          counterfactualTransitionBudget &&
+          !counterfactualTransitionBudget.has(transitionIndex)
+        ) {
+          counterfactualTransitionBudgetSkippedCount += 1;
           return;
         }
         const result = getCounterfactualTransitionResult(
@@ -2372,6 +2487,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualPolicyMarginSkippedCount,
     counterfactualPolicyChangeSkippedCount,
     counterfactualConfidenceSkippedCount,
+    counterfactualTransitionBudgetSkippedCount,
     counterfactualScoreGapSkippedCount,
     counterfactualScoreGapBudgetSkippedCount,
     counterfactualMovePairBudgetSkippedCount,
@@ -2445,6 +2561,7 @@ export function collectCounterfactualRlLabelAudit(
     counterfactualMinBehaviorWins: number;
     counterfactualMaxPolicyMargin: number;
     counterfactualRequirePolicyChange: boolean;
+    counterfactualMaxTransitionsPerEpisode: number;
     counterfactualMaxScoreGap: number;
     counterfactualScoreGapBudget: number;
     counterfactualMaxLabelsPerMovePair: number;
@@ -2478,6 +2595,7 @@ export function collectCounterfactualRlLabelAudit(
   let maxReturnGapSkippedCount = 0;
   let policyChangeSkippedCount = 0;
   let scoreGapSkippedCount = 0;
+  let transitionBudgetSkippedCount = 0;
   let scoreGapBudgetSkippedCount = 0;
   let movePairBudgetSkippedCount = 0;
   let movePairExcludedSkippedCount = 0;
@@ -2560,6 +2678,20 @@ export function collectCounterfactualRlLabelAudit(
     });
 
     sampledDecisionCount += rollout.transitions.length;
+    const counterfactualTransitionBudget = selectCounterfactualTransitionBudget(
+      rollout.transitions,
+      policy,
+      {
+        maxTransitionsPerEpisode:
+          options.counterfactualMaxTransitionsPerEpisode,
+        counterfactualMaxPolicyMargin: options.counterfactualMaxPolicyMargin,
+        counterfactualTrainingMode: options.counterfactualTrainingMode,
+        counterfactualBehaviorMoveTypes:
+          options.counterfactualBehaviorMoveTypes,
+        updateScope: options.updateScope,
+        useGreedyCounterfactualStates,
+      }
+    );
     rollout.transitions.forEach((transition, transitionIndex) => {
       const isExploratoryDecision =
         transition.selectedCandidateIndex !== transition.greedyCandidateIndex;
@@ -2593,6 +2725,13 @@ export function collectCounterfactualRlLabelAudit(
         )
       ) {
         behaviorMoveTypeSkippedCount += 1;
+        return;
+      }
+      if (
+        counterfactualTransitionBudget &&
+        !counterfactualTransitionBudget.has(transitionIndex)
+      ) {
+        transitionBudgetSkippedCount += 1;
         return;
       }
 
@@ -2880,6 +3019,7 @@ export function collectCounterfactualRlLabelAudit(
     behaviorConfidenceSkippedCount,
     behaviorWinRateSkippedCount,
     confidenceSkippedCount,
+    transitionBudgetSkippedCount,
     policyChangeSkippedCount,
     scoreGapSkippedCount,
     scoreGapBudgetSkippedCount,

@@ -195,6 +195,10 @@ const options = {
     "RL_COUNTERFACTUAL_PAIRWISE_FEATURE_MODE",
     "raw"
   ),
+  rlCounterfactualMaxTransitionsPerEpisode: readIntegerEnv(
+    "RL_COUNTERFACTUAL_MAX_TRANSITIONS_PER_EPISODE",
+    0
+  ),
   rlCounterfactualMaxScoreGap: readNumberEnv(
     "RL_COUNTERFACTUAL_MAX_SCORE_GAP",
     0
