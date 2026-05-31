@@ -87,6 +87,19 @@ policy-gradient probe from it changed no paired heuristic-seat outcomes over 64
 games while measuring `-0.229 +/- 0.229` in neural self-play. Treat the deck
 context as a better feature substrate for future reward labels, not as an
 already stronger policy.
+A champion-mode counterfactual pairwise probe from that warmup is the first
+deck-context reward-label path with a small same-direction signal. The compact
+recipe (`RL_OPPONENT_MODE=champion`, greedy counterfactual states, behavior-scope
+pairwise labels, `RL_COUNTERFACTUAL_SCORE_GAP_BUDGET=6`,
+`RL_COUNTERFACTUAL_STOP_AFTER_LABELS=6`, weak-cycle and useful-cycle guards)
+accepted 2 strong `c2s>c2s` labels, flipped both accepted-label top actions, and
+over a 4-seed report measured `+0.059 +/- 0.066` paired vs the deck-context
+warmup and `+0.076 +/- 0.068` in neural self-play. Scaling the same gates to a
+16-label budget accepted 7 labels and improved paired heuristic-seat comparison
+to `+0.130 +/- 0.083`, but neural self-play regressed to
+`-0.122 +/- 0.086`; the broader batch appears to dilute the useful signal. The
+next sweep should vary the compact recipe's seeds/regularization before raising
+the label budget.
 Cycle moves now include a stock-memory proxy: the card that would become visible
 after cycling, whether it can play center/solitaire/soon, whether it can connect
 to the pounce card, whether the action only resets the waste pile, and the
