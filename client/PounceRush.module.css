@@ -158,10 +158,11 @@
   z-index: 74000;
   top: calc(env(safe-area-inset-top, 0px) + 78px);
   left: 50%;
+  width: max-content;
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  max-width: min(520px, calc(100% - 24px));
+  max-width: min(680px, calc(100% - 24px));
   padding: 8px 13px;
   color: #ffffff;
   font-size: 13px;
@@ -186,8 +187,9 @@
 .feedbackCue small {
   min-width: 0;
   overflow: hidden;
+  overflow-wrap: anywhere;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .feedbackCue small {
@@ -223,15 +225,15 @@
 }
 
 .feedbackSuccess .feedbackIcon::after {
-  left: 3px;
+  left: 4px;
   right: auto;
-  top: 6px;
-  width: 8px;
-  height: 4px;
+  top: 1px;
+  width: 5px;
+  height: 9px;
   background: transparent;
-  border-left: 2px solid currentColor;
+  border-right: 2px solid currentColor;
   border-bottom: 2px solid currentColor;
-  transform: rotate(-45deg);
+  transform: rotate(45deg);
 }
 
 .startOverlay {
@@ -247,7 +249,7 @@
 }
 
 .startPanel {
-  width: min(100%, 430px);
+  width: min(100%, 540px);
   display: grid;
   gap: 16px;
   padding: 22px;
@@ -269,7 +271,7 @@
 
 .modeTabs {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
 }
 
@@ -598,6 +600,13 @@
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 10px;
+}
+
+.buttonInlineStatus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
 }
 
 .shareSummary {

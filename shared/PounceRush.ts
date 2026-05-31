@@ -16,7 +16,7 @@ export type PounceRushPuzzleKind =
   | "uncover_center"
   | "combo";
 
-export type PounceRushObjective = "Unload a pounce card" | "Make a center play";
+export type PounceRushObjective = "Unload a pounce card";
 
 export type PounceRushPuzzle = {
   board: BoardState;
@@ -115,17 +115,17 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
   {
     id: "solitaire-center-scan",
     kind: "solitaire_center",
-    objective: "Make a center play",
+    objective: "Unload a pounce card",
     difficulty: "Warmup",
     build: () => ({
       deckCard: card("spades", 13),
       flippedDeck: [card("diamonds", 4)],
-      pounceDeck: [card("clubs", 5), card("hearts", 9)],
+      pounceDeck: [card("clubs", 5), card("spades", 7)],
       stacks: singleStacks(
         card("diamonds", 9),
         card("clubs", 12),
         card("spades", 6),
-        card("hearts", 8)
+        card("hearts", 10)
       ),
       piles: [
         suitedPile("hearts", 3),
@@ -135,6 +135,7 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
       ],
       sequence: [
         { type: "c2c", source: { type: "solitaire", index: 2 }, dest: 1 },
+        { type: "c2c", source: { type: "pounce" }, dest: 1 },
       ],
     }),
   },
@@ -168,19 +169,19 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
   {
     id: "solitaire-center-generated",
     kind: "solitaire_center",
-    objective: "Make a center play",
+    objective: "Unload a pounce card",
     difficulty: "Warmup",
     build: ({ rng }) => {
-      const targetValue = pickValue(rng, [4, 5, 7, 8, 9, 10]);
+      const targetValue = pickValue(rng, [4, 5, 7, 8, 9]);
       return {
-        deckCard: card("spades", 13),
-        flippedDeck: [card("diamonds", 12)],
-        pounceDeck: [card("clubs", 6), card("hearts", 13)],
+        deckCard: card("clubs", 13),
+        flippedDeck: [card("diamonds", 2)],
+        pounceDeck: [card("clubs", 6), card("hearts", nextValue(targetValue))],
         stacks: singleStacks(
           card("diamonds", 13),
           card("clubs", 12),
           card("hearts", targetValue),
-          card("spades", 11)
+          card("spades", 13)
         ),
         piles: [
           suitedPile("hearts", previousValue(targetValue)),
@@ -190,6 +191,7 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
         ],
         sequence: [
           { type: "c2c", source: { type: "solitaire", index: 2 }, dest: 0 },
+          { type: "c2c", source: { type: "pounce" }, dest: 0 },
         ],
       };
     },
@@ -197,12 +199,12 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
   {
     id: "waste-ace-center",
     kind: "waste_center",
-    objective: "Make a center play",
+    objective: "Unload a pounce card",
     difficulty: "Warmup",
     build: () => ({
       deckCard: card("clubs", 13),
       flippedDeck: [card("diamonds", 1)],
-      pounceDeck: [card("spades", 12), card("clubs", 10)],
+      pounceDeck: [card("spades", 12), card("diamonds", 2)],
       stacks: singleStacks(
         card("spades", 10),
         card("diamonds", 12),
@@ -215,20 +217,23 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
         suitedPile("clubs", 8),
         [],
       ],
-      sequence: [{ type: "c2c", source: { type: "deck" }, dest: 3 }],
+      sequence: [
+        { type: "c2c", source: { type: "deck" }, dest: 3 },
+        { type: "c2c", source: { type: "pounce" }, dest: 3 },
+      ],
     }),
   },
   {
     id: "waste-center-generated",
     kind: "waste_center",
-    objective: "Make a center play",
+    objective: "Unload a pounce card",
     difficulty: "Warmup",
     build: ({ rng }) => {
       const targetValue = pickValue(rng, [4, 5, 7, 8, 9, 10]);
       return {
         deckCard: card("clubs", 13),
         flippedDeck: [card("hearts", targetValue)],
-        pounceDeck: [card("spades", 12), card("clubs", 11)],
+        pounceDeck: [card("spades", 12), card("hearts", nextValue(targetValue))],
         stacks: singleStacks(
           card("spades", 13),
           card("diamonds", 11),
@@ -241,7 +246,10 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
           suitedPile("diamonds", 3),
           suitedPile("clubs", 3),
         ],
-        sequence: [{ type: "c2c", source: { type: "deck" }, dest: 0 }],
+        sequence: [
+          { type: "c2c", source: { type: "deck" }, dest: 0 },
+          { type: "c2c", source: { type: "pounce" }, dest: 0 },
+        ],
       };
     },
   },
@@ -337,22 +345,23 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     build: () => ({
       deckCard: card("clubs", 13),
       flippedDeck: [card("hearts", 8)],
-      pounceDeck: [card("clubs", 11), card("diamonds", 5)],
+      pounceDeck: [card("clubs", 11), card("hearts", 7)],
       stacks: [
-        [card("spades", 6), card("hearts", 4)],
-        [card("clubs", 5)],
+        [card("hearts", 6), card("clubs", 5)],
+        [card("diamonds", 6)],
         [card("spades", 12)],
         [card("spades", 13)],
       ],
       piles: [
-        suitedPile("hearts", 2),
+        suitedPile("hearts", 5),
         suitedPile("spades", 4),
         suitedPile("diamonds", 3),
         suitedPile("clubs", 3),
       ],
       sequence: [
         { type: "s2s", source: 0, dest: 1, count: 1 },
-        { type: "c2s", source: "pounce", dest: 0 },
+        { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
+        { type: "c2c", source: { type: "pounce" }, dest: 0 },
       ],
     }),
   },
@@ -386,12 +395,12 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
   {
     id: "uncover-center",
     kind: "uncover_center",
-    objective: "Make a center play",
+    objective: "Unload a pounce card",
     difficulty: "Sharp",
     build: () => ({
       deckCard: card("hearts", 13),
       flippedDeck: [card("hearts", 12)],
-      pounceDeck: [card("clubs", 11), card("clubs", 10)],
+      pounceDeck: [card("clubs", 11), card("hearts", 7)],
       stacks: [
         [card("hearts", 6), card("clubs", 5)],
         [card("diamonds", 6)],
@@ -407,6 +416,7 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
       sequence: [
         { type: "s2s", source: 0, dest: 1, count: 1 },
         { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
+        { type: "c2c", source: { type: "pounce" }, dest: 0 },
       ],
     }),
   },
@@ -417,7 +427,7 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     difficulty: "Combo",
     build: () => ({
       deckCard: card("diamonds", 13),
-      flippedDeck: [card("clubs", 3)],
+      flippedDeck: [card("clubs", 12)],
       pounceDeck: [card("clubs", 9), card("hearts", 7)],
       stacks: singleStacks(
         card("clubs", 13),
@@ -436,6 +446,39 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
         { type: "c2c", source: { type: "pounce" }, dest: 0 },
       ],
     }),
+  },
+  {
+    id: "solitaire-waste-center-pounce",
+    kind: "combo",
+    objective: "Unload a pounce card",
+    difficulty: "Combo",
+    build: ({ rng }) => {
+      const targetValue = pickValue(rng, [4, 5, 6, 7, 8, 9]);
+      const wasteValue = nextValue(targetValue);
+      const pounceValue = nextValue(wasteValue);
+      return {
+        deckCard: card("clubs", 13),
+        flippedDeck: [card("hearts", wasteValue)],
+        pounceDeck: [card("clubs", 11), card("hearts", pounceValue)],
+        stacks: [
+          [card("diamonds", 13)],
+          [card("clubs", 12)],
+          [card("spades", nextValue(targetValue)), card("hearts", targetValue)],
+          [card("spades", 11)],
+        ],
+        piles: [
+          suitedPile("hearts", previousValue(targetValue)),
+          suitedPile("spades", 5),
+          suitedPile("diamonds", 3),
+          suitedPile("clubs", 3),
+        ],
+        sequence: [
+          { type: "c2c", source: { type: "solitaire", index: 2 }, dest: 0 },
+          { type: "c2c", source: { type: "deck" }, dest: 0 },
+          { type: "c2c", source: { type: "pounce" }, dest: 0 },
+        ],
+      };
+    },
   },
   {
     id: "uncover-free-pounce",
@@ -528,8 +571,6 @@ export function getPounceRushMoveRejection(
   const expectedMove = puzzle.sequence[stepIndex];
   const subparMove = getCodifiedSubparMoveMessage(
     board,
-    puzzle,
-    stepIndex,
     move,
     expectedMove
   );
@@ -540,10 +581,7 @@ export function getPounceRushMoveRejection(
   if (isLegalPounceRushMove(board, move)) {
     return {
       title: "Nice try",
-      detail:
-        puzzle.objective === "Unload a pounce card"
-          ? "There is a better move to unload a pounce card."
-          : "There is a more direct center play.",
+      detail: "There is a better move to unload a pounce card.",
     };
   }
 
@@ -590,6 +628,8 @@ export function createPounceRushPuzzle({
 
     try {
       assertUniqueCards(board, template.id);
+      assertSolitaireStacksAreValid(board, template.id);
+      assertSolutionClearsPounce(board, setup.sequence, template.id);
       assertSequenceIsLegal(board, setup.sequence, template.id);
       assertNoUnexpectedLegalMoves(board, setup.sequence, template.id);
 
@@ -672,14 +712,37 @@ function getSeededTemplate(
   seed: string,
   puzzleNumber: number
 ): PuzzleTemplate {
-  const templateCount = POUNCE_RUSH_TEMPLATES.length;
+  const templates = getTemplatePool(seed, puzzleNumber);
+  const templateCount = templates.length;
   const cycle = Math.floor(puzzleNumber / templateCount);
   const cycleIndex = puzzleNumber % templateCount;
   const order = shuffle(
     Array.from({ length: templateCount }, (_, index) => index),
     createSeededRng(`${seed}:template-cycle:${cycle}`)
   );
-  return POUNCE_RUSH_TEMPLATES[order[cycleIndex]];
+  return templates[order[cycleIndex]];
+}
+
+function getTemplatePool(seed: string, puzzleNumber: number): PuzzleTemplate[] {
+  if (seed.startsWith("daily-") && !seed.startsWith("daily-rush-")) {
+    return POUNCE_RUSH_TEMPLATES.filter(
+      (template) => template.difficulty === "Combo"
+    );
+  }
+
+  if (puzzleNumber < 4) {
+    return POUNCE_RUSH_TEMPLATES.filter(
+      (template) => template.difficulty === "Warmup"
+    );
+  }
+
+  if (puzzleNumber < 10) {
+    return POUNCE_RUSH_TEMPLATES.filter(
+      (template) => template.difficulty !== "Combo"
+    );
+  }
+
+  return POUNCE_RUSH_TEMPLATES;
 }
 
 function normalizePounceRushSeed(seed: string | undefined): string {
@@ -894,6 +957,51 @@ function assertSequenceIsLegal(
   });
 }
 
+function assertSolutionClearsPounce(
+  board: BoardState,
+  sequence: Move[],
+  templateId: string
+): void {
+  const finalMove = sequence[sequence.length - 1];
+  if (!isPounceClearingMove(finalMove)) {
+    throw new Error(
+      `Pounce Rush puzzle ${templateId} does not end by clearing pounce`
+    );
+  }
+
+  const boardCopy = deepClone(board);
+  const startingPounceCount = boardCopy.players[PLAYER_INDEX].pounceDeck.length;
+  sequence.forEach((move) => {
+    const result = executeMove(boardCopy, PLAYER_INDEX, move);
+    if (result == null) {
+      throw new Error(
+        `Pounce Rush puzzle ${templateId} has an illegal pounce-clearing sequence`
+      );
+    }
+  });
+
+  if (boardCopy.players[PLAYER_INDEX].pounceDeck.length >= startingPounceCount) {
+    throw new Error(
+      `Pounce Rush puzzle ${templateId} did not clear a pounce card`
+    );
+  }
+}
+
+function assertSolitaireStacksAreValid(
+  board: BoardState,
+  templateId: string
+): void {
+  board.players[PLAYER_INDEX].stacks.forEach((stack, stackIndex) => {
+    for (let index = 1; index < stack.length; index++) {
+      if (!canStackOnSolitaire(stack[index], stack[index - 1])) {
+        throw new Error(
+          `Pounce Rush puzzle ${templateId} has invalid solitaire stack ${stackIndex}`
+        );
+      }
+    }
+  });
+}
+
 function assertNoUnexpectedLegalMoves(
   board: BoardState,
   sequence: Move[],
@@ -921,8 +1029,6 @@ function assertNoUnexpectedLegalMoves(
       if (
         getCodifiedSubparMoveMessage(
           boardCopy,
-          puzzle,
-          stepIndex,
           move,
           expectedMove
         )
@@ -949,14 +1055,12 @@ function assertNoUnexpectedLegalMoves(
 function getTemplateObjective(templateId: string): PounceRushObjective {
   return (
     POUNCE_RUSH_TEMPLATES.find((template) => template.id === templateId)
-      ?.objective ?? "Make a center play"
+      ?.objective ?? "Unload a pounce card"
   );
 }
 
 function getCodifiedSubparMoveMessage(
   board: BoardState,
-  puzzle: Pick<PounceRushPuzzle, "objective">,
-  _stepIndex: number,
   move: Move,
   expectedMove: Move | undefined
 ): PounceRushMoveRejection | null {
@@ -988,6 +1092,17 @@ function getCodifiedSubparMoveMessage(
   }
 
   if (
+    expectedMove.type === "c2c" &&
+    expectedMove.source.type === "deck" &&
+    move.type !== "c2c"
+  ) {
+    return {
+      title: "Waste first",
+      detail: "The waste card connects your pounce card.",
+    };
+  }
+
+  if (
     expectedMove.type === "c2s" &&
     expectedMove.source === "pounce" &&
     isEmptySolitaireStack(board, expectedMove.dest) &&
@@ -1004,7 +1119,7 @@ function getCodifiedSubparMoveMessage(
     expectedMove.type === "c2c" &&
     expectedMove.source.type === "pounce" &&
     ((move.type === "c2s" && move.source === "pounce") ||
-      (isMoveToAnyEmptySolitaireStack(board, move) && move.type !== "c2c"))
+      move.type !== "c2c")
   ) {
     return {
       title: "Center first",
@@ -1012,27 +1127,13 @@ function getCodifiedSubparMoveMessage(
     };
   }
 
-  if (
-    puzzle.objective === "Unload a pounce card" &&
-    move.type === "c2c" &&
-    !isExpectedPounceRushMove(move, expectedMove)
-  ) {
-    return {
-      title: "Nice try",
-      detail: "There is a better move to unload a pounce card.",
-    };
-  }
-
   return null;
 }
 
-function isMoveToAnyEmptySolitaireStack(
-  board: BoardState,
-  move: Move
-): boolean {
+function isPounceClearingMove(move: Move | undefined): boolean {
   return (
-    (move.type === "c2s" || move.type === "s2s") &&
-    isEmptySolitaireStack(board, move.dest)
+    (move?.type === "c2c" && move.source.type === "pounce") ||
+    (move?.type === "c2s" && move.source === "pounce")
   );
 }
 
@@ -1239,6 +1340,17 @@ function assertUniqueCards(board: BoardState, templateId: string): void {
     }
     seen.add(key);
   });
+}
+
+function canStackOnSolitaire(cardState: CardState, lowerCard: CardState): boolean {
+  return (
+    lowerCard.value === cardState.value + 1 &&
+    isBlackSuit(lowerCard.suit) !== isBlackSuit(cardState.suit)
+  );
+}
+
+function isBlackSuit(suit: Suits): boolean {
+  return suit === "clubs" || suit === "spades";
 }
 
 function card(suit: Suits, value: Values): CardState {

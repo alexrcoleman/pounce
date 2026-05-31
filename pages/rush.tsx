@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "antd";
 import Board from "../client/Board";
@@ -20,6 +20,8 @@ const PounceRushPage: NextPage<{
   const router = useRouter();
   const settings = useClientSettingsStore({ scale: 0.94 });
   const [isReportDialogOpen, setIsReportDialogOpen] = useState(false);
+  const [isSummaryCopied, setIsSummaryCopied] = useState(false);
+  const summaryCopiedTimeoutRef = useRef<number | null>(null);
   const visiblePlayerIndices = [0] as const;
   const playerName = name || "Player";
   const {
@@ -57,6 +59,15 @@ const PounceRushPage: NextPage<{
     }
   }, [name, setName]);
 
+  useEffect(
+    () => () => {
+      if (summaryCopiedTimeoutRef.current != null) {
+        window.clearTimeout(summaryCopiedTimeoutRef.current);
+      }
+    },
+    []
+  );
+
   if (!isConnected || state.board == null || currentPuzzle == null) {
     return (
       <>
@@ -76,18 +87,21 @@ const PounceRushPage: NextPage<{
   const isRunning = status === "running";
   const isDailyPuzzle = runKind === "daily_puzzle";
   const isDailyRush = runKind === "daily_rush";
+  const isEndless = runKind === "endless";
   const isInteractionDisabled = isIdle || isComplete || isAdvancingPuzzle;
   const sequenceLength = currentPuzzle.sequence.length;
   const displayedStep = Math.min(stepIndex + 1, sequenceLength);
   const isDailyPuzzleComplete = dailyOutcome?.dateKey === dailyDateKey;
   const isDailyRushComplete = dailyRushOutcome?.dateKey === dailyDateKey;
-  const isSelectedDailyComplete =
-    (isDailyPuzzle && isDailyPuzzleComplete) ||
-    (isDailyRush && isDailyRushComplete);
   const dailyLabel = formatDailyLabel(dailyDateKey);
   const isReviewingPuzzle = isComplete && reviewPuzzleNumber != null;
-  const timeLabel = isDailyPuzzle ? "Elapsed" : "Time";
-  const timeValue = isDailyPuzzle
+  const shareText = isDailyPuzzle
+    ? dailyOutcome?.shareText
+    : isDailyRush
+    ? dailyRushOutcome?.shareText
+    : null;
+  const timeLabel = isDailyPuzzle || isEndless ? "Elapsed" : "Time";
+  const timeValue = isDailyPuzzle || isEndless
     ? formatDuration(elapsedMs)
     : formatDuration(remainingMs);
   const completionTitle = isDailyPuzzle
@@ -100,6 +114,22 @@ const PounceRushPage: NextPage<{
     : isDailyRush
     ? "Daily rush"
     : "Report code";
+
+  const copySummary = async () => {
+    const wasCopied = await actions.copyShareText(shareText);
+    if (!wasCopied) {
+      return;
+    }
+
+    setIsSummaryCopied(true);
+    if (summaryCopiedTimeoutRef.current != null) {
+      window.clearTimeout(summaryCopiedTimeoutRef.current);
+    }
+    summaryCopiedTimeoutRef.current = window.setTimeout(() => {
+      summaryCopiedTimeoutRef.current = null;
+      setIsSummaryCopied(false);
+    }, 1000);
+  };
 
   return (
     <>
@@ -209,7 +239,7 @@ const PounceRushPage: NextPage<{
                   <small>
                     {isDailyRushComplete
                       ? `${dailyRushOutcome?.score ?? 0} solved today`
-                      : "One-minute daily"}
+                      : "Three-minute daily"}
                   </small>
                 </button>
                 <button
@@ -219,7 +249,16 @@ const PounceRushPage: NextPage<{
                   type="button"
                 >
                   <span>Random Rush</span>
-                  <small>Fresh practice boards</small>
+                  <small>Three-minute run</small>
+                </button>
+                <button
+                  aria-pressed={isEndless}
+                  className={styles.modeTab}
+                  onClick={() => actions.selectRunKind("endless")}
+                  type="button"
+                >
+                  <span>Endless</span>
+                  <small>No timer</small>
                 </button>
               </div>
               <div className={styles.modeSummary}>
@@ -227,7 +266,7 @@ const PounceRushPage: NextPage<{
                   isDailyPuzzleComplete ? (
                     <>
                       <strong>Daily puzzle complete</strong>
-                      <span>Daily Rush and Random Rush are still open.</span>
+                      <span>Open results, or choose another mode.</span>
                     </>
                   ) : (
                     <>
@@ -239,14 +278,19 @@ const PounceRushPage: NextPage<{
                   isDailyRushComplete ? (
                     <>
                       <strong>Daily Rush complete</strong>
-                      <span>Random Rush is still open for practice.</span>
+                      <span>Open results, or choose another mode.</span>
                     </>
                   ) : (
                     <>
                       <strong>One rush today</strong>
-                      <span>Play the same daily one-minute set.</span>
+                      <span>Play the same daily three-minute set.</span>
                     </>
                   )
+                ) : isEndless ? (
+                  <>
+                    <strong>Endless puzzles</strong>
+                    <span>Keep solving generated boards without a timer.</span>
+                  </>
                 ) : (
                   <>
                     <strong>Unlimited practice</strong>
@@ -257,24 +301,27 @@ const PounceRushPage: NextPage<{
               <div className={styles.startActions}>
                 <Button
                   className={`${styles.primaryButton} ${styles.startButton}`}
-                  disabled={isSelectedDailyComplete}
                   onClick={
                     isDailyPuzzle
                       ? actions.startDailyPuzzle
                       : isDailyRush
                       ? actions.startDailyRush
+                      : isEndless
+                      ? actions.startEndless
                       : actions.startRandom
                   }
                   type="primary"
                 >
                   {isDailyPuzzle
                     ? isDailyPuzzleComplete
-                      ? "Daily puzzle complete"
+                      ? "View results"
                       : "Start puzzle"
                     : isDailyRush
                     ? isDailyRushComplete
-                      ? "Daily Rush complete"
+                      ? "View results"
                       : "Start Daily Rush"
+                    : isEndless
+                    ? "Start Endless"
                     : "Start Random Rush"}
                 </Button>
               </div>
@@ -319,6 +366,21 @@ const PounceRushPage: NextPage<{
                     <strong>{dailyOutcome.tries}</strong>
                   </div>
                 </div>
+              ) : isDailyRush && dailyRushOutcome ? (
+                <div className={styles.dailyResultGrid}>
+                  <div>
+                    <span>Solved</span>
+                    <strong>{dailyRushOutcome.score}</strong>
+                  </div>
+                  <div>
+                    <span>Boards</span>
+                    <strong>{dailyRushOutcome.puzzleCount}</strong>
+                  </div>
+                  <div>
+                    <span>Time</span>
+                    <strong>{formatDuration(dailyRushOutcome.durationMs)}</strong>
+                  </div>
+                </div>
               ) : (
                 <div className={styles.completionScore}>
                   <strong>{score}</strong>
@@ -346,10 +408,8 @@ const PounceRushPage: NextPage<{
                   </button>
                 ))}
               </div>
-              {isDailyPuzzle && dailyOutcome ? (
-                <pre className={styles.shareSummary}>
-                  {dailyOutcome.shareText}
-                </pre>
+              {shareText ? (
+                <pre className={styles.shareSummary}>{shareText}</pre>
               ) : null}
               <div className={styles.completionActions}>
                 {runKind === "random" ? (
@@ -369,42 +429,52 @@ const PounceRushPage: NextPage<{
                     className={styles.completionButton}
                     onClick={() => {
                       setIsReportDialogOpen(false);
+                      actions.startEndless();
+                    }}
+                  >
+                    Continue endless
+                  </Button>
+                ) : null}
+                {runKind === "random" ? (
+                  <Button
+                    className={styles.completionButton}
+                    onClick={() => {
+                      setIsReportDialogOpen(false);
                       actions.restart();
                     }}
                   >
                     Replay set
                   </Button>
                 ) : null}
-                {isDailyPuzzle || runKind === "random" ? (
+                {shareText ? (
                   <Button
                     className={`${styles.completionButton} ${
-                      isDailyPuzzle ? styles.primaryButton : ""
+                      shareText ? styles.primaryButton : ""
                     }`}
-                    onClick={
-                      isDailyPuzzle
-                        ? actions.copyDailyShareText
-                        : () => setIsReportDialogOpen(true)
-                    }
-                    type={isDailyPuzzle ? "primary" : "default"}
+                    onClick={copySummary}
+                    type="primary"
                   >
-                    {isDailyPuzzle ? "Copy summary" : "Report puzzles"}
+                    {isSummaryCopied ? (
+                      <span className={styles.buttonInlineStatus}>
+                        Copied <SolvedCheck />
+                      </span>
+                    ) : (
+                      "Copy summary"
+                    )}
                   </Button>
                 ) : null}
-                {isDailyPuzzle || isDailyRush ? (
+                {isDailyPuzzle || isDailyRush || runKind === "random" ? (
                   <Button
-                    className={`${styles.completionButton} ${
-                      isDailyRush ? styles.primaryButton : ""
-                    }`}
+                    className={styles.completionButton}
                     onClick={() => {
                       setIsReportDialogOpen(false);
-                      actions.startRandom();
+                      actions.showModePicker();
                     }}
-                    type={isDailyRush ? "primary" : "default"}
                   >
-                    Random Rush
+                    Back to puzzles
                   </Button>
                 ) : null}
-                {isDailyPuzzle || isDailyRush ? (
+                {isDailyPuzzle || isDailyRush || runKind === "random" ? (
                   <Button
                     className={styles.completionButton}
                     onClick={() => setIsReportDialogOpen(true)}
