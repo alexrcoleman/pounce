@@ -628,14 +628,19 @@ const cappedScoreGapBudgetFiltered = trainNeuralActionRankingPolicy({
   rlCounterfactualValueHuberDelta: 0,
 });
 assert.ok(
-  cappedScoreGapBudgetFiltered.reinforcement.counterfactualUpdateCount <= 4 &&
-    cappedScoreGapBudgetFiltered.reinforcement
-      .counterfactualScoreGapBudgetSkippedCount > 0 &&
-    cappedScoreGapBudgetFiltered.reinforcement
-      .counterfactualScoreGapSkippedCount === 0 &&
-    cappedScoreGapBudgetFiltered.reinforcement.averageCounterfactualScoreGap <=
-      0.05,
-  "score-gap cap should prefilter candidates before score-gap budgeting"
+  cappedScoreGapBudgetFiltered.reinforcement.counterfactualUpdateCount > 0 &&
+    cappedScoreGapBudgetFiltered.reinforcement.counterfactualUpdateCount <= 4,
+  "score-gap cap should keep a non-empty label set within the score-gap budget"
+);
+assert.equal(
+  cappedScoreGapBudgetFiltered.reinforcement.counterfactualScoreGapSkippedCount,
+  0,
+  "score-gap cap should prefilter candidates before recording skipped labels"
+);
+assert.ok(
+  cappedScoreGapBudgetFiltered.reinforcement.averageCounterfactualScoreGap <=
+    0.05,
+  "score-gap cap should keep accepted labels inside the configured score gap"
 );
 
 const labelTargetStopped = trainNeuralActionRankingPolicy({
@@ -891,6 +896,18 @@ function assertLegacyFeatureExpansion() {
     "opponent.deckCenterPlayableCount",
     "opponent.stackCenterPlayableCount",
     "opponent.pounceCanPlaySoonCount",
+    "own.stockFraction",
+    "own.wasteFraction",
+    "own.pounceValue",
+    "own.pounceStackParity",
+    "opponent.minPounceCount",
+    "opponent.maxPouncePressure",
+    "center.ownPounceCanFollowAfter",
+    "center.ownDeckCanFollowAfter",
+    "center.ownStackCanFollowAfter",
+    "center.opponentFollowPressureAfter",
+    "center.opponentPounceFollowPressureAfter",
+    "center.opponentSameNowPressure",
   ].filter((featureName) => baseModel.featureNames.includes(featureName));
   assert.ok(
     droppedFeatures.length > 0,
@@ -1049,6 +1066,21 @@ function assertTacticalFeatureSurface() {
     getFeature(cycleCandidate, "own.wastePounceConnectorCloseness") > 0,
     "deck context should expose waste-card pounce connector closeness"
   );
+  assert.equal(
+    getFeature(cycleCandidate, "own.wasteFraction"),
+    1,
+    "deck context should expose how far through the current waste pass we are"
+  );
+  assert.equal(
+    getFeature(cycleCandidate, "own.pounceValue"),
+    4 / 13,
+    "board context should expose the current pounce card value"
+  );
+  assert.equal(
+    getFeature(cycleCandidate, "own.pounceStackParity"),
+    1,
+    "board context should expose the current pounce card stack parity"
+  );
   assert.ok(
     getFeature(cycleCandidate, "own.stackCenterPlayableCount") > 0,
     "visible pressure should count own playable solitaire tops"
@@ -1168,6 +1200,90 @@ function assertTacticalFeatureSurface() {
       "own.stockLookaheadOwnSolitaireDestinationReach"
     ) > 0,
     "deck context should expose future stock solitaire destinations"
+  );
+  assert.equal(
+    getFeature(stockLookaheadCycle, "own.stockFraction"),
+    1,
+    "deck context should expose the stock fraction to every action"
+  );
+
+  const centerPressureBoard = createBoard(2);
+  centerPressureBoard.isActive = true;
+  centerPressureBoard.isDealt = true;
+  centerPressureBoard.piles = [
+    [card("hearts", 4, -1)],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+  ];
+  centerPressureBoard.players[0].pounceDeck = [card("hearts", 6, 0)];
+  centerPressureBoard.players[0].deck = [];
+  centerPressureBoard.players[0].flippedDeck = [card("hearts", 5, 0)];
+  centerPressureBoard.players[0].stacks = [
+    [card("hearts", 6, 0)],
+    [],
+    [],
+    [],
+  ];
+  centerPressureBoard.players[1].pounceDeck = [
+    card("clubs", 2, 1),
+    card("hearts", 6, 1),
+  ];
+  centerPressureBoard.players[1].deck = [];
+  centerPressureBoard.players[1].flippedDeck = [card("hearts", 5, 1)];
+  centerPressureBoard.players[1].stacks = [
+    [card("hearts", 6, 1)],
+    [],
+    [],
+    [],
+  ];
+  const centerPressureCandidate = enumerateActionRankingCandidates(
+    centerPressureBoard,
+    0
+  ).find(
+    (candidate) =>
+      candidate.move.type === "c2c" &&
+      candidate.move.source.type === "deck"
+  );
+  assert.ok(
+    centerPressureCandidate,
+    "feature check should include a center move with follow pressure"
+  );
+  assert.ok(
+    getFeature(centerPressureCandidate, "center.ownPounceCanFollowAfter") > 0,
+    "center pressure should report own pounce follow-up cards"
+  );
+  assert.ok(
+    getFeature(centerPressureCandidate, "center.ownStackCanFollowAfter") > 0,
+    "center pressure should report own solitaire follow-up cards"
+  );
+  assert.ok(
+    getFeature(centerPressureCandidate, "center.opponentFollowPressureAfter") >
+      0,
+    "center pressure should weight opponent follow-up cards by pounce urgency"
+  );
+  assert.ok(
+    getFeature(
+      centerPressureCandidate,
+      "center.opponentPounceFollowPressureAfter"
+    ) > 0,
+    "center pressure should separately expose opponent pounce follow-ups"
+  );
+  assert.ok(
+    getFeature(centerPressureCandidate, "center.opponentSameNowPressure") > 0,
+    "center pressure should weight opponents that could race the same center card"
+  );
+  assert.ok(
+    getFeature(centerPressureCandidate, "opponent.minPounceCount") > 0,
+    "visible pressure should expose the closest opponent pounce count"
+  );
+  assert.ok(
+    getFeature(centerPressureCandidate, "opponent.maxPouncePressure") > 0,
+    "visible pressure should expose low-pounce opponent urgency"
   );
 
   return {

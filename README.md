@@ -77,7 +77,22 @@ It also repeats a compact own-deck context on every candidate: visible waste-car
 soon/play-to-solitaire/pounce-connector shape plus stock-lookahead reach for
 center play, soon play, solitaire destinations, and pounce connectors. That gives
 non-cycle moves a lightweight memory proxy for the deck opportunity they are
-preserving or delaying.
+preserving or delaying. The current 130-input surface also exposes direct
+stock/waste fractions plus the current pounce-card value/parity on every
+candidate, so reward labels do not have to reconstruct those ideas from separate
+count features.
+Center moves now carry a sharper tempo/threat signal: own follow-up cards are
+split by pounce/deck/solitaire source, and opponent follow-up pressure is
+weighted by how close that opponent is to pouncing out. This is meant to give RL
+enough context to learn "do not feed the opponent's pounce card" without baking
+that as a fixed heuristic priority.
+A first 130-input threat-context warmup from the 118-input deck-context warmup
+(`48` imitation deals, `2` epochs, `IMITATION_LR=0.005`) reached `92.92%`
+teacher accuracy and saved an `805 KB` model with 25,345 parameters. It stayed
+close to the 118-input warmup in paired heuristic-seat play
+(`-0.042 +/- 0.057` over 128 games) and had a noisy positive neural self-play
+point estimate (`+0.297 +/- 0.328` over 64 games). Treat this as feature-surface
+preparation for reward/self-play work, not as a promoted stronger policy yet.
 A first 118-input deck-context warmup from the 108-input solitaire-context
 checkpoint (`48` imitation deals, `2` epochs, `IMITATION_LR=0.005`) reached
 `92.97%` teacher accuracy and saved a `730 KB` model with 23,041 parameters. It
@@ -103,15 +118,16 @@ the label budget.
 A no-promotion `action-ranking:tune-rl` sweep now supports that kind of check:
 `RL_TUNE_DISABLE_PROMOTION=true` keeps every recipe anchored to the same starting
 checkpoint, and `RL_TUNE_EVALUATE_ALL_GATES=true` runs self-play/style gates even
-for near-misses. A 3-recipe compact champion sweep on a fresh seed tested the
-all-layer recipe, `RL_COUNTERFACTUAL_ANCHOR_WEIGHT=0.25`, and return-gap pair
-weighting with scale `8`. None reproduced the earlier positive paired signal:
-all-layer tied paired/self-play exactly, anchoring measured
+for near-misses. A sampled-state 3-recipe compact champion sweep on a fresh seed
+tested the all-layer recipe, `RL_COUNTERFACTUAL_ANCHOR_WEIGHT=0.25`, and
+return-gap pair weighting with scale `8`. None reproduced the earlier positive
+paired signal: all-layer tied paired/self-play exactly, anchoring measured
 `-0.013 +/- 0.013` paired and `+0.005 +/- 0.005` self-play, and return-gap
 weighting measured `-0.008 +/- 0.008` paired and `+0.036 +/- 0.036` self-play.
-So the compact champion path is promising but seed-sensitive; the next useful
-work is improving label yield/reliability before spending larger confirmation
-budgets.
+Because that was not a strict greedy-state reproduction, do not use it as the
+final verdict on the compact champion recipe. The broader lesson still holds:
+the path is seed-sensitive, and the next useful work is improving label
+yield/reliability before spending larger confirmation budgets.
 Cycle moves now include a stock-memory proxy: the card that would become visible
 after cycling, whether it can play center/solitaire/soon, whether it can connect
 to the pounce card, whether the action only resets the waste pile, and the
