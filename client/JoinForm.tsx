@@ -5,7 +5,9 @@ import { useRouter } from "next/router";
 import Link from "next/link";
 import usePwaInstall from "./usePwaInstall";
 import { FAVICON_SRC } from "../shared/gameAssets";
+import { canUseClientInitialValue } from "./clientHydration";
 import { markPendingRoomEntry } from "./analytics";
+import useIsomorphicLayoutEffect from "./useIsomorphicLayoutEffect";
 
 const ROOM_CODE_PREFETCH_MIN_LENGTH = 1;
 
@@ -32,8 +34,16 @@ export default function JoinForm({
   onPlayOffline,
 }: Props) {
   const inviteRoomCode = normalizeRoomCode(inviteRoom ?? "");
-  const [currentRoom, setCurrentRoom] = useState("");
-  const [currentName, setCurrentName] = useState("");
+  const router = useRouter();
+  const [currentRoom, setCurrentRoom] = useState(() =>
+    canUseClientInitialValue()
+      ? getInitialRoom(inviteRoomCode, router.query.roomid)
+      : ""
+  );
+  const [currentName, setCurrentName] = useState(() =>
+    getRememberedName(placeholderName) ||
+    (canUseClientInitialValue() ? getStoredName() : "")
+  );
   const [namePlaceholder, setNamePlaceholder] = useState("Your name");
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [isInstallHelpOpen, setInstallHelpOpen] = useState(false);
@@ -50,13 +60,12 @@ export default function JoinForm({
     isUpdatingOfflineCache,
     message,
   } = usePwaInstall();
-  const router = useRouter();
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     if (router.isReady) {
       const queryRoom = router.query.roomid?.toString() ?? "";
       setCurrentRoom(inviteRoomCode || normalizeRoomCode(queryRoom));
-      const storedName = localStorage.getItem("pounce::name") ?? "";
+      const storedName = getStoredName();
       setCurrentName(
         getRememberedName(placeholderName) || getRememberedName(storedName)
       );
@@ -484,6 +493,27 @@ function getRememberedName(name: string) {
   return trimmedName && trimmedName.toLowerCase() !== "player"
     ? trimmedName
     : "";
+}
+
+function getStoredName() {
+  try {
+    return getRememberedName(localStorage.getItem("pounce::name") ?? "");
+  } catch {
+    return "";
+  }
+}
+
+function getInitialRoom(
+  inviteRoomCode: string,
+  queryRoomId: string | string[] | undefined
+) {
+  if (inviteRoomCode) {
+    return inviteRoomCode;
+  }
+
+  return normalizeRoomCode(
+    Array.isArray(queryRoomId) ? queryRoomId[0] ?? "" : queryRoomId ?? ""
+  );
 }
 
 function normalizeRoomCode(room: string) {

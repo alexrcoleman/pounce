@@ -13,6 +13,7 @@ import StatsigRouteLogger from "../client/StatsigRouteLogger";
 import { useCallback, useEffect, useState, type ErrorInfo } from "react";
 import { useRouter } from "next/router";
 import { getPageThemeColor } from "../shared/themeColors";
+import { markClientHydrated } from "../client/clientHydration";
 import theme from "../client/theme";
 import {
   getRouteAnalyticsMetadata,
@@ -40,6 +41,10 @@ function AppContent({ Component, pageProps }: AppProps) {
   const router = useRouter();
   const logStatsigEvent = useStatsigLogger();
   const pageThemeColor = getPageThemeColor(router.pathname);
+
+  useEffect(() => {
+    markClientHydrated();
+  }, []);
 
   useEffect(() => {
     if (!router.isReady) {

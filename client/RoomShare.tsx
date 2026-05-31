@@ -3,6 +3,9 @@ import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import styles from "./RoomShare.module.css";
+import { absoluteUrl, getSeoOrigin } from "../shared/seo";
+import { canUseClientInitialValue } from "./clientHydration";
+import useIsomorphicLayoutEffect from "./useIsomorphicLayoutEffect";
 
 type RoomShareProps = {
   roomId: string;
@@ -14,17 +17,17 @@ export default function RoomShare({
   variant = "start",
 }: RoomShareProps) {
   const roomCode = normalizeRoomCode(roomId);
-  const [inviteUrl, setInviteUrl] = useState("");
-  const [canShare, setCanShare] = useState(false);
+  const [canShare, setCanShare] = useState(
+    () => canUseClientInitialValue() && hasNativeShare()
+  );
   const [copied, setCopied] = useState(false);
   const invitePath = useMemo(() => buildRoomInvitePath(roomCode), [roomCode]);
+  const inviteUrl = useMemo(() => buildRoomInviteUrl(invitePath), [invitePath]);
   const displayUrl = useMemo(() => formatInviteUrl(inviteUrl), [inviteUrl]);
 
-  useEffect(() => {
-    const nextInviteUrl = buildRoomInviteUrl(invitePath);
-    setInviteUrl(nextInviteUrl);
-    setCanShare(typeof navigator !== "undefined" && "share" in navigator);
-  }, [invitePath]);
+  useIsomorphicLayoutEffect(() => {
+    setCanShare(hasNativeShare());
+  }, []);
 
   useEffect(() => {
     if (!copied) {
@@ -77,7 +80,7 @@ export default function RoomShare({
           rel="noreferrer"
           target="_blank"
         >
-          {displayUrl || invitePath}
+          {displayUrl}
         </a>
       </div>
       <Button className={styles.action} onClick={shareRoom}>
@@ -92,11 +95,7 @@ function buildRoomInvitePath(roomCode: string) {
 }
 
 function buildRoomInviteUrl(path: string) {
-  if (typeof window === "undefined") {
-    return path;
-  }
-
-  return new URL(path, window.location.origin).toString();
+  return absoluteUrl(getSeoOrigin(), path);
 }
 
 function normalizeRoomCode(roomId: string) {
@@ -104,16 +103,16 @@ function normalizeRoomCode(roomId: string) {
 }
 
 function formatInviteUrl(inviteUrl: string) {
-  if (!inviteUrl) {
-    return "";
-  }
-
   try {
     const url = new URL(inviteUrl);
     return `${url.host}${url.pathname}`;
   } catch {
     return inviteUrl;
   }
+}
+
+function hasNativeShare() {
+  return typeof navigator !== "undefined" && "share" in navigator;
 }
 
 async function copyText(text: string) {

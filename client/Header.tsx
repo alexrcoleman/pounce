@@ -11,7 +11,6 @@ import { Button, Modal, Popover } from "antd";
 import { useClientContext } from "./ClientContext";
 import DesktopOnlyTooltip from "./DesktopOnlyTooltip";
 import ScoresTable from "./ScoresTable";
-import isTouchDevice from "./isTouchDevice";
 import type { BoardState } from "../shared/GameUtils";
 import { REACTION_OPTIONS, type ReactionId } from "../shared/Reactions";
 import {
@@ -55,7 +54,6 @@ type Props = {
 export default observer(function Header(props: Props) {
   const [isSettingsOpen, setSettingsOpen] = useState(false);
   const [settingsPage, setSettingsPage] = useState<SettingsPage>("main");
-  const [showScoreButton, setShowScoreButton] = useState(false);
   const { state, socket } = useClientContext();
   const board = state.board;
   const isStarted = state.board?.isActive ?? false;
@@ -106,17 +104,6 @@ export default observer(function Header(props: Props) {
     props.onSettingsRequestHandled?.();
   }, [props.settingsRequest, props.onSettingsRequestHandled]);
 
-  useEffect(() => {
-    const updateShowScoreButton = () => {
-      setShowScoreButton(
-        isTouchDevice() || window.matchMedia("(max-width: 720px)").matches
-      );
-    };
-    updateShowScoreButton();
-    window.addEventListener("resize", updateShowScoreButton);
-    return () => window.removeEventListener("resize", updateShowScoreButton);
-  }, []);
-
   return (
     <>
       {showRoomCode ? (
@@ -148,7 +135,7 @@ export default observer(function Header(props: Props) {
             onToggle={() => socket?.emit("set_paused", { paused: !isPaused })}
           />
         ) : null}
-        {showScoreButton && board != null && board.pouncer == null ? (
+        {board != null && board.pouncer == null ? (
           <HeaderScoreboardButton board={board} />
         ) : null}
         {showStuckButton ? (
@@ -651,7 +638,7 @@ function HeaderScoreboardButton({ board }: { board: BoardState }) {
           aria-expanded={isOpen}
           aria-haspopup="dialog"
           aria-label="Open scores"
-          className={`${styles.floatingButton} ${styles.iconButton}`}
+          className={`${styles.floatingButton} ${styles.iconButton} ${styles.scoreboardButton}`}
           onClick={() => setOpen(true)}
           type="button"
         >

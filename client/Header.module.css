@@ -197,6 +197,10 @@
   opacity: 0.96;
 }
 
+.scoreboardButton {
+  display: none;
+}
+
 .settingsIcon {
   width: 15px;
   height: 15px;
@@ -448,6 +452,10 @@
 }
 
 @media (max-width: 720px) {
+  .scoreboardButton {
+    display: inline-flex;
+  }
+
   .floatingControls {
     top: max(8px, env(safe-area-inset-top, 0px));
     right: max(8px, env(safe-area-inset-right, 0px));
@@ -492,6 +500,12 @@
     min-width: 96px;
     max-width: 116px;
     padding: 0 9px;
+  }
+}
+
+@media (hover: none), (pointer: coarse) {
+  .scoreboardButton {
+    display: inline-flex;
   }
 }
 
