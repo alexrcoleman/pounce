@@ -46,6 +46,11 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "own.pounceCount",
   "own.deckCount",
   "own.flippedCount",
+  "own.wasteCanPlaySoon",
+  "own.wasteOwnSolitaireDestinationCount",
+  "own.wasteOwnSolitaireConnectorForPounce",
+  "own.wasteMatchesPounceParity",
+  "own.wastePounceConnectorCloseness",
   "cycle.revealsCard",
   "cycle.revealedValue",
   "cycle.revealedCenterPlayable",
@@ -105,6 +110,11 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "cycle.lookaheadOwnSolitaireDestinationReach",
   "cycle.lookaheadOwnSolitaireConnectorForPounceReach",
   "cycle.lookaheadPounceConnectorReach",
+  "own.stockLookaheadCenterPlayableReach",
+  "own.stockLookaheadCanPlaySoonReach",
+  "own.stockLookaheadOwnSolitaireDestinationReach",
+  "own.stockLookaheadOwnSolitaireConnectorForPounceReach",
+  "own.stockLookaheadPounceConnectorReach",
   "own.pounceCenterPlayable",
   "own.deckCenterPlayable",
   "own.stackCenterPlayableCount",
@@ -373,6 +383,7 @@ function buildActionRankingFeatures(
   const sourceShape = getSourceShapeFeatures(board, player, move, card);
   const cycleShape = getCycleShapeFeatures(board, player, move);
   const centerFollow = getCenterFollowFeatures(board, playerIndex, move, card);
+  const deckContext = getOwnDeckContextFeatures(board, player);
   const cardAlternatives = getCardAlternativeFeatures(
     board,
     player,
@@ -430,6 +441,11 @@ function buildActionRankingFeatures(
     normalize(player?.pounceDeck.length, 13),
     normalize(player?.deck.length, 35),
     normalize(player?.flippedDeck.length, 35),
+    bool(deckContext.wasteCanPlaySoon),
+    normalize(deckContext.wasteOwnSolitaireDestinationCount, 4),
+    bool(deckContext.wasteOwnSolitaireConnectorForPounce),
+    bool(deckContext.wasteMatchesPounceParity),
+    normalize(deckContext.wastePounceConnectorCloseness, 1),
     bool(cycleShape.revealedCard != null),
     normalizeCardValue(cycleShape.revealedCard),
     bool(cycleShape.revealedCenterPlayable),
@@ -501,6 +517,11 @@ function buildActionRankingFeatures(
     normalize(cycleShape.lookaheadOwnSolitaireDestinationReach, 1),
     normalize(cycleShape.lookaheadOwnSolitaireConnectorForPounceReach, 1),
     normalize(cycleShape.lookaheadPounceConnectorReach, 1),
+    normalize(deckContext.stockLookaheadCenterPlayableReach, 1),
+    normalize(deckContext.stockLookaheadCanPlaySoonReach, 1),
+    normalize(deckContext.stockLookaheadOwnSolitaireDestinationReach, 1),
+    normalize(deckContext.stockLookaheadOwnSolitaireConnectorForPounceReach, 1),
+    normalize(deckContext.stockLookaheadPounceConnectorReach, 1),
     bool(pressureFeatures.ownPounceCenterPlayable),
     bool(pressureFeatures.ownDeckCenterPlayable),
     normalize(pressureFeatures.ownStackCenterPlayableCount, 4),
@@ -840,6 +861,64 @@ function getCycleLookaheadFeatures(board: BoardState, player: PlayerState) {
   }
 
   return features;
+}
+
+function getOwnDeckContextFeatures(
+  board: BoardState,
+  player: PlayerState | undefined
+) {
+  const emptyFeatures = {
+    wasteCanPlaySoon: false,
+    wasteOwnSolitaireDestinationCount: 0,
+    wasteOwnSolitaireConnectorForPounce: false,
+    wasteMatchesPounceParity: false,
+    wastePounceConnectorCloseness: 0,
+    stockLookaheadCenterPlayableReach: 0,
+    stockLookaheadCanPlaySoonReach: 0,
+    stockLookaheadOwnSolitaireDestinationReach: 0,
+    stockLookaheadOwnSolitaireConnectorForPounceReach: 0,
+    stockLookaheadPounceConnectorReach: 0,
+  };
+  if (!player) {
+    return emptyFeatures;
+  }
+
+  const wasteCard = peek(player.flippedDeck);
+  const pounceCard = peek(player.pounceDeck);
+  const wasteSolitaireDestinations = wasteCard
+    ? player.stacks.flatMap((_, dest) =>
+        canMoveCardToSolitaireStack(player, wasteCard, dest) ? [dest] : []
+      )
+    : [];
+  const lookahead = getCycleLookaheadFeatures(board, player);
+
+  return {
+    wasteCanPlaySoon: wasteCard != null && getCanPlaySoon(wasteCard, board, 4),
+    wasteOwnSolitaireDestinationCount: wasteSolitaireDestinations.length,
+    wasteOwnSolitaireConnectorForPounce:
+      wasteCard != null &&
+      wasteSolitaireDestinations.some((dest) =>
+        getMakesPouncePlayable(
+          player,
+          { type: "c2s", source: "deck", dest },
+          wasteCard
+        )
+      ),
+    wasteMatchesPounceParity:
+      wasteCard != null &&
+      pounceCard != null &&
+      getStackCompatibilityParity(wasteCard) ===
+        getStackCompatibilityParity(pounceCard),
+    wastePounceConnectorCloseness:
+      wasteCard && pounceCard ? getConnectorCloseness(wasteCard, pounceCard) : 0,
+    stockLookaheadCenterPlayableReach: lookahead.lookaheadCenterPlayableReach,
+    stockLookaheadCanPlaySoonReach: lookahead.lookaheadCanPlaySoonReach,
+    stockLookaheadOwnSolitaireDestinationReach:
+      lookahead.lookaheadOwnSolitaireDestinationReach,
+    stockLookaheadOwnSolitaireConnectorForPounceReach:
+      lookahead.lookaheadOwnSolitaireConnectorForPounceReach,
+    stockLookaheadPounceConnectorReach: lookahead.lookaheadPounceConnectorReach,
+  };
 }
 
 function getVisiblePressureFeatures(board: BoardState, playerIndex: number) {

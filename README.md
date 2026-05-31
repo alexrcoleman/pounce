@@ -67,12 +67,17 @@ source-stack height/bottom/exposed-card information, whether exposed cards can
 play or match the pounce card's stack-compatibility parity, destination bottom
 value, card parity and pounce-connector closeness, and opponent follow pressure
 split by pounce/deck/solitaire visible cards after center plays.
-The current 108-input surface adds a compact whole-solitaire context: how many
-own stack tops can play soon, how many newly exposed second cards could play
-center or soon, best buried/bottom pounce-connector closeness, and whether a
-source move exposes a card with another solitaire destination. These are meant
-to let rollout labels explain why exposing or preserving a pile matters without
-feeding the network a full recurrent board memory.
+The current feature surface adds a compact whole-solitaire context: how many own
+stack tops can play soon, how many newly exposed second cards could play center
+or soon, best buried/bottom pounce-connector closeness, and whether a source move
+exposes a card with another solitaire destination. These are meant to let rollout
+labels explain why exposing or preserving a pile matters without feeding the
+network a full recurrent board memory.
+It also repeats a compact own-deck context on every candidate: visible waste-card
+soon/play-to-solitaire/pounce-connector shape plus stock-lookahead reach for
+center play, soon play, solitaire destinations, and pounce connectors. That gives
+non-cycle moves a lightweight memory proxy for the deck opportunity they are
+preserving or delaying.
 Cycle moves now include a stock-memory proxy: the card that would become visible
 after cycling, whether it can play center/solitaire/soon, whether it can connect
 to the pounce card, whether the action only resets the waste pile, and the

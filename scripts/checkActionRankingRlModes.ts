@@ -839,6 +839,11 @@ function assertLegacyFeatureExpansion() {
     "cycle.resetsWaste",
     "cycle.stockFractionAfter",
     "cycle.cardsAdvanced",
+    "own.wasteCanPlaySoon",
+    "own.wasteOwnSolitaireDestinationCount",
+    "own.wasteOwnSolitaireConnectorForPounce",
+    "own.wasteMatchesPounceParity",
+    "own.wastePounceConnectorCloseness",
     "dest.bottomValue",
     "card.stackParity",
     "card.matchesPounceParity",
@@ -868,6 +873,11 @@ function assertLegacyFeatureExpansion() {
     "cycle.lookaheadOwnSolitaireDestinationReach",
     "cycle.lookaheadOwnSolitaireConnectorForPounceReach",
     "cycle.lookaheadPounceConnectorReach",
+    "own.stockLookaheadCenterPlayableReach",
+    "own.stockLookaheadCanPlaySoonReach",
+    "own.stockLookaheadOwnSolitaireDestinationReach",
+    "own.stockLookaheadOwnSolitaireConnectorForPounceReach",
+    "own.stockLookaheadPounceConnectorReach",
     "own.pounceCenterPlayable",
     "own.deckCenterPlayable",
     "own.stackCenterPlayableCount",
@@ -1016,6 +1026,29 @@ function assertTacticalFeatureSurface() {
     1,
     "visible pressure should mark own playable waste card"
   );
+  assert.equal(
+    getFeature(cycleCandidate, "own.wasteCanPlaySoon"),
+    1,
+    "deck context should mark visible waste cards close to center play"
+  );
+  assert.ok(
+    getFeature(cycleCandidate, "own.wasteOwnSolitaireDestinationCount") > 0,
+    "deck context should count solitaire destinations for visible waste cards"
+  );
+  assert.equal(
+    getFeature(cycleCandidate, "own.wasteOwnSolitaireConnectorForPounce"),
+    1,
+    "deck context should mark waste cards that make the pounce card playable"
+  );
+  assert.equal(
+    getFeature(cycleCandidate, "own.wasteMatchesPounceParity"),
+    1,
+    "deck context should expose waste-card pounce parity"
+  );
+  assert.ok(
+    getFeature(cycleCandidate, "own.wastePounceConnectorCloseness") > 0,
+    "deck context should expose waste-card pounce connector closeness"
+  );
   assert.ok(
     getFeature(cycleCandidate, "own.stackCenterPlayableCount") > 0,
     "visible pressure should count own playable solitaire tops"
@@ -1119,11 +1152,22 @@ function assertTacticalFeatureSurface() {
     "cycle lookahead should see center-playable cards beyond the next reveal"
   );
   assert.ok(
+    getFeature(stockLookaheadCycle, "own.stockLookaheadCenterPlayableReach") > 0,
+    "deck context should expose center-playable stock memory to every action"
+  );
+  assert.ok(
     getFeature(
       stockLookaheadCycle,
       "cycle.lookaheadOwnSolitaireDestinationReach"
     ) > 0,
     "cycle lookahead should see future stock cards with solitaire destinations"
+  );
+  assert.ok(
+    getFeature(
+      stockLookaheadCycle,
+      "own.stockLookaheadOwnSolitaireDestinationReach"
+    ) > 0,
+    "deck context should expose future stock solitaire destinations"
   );
 
   return {
@@ -1135,6 +1179,10 @@ function assertTacticalFeatureSurface() {
     cycleLookaheadCenterPlayableReach: getFeature(
       stockLookaheadCycle,
       "cycle.lookaheadCenterPlayableReach"
+    ),
+    stockLookaheadCenterPlayableReach: getFeature(
+      stockLookaheadCycle,
+      "own.stockLookaheadCenterPlayableReach"
     ),
     opponentPouncePressure: getFeature(
       cycleCandidate,
