@@ -64,6 +64,8 @@ const promoteStandardErrorMultiplier = readNumberEnv(
   1
 );
 const keepCandidates = readBooleanEnv("RL_TUNE_KEEP_CANDIDATES", true);
+const disablePromotion = readBooleanEnv("RL_TUNE_DISABLE_PROMOTION", false);
+const evaluateAllGates = readBooleanEnv("RL_TUNE_EVALUATE_ALL_GATES", false);
 const playerCount = readIntegerEnv("PLAYERS", 4);
 const maxMovesPerGame = readIntegerEnv("MAX_MOVES", 1800);
 const compareGames = readIntegerEnv("COMPARE_GAMES", 48);
@@ -195,7 +197,8 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
     const modelGatePassed = confirmationBatch
       ? confirmationLowerBound! > confirmMinDelta
       : searchPassed;
-    const shouldRunStyleGate = styleGateGames > 0 && modelGatePassed;
+    const shouldRunStyleGate =
+      styleGateGames > 0 && (modelGatePassed || evaluateAllGates);
     const styleGateBatch = shouldRunStyleGate
       ? compareModelBatchByStyle(candidateModel, bestModel, {
           playerCount,
@@ -216,7 +219,8 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       ? styleGateLowerBound! >= -styleGateMaxRegression
       : true;
     const shouldRunSelfPlayGate =
-      selfPlayGateGames > 0 && modelGatePassed && styleGatePassed;
+      selfPlayGateGames > 0 &&
+      (evaluateAllGates || (modelGatePassed && styleGatePassed));
     const selfPlayGateBatch = shouldRunSelfPlayGate
       ? compareModelBatchSelfPlay(candidateModel, bestModel, {
           playerCount,
@@ -236,7 +240,11 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
     const selfPlayGatePassed = selfPlayGateBatch
       ? selfPlayGateLowerBound! >= -selfPlayGateMaxRegression
       : true;
-    const promoted = modelGatePassed && styleGatePassed && selfPlayGatePassed;
+    const promoted =
+      !disablePromotion &&
+      modelGatePassed &&
+      styleGatePassed &&
+      selfPlayGatePassed;
 
     if (promoted) {
       bestModel = candidateModel;
@@ -309,6 +317,8 @@ console.log(
       promotionRule: {
         promoteMinDelta,
         promoteStandardErrorMultiplier,
+        disablePromotion,
+        evaluateAllGates,
       },
       confirmationRule: {
         confirmGames,

@@ -100,6 +100,18 @@ to `+0.130 +/- 0.083`, but neural self-play regressed to
 `-0.122 +/- 0.086`; the broader batch appears to dilute the useful signal. The
 next sweep should vary the compact recipe's seeds/regularization before raising
 the label budget.
+A no-promotion `action-ranking:tune-rl` sweep now supports that kind of check:
+`RL_TUNE_DISABLE_PROMOTION=true` keeps every recipe anchored to the same starting
+checkpoint, and `RL_TUNE_EVALUATE_ALL_GATES=true` runs self-play/style gates even
+for near-misses. A 3-recipe compact champion sweep on a fresh seed tested the
+all-layer recipe, `RL_COUNTERFACTUAL_ANCHOR_WEIGHT=0.25`, and return-gap pair
+weighting with scale `8`. None reproduced the earlier positive paired signal:
+all-layer tied paired/self-play exactly, anchoring measured
+`-0.013 +/- 0.013` paired and `+0.005 +/- 0.005` self-play, and return-gap
+weighting measured `-0.008 +/- 0.008` paired and `+0.036 +/- 0.036` self-play.
+So the compact champion path is promising but seed-sensitive; the next useful
+work is improving label yield/reliability before spending larger confirmation
+budgets.
 Cycle moves now include a stock-memory proxy: the card that would become visible
 after cycling, whether it can play center/solitaire/soon, whether it can connect
 to the pounce card, whether the action only resets the waste pile, and the
@@ -366,9 +378,12 @@ gate puts the candidate and current best at the same table, swaps seat parity by
 default, and requires the lower-bound point-differential delta to stay above
 `-RL_TUNE_SELF_PLAY_MAX_REGRESSION`. `RL_TUNE_SELF_PLAY_RUNS`,
 `RL_TUNE_SELF_PLAY_SE_MULTIPLIER`, and `RL_TUNE_SELF_PLAY_SWAP_SEATS` tune the
-self-play gate budget and strictness. This is still a search tool; a promoted
-model still needs a larger final paired comparison before replacing the current
-best checkpoint.
+self-play gate budget and strictness. For exploratory sweeps where every recipe
+should be checked against the same starting checkpoint, set
+`RL_TUNE_DISABLE_PROMOTION=true`. Set `RL_TUNE_EVALUATE_ALL_GATES=true` to run
+style/self-play gates for every recipe even when the paired promotion lower bound
+does not pass. This is still a search tool; a promoted model still needs a larger
+final paired comparison before replacing the current best checkpoint.
 
 `IMPROVEMENT_STATES` enables the counterfactual rollout pass: it samples
 teacher-game states, tries several legal actions, lets the teacher finish from
