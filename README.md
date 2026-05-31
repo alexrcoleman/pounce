@@ -95,6 +95,17 @@ close to the 118-input warmup in paired heuristic-seat play
 (`-0.042 +/- 0.057` over 128 games) and had a noisy positive neural self-play
 point estimate (`+0.297 +/- 0.328` over 64 games). Treat this as feature-surface
 preparation for reward/self-play work, not as a promoted stronger policy yet.
+A first reliability-filtered reward probe from this 130-input warmup used greedy
+states, `3` counterfactual rollouts, unanimous behavior win-rate filtering,
+`RL_COUNTERFACTUAL_MAX_SCORE_GAP=0.5`,
+`RL_COUNTERFACTUAL_SCORE_GAP_BUDGET=8`, and the connector/useful-cycle guards.
+The audit accepted only `7` labels in `128` scanned episodes, mostly same-family
+`c2s>c2s` and `c2c>c2c` corrections plus one high-gap `cycle>c2s`. Training the
+matching behavior-scoped, return-gap-weighted pairwise recipe accepted `6`
+labels and applied `12` pairwise updates, but produced zero label-state
+top-action flips and exact ties in paired, fixed-style, and self-play gates. The
+next useful lever is therefore update calibration or targeted deployed-state
+mining, not larger confirmation budgets for this exact recipe.
 Imitation training can now target a single fixed heuristic style with
 `IMITATION_TEACHER_STYLE="Alex 75%"`, and `action-ranking:imitation-by-style`
 reports top-action/equivalence/family agreement against each style. On the
@@ -133,6 +144,20 @@ matchup, `7,680` simulated rounds) put it far below the heuristic family:
 differential, and only a `0.68%` pounce-out rate. This is a useful simulator
 sanity check: broad solitaire/center strategy choices do matter, even if the
 Alex threshold variants are clustered tightly.
+A higher-sample strategy check sharpened that interpretation. In the newer
+strategy-analysis code, `Center pressure` is the old `Alex 75%` profile and
+`Balanced setup` is old `Alex 66%`. Over `1,000` seeded hands with `25` trials
+per advice strategy, raw-best hand share was `46.0% +/- 3.1%` for Balanced
+setup, `32.6% +/- 2.9%` for Solitaire heavy, and `21.4% +/- 2.5%` for Center
+pressure; however, the paired point-differential delta was still positive for
+Center pressure over Balanced setup (`+0.176 +/- 0.100`) and negative for
+Solitaire heavy (`-0.799 +/- 0.171`). A direct paired tournament over `8,192`
+deals with seat rotations found `Alex 75%` vs `Alex 66%` still statistically
+unclear (`+0.0037 +/- 0.0103` score-win-share delta and `+0.103 +/- 0.240`
+point differential), while both were clearly above `Mom` by roughly five score
+win-share points and `+1.3` to `+1.4` point differential. So `Alex 75%` remains
+a plausible local optimum, but the threshold edge is too thin to be the main RL
+target.
 A first 118-input deck-context warmup from the 108-input solitaire-context
 checkpoint (`48` imitation deals, `2` epochs, `IMITATION_LR=0.005`) reached
 `92.97%` teacher accuracy and saved a `730 KB` model with 23,041 parameters. It
