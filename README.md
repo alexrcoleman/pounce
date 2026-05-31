@@ -35,7 +35,7 @@ Useful training knobs:
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:diagnose` to compare top-ranked actions on sampled teacher states
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:trace-divergences` to inspect the first policy-action divergence in paired games
 - `MODEL_IN=...\best.json npm run action-ranking:audit-labels` to audit rollout labels before training on them
-- `MODEL_IN=...\best.json npm run action-ranking:audit-rl-labels` to audit accepted counterfactual RL labels before training on them
+- `MODEL_IN=...\best.json npm run action-ranking:audit-rl-labels` to audit accepted counterfactual RL labels before training on them; this also supports `RL_OPPONENT_MODE=self|champion` and `RL_OPPONENT_MODEL`
 - `MODEL_IN=...\best.json npm run action-ranking:tune` to iterate reward fine-tunes and promote only paired-comparison improvements
 - `MODEL_IN=...\best.json npm run action-ranking:tune-rl` to sweep counterfactual RL recipes and promote only paired-comparison improvements
 - `npm run action-ranking:check-rl-modes` to smoke-test legacy feature expansion and counterfactual RL training mode routing
@@ -1460,6 +1460,20 @@ signal (`-0.004 +/- 0.047`, raw score `-0.021`). The c2s destination path is
 now well controlled, but still not a statistically stronger policy; the next
 step should either improve the objective/horizon for those labels or switch to a
 broader self-play/champion training signal.
+A smoke champion-mode pass from the 130-input threat-context warmup now uses
+the same frozen-opponent setup in both training and label audit. The narrow
+`0.25` policy-margin recipe with 2-rollout unanimous behavior support found one
+accepted `c2c>c2c` label, flipped that label state, and measured
+`+0.019 +/- 0.024` over 1,536 paired heuristic-seat games. A trace saw first
+divergences in only `1.43%` of games; those divergences averaged `+1.88`
+points, mostly from `c2c>c2c`, but the sample was just 11 divergences. Widening
+the policy-margin cap to `0.5` found two `c2s>c2s` labels but flipped no
+accepted label states, traced only one divergence in 384 games, and measured
+slightly negative over 768 paired games (`-0.031 +/- 0.052`). So champion RL is
+not blocked by wiring anymore, but the label stream is still too sparse for a
+deployed strategic jump. The next useful work is improving label throughput or
+using a targeted high-yield deployed-state miner before spending large
+confirmation budgets.
 
 ## Deploying
 

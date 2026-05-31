@@ -67,6 +67,11 @@ if (!modelPath) {
 }
 
 const policy = new NeuralActionRankingPolicy(readModel(modelPath));
+const opponentModelPath = process.env.RL_OPPONENT_MODEL;
+const opponentModel = opponentModelPath
+  ? new NeuralActionRankingPolicy(readModel(opponentModelPath))
+  : undefined;
+const opponentMode = readOpponentModeEnv("RL_OPPONENT_MODE", "teacher");
 const playerCount = readIntegerEnv("PLAYERS", 4);
 const episodes = readIntegerEnv(
   "RL_AUDIT_EPISODES",
@@ -83,6 +88,9 @@ const options = {
   episodes,
   seed,
   temperature: readNumberEnv("RL_TEMPERATURE", 1),
+  opponentMode,
+  opponentPolicy:
+    opponentModel ?? (opponentMode === "champion" ? policy : undefined),
   commonRandom: readBooleanEnv("RL_COMMON_RANDOM", true),
   counterfactualScanSeedCount: readIntegerEnv(
     "RL_COUNTERFACTUAL_SCAN_SEED_COUNT",
@@ -214,8 +222,14 @@ console.log(
       model: {
         path: modelPath,
       },
+      opponentModel: {
+        path:
+          opponentModelPath ??
+          (opponentMode === "champion" ? modelPath : null),
+      },
       options: {
         ...options,
+        opponentPolicy: options.opponentPolicy ? "[policy]" : null,
         maxSampleExamples,
         maxSampleCandidates,
         focusPair,
@@ -930,6 +944,21 @@ function readBooleanEnv(name: string, fallback: boolean): boolean {
   }
   if (["0", "false", "no", "off"].includes(value.toLowerCase())) {
     return false;
+  }
+  return fallback;
+}
+
+function readOpponentModeEnv(
+  name: string,
+  fallback: "teacher" | "self" | "champion"
+): "teacher" | "self" | "champion" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  const normalized = value.toLowerCase();
+  if (normalized === "self" || normalized === "champion") {
+    return normalized;
   }
   return fallback;
 }

@@ -2427,6 +2427,8 @@ export function collectCounterfactualRlLabelAudit(
     episodes: number;
     seed: string;
     temperature: number;
+    opponentMode: PolicyGradientOpponentMode;
+    opponentPolicy?: NeuralActionRankingPolicy;
     commonRandom: boolean;
     counterfactualScanSeedCount: number;
     counterfactualRolloutCount: number;
@@ -2503,12 +2505,37 @@ export function collectCounterfactualRlLabelAudit(
       ? Math.max(1, Math.floor(options.counterfactualScanSeedCount))
       : 1;
   const counterfactualScanCount = options.episodes * counterfactualScanSeedCount;
+  const useSelfPlayOpponents = options.opponentMode === "self";
+  const useChampionOpponents = options.opponentMode === "champion";
+  if (useChampionOpponents && !options.opponentPolicy) {
+    throw new Error("Champion opponent mode requires a frozen opponent policy.");
+  }
 
   for (let scanIndex = 0; scanIndex < counterfactualScanCount; scanIndex++) {
     const scanSeedIndex = Math.floor(scanIndex / options.episodes);
     const episode = scanIndex % options.episodes;
     const scanSeed = getCounterfactualScanSeed(options.seed, scanSeedIndex);
     const neuralPlayerIndex = episode % options.playerCount;
+    const activePlayerIndices = Array.from(
+      { length: options.playerCount },
+      (_, index) => index
+    );
+    const learningPlayerIndices = useSelfPlayOpponents
+      ? activePlayerIndices
+      : [neuralPlayerIndex];
+    const learningPlayerSet = new Set(learningPlayerIndices);
+    const policyByPlayer = useChampionOpponents
+      ? (playerIndex: number) =>
+          learningPlayerSet.has(playerIndex)
+            ? policy
+            : options.opponentPolicy
+      : undefined;
+    const rolloutNeuralPlayerIndices = useChampionOpponents
+      ? activePlayerIndices
+      : learningPlayerIndices;
+    const samplePlayerIndices = useChampionOpponents
+      ? learningPlayerIndices
+      : undefined;
     const board = createTrainingBoard(
       options.playerCount,
       `${scanSeed}:deal:${episode}`
@@ -2524,7 +2551,10 @@ export function collectCounterfactualRlLabelAudit(
       temperature: useGreedyCounterfactualStates ? 1 : options.temperature,
       sample: !useGreedyCounterfactualStates,
       maxMovesPerGame: options.maxMovesPerGame,
-      neuralPlayerIndices: [neuralPlayerIndex],
+      neuralPlayerIndices: rolloutNeuralPlayerIndices,
+      policyByPlayer,
+      samplePlayerIndices,
+      capturePlayerIndices: learningPlayerIndices,
       captureTransitions: useGreedyCounterfactualStates,
       captureTransitionBoards: true,
     });
@@ -2581,8 +2611,10 @@ export function collectCounterfactualRlLabelAudit(
           : options.counterfactualMaxScoreGap,
         options.counterfactualScoreRewardWeight,
         options.counterfactualPounceRewardWeight,
-        [transition.playerIndex],
-        undefined,
+        useSelfPlayOpponents || useChampionOpponents
+          ? learningPlayerIndices
+          : [transition.playerIndex],
+        useChampionOpponents ? options.opponentPolicy : undefined,
         getCounterfactualMoveTypeCandidateFilter(options)
       );
       const counterfactualGap =
