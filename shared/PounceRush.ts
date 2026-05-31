@@ -303,6 +303,87 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     },
   },
   {
+    id: "deck-connector-pounce",
+    kind: "combo",
+    objective: "Unload a pounce card",
+    difficulty: "Sharp",
+    build: () => ({
+      deckCard: card("diamonds", 13),
+      flippedDeck: [card("hearts", 6)],
+      pounceDeck: [card("diamonds", 12), card("clubs", 5)],
+      stacks: singleStacks(
+        card("spades", 7),
+        card("spades", 10),
+        card("spades", 12),
+        card("spades", 13)
+      ),
+      piles: [
+        suitedPile("hearts", 4),
+        suitedPile("spades", 5),
+        suitedPile("diamonds", 3),
+        suitedPile("clubs", 3),
+      ],
+      sequence: [
+        { type: "c2s", source: "deck", dest: 0 },
+        { type: "c2s", source: "pounce", dest: 0 },
+      ],
+    }),
+  },
+  {
+    id: "uncover-connector-pounce",
+    kind: "combo",
+    objective: "Unload a pounce card",
+    difficulty: "Combo",
+    build: () => ({
+      deckCard: card("clubs", 13),
+      flippedDeck: [card("hearts", 8)],
+      pounceDeck: [card("clubs", 11), card("diamonds", 5)],
+      stacks: [
+        [card("spades", 6), card("hearts", 4)],
+        [card("clubs", 5)],
+        [card("spades", 12)],
+        [card("spades", 13)],
+      ],
+      piles: [
+        suitedPile("hearts", 2),
+        suitedPile("spades", 4),
+        suitedPile("diamonds", 3),
+        suitedPile("clubs", 3),
+      ],
+      sequence: [
+        { type: "s2s", source: 0, dest: 1, count: 1 },
+        { type: "c2s", source: "pounce", dest: 0 },
+      ],
+    }),
+  },
+  {
+    id: "tall-free-slot-pounce",
+    kind: "free_slot",
+    objective: "Unload a pounce card",
+    difficulty: "Combo",
+    build: () => ({
+      deckCard: card("clubs", 13),
+      flippedDeck: [card("hearts", 8)],
+      pounceDeck: [card("hearts", 11), card("clubs", 10)],
+      stacks: [
+        [card("hearts", 6), card("clubs", 5)],
+        [card("spades", 7)],
+        [card("spades", 12)],
+        [card("spades", 13)],
+      ],
+      piles: [
+        suitedPile("hearts", 4),
+        suitedPile("spades", 5),
+        suitedPile("diamonds", 3),
+        suitedPile("clubs", 3),
+      ],
+      sequence: [
+        { type: "s2s", source: 0, dest: 1, count: 2 },
+        { type: "c2s", source: "pounce", dest: 0 },
+      ],
+    }),
+  },
+  {
     id: "uncover-center",
     kind: "uncover_center",
     objective: "Make a center play",

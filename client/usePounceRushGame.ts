@@ -38,12 +38,15 @@ type RushFeedback = PounceRushMoveRejection & {
 export type PounceRushDailyOutcome = {
   completedAt: string;
   dateKey: string;
-  puzzleCount: number;
-  score: number;
+  durationMs: number;
   seed: string;
+  shareText: string;
+  streak: number;
+  tries: number;
 };
 
 const DAILY_OUTCOME_STORAGE_KEY = "pounce::rush-daily-outcome";
+const DAILY_HISTORY_STORAGE_KEY = "pounce::rush-daily-history";
 
 export default function usePounceRushGame(playerName: string) {
   const initialDailyDateKeyRef = useRef(getPounceRushDailyKey());
@@ -77,7 +80,10 @@ export default function usePounceRushGame(playerName: string) {
   });
   const [currentPuzzle, setCurrentPuzzle] =
     useState<PounceRushPuzzle | null>(initialPuzzle);
+  const [dailyTryCount, setDailyTryCount] = useState(1);
+  const [elapsedMs, setElapsedMs] = useState(0);
   const [feedback, setFeedback] = useState<RushFeedback | null>(null);
+  const [hintCard, setHintCard] = useState<CardState | null>(null);
   const [isAdvancingPuzzle, setIsAdvancingPuzzle] = useState(false);
   const [isBoardAnimationSuppressed, setIsBoardAnimationSuppressed] =
     useState(false);
@@ -102,6 +108,7 @@ export default function usePounceRushGame(playerName: string) {
   const currentPuzzleRef = useRef<PounceRushPuzzle | null>(initialPuzzle);
   const dailyDateKeyRef = useRef(initialDailyDateKeyRef.current);
   const dailyOutcomeRef = useRef<PounceRushDailyOutcome | null>(null);
+  const dailyTryCountRef = useRef(1);
   const feedbackIdRef = useRef(0);
   const isAdvancingPuzzleRef = useRef(false);
   const nextPuzzleTimeoutRef = useRef<number | null>(null);
@@ -172,6 +179,7 @@ export default function usePounceRushGame(playerName: string) {
       stepIndexRef.current = 0;
       puzzleNumberRef.current = nextPuzzleNumber;
       setCurrentPuzzle(puzzle);
+      setHintCard(null);
       setIsAdvancingPuzzle(false);
       setPuzzleNumber(nextPuzzleNumber);
       setStepIndex(0);
@@ -208,9 +216,13 @@ export default function usePounceRushGame(playerName: string) {
       seedRef.current = nextSeed;
       runKindRef.current = nextRunKind;
       statusRef.current = "running";
+      dailyTryCountRef.current = 1;
       scoreRef.current = 0;
       startTimeRef.current = Date.now();
+      setDailyTryCount(1);
+      setElapsedMs(0);
       setFeedback(null);
+      setHintCard(null);
       puzzleHistoryRef.current = [];
       setPuzzleHistory([]);
       setRemainingMs(POUNCE_RUSH_DURATION_MS);
@@ -297,12 +309,109 @@ export default function usePounceRushGame(playerName: string) {
     [installPuzzle]
   );
 
+  const closePuzzlePreview = useCallback(() => {
+    if (statusRef.current === "complete") {
+      setReviewPuzzleNumber(null);
+    }
+  }, []);
+
+  const recordDailyMiss = useCallback(() => {
+    if (statusRef.current !== "running" || runKindRef.current !== "daily") {
+      return;
+    }
+
+    const nextTryCount = dailyTryCountRef.current + 1;
+    dailyTryCountRef.current = nextTryCount;
+    setDailyTryCount(nextTryCount);
+  }, []);
+
   const blockAttempt = useCallback(() => {
+    recordDailyMiss();
     showFeedback({
       title: "Stock is locked",
       detail: "Rush puzzles only use the visible waste card.",
     });
+  }, [recordDailyMiss, showFeedback]);
+
+  const showHint = useCallback(() => {
+    const board = boardRef.current;
+    const puzzle = currentPuzzleRef.current;
+    if (!board || !puzzle || statusRef.current !== "running") {
+      showFeedback({ title: "Press Start" });
+      return;
+    }
+
+    const expectedMove = puzzle.sequence[stepIndexRef.current];
+    const nextHintCard = getHintCard(board, expectedMove);
+    if (!nextHintCard) {
+      showFeedback({ title: "Scan the board" });
+      return;
+    }
+
+    setHintCard(nextHintCard);
+    showFeedback(
+      {
+        title: "Hint",
+        detail: getHintDetail(expectedMove),
+      },
+      "success"
+    );
   }, [showFeedback]);
+
+  const copyDailyShareText = useCallback(() => {
+    const shareText = dailyOutcomeRef.current?.shareText;
+    if (!shareText || typeof window === "undefined") {
+      return;
+    }
+
+    window.navigator.clipboard
+      ?.writeText(shareText)
+      .then(() => {
+        showFeedback({ title: "Copied" }, "success");
+      })
+      .catch(() => {
+        showFeedback({ title: "Copy failed" });
+      });
+  }, [showFeedback]);
+
+  const finishRun = useCallback(() => {
+    clearNextPuzzleTimeout();
+    const completedAt = new Date().toISOString();
+    const elapsed = Date.now() - startTimeRef.current;
+    statusRef.current = "complete";
+    setElapsedMs(elapsed);
+    setStatus("complete");
+    setHintCard(null);
+    setIsAdvancingPuzzle(false);
+    isAdvancingPuzzleRef.current = false;
+
+    if (runKindRef.current === "daily") {
+      const history = loadDailyHistory();
+      history[dailyDateKeyRef.current] = {
+        completedAt,
+        durationMs: elapsed,
+        tries: dailyTryCountRef.current,
+      };
+      const streak = getDailyStreak(dailyDateKeyRef.current, history);
+      const outcome: PounceRushDailyOutcome = {
+        completedAt,
+        dateKey: dailyDateKeyRef.current,
+        durationMs: elapsed,
+        seed: seedRef.current,
+        shareText: createDailyShareText({
+          dateKey: dailyDateKeyRef.current,
+          durationMs: elapsed,
+          streak,
+          tries: dailyTryCountRef.current,
+        }),
+        streak,
+        tries: dailyTryCountRef.current,
+      };
+      dailyOutcomeRef.current = outcome;
+      setDailyOutcome(outcome);
+      saveDailyOutcome(outcome, history);
+    }
+  }, [clearNextPuzzleTimeout]);
 
   const completeCurrentPuzzle = useCallback(() => {
     if (isAdvancingPuzzleRef.current || statusRef.current !== "running") {
@@ -322,33 +431,17 @@ export default function usePounceRushGame(playerName: string) {
         return;
       }
 
+      if (runKindRef.current === "daily") {
+        finishRun();
+        return;
+      }
+
       installPuzzle(puzzleNumberRef.current + 1, {
         record: true,
         seed: seedRef.current,
       });
     }, NEXT_PUZZLE_DELAY_MS);
-  }, [clearNextPuzzleTimeout, installPuzzle, showFeedback]);
-
-  const finishRun = useCallback(() => {
-    clearNextPuzzleTimeout();
-    statusRef.current = "complete";
-    setStatus("complete");
-    setIsAdvancingPuzzle(false);
-    isAdvancingPuzzleRef.current = false;
-
-    if (runKindRef.current === "daily") {
-      const outcome: PounceRushDailyOutcome = {
-        completedAt: new Date().toISOString(),
-        dateKey: dailyDateKeyRef.current,
-        puzzleCount: puzzleHistoryRef.current.length,
-        score: scoreRef.current,
-        seed: seedRef.current,
-      };
-      dailyOutcomeRef.current = outcome;
-      setDailyOutcome(outcome);
-      saveDailyOutcome(outcome);
-    }
-  }, [clearNextPuzzleTimeout]);
+  }, [clearNextPuzzleTimeout, finishRun, installPuzzle, showFeedback]);
 
   const executeRushMove = useCallback(
     (move: Move) => {
@@ -366,6 +459,7 @@ export default function usePounceRushGame(playerName: string) {
 
       const expectedMove = puzzle.sequence[stepIndexRef.current];
       if (!isExpectedPounceRushMove(move, expectedMove)) {
+        recordDailyMiss();
         showFeedback(
           getPounceRushMoveRejection(
             board,
@@ -379,10 +473,12 @@ export default function usePounceRushGame(playerName: string) {
 
       const result = executeMove(board, 0, move);
       if (result == null) {
+        recordDailyMiss();
         showFeedback({ title: "Blocked" });
         return;
       }
 
+      setHintCard(null);
       emitBoardUpdate(state, board, revisionRef);
       const nextStepIndex = stepIndexRef.current + 1;
       stepIndexRef.current = nextStepIndex;
@@ -394,7 +490,7 @@ export default function usePounceRushGame(playerName: string) {
         showFeedback({ title: "Correct!" }, "success");
       }
     },
-    [completeCurrentPuzzle, showFeedback, state]
+    [completeCurrentPuzzle, recordDailyMiss, showFeedback, state]
   );
 
   const socket = useMemo<GameSocket>(
@@ -513,9 +609,15 @@ export default function usePounceRushGame(playerName: string) {
         return;
       }
 
+      const elapsed = Date.now() - startTimeRef.current;
+      setElapsedMs(elapsed);
+      if (runKindRef.current === "daily") {
+        return;
+      }
+
       const remaining = Math.max(
         0,
-        POUNCE_RUSH_DURATION_MS - (Date.now() - startTimeRef.current)
+        POUNCE_RUSH_DURATION_MS - elapsed
       );
       setRemainingMs(remaining);
       if (remaining <= 0) {
@@ -530,6 +632,8 @@ export default function usePounceRushGame(playerName: string) {
 
   return {
     actions: {
+      closePuzzlePreview,
+      copyDailyShareText,
       executeMove: executeRushMove,
       onBlockedMove: blockAttempt,
       onUpdateHand: (location: CursorLocation) => {
@@ -537,6 +641,7 @@ export default function usePounceRushGame(playerName: string) {
       },
       peekPuzzle,
       selectRunKind,
+      showHint,
       restart,
       startDaily,
       startRandom,
@@ -544,7 +649,10 @@ export default function usePounceRushGame(playerName: string) {
     currentPuzzle,
     dailyDateKey,
     dailyOutcome,
+    dailyTryCount,
+    elapsedMs,
     feedback,
+    hintCard,
     isAdvancingPuzzle,
     isBoardAnimationSuppressed,
     isConnected: state.isConnected,
@@ -602,6 +710,74 @@ function applyHandsUpdate(state: SocketState, hands: CursorState[]): void {
   });
 }
 
+type PounceRushDailyHistory = Record<
+  string,
+  {
+    completedAt: string;
+    durationMs: number;
+    tries: number;
+  }
+>;
+
+function getHintCard(board: BoardState, move: Move | undefined): CardState | null {
+  if (!move) {
+    return null;
+  }
+
+  const player = board.players[0];
+  switch (move.type) {
+    case "c2c":
+      if (move.source.type === "pounce") {
+        return getTopCard(player.pounceDeck);
+      }
+      if (move.source.type === "deck") {
+        return getTopCard(player.flippedDeck);
+      }
+      return getTopCard(player.stacks[move.source.index]);
+    case "c2s":
+      return move.source === "pounce"
+        ? getTopCard(player.pounceDeck)
+        : getTopCard(player.flippedDeck);
+    case "s2s": {
+      const stack = player.stacks[move.source];
+      return stack[stack.length - move.count] ?? null;
+    }
+    case "cycle":
+    case "flip_deck":
+    case "move_field_stack":
+      return null;
+  }
+}
+
+function getHintDetail(move: Move | undefined): string {
+  if (!move) {
+    return "Find the next playable card.";
+  }
+
+  if (move.type === "s2s") {
+    return "Move a solitaire stack.";
+  }
+  if (move.type === "c2s") {
+    return move.source === "pounce"
+      ? "Unload the pounce card."
+      : "Use the waste card on a solitaire stack.";
+  }
+  if (move.type === "c2c") {
+    if (move.source.type === "pounce") {
+      return "The pounce card can go to the center.";
+    }
+    if (move.source.type === "deck") {
+      return "The waste card can go to the center.";
+    }
+    return "A solitaire card can go to the center.";
+  }
+  return "Find the next playable card.";
+}
+
+function getTopCard(cards: CardState[]): CardState | null {
+  return cards[cards.length - 1] ?? null;
+}
+
 function loadDailyOutcome(dateKey: string): PounceRushDailyOutcome | null {
   if (typeof window === "undefined") {
     return null;
@@ -617,9 +793,11 @@ function loadDailyOutcome(dateKey: string): PounceRushDailyOutcome | null {
     if (
       outcome.dateKey !== dateKey ||
       typeof outcome.completedAt !== "string" ||
-      typeof outcome.puzzleCount !== "number" ||
-      typeof outcome.score !== "number" ||
-      typeof outcome.seed !== "string"
+      typeof outcome.durationMs !== "number" ||
+      typeof outcome.seed !== "string" ||
+      typeof outcome.shareText !== "string" ||
+      typeof outcome.streak !== "number" ||
+      typeof outcome.tries !== "number"
     ) {
       return null;
     }
@@ -630,7 +808,41 @@ function loadDailyOutcome(dateKey: string): PounceRushDailyOutcome | null {
   }
 }
 
-function saveDailyOutcome(outcome: PounceRushDailyOutcome): void {
+function loadDailyHistory(): PounceRushDailyHistory {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(DAILY_HISTORY_STORAGE_KEY);
+    if (!storedValue) {
+      return {};
+    }
+
+    const parsed = JSON.parse(storedValue) as PounceRushDailyHistory;
+    if (parsed == null || typeof parsed !== "object") {
+      return {};
+    }
+
+    return Object.fromEntries(
+      Object.entries(parsed).filter(
+        ([dateKey, entry]) =>
+          /^\d{4}-\d{2}-\d{2}$/.test(dateKey) &&
+          entry != null &&
+          typeof entry.completedAt === "string" &&
+          typeof entry.durationMs === "number" &&
+          typeof entry.tries === "number"
+      )
+    );
+  } catch {
+    return {};
+  }
+}
+
+function saveDailyOutcome(
+  outcome: PounceRushDailyOutcome,
+  history: PounceRushDailyHistory
+): void {
   if (typeof window === "undefined") {
     return;
   }
@@ -640,7 +852,64 @@ function saveDailyOutcome(outcome: PounceRushDailyOutcome): void {
       DAILY_OUTCOME_STORAGE_KEY,
       JSON.stringify(outcome)
     );
+    window.localStorage.setItem(
+      DAILY_HISTORY_STORAGE_KEY,
+      JSON.stringify(history)
+    );
   } catch {
     // Private browsing or storage limits should not block finishing a run.
   }
+}
+
+function getDailyStreak(
+  dateKey: string,
+  history: PounceRushDailyHistory
+): number {
+  let streak = 0;
+  let cursor: string | null = dateKey;
+  while (cursor && history[cursor]) {
+    streak += 1;
+    cursor = getPreviousDateKey(cursor);
+  }
+  return streak;
+}
+
+function getPreviousDateKey(dateKey: string): string | null {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  if (!year || !month || !day) {
+    return null;
+  }
+
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() - 1);
+  return getPounceRushDailyKey(date);
+}
+
+function createDailyShareText({
+  dateKey,
+  durationMs,
+  streak,
+  tries,
+}: {
+  dateKey: string;
+  durationMs: number;
+  streak: number;
+  tries: number;
+}): string {
+  const triesText = tries === 1 ? "1 try" : `${tries} tries`;
+  const streakText = streak === 1 ? "1 day" : `${streak} days`;
+  return [
+    `Pounce Daily ${dateKey}`,
+    `⏱ ${formatDurationForShare(durationMs)}`,
+    `🔥 ${streakText}`,
+    `🎯 ${triesText}`,
+    "🟩 Solved",
+  ].join("\n");
+}
+
+function formatDurationForShare(durationMs: number): string {
+  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }

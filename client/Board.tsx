@@ -52,6 +52,7 @@ type Props = {
   executeMove: (move: Move) => void;
   onOpenRoomSettings: () => void;
   onUpdateHand: (location: CursorLocation) => void;
+  hintCard?: CardState | null;
   isDeckCyclingBlocked?: boolean;
   isInteractionDisabled?: boolean;
   isLeftHandedLayout: boolean;
@@ -142,6 +143,7 @@ function useIsBoardAcceptingMoves(
 export default observer(function Board({
   executeMove,
   easyReadCards,
+  hintCard,
   isDeckCyclingBlocked = false,
   isInteractionDisabled = false,
   isLeftHandedLayout,
@@ -287,6 +289,7 @@ export default observer(function Board({
             <CardsLayer
               canInteract={canInteractWithCards}
               executeMove={executeMove}
+              hintCard={hintCard}
               isDeckCyclingBlocked={isDeckCyclingBlocked}
               onBlockedMove={onBlockedMove}
               visiblePlayerIndices={visiblePlayerIndices}

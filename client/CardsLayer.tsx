@@ -13,12 +13,14 @@ export default observer(function CardsLayer({
   canInteract,
   isDeckCyclingBlocked = false,
   executeMove,
+  hintCard,
   onBlockedMove,
   visiblePlayerIndices,
 }: {
   canInteract: boolean;
   isDeckCyclingBlocked?: boolean;
   executeMove: (move: Move) => void;
+  hintCard?: CardState | null;
   onBlockedMove?: () => void;
   visiblePlayerIndices?: readonly number[];
 }) {
@@ -38,6 +40,7 @@ export default observer(function CardsLayer({
     state.hands,
     activePlayerIndex
   );
+  const hintCardKey = hintCard ? getCardKey(hintCard) : null;
 
   const [postGameStage, setPostGameStage] = useState(0);
   const shouldRunPostGameCleanup = !board.isActive && board.pouncer != null;
@@ -74,6 +77,7 @@ export default observer(function CardsLayer({
             })}
             postGameStage={postGameStage}
             isHandTarget={canInteract}
+            isHinted={hintCardKey === getCardKey(card)}
             isRemoteCursorDragged={remoteDraggedCardKeys.has(
               getCardKey(card)
             )}
@@ -111,6 +115,7 @@ export default observer(function CardsLayer({
                 }
                 location={stableObject({ type: "deck", cardIndex: index })}
                 isHandTarget={canInteract && isTopCard && isActivePlayer}
+                isHinted={hintCardKey === getCardKey(card)}
                 isRemoteCursorDragged={remoteDraggedCardKeys.has(
                   getCardKey(card)
                 )}
@@ -137,6 +142,7 @@ export default observer(function CardsLayer({
                     : undefined
                 }
                 isHandTarget={canInteract && isTopCard && isActivePlayer}
+                isHinted={hintCardKey === getCardKey(card)}
                 isRemoteCursorDragged={remoteDraggedCardKeys.has(
                   getCardKey(card)
                 )}
@@ -157,6 +163,7 @@ export default observer(function CardsLayer({
                   cardIndex: index,
                 })}
                 isHandTarget={canInteract && isTopCard && isActivePlayer}
+                isHinted={hintCardKey === getCardKey(card)}
                 isRemoteCursorDragged={remoteDraggedCardKeys.has(
                   getCardKey(card)
                 )}
@@ -177,6 +184,7 @@ export default observer(function CardsLayer({
                     cardIndex: index,
                   })}
                   isHandTarget={canInteract && isActivePlayer}
+                  isHinted={hintCardKey === getCardKey(card)}
                   isRemoteCursorDragged={remoteDraggedCardKeys.has(
                     getCardKey(card)
                   )}
