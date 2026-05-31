@@ -18,7 +18,7 @@ Useful training knobs:
 
 - `IMITATION_DEALS`, `IMITATION_EPOCHS`, `IMITATION_LR`, `IMITATION_EQUIVALENT_TARGETS`, `IMITATION_TEACHER_STYLE`
 - `IMPROVEMENT_STATES`, `IMPROVEMENT_STATE_SOURCE`, `IMPROVEMENT_STATE_TEMPERATURE`, `IMPROVEMENT_STATE_SAMPLE`, `IMPROVEMENT_MAX_SCORE_GAP`, `IMPROVEMENT_MAX_WINNER_SCORE_GAP`, `IMPROVEMENT_MAX_CANDIDATE_SCORE_GAP`, `IMPROVEMENT_POLICY_CANDIDATES`, `IMPROVEMENT_CANDIDATES`, `IMPROVEMENT_ROLLOUT_MOVES`, `IMPROVEMENT_ROLLOUT_COUNT`, `IMPROVEMENT_COMMON_RANDOM`, `IMPROVEMENT_CONTINUATION`, `IMPROVEMENT_SCORE_WEIGHT`, `IMPROVEMENT_MODE`, `IMPROVEMENT_MIN_RETURN_GAP`, `IMPROVEMENT_MAX_PAIRS`, `IMPROVEMENT_PREFERENCE_TEMPERATURE`, `IMPROVEMENT_PREFERENCE_SCOPE`, `IMPROVEMENT_PAIRWISE_MARGIN`, `IMPROVEMENT_VALUE_SCALE`, `IMPROVEMENT_VALUE_CENTER`, `IMPROVEMENT_VALUE_TARGET_MODE`, `IMPROVEMENT_VALUE_HUBER`, `IMPROVEMENT_REQUIRE_BEHAVIOR_GAP`, `IMPROVEMENT_MIN_BEHAVIOR_IMPROVEMENT`, `IMPROVEMENT_BEHAVIOR_GAP_SE_MULTIPLIER`, `IMPROVEMENT_EPOCHS`, `IMPROVEMENT_LR`, `IMPROVEMENT_TEMPERATURE`
-- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_OPPONENT_MODE`, `RL_OPPONENT_MODEL`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_SCAN_EPISODES`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_CANDIDATES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MAX_RETURN_GAP`, `RL_COUNTERFACTUAL_REQUIRE_BEHAVIOR_GAP`, `RL_COUNTERFACTUAL_MIN_BEHAVIOR_IMPROVEMENT`, `RL_COUNTERFACTUAL_STATE_SOURCE`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_GAP_SE_MULTIPLIER`, `RL_COUNTERFACTUAL_MIN_BEHAVIOR_WIN_RATE`, `RL_COUNTERFACTUAL_MAX_POLICY_MARGIN`, `RL_COUNTERFACTUAL_REQUIRE_POLICY_CHANGE`, `RL_COUNTERFACTUAL_PREFERENCE_SCOPE`, `RL_COUNTERFACTUAL_PAIRWISE_MARGIN`, `RL_COUNTERFACTUAL_PAIRWISE_WEIGHT_MODE`, `RL_COUNTERFACTUAL_PAIRWISE_WEIGHT_SCALE`, `RL_COUNTERFACTUAL_PAIRWISE_MAX_WEIGHT`, `RL_COUNTERFACTUAL_MAX_SCORE_GAP`, `RL_COUNTERFACTUAL_SCORE_GAP_BUDGET`, `RL_COUNTERFACTUAL_MAX_LABELS_PER_MOVE_PAIR`, `RL_COUNTERFACTUAL_EXCLUDE_MOVE_PAIRS`, `RL_COUNTERFACTUAL_BEHAVIOR_MOVE_TYPES`, `RL_COUNTERFACTUAL_STOP_AFTER_LABELS`, `RL_COUNTERFACTUAL_SCORE_WEIGHT`, `RL_COUNTERFACTUAL_POUNCE_WEIGHT`, `RL_COUNTERFACTUAL_SKIP_CYCLE_OVER_CONNECTOR`, `RL_COUNTERFACTUAL_SKIP_WEAK_CYCLE_OVER_CONNECTOR`, `RL_COUNTERFACTUAL_SKIP_SOLITAIRE_OVER_USEFUL_CYCLE`, `RL_COUNTERFACTUAL_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_ANCHOR_TEMPERATURE`, `RL_COUNTERFACTUAL_BEHAVIOR_CORRECTION_WEIGHT`, `RL_COUNTERFACTUAL_BEHAVIOR_CORRECTION_MARGIN`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MARGIN`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MAX_POLICY_MARGIN`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MODE`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_TARGET_MODE`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_TRAINABLE_LAYERS`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
+- `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_OPPONENT_MODE`, `RL_OPPONENT_MODEL`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_COUNTERFACTUAL_SCAN_EPISODES`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_CANDIDATES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MAX_RETURN_GAP`, `RL_COUNTERFACTUAL_REQUIRE_BEHAVIOR_GAP`, `RL_COUNTERFACTUAL_MIN_BEHAVIOR_IMPROVEMENT`, `RL_COUNTERFACTUAL_STATE_SOURCE`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_GAP_SE_MULTIPLIER`, `RL_COUNTERFACTUAL_MIN_BEHAVIOR_WIN_RATE`, `RL_COUNTERFACTUAL_MAX_POLICY_MARGIN`, `RL_COUNTERFACTUAL_REQUIRE_POLICY_CHANGE`, `RL_COUNTERFACTUAL_PREFERENCE_SCOPE`, `RL_COUNTERFACTUAL_PAIRWISE_MARGIN`, `RL_COUNTERFACTUAL_PAIRWISE_WEIGHT_MODE`, `RL_COUNTERFACTUAL_PAIRWISE_WEIGHT_SCALE`, `RL_COUNTERFACTUAL_PAIRWISE_MAX_WEIGHT`, `RL_COUNTERFACTUAL_MAX_SCORE_GAP`, `RL_COUNTERFACTUAL_SCORE_GAP_BUDGET`, `RL_COUNTERFACTUAL_MAX_LABELS_PER_MOVE_PAIR`, `RL_COUNTERFACTUAL_EXCLUDE_MOVE_PAIRS`, `RL_COUNTERFACTUAL_BEHAVIOR_MOVE_TYPES`, `RL_COUNTERFACTUAL_STOP_AFTER_LABELS`, `RL_COUNTERFACTUAL_SCORE_WEIGHT`, `RL_COUNTERFACTUAL_POUNCE_WEIGHT`, `RL_COUNTERFACTUAL_SKIP_CYCLE_OVER_CONNECTOR`, `RL_COUNTERFACTUAL_SKIP_WEAK_CYCLE_OVER_CONNECTOR`, `RL_COUNTERFACTUAL_SKIP_SOLITAIRE_OVER_USEFUL_CYCLE`, `RL_COUNTERFACTUAL_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_ANCHOR_TEMPERATURE`, `RL_COUNTERFACTUAL_BEHAVIOR_CORRECTION_WEIGHT`, `RL_COUNTERFACTUAL_BEHAVIOR_CORRECTION_MARGIN`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MARGIN`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MAX_POLICY_MARGIN`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MODE`, `RL_COUNTERFACTUAL_MOVE_TYPE_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_MOVE_TYPE_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_MOVE_TYPE_ANCHOR_TEMPERATURE`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_TARGET_MODE`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_TRAINABLE_LAYERS`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `HIDDEN_LAYERS`, `MAX_MOVES`, `SEED`
 - `HIDDEN` and `HIDDEN_LAYERS` accept comma-separated layer sizes, for example `HIDDEN=192,96`
 - `MODEL_OUT=C:\tmp\pounce-action-ranking-model.json` to save model weights
@@ -30,6 +30,7 @@ Useful training knobs:
 - `MODEL_IN=...\candidate.json BASELINE_MODEL=...\baseline.json npm run action-ranking:report` to summarize model size/features, fixed-heuristic strength, paired baseline comparison, and neural self-play comparison in one output
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare` to compare two models on paired deals/seats
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare-self-play` to compare two models sharing the same self-play table
+- `STYLE_A="Alex 75%" STYLE_B="Alex 66%" OPPONENTS="Mom" GAMES=8192 npm run action-ranking:compare-styles` to compare fixed heuristic styles with paired deal-level confidence intervals
 - `PLAYERS=3 GAMES=512 npm run action-ranking:tournament` to run fixed-style heuristic tournaments; add `MODEL_SPECS="label=path;other=path"` to include neural models
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:diagnose` to compare top-ranked actions on sampled teacher states
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:trace-divergences` to inspect the first policy-action divergence in paired games
@@ -204,6 +205,18 @@ point differential), while both were clearly above `Mom` by roughly five score
 win-share points and `+1.3` to `+1.4` point differential. So `Alex 75%` remains
 a plausible local optimum, but the threshold edge is too thin to be the main RL
 target.
+`action-ranking:compare-styles` now provides a direct paired style check with
+deal-level confidence intervals. Over `32,768` deals with seat rotations in the
+`Alex 75%` / `Alex 66%` / `Mom` table, `Alex 75%` beat `Alex 66%` on average
+point differential by `+0.162` with a `95%` CI of `+0.078` to `+0.246`, and on
+raw score by `+0.108` with a `95%` CI of `+0.052` to `+0.164`. The full-table
+score-win-share delta was still not significant (`+0.38pp`, `95%` CI
+`-0.04pp` to `+0.80pp`), while the head-to-head score share was just barely
+above even (`50.41%`, `95%` CI `50.16%` to `50.66%`). Against the intentionally
+weak `No solitaire unless stuck` style, the same comparator over `4,096` deals
+found a decisive sanity-check gap: `+28.70 +/- 0.28` point differential and a
+`+87.99pp +/- 0.83pp` head-to-head win-rate delta for `Alex 75%`. Strategy
+matters in the simulator; the Alex threshold variants are simply very close.
 A first 118-input deck-context warmup from the 108-input solitaire-context
 checkpoint (`48` imitation deals, `2` epochs, `IMITATION_LR=0.005`) reached
 `92.97%` teacher accuracy and saved a `730 KB` model with 23,041 parameters. It
@@ -800,6 +813,15 @@ only near-tie connector-over-cycle priors. Set
 `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MODE=symmetric` to preserve whichever
 connector-or-cycle action the pre-update policy scored higher; the default
 `connector` mode preserves the original connector-over-cycle guardrail only.
+`RL_COUNTERFACTUAL_MOVE_TYPE_ANCHOR_WEIGHT` adds a label-state distillation
+anchor for same-move-type supervised labels. For each accepted label where the
+rollout winner and greedy behavior share a move type, it replays the pre-update
+policy's full candidate scores on that same state, using
+`RL_COUNTERFACTUAL_MOVE_TYPE_ANCHOR_EXAMPLES` as a cap and
+`RL_COUNTERFACTUAL_MOVE_TYPE_ANCHOR_TEMPERATURE` for the reward-target
+softness. This is narrower than the general anchor: it is meant to let
+destination/order labels fight within a move family while discouraging hidden
+layer drift that changes unrelated move-family boundaries.
 `RL_COUNTERFACTUAL_MODE=value` uses the same counterfactual returns as
 action-value regression targets. The value target scale, centering, and Huber
 clipping are controlled by
@@ -1366,6 +1388,22 @@ Adding policy anchoring reduced deployed changes to 5 first divergences in 768
 traced games, mostly same-family or mixed, but the quick gate was still slightly
 negative (`-0.013 +/- 0.013`). The useful next shape is anchored or otherwise
 regularized same-family destination learning, not an unanchored c2s preference.
+The next near-margin destination pass added `RL_COUNTERFACTUAL_MAX_POLICY_MARGIN`
+and `RL_COUNTERFACTUAL_MAX_SCORE_GAP` caps at `0.25`, which kept the c2s-only
+scan focused on deployed, learnable states instead of hundreds of far-off-policy
+destination preferences. With the behavior move filter, same-type filter, and
+pounce-progress support gap, a 512-episode audit kept 7 clean `c2s>c2s` labels
+with average policy-score gap `0.104` and average pounce-progress support
+`+2.43`. Training on the matching 13-label batch moved 5 of 13 label-state top
+actions without anchoring, but a 4-seed / 1,536-game paired comparison measured
+`-0.016 +/- 0.022` point differential and `-0.077` raw score. The new
+move-type label-state anchor applied 13 distillation anchors and moved 4 of 13
+label states; one 768-game paired seed was mildly positive (`+0.064 +/- 0.051`),
+but tracing still showed move-family drift, mostly `cycle>c2s`, and it is not a
+promotion candidate. This confirms the useful label shape is real but still
+sparse and calibration-sensitive; the next improvement should collect more
+near-margin same-family labels and validate them across multiple seeds before
+harder updates.
 
 ## Deploying
 

@@ -263,6 +263,18 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       "RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MODE",
       "connector"
     ),
+    rlCounterfactualMoveTypeAnchorWeight: readNumberEnv(
+      "RL_COUNTERFACTUAL_MOVE_TYPE_ANCHOR_WEIGHT",
+      0
+    ),
+    rlCounterfactualMoveTypeAnchorMaxExamples: readIntegerEnv(
+      "RL_COUNTERFACTUAL_MOVE_TYPE_ANCHOR_EXAMPLES",
+      512
+    ),
+    rlCounterfactualMoveTypeAnchorTemperature: readNumberEnv(
+      "RL_COUNTERFACTUAL_MOVE_TYPE_ANCHOR_TEMPERATURE",
+      1
+    ),
     rlCounterfactualValueTargetScale: readNumberEnv(
       "RL_COUNTERFACTUAL_VALUE_SCALE",
       4

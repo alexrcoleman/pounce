@@ -396,6 +396,27 @@ assert.ok(
   "symmetric connector-anchored value mode should train policy-ordered connector-vs-cycle anchor updates"
 );
 
+const moveTypeAnchoredValue = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:move-type-anchored-value:0",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+  rlCounterfactualMoveTypeAnchorWeight: 0.05,
+  rlCounterfactualMoveTypeAnchorMaxExamples: 8,
+});
+assertCounterfactualWork(moveTypeAnchoredValue, "value");
+assert.ok(
+  moveTypeAnchoredValue.reinforcement.counterfactualMoveTypeAnchorExamples > 0,
+  "move-type anchored value mode should collect same-type label-state anchor examples"
+);
+assert.ok(
+  moveTypeAnchoredValue.reinforcement.counterfactualMoveTypeAnchorUpdates > 0,
+  "move-type anchored value mode should train same-type label-state anchor updates"
+);
+
 const scoreGapPrefiltered = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:score-gap-filtered",
@@ -896,6 +917,10 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.counterfactualConnectorAnchorExamples,
     counterfactualConnectorAnchorUpdates:
       result.reinforcement.counterfactualConnectorAnchorUpdates,
+    counterfactualMoveTypeAnchorExamples:
+      result.reinforcement.counterfactualMoveTypeAnchorExamples,
+    counterfactualMoveTypeAnchorUpdates:
+      result.reinforcement.counterfactualMoveTypeAnchorUpdates,
     counterfactualPolicyShift:
       result.reinforcement.counterfactualPolicyShift,
     averageCounterfactualScoreGap:
