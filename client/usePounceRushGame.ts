@@ -30,7 +30,7 @@ const NEXT_PUZZLE_DELAY_MS = 720;
 const BOARD_ANIMATION_SUPPRESSION_MS = 90;
 
 type RushStatus = "idle" | "running" | "complete";
-type PounceRushRunKind = "daily" | "random";
+type PounceRushRunKind = "daily_puzzle" | "daily_rush" | "random";
 type RushFeedback = PounceRushMoveRejection & {
   id: number;
   tone: "blocked" | "success";
@@ -44,9 +44,17 @@ export type PounceRushDailyOutcome = {
   streak: number;
   tries: number;
 };
+export type PounceRushDailyRushOutcome = {
+  completedAt: string;
+  dateKey: string;
+  puzzleCount: number;
+  score: number;
+  seed: string;
+};
 
 const DAILY_OUTCOME_STORAGE_KEY = "pounce::rush-daily-outcome";
 const DAILY_HISTORY_STORAGE_KEY = "pounce::rush-daily-history";
+const DAILY_RUSH_OUTCOME_STORAGE_KEY = "pounce::rush-daily-rush-outcome";
 
 export default function usePounceRushGame(playerName: string) {
   const initialDailyDateKeyRef = useRef(getPounceRushDailyKey());
@@ -95,9 +103,11 @@ export default function usePounceRushGame(playerName: string) {
   );
   const [dailyOutcome, setDailyOutcome] =
     useState<PounceRushDailyOutcome | null>(null);
+  const [dailyRushOutcome, setDailyRushOutcome] =
+    useState<PounceRushDailyRushOutcome | null>(null);
   const [puzzleNumber, setPuzzleNumber] = useState(0);
   const [reviewPuzzleNumber, setReviewPuzzleNumber] = useState<number | null>(0);
-  const [runKind, setRunKind] = useState<PounceRushRunKind>("daily");
+  const [runKind, setRunKind] = useState<PounceRushRunKind>("daily_puzzle");
   const [score, setScore] = useState(0);
   const [seed, setSeedState] = useState(initialSeedRef.current);
   const [status, setStatus] = useState<RushStatus>("idle");
@@ -108,6 +118,7 @@ export default function usePounceRushGame(playerName: string) {
   const currentPuzzleRef = useRef<PounceRushPuzzle | null>(initialPuzzle);
   const dailyDateKeyRef = useRef(initialDailyDateKeyRef.current);
   const dailyOutcomeRef = useRef<PounceRushDailyOutcome | null>(null);
+  const dailyRushOutcomeRef = useRef<PounceRushDailyRushOutcome | null>(null);
   const dailyTryCountRef = useRef(1);
   const feedbackIdRef = useRef(0);
   const isAdvancingPuzzleRef = useRef(false);
@@ -115,7 +126,7 @@ export default function usePounceRushGame(playerName: string) {
   const playerNameRef = useRef(playerName);
   const puzzleHistoryRef = useRef<PounceRushPuzzleSummary[]>([]);
   const puzzleNumberRef = useRef(0);
-  const runKindRef = useRef<PounceRushRunKind>("daily");
+  const runKindRef = useRef<PounceRushRunKind>("daily_puzzle");
   const scoreRef = useRef(0);
   const seedRef = useRef(initialSeedRef.current);
   const startTimeRef = useRef(Date.now());
@@ -244,23 +255,46 @@ export default function usePounceRushGame(playerName: string) {
     start(createPounceRushRunSeed(), "random");
   }, [start]);
 
-  const startDaily = useCallback(() => {
+  const startDailyPuzzle = useCallback(() => {
     const todayKey = getPounceRushDailyKey();
     const existingOutcome = dailyOutcomeRef.current;
+    dailyDateKeyRef.current = todayKey;
+    setDailyDateKey(todayKey);
+    if (existingOutcome?.dateKey === todayKey) {
+      runKindRef.current = "daily_rush";
+      setRunKind("daily_rush");
+      showFeedback({
+        title: "Daily puzzle complete",
+        detail: "Daily Rush and Random Rush are still open.",
+      });
+      installPuzzle(0, {
+        record: false,
+        seed: createPounceRushDailyRushSeed(todayKey),
+      });
+      return;
+    }
+
+    start(createPounceRushDailySeed(todayKey), "daily_puzzle");
+  }, [installPuzzle, showFeedback, start]);
+
+  const startDailyRush = useCallback(() => {
+    const todayKey = getPounceRushDailyKey();
+    const existingOutcome = dailyRushOutcomeRef.current;
     dailyDateKeyRef.current = todayKey;
     setDailyDateKey(todayKey);
     if (existingOutcome?.dateKey === todayKey) {
       runKindRef.current = "random";
       setRunKind("random");
       showFeedback({
-        title: "Daily complete",
-        detail: "Random puzzles are still open for practice.",
+        title: "Daily Rush complete",
+        detail: "Random Rush is still open for practice.",
       });
+      installPuzzle(0, { record: false, seed: "" });
       return;
     }
 
-    start(createPounceRushDailySeed(todayKey), "daily");
-  }, [showFeedback, start]);
+    start(createPounceRushDailyRushSeed(todayKey), "daily_rush");
+  }, [installPuzzle, showFeedback, start]);
 
   const selectRunKind = useCallback(
     (nextRunKind: PounceRushRunKind) => {
@@ -271,17 +305,30 @@ export default function usePounceRushGame(playerName: string) {
       const todayKey = getPounceRushDailyKey();
       dailyDateKeyRef.current = todayKey;
       setDailyDateKey(todayKey);
-      if (
-        nextRunKind === "daily" &&
-        dailyOutcomeRef.current?.dateKey === todayKey
-      ) {
-        runKindRef.current = "random";
-        setRunKind("random");
+      const isCompletedDailyMode =
+        (nextRunKind === "daily_puzzle" &&
+          dailyOutcomeRef.current?.dateKey === todayKey) ||
+        (nextRunKind === "daily_rush" &&
+          dailyRushOutcomeRef.current?.dateKey === todayKey);
+      if (isCompletedDailyMode) {
+        const fallbackRunKind = getDefaultRunKind(
+          todayKey,
+          dailyOutcomeRef.current,
+          dailyRushOutcomeRef.current
+        );
+        runKindRef.current = fallbackRunKind;
+        setRunKind(fallbackRunKind);
         showFeedback({
-          title: "Daily complete",
-          detail: "Try a random puzzle rush instead.",
+          title:
+            nextRunKind === "daily_puzzle"
+              ? "Daily puzzle complete"
+              : "Daily Rush complete",
+          detail: "Pick another mode for more practice.",
         });
-        installPuzzle(0, { record: false, seed: "" });
+        installPuzzle(0, {
+          record: false,
+          seed: getPreviewSeedForRunKind(fallbackRunKind, todayKey),
+        });
         return;
       }
 
@@ -289,8 +336,7 @@ export default function usePounceRushGame(playerName: string) {
       setRunKind(nextRunKind);
       installPuzzle(0, {
         record: false,
-        seed:
-          nextRunKind === "daily" ? createPounceRushDailySeed(todayKey) : "",
+        seed: getPreviewSeedForRunKind(nextRunKind, todayKey),
       });
     },
     [installPuzzle, showFeedback]
@@ -316,7 +362,10 @@ export default function usePounceRushGame(playerName: string) {
   }, []);
 
   const recordDailyMiss = useCallback(() => {
-    if (statusRef.current !== "running" || runKindRef.current !== "daily") {
+    if (
+      statusRef.current !== "running" ||
+      runKindRef.current !== "daily_puzzle"
+    ) {
       return;
     }
 
@@ -385,7 +434,7 @@ export default function usePounceRushGame(playerName: string) {
     setIsAdvancingPuzzle(false);
     isAdvancingPuzzleRef.current = false;
 
-    if (runKindRef.current === "daily") {
+    if (runKindRef.current === "daily_puzzle") {
       const history = loadDailyHistory();
       history[dailyDateKeyRef.current] = {
         completedAt,
@@ -410,6 +459,17 @@ export default function usePounceRushGame(playerName: string) {
       dailyOutcomeRef.current = outcome;
       setDailyOutcome(outcome);
       saveDailyOutcome(outcome, history);
+    } else if (runKindRef.current === "daily_rush") {
+      const outcome: PounceRushDailyRushOutcome = {
+        completedAt,
+        dateKey: dailyDateKeyRef.current,
+        puzzleCount: puzzleHistoryRef.current.length,
+        score: scoreRef.current,
+        seed: seedRef.current,
+      };
+      dailyRushOutcomeRef.current = outcome;
+      setDailyRushOutcome(outcome);
+      saveDailyRushOutcome(outcome);
     }
   }, [clearNextPuzzleTimeout]);
 
@@ -431,7 +491,7 @@ export default function usePounceRushGame(playerName: string) {
         return;
       }
 
-      if (runKindRef.current === "daily") {
+      if (runKindRef.current === "daily_puzzle") {
         finishRun();
         return;
       }
@@ -585,21 +645,24 @@ export default function usePounceRushGame(playerName: string) {
   useEffect(() => {
     const todayKey = getPounceRushDailyKey();
     const outcome = loadDailyOutcome(todayKey);
+    const rushOutcome = loadDailyRushOutcome(todayKey);
     dailyDateKeyRef.current = todayKey;
     dailyOutcomeRef.current = outcome;
+    dailyRushOutcomeRef.current = rushOutcome;
     setDailyDateKey(todayKey);
     setDailyOutcome(outcome);
+    setDailyRushOutcome(rushOutcome);
 
     if (statusRef.current !== "idle") {
       return;
     }
 
-    const nextRunKind: PounceRushRunKind = outcome ? "random" : "daily";
+    const nextRunKind = getDefaultRunKind(todayKey, outcome, rushOutcome);
     runKindRef.current = nextRunKind;
     setRunKind(nextRunKind);
     installPuzzle(0, {
       record: false,
-      seed: nextRunKind === "daily" ? createPounceRushDailySeed(todayKey) : "",
+      seed: getPreviewSeedForRunKind(nextRunKind, todayKey),
     });
   }, [installPuzzle]);
 
@@ -611,7 +674,7 @@ export default function usePounceRushGame(playerName: string) {
 
       const elapsed = Date.now() - startTimeRef.current;
       setElapsedMs(elapsed);
-      if (runKindRef.current === "daily") {
+      if (runKindRef.current === "daily_puzzle") {
         return;
       }
 
@@ -643,12 +706,14 @@ export default function usePounceRushGame(playerName: string) {
       selectRunKind,
       showHint,
       restart,
-      startDaily,
+      startDailyPuzzle,
+      startDailyRush,
       startRandom,
     },
     currentPuzzle,
     dailyDateKey,
     dailyOutcome,
+    dailyRushOutcome,
     dailyTryCount,
     elapsedMs,
     feedback,
@@ -778,6 +843,37 @@ function getTopCard(cards: CardState[]): CardState | null {
   return cards[cards.length - 1] ?? null;
 }
 
+function createPounceRushDailyRushSeed(dateKey: string): string {
+  return `daily-rush-${dateKey}`;
+}
+
+function getPreviewSeedForRunKind(
+  runKind: PounceRushRunKind,
+  dateKey: string
+): string {
+  if (runKind === "daily_puzzle") {
+    return createPounceRushDailySeed(dateKey);
+  }
+  if (runKind === "daily_rush") {
+    return createPounceRushDailyRushSeed(dateKey);
+  }
+  return "";
+}
+
+function getDefaultRunKind(
+  dateKey: string,
+  dailyOutcome: PounceRushDailyOutcome | null,
+  dailyRushOutcome: PounceRushDailyRushOutcome | null
+): PounceRushRunKind {
+  if (dailyOutcome?.dateKey !== dateKey) {
+    return "daily_puzzle";
+  }
+  if (dailyRushOutcome?.dateKey !== dateKey) {
+    return "daily_rush";
+  }
+  return "random";
+}
+
 function loadDailyOutcome(dateKey: string): PounceRushDailyOutcome | null {
   if (typeof window === "undefined") {
     return null;
@@ -803,6 +899,40 @@ function loadDailyOutcome(dateKey: string): PounceRushDailyOutcome | null {
     }
 
     return outcome as PounceRushDailyOutcome;
+  } catch {
+    return null;
+  }
+}
+
+function loadDailyRushOutcome(
+  dateKey: string
+): PounceRushDailyRushOutcome | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const storedValue = window.localStorage.getItem(
+      DAILY_RUSH_OUTCOME_STORAGE_KEY
+    );
+    if (!storedValue) {
+      return null;
+    }
+
+    const outcome = JSON.parse(
+      storedValue
+    ) as Partial<PounceRushDailyRushOutcome>;
+    if (
+      outcome.dateKey !== dateKey ||
+      typeof outcome.completedAt !== "string" ||
+      typeof outcome.puzzleCount !== "number" ||
+      typeof outcome.score !== "number" ||
+      typeof outcome.seed !== "string"
+    ) {
+      return null;
+    }
+
+    return outcome as PounceRushDailyRushOutcome;
   } catch {
     return null;
   }
@@ -855,6 +985,21 @@ function saveDailyOutcome(
     window.localStorage.setItem(
       DAILY_HISTORY_STORAGE_KEY,
       JSON.stringify(history)
+    );
+  } catch {
+    // Private browsing or storage limits should not block finishing a run.
+  }
+}
+
+function saveDailyRushOutcome(outcome: PounceRushDailyRushOutcome): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(
+      DAILY_RUSH_OUTCOME_STORAGE_KEY,
+      JSON.stringify(outcome)
     );
   } catch {
     // Private browsing or storage limits should not block finishing a run.

@@ -29,6 +29,7 @@ const PounceRushPage: NextPage<{
     currentPuzzle,
     dailyDateKey,
     dailyOutcome,
+    dailyRushOutcome,
     dailyTryCount,
     elapsedMs,
     feedback,
@@ -75,17 +76,32 @@ const PounceRushPage: NextPage<{
   const isComplete = status === "complete";
   const isIdle = status === "idle";
   const isRunning = status === "running";
+  const isDailyPuzzle = runKind === "daily_puzzle";
+  const isDailyRush = runKind === "daily_rush";
   const isInteractionDisabled = isIdle || isComplete || isAdvancingPuzzle;
   const sequenceLength = currentPuzzle.sequence.length;
   const displayedStep = Math.min(stepIndex + 1, sequenceLength);
-  const isDailyComplete = dailyOutcome?.dateKey === dailyDateKey;
+  const isDailyPuzzleComplete = dailyOutcome?.dateKey === dailyDateKey;
+  const isDailyRushComplete = dailyRushOutcome?.dateKey === dailyDateKey;
+  const isSelectedDailyComplete =
+    (isDailyPuzzle && isDailyPuzzleComplete) ||
+    (isDailyRush && isDailyRushComplete);
   const dailyLabel = formatDailyLabel(dailyDateKey);
   const isReviewingPuzzle = isComplete && reviewPuzzleNumber != null;
-  const timeLabel = runKind === "daily" ? "Elapsed" : "Time";
-  const timeValue =
-    runKind === "daily"
-      ? formatDuration(elapsedMs)
-      : formatDuration(remainingMs);
+  const timeLabel = isDailyPuzzle ? "Elapsed" : "Time";
+  const timeValue = isDailyPuzzle
+    ? formatDuration(elapsedMs)
+    : formatDuration(remainingMs);
+  const completionTitle = isDailyPuzzle
+    ? "Daily Solved"
+    : isDailyRush
+    ? "Daily Rush Complete"
+    : "Times Up";
+  const reportLabel = isDailyPuzzle
+    ? "Daily puzzle"
+    : isDailyRush
+    ? "Daily rush"
+    : "Report code";
 
   return (
     <>
@@ -136,7 +152,7 @@ const PounceRushPage: NextPage<{
             <div className={styles.objectiveMeta}>
               Puzzle {puzzleNumber + 1} / {currentPuzzle.difficulty}{" "}
               {displayedStep}/{sequenceLength}
-              {runKind === "daily" && isRunning ? ` / Try ${dailyTryCount}` : ""}
+              {isDailyPuzzle && isRunning ? ` / Try ${dailyTryCount}` : ""}
             </div>
           </div>
           <div className={`${styles.hudGroup} ${styles.hudGroupRight}`}>
@@ -177,15 +193,29 @@ const PounceRushPage: NextPage<{
               <h1 className={styles.startTitle}>Pounce Rush</h1>
               <div className={styles.modeTabs} role="tablist">
                 <button
-                  aria-pressed={runKind === "daily"}
+                  aria-pressed={isDailyPuzzle}
                   className={styles.modeTab}
-                  data-complete={isDailyComplete ? "true" : "false"}
-                  onClick={() => actions.selectRunKind("daily")}
+                  data-complete={isDailyPuzzleComplete ? "true" : "false"}
+                  onClick={() => actions.selectRunKind("daily_puzzle")}
                   type="button"
                 >
                   <span>Daily Puzzle</span>
                   <small>
-                    {isDailyComplete ? "Solved today" : dailyLabel}
+                    {isDailyPuzzleComplete ? "Solved today" : dailyLabel}
+                  </small>
+                </button>
+                <button
+                  aria-pressed={isDailyRush}
+                  className={styles.modeTab}
+                  data-complete={isDailyRushComplete ? "true" : "false"}
+                  onClick={() => actions.selectRunKind("daily_rush")}
+                  type="button"
+                >
+                  <span>Daily Rush</span>
+                  <small>
+                    {isDailyRushComplete
+                      ? `${dailyRushOutcome?.score ?? 0} solved today`
+                      : "One-minute daily"}
                   </small>
                 </button>
                 <button
@@ -194,21 +224,33 @@ const PounceRushPage: NextPage<{
                   onClick={() => actions.selectRunKind("random")}
                   type="button"
                 >
-                  <span>Random Puzzle</span>
+                  <span>Random Rush</span>
                   <small>Fresh practice boards</small>
                 </button>
               </div>
               <div className={styles.modeSummary}>
-                {runKind === "daily" ? (
-                  isDailyComplete ? (
+                {isDailyPuzzle ? (
+                  isDailyPuzzleComplete ? (
                     <>
-                      <strong>Daily complete</strong>
-                      <span>Random puzzles are still open for practice.</span>
+                      <strong>Daily puzzle complete</strong>
+                      <span>Daily Rush and Random Rush are still open.</span>
                     </>
                   ) : (
                     <>
                       <strong>One puzzle today</strong>
                       <span>Solve it once for time, tries, and streak.</span>
+                    </>
+                  )
+                ) : isDailyRush ? (
+                  isDailyRushComplete ? (
+                    <>
+                      <strong>Daily Rush complete</strong>
+                      <span>Random Rush is still open for practice.</span>
+                    </>
+                  ) : (
+                    <>
+                      <strong>One rush today</strong>
+                      <span>Play the same daily one-minute set.</span>
                     </>
                   )
                 ) : (
@@ -221,19 +263,25 @@ const PounceRushPage: NextPage<{
               <div className={styles.startActions}>
                 <Button
                   className={`${styles.primaryButton} ${styles.startButton}`}
-                  disabled={runKind === "daily" && isDailyComplete}
+                  disabled={isSelectedDailyComplete}
                   onClick={
-                    runKind === "daily"
-                      ? actions.startDaily
+                    isDailyPuzzle
+                      ? actions.startDailyPuzzle
+                      : isDailyRush
+                      ? actions.startDailyRush
                       : actions.startRandom
                   }
                   type="primary"
                 >
-                  {runKind === "daily"
-                    ? isDailyComplete
-                      ? "Daily complete"
-                      : "Start daily"
-                    : "Start random"}
+                  {isDailyPuzzle
+                    ? isDailyPuzzleComplete
+                      ? "Daily puzzle complete"
+                      : "Start puzzle"
+                    : isDailyRush
+                    ? isDailyRushComplete
+                      ? "Daily Rush complete"
+                      : "Start Daily Rush"
+                    : "Start Random Rush"}
                 </Button>
               </div>
             </div>
@@ -244,7 +292,9 @@ const PounceRushPage: NextPage<{
           <div className={styles.reviewDock} role="status">
             <span>
               Reviewing Puzzle {reviewPuzzleNumber + 1}
-              <small>{isPuzzleSolved(reviewPuzzleNumber, score) ? "Solved" : "Seen"}</small>
+              {isPuzzleSolved(reviewPuzzleNumber, score) ? (
+                <SolvedCheck />
+              ) : null}
             </span>
             <button
               className={styles.reviewDockButton}
@@ -259,10 +309,8 @@ const PounceRushPage: NextPage<{
         {isComplete && !isReviewingPuzzle ? (
           <div className={styles.completionOverlay} role="dialog" aria-modal>
             <div className={styles.completionPanel}>
-              <h1 className={styles.completionTitle}>
-                {runKind === "daily" ? "Daily Solved" : "Times Up"}
-              </h1>
-              {runKind === "daily" && dailyOutcome ? (
+              <h1 className={styles.completionTitle}>{completionTitle}</h1>
+              {isDailyPuzzle && dailyOutcome ? (
                 <div className={styles.dailyResultGrid}>
                   <div>
                     <span>Time</span>
@@ -296,17 +344,15 @@ const PounceRushPage: NextPage<{
                   >
                     <span>
                       Puzzle {entry.puzzleNumber + 1}
-                      <small>
-                        {isPuzzleSolved(entry.puzzleNumber, score)
-                          ? "Solved"
-                          : "Seen"}
-                      </small>
+                      {isPuzzleSolved(entry.puzzleNumber, score) ? (
+                        <SolvedCheck />
+                      ) : null}
                     </span>
                     <strong>{entry.objective}</strong>
                   </button>
                 ))}
               </div>
-              {runKind === "daily" && dailyOutcome ? (
+              {isDailyPuzzle && dailyOutcome ? (
                 <pre className={styles.shareSummary}>
                   {dailyOutcome.shareText}
                 </pre>
@@ -335,31 +381,36 @@ const PounceRushPage: NextPage<{
                     Replay set
                   </Button>
                 ) : null}
-                <Button
-                  className={`${styles.completionButton} ${
-                    runKind === "daily" ? styles.primaryButton : ""
-                  }`}
-                  onClick={
-                    runKind === "daily"
-                      ? actions.copyDailyShareText
-                      : () => setIsReportDialogOpen(true)
-                  }
-                  type={runKind === "daily" ? "primary" : "default"}
-                >
-                  {runKind === "daily" ? "Copy summary" : "Report puzzles"}
-                </Button>
-                {runKind === "daily" ? (
+                {isDailyPuzzle || runKind === "random" ? (
                   <Button
-                    className={styles.completionButton}
+                    className={`${styles.completionButton} ${
+                      isDailyPuzzle ? styles.primaryButton : ""
+                    }`}
+                    onClick={
+                      isDailyPuzzle
+                        ? actions.copyDailyShareText
+                        : () => setIsReportDialogOpen(true)
+                    }
+                    type={isDailyPuzzle ? "primary" : "default"}
+                  >
+                    {isDailyPuzzle ? "Copy summary" : "Report puzzles"}
+                  </Button>
+                ) : null}
+                {isDailyPuzzle || isDailyRush ? (
+                  <Button
+                    className={`${styles.completionButton} ${
+                      isDailyRush ? styles.primaryButton : ""
+                    }`}
                     onClick={() => {
                       setIsReportDialogOpen(false);
                       actions.startRandom();
                     }}
+                    type={isDailyRush ? "primary" : "default"}
                   >
-                    Random puzzle
+                    Random Rush
                   </Button>
                 ) : null}
-                {runKind === "daily" ? (
+                {isDailyPuzzle || isDailyRush ? (
                   <Button
                     className={styles.completionButton}
                     onClick={() => setIsReportDialogOpen(true)}
@@ -383,17 +434,17 @@ const PounceRushPage: NextPage<{
             <div className={styles.reportPanel}>
               <h2>Report Puzzles</h2>
               <div className={styles.reportCodeBlock}>
-                <span>{runKind === "daily" ? "Daily puzzle" : "Report code"}</span>
-                <strong>{runKind === "daily" ? dailyLabel : seed}</strong>
+                <span>{reportLabel}</span>
+                <strong>{isDailyPuzzle || isDailyRush ? dailyLabel : seed}</strong>
               </div>
               <div className={styles.reportList}>
                 {puzzleHistory.map((entry) => (
                   <div className={styles.reportItem} key={entry.reportCode}>
                     <span>
-                      Puzzle {entry.puzzleNumber + 1} -{" "}
-                      {isPuzzleSolved(entry.puzzleNumber, score)
-                        ? "Solved"
-                        : "Seen"}
+                      Puzzle {entry.puzzleNumber + 1}
+                      {isPuzzleSolved(entry.puzzleNumber, score) ? (
+                        <SolvedCheck />
+                      ) : null}
                     </span>
                     <strong>{entry.reportCode}</strong>
                   </div>
@@ -437,6 +488,14 @@ function formatDailyLabel(dateKey: string): string {
 
 function isPuzzleSolved(puzzleNumber: number, score: number): boolean {
   return puzzleNumber < score;
+}
+
+function SolvedCheck(): JSX.Element {
+  return (
+    <span className={styles.solvedCheck} aria-label="Solved" role="img">
+      ✓
+    </span>
+  );
 }
 
 export default PounceRushPage;
