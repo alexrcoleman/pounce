@@ -1036,6 +1036,89 @@
   white-space: nowrap;
 }
 
+.fairHandSelect {
+  width: 220px;
+  max-width: 64%;
+}
+
+.fairHandTooltipOverlay {
+  max-width: min(320px, calc(100vw - 32px));
+}
+
+.fairHandTooltip {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fairHandTooltipModes {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.fairHandTooltipModes p,
+.fairHandLuck p {
+  margin: 0;
+}
+
+.fairHandTooltipModes p {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.fairHandTooltipModes strong,
+.fairHandLuck strong {
+  font-weight: 900;
+}
+
+.fairHandTooltipModes span,
+.fairHandLuck p,
+.fairHandLuckNote {
+  color: rgba(255, 255, 255, 0.84);
+}
+
+.fairHandLuck {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(255, 255, 255, 0.24);
+}
+
+.fairHandLuck ul {
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  list-style: none;
+}
+
+.fairHandLuck li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: baseline;
+}
+
+.fairHandLuck li span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fairHandLuck li span:last-child {
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
+}
+
+.fairHandLuckNote {
+  font-size: 11px;
+  line-height: 1.25;
+}
+
 .pingIndicator {
   display: inline-flex;
   align-items: center;

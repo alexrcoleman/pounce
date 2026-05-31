@@ -32,6 +32,7 @@ import {
   resetRoomHandAfterCenterPlay,
   resetRoom,
   setRoomPlayerStuck,
+  setRoomFairHandMode,
   setRoomFairHandRotation,
   setRoomAILevel,
   setRoomPaused,
@@ -375,6 +376,21 @@ export default function createSocketIOServer() {
         broadcastHands(user.currentRoom);
       }
     });
+    socket.on("set_fair_hand_mode", (args) => {
+      if (user.currentRoom == null) {
+        return;
+      }
+
+      const room = getRoom(user.currentRoom);
+      if (!isHost(room.board, socket.id)) {
+        return;
+      }
+
+      if (setRoomFairHandMode(room, args.mode)) {
+        markRoomUpdated(user.currentRoom);
+        broadcastUpdate(user.currentRoom);
+      }
+    });
     socket.on("set_fair_hand_rotation", (args) => {
       if (user.currentRoom == null) {
         return;
@@ -385,7 +401,11 @@ export default function createSocketIOServer() {
         return;
       }
 
-      if (setRoomFairHandRotation(room, args.enabled)) {
+      if (
+        args.mode != null
+          ? setRoomFairHandMode(room, args.mode)
+          : setRoomFairHandRotation(room, args.enabled)
+      ) {
         markRoomUpdated(user.currentRoom);
         broadcastUpdate(user.currentRoom);
       }

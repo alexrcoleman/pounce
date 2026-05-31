@@ -4,11 +4,16 @@ import CloseOutlined from "@ant-design/icons/CloseOutlined";
 import SoundOutlined from "@ant-design/icons/SoundOutlined";
 import { type ReactNode, useEffect, useState } from "react";
 import { observer } from "mobx-react-lite";
-import { Button, Flex, Modal, Slider, Switch } from "antd";
+import { Button, Flex, Modal, Select, Slider, Switch } from "antd";
 import { useClientContext } from "./ClientContext";
 import RoomShare from "./RoomShare";
 import ChevronLeftIcon from "./icons/ChevronLeftIcon";
 import InfoTooltipIcon from "./InfoTooltipIcon";
+import {
+  getFairHandMode,
+  type FairHandMode,
+} from "../shared/FairHands";
+import type { BoardState, PlayerState } from "../shared/GameUtils";
 import useNetworkInformation, {
   getNetworkInformationTitle,
   getNetworkSummary,
@@ -20,8 +25,11 @@ type SettingsDialogProps = {
   onLeaveRoom: () => void;
 };
 
-const FAIR_HAND_ROTATION_HELP =
-  "When on, Pounce keeps one shuffled set of hands for a short series and rotates them each round, so everyone gets a turn with the same luck. Leave it off for a brand-new shuffle every round.";
+const FAIR_HAND_MODE_OPTIONS: { value: FairHandMode; label: string }[] = [
+  { value: "off", label: "Off" },
+  { value: "rotate", label: "Take turns with hands" },
+  { value: "fairest", label: "Best hand to least lucky" },
+];
 
 const AI_DIFFICULTY_PRESETS = [
   { key: "easy", label: "Easy", speed: 3 },
@@ -51,6 +59,7 @@ export default observer(function SettingsDialog({
   const networkInformation = useNetworkInformation();
   const [isFairHandHelpOpen, setFairHandHelpOpen] = useState(false);
   const [localAICount, setLocalAICount] = useState(serverAICount);
+  const fairHandMode = getFairHandMode(state.roomSettings);
   const currentAISpeed = state.roomSettings.aiSpeed ?? 3;
   const [aiDifficultyMode, setAIDifficultyMode] = useState<AIDifficultyMode>(
     () => getAIDifficultyMode(currentAISpeed)
@@ -206,26 +215,30 @@ export default observer(function SettingsDialog({
             <SettingRow
               title={
                 <Flex align="center" gap={6}>
-                  <span>Fair hand rotation</span>
+                  <span>Fair hands</span>
                   <InfoTooltipIcon
-                    aria-label="How fair hand rotation works"
+                    aria-label="How fair hands works"
                     onBlur={() => setFairHandHelpOpen(false)}
                     onClick={() => setFairHandHelpOpen(true)}
                     onFocus={() => setFairHandHelpOpen(true)}
                     onMouseEnter={() => setFairHandHelpOpen(true)}
                     onMouseLeave={() => setFairHandHelpOpen(false)}
+                    tooltipClassName={styles.fairHandTooltipOverlay}
                     tooltipOpen={isFairHandHelpOpen}
                   >
-                    {FAIR_HAND_ROTATION_HELP}
+                    <FairHandModeTooltip board={state.board} />
                   </InfoTooltipIcon>
                 </Flex>
               }
               control={
-                <Switch
-                  checked={state.roomSettings.fairHandRotation}
+                <Select
+                  className={styles.fairHandSelect}
                   disabled={!isHost}
-                  onChange={(enabled) =>
-                    socket?.emit("set_fair_hand_rotation", { enabled })
+                  options={FAIR_HAND_MODE_OPTIONS}
+                  popupMatchSelectWidth={false}
+                  value={fairHandMode}
+                  onChange={(mode: FairHandMode) =>
+                    socket?.emit("set_fair_hand_mode", { mode })
                   }
                 />
               }
@@ -439,6 +452,54 @@ export default observer(function SettingsDialog({
   );
 });
 
+function FairHandModeTooltip({ board }: { board: BoardState | null }) {
+  const luckRows = getFairHandLuckRows(board);
+
+  return (
+    <div className={styles.fairHandTooltip}>
+      <div className={styles.fairHandTooltipModes}>
+        <p>
+          <strong>Off</strong>
+          <span>Fresh random hands every round.</span>
+        </p>
+        <p>
+          <strong>Take turns with hands</strong>
+          <span>
+            Reuses one shuffled set and rotates those hands between players.
+          </span>
+        </p>
+        <p>
+          <strong>Best hand to least lucky</strong>
+          <span>
+            Shuffles fresh hands, predicts each hand with the same balanced
+            strategy, then gives stronger hands to lower luck totals.
+          </span>
+        </p>
+      </div>
+      <div className={styles.fairHandLuck}>
+        <strong>Luck so far (predicted score)</strong>
+        {luckRows.length > 0 ? (
+          <>
+            <ul>
+              {luckRows.map((row) => (
+                <li key={row.playerIndex}>
+                  <span>{row.name}</span>
+                  <span>{formatFairHandLuck(row.score)}</span>
+                </li>
+              ))}
+            </ul>
+            <span className={styles.fairHandLuckNote}>
+              Higher means luckier hands so far.
+            </span>
+          </>
+        ) : (
+          <p>Predicted scores appear after this mode deals hands.</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function AIDifficultyControl({
   customSpeed,
   mode,
@@ -519,6 +580,41 @@ export function AIDifficultyControl({
       ) : null}
     </div>
   );
+}
+
+function getFairHandLuckRows(
+  board: BoardState | null
+): { playerIndex: number; name: string; score: number }[] {
+  if (!board) {
+    return [];
+  }
+
+  return board.players
+    .map((player, playerIndex) => ({
+      playerIndex,
+      player,
+    }))
+    .filter(({ player }) => !player.disconnected)
+    .map(({ player, playerIndex }) => ({
+      playerIndex,
+      name: getFairHandPlayerName(player),
+      score: player.fairHandExpectedScoreTotal,
+    }))
+    .filter(
+      (row): row is { playerIndex: number; name: string; score: number } =>
+        typeof row.score === "number" && Number.isFinite(row.score)
+    );
+}
+
+function getFairHandPlayerName(player: PlayerState): string {
+  const name = player.name.trim();
+  return name.length > 0 ? name : "Player";
+}
+
+function formatFairHandLuck(score: number): string {
+  const rounded = Math.round(score * 10) / 10;
+  const sign = rounded > 0 ? "+" : "";
+  return `${sign}${rounded.toFixed(1)}`;
 }
 
 function SettingsSection({

@@ -4,6 +4,7 @@ import {
   CursorState,
   createBoard,
 } from "./GameUtils";
+import type { FairHandMode } from "./FairHands";
 import type { RoundAnalysis, RoundSnapshot } from "./RoundAnalysis";
 
 export type AIPileKnowledge = {
@@ -12,6 +13,8 @@ export type AIPileKnowledge = {
 };
 
 export type RoomSettings = {
+  fairHandMode: FairHandMode;
+  /** @deprecated Prefer fairHandMode. Kept for older clients. */
   fairHandRotation: boolean;
   aiSpeed: number;
   simulationMode: boolean;
@@ -59,6 +62,7 @@ export function createRoomState(playerCount: number): RoomState {
     stuckPlayerIndices: [],
     autoStart: false,
     settings: {
+      fairHandMode: "off",
       fairHandRotation: false,
       aiSpeed: 3,
       simulationMode: false,

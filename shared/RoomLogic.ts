@@ -21,6 +21,10 @@ import {
 
 import type { AIPileKnowledge, RoomState } from "./RoomState";
 import {
+  getFairHandMode,
+  normalizeFairHandMode,
+} from "./FairHands";
+import {
   executeMove,
   getDistance,
   isProductiveMove,
@@ -48,6 +52,7 @@ import {
   getStuckVoteStatus,
   getStuckVotingPlayerIndices,
 } from "./StuckPlayers";
+import { simulateBalancedDealScores } from "./DealSimulation";
 
 export type RoomTickResult = {
   hasUpdate: boolean;
@@ -65,6 +70,8 @@ const AI_OBSOLETE_TARGET_RECONSIDER_DELAY_RATIO = 0.45;
 const AI_OBSOLETE_TARGET_RECONSIDER_MIN_DELAY_MS = 120;
 const AI_OBSOLETE_TARGET_RECONSIDER_MAX_DELAY_MS = 650;
 const MIN_ROUND_READY_PLAYERS = 2;
+const FAIREST_DEAL_SIMULATION_TRIALS = 12;
+const FAIREST_DEAL_MAX_MOVES_PER_TRIAL = 1400;
 export const PLAYER_CENTER_CURSOR_RESET_DELAY_MS = 1000;
 
 export type SetRoomPlayerStuckResult = {
@@ -629,7 +636,7 @@ export function startRoomGame(
 
   removeDisconnectedPlayers(room);
   if (!room.board.isDealt) {
-    clearPlayersWaitingForDeal(room);
+    dealRoomHands(room);
   }
   clearRoomStuckPlayers(room);
   startGame(room);
@@ -685,7 +692,10 @@ function getRoomStartCountdownDurationMs(room: RoomState): number {
 export function dealRoomHands(room: RoomState): boolean {
   removeDisconnectedPlayers(room);
   clearPlayersWaitingForDeal(room);
-  const didDeal = dealGameHands(room);
+  const didDeal =
+    getFairHandMode(room.settings) === "fairest"
+      ? dealFairestRoomHands(room)
+      : dealGameHands(room);
   if (didDeal) {
     clearRoomStuckPlayers(room);
     room.handUpdateVersions = [];
@@ -695,6 +705,154 @@ export function dealRoomHands(room: RoomState): boolean {
     resetAIVisibilityMemory(room);
   }
   return didDeal;
+}
+
+function dealFairestRoomHands(room: RoomState): boolean {
+  const { board } = room;
+  if (board.isActive || board.isDealt) {
+    return false;
+  }
+
+  room.queuedHands = [];
+  resetBoard(board);
+  const shuffledDecks = board.players.map((player) => cloneDeck(player.deck));
+  dealActivePlayerHands(board);
+
+  const activePlayerIndices = getActiveDealPlayerIndices(board);
+  const rankedHands = getRankedFairestDealHands(board, activePlayerIndices);
+  if (rankedHands.length > 0) {
+    normalizeFairHandExpectedScores(board, activePlayerIndices);
+    const rankedPlayers = activePlayerIndices
+      .slice()
+      .sort(
+        (a, b) =>
+          getFairHandExpectedScore(board.players[a]) -
+            getFairHandExpectedScore(board.players[b]) ||
+          a - b
+      );
+    const assignedDecks = shuffledDecks.slice();
+    rankedPlayers.forEach((playerIndex, rankIndex) => {
+      const hand = rankedHands[rankIndex];
+      if (!hand) {
+        return;
+      }
+
+      assignedDecks[playerIndex] = shuffledDecks[hand.playerIndex];
+      board.players[playerIndex].fairHandExpectedScoreTotal =
+        getFairHandExpectedScore(board.players[playerIndex]) +
+        hand.expectedScore;
+    });
+    resetBoard(board, assignedDecks);
+    dealActivePlayerHands(board);
+  }
+
+  board.isDealt = true;
+  room.hands = [];
+  return true;
+}
+
+function getRankedFairestDealHands(
+  board: BoardState,
+  activePlayerIndices: number[]
+): { playerIndex: number; expectedScore: number }[] {
+  if (activePlayerIndices.length <= 1) {
+    return [];
+  }
+
+  try {
+    const scoreByPlayerIndex = new Map(
+      simulateBalancedDealScores(board, {
+        maxTrials: FAIREST_DEAL_SIMULATION_TRIALS,
+        maxMovesPerTrial: FAIREST_DEAL_MAX_MOVES_PER_TRIAL,
+      }).map((result) => [result.playerIndex, result.predictedScore])
+    );
+    return activePlayerIndices
+      .map((playerIndex) => ({
+        playerIndex,
+        expectedScore: scoreByPlayerIndex.get(playerIndex) ?? 0,
+      }))
+      .sort(
+        (a, b) =>
+          b.expectedScore - a.expectedScore || a.playerIndex - b.playerIndex
+      );
+  } catch (error) {
+    console.warn("Unable to rank fairest deal hands", error);
+    return [];
+  }
+}
+
+function recordFairestExpectedScoresForPlayers(
+  room: RoomState,
+  playerIndices: number[]
+): void {
+  const activePlayerIndices = getActiveDealPlayerIndices(room.board);
+  normalizeFairHandExpectedScores(room.board, activePlayerIndices);
+  try {
+    const expectedScoreByPlayerIndex = new Map(
+      simulateBalancedDealScores(room.board, {
+        maxTrials: FAIREST_DEAL_SIMULATION_TRIALS,
+        maxMovesPerTrial: FAIREST_DEAL_MAX_MOVES_PER_TRIAL,
+      }).map((result) => [result.playerIndex, result.predictedScore])
+    );
+    playerIndices.forEach((playerIndex) => {
+      const expectedScore = expectedScoreByPlayerIndex.get(playerIndex);
+      if (expectedScore == null) {
+        return;
+      }
+      room.board.players[playerIndex].fairHandExpectedScoreTotal =
+        getFairHandExpectedScore(room.board.players[playerIndex]) +
+        expectedScore;
+    });
+  } catch (error) {
+    console.warn("Unable to record fairest deal score", error);
+  }
+}
+
+function normalizeFairHandExpectedScores(
+  board: BoardState,
+  activePlayerIndices: number[]
+): void {
+  const existingScores = board.players
+    .map((player) => player.fairHandExpectedScoreTotal)
+    .filter(
+      (score): score is number =>
+        typeof score === "number" && Number.isFinite(score)
+    );
+  const averageScore =
+    existingScores.length > 0
+      ? existingScores.reduce((sum, score) => sum + score, 0) /
+        existingScores.length
+      : 0;
+
+  activePlayerIndices.forEach((playerIndex) => {
+    const player = board.players[playerIndex];
+    const score = player.fairHandExpectedScoreTotal;
+    if (typeof score !== "number" || !Number.isFinite(score)) {
+      player.fairHandExpectedScoreTotal = averageScore;
+    }
+  });
+}
+
+function getFairHandExpectedScore(player: PlayerState): number {
+  const score = player.fairHandExpectedScoreTotal;
+  return typeof score === "number" && Number.isFinite(score) ? score : 0;
+}
+
+function getActiveDealPlayerIndices(board: BoardState): number[] {
+  return board.players
+    .map((player, index) => ({ player, index }))
+    .filter(({ player }) => player.isSpectating !== true)
+    .map(({ index }) => index);
+}
+
+function dealActivePlayerHands(board: BoardState): void {
+  getActiveDealPlayerIndices(board).forEach((playerIndex) => {
+    dealPlayerHand(board, playerIndex);
+  });
+}
+
+function cloneDeck(deck: CardState[]): CardState[] {
+  return deck.map((card) => ({ ...card }));
 }
 
 export function dealRemainingRoomPlayers(room: RoomState): boolean {
@@ -717,6 +875,9 @@ export function dealRemainingRoomPlayers(room: RoomState): boolean {
     player.isWaitingForDeal = false;
     dealPlayerHand(board, playerIndex);
   });
+  if (getFairHandMode(room.settings) === "fairest") {
+    recordFairestExpectedScoresForPlayers(room, playerIndices);
+  }
 
   clearPlayersReadyForRound(board);
   room.queuedHands = [];
@@ -804,6 +965,7 @@ export function resetRoom(room: RoomState): void {
   room.board.players.forEach((p) => {
     p.scores = [];
     p.totalPoints = 0;
+    p.fairHandExpectedScoreTotal = 0;
   });
   room.queuedHands = [];
   clearRoomStuckPlayers(room);
@@ -815,20 +977,33 @@ export function resetRoom(room: RoomState): void {
   resetAIVisibilityMemory(room);
 }
 
+export function setRoomFairHandMode(
+  room: RoomState,
+  mode: unknown
+): boolean {
+  const fairHandMode = normalizeFairHandMode(mode);
+  const fairHandRotation = fairHandMode === "rotate";
+  if (
+    getFairHandMode(room.settings) === fairHandMode &&
+    room.settings.fairHandMode === fairHandMode &&
+    room.settings.fairHandRotation === fairHandRotation
+  ) {
+    return false;
+  }
+
+  room.settings.fairHandMode = fairHandMode;
+  room.settings.fairHandRotation = fairHandRotation;
+  if (fairHandMode !== "rotate") {
+    room.queuedHands = [];
+  }
+  return true;
+}
+
 export function setRoomFairHandRotation(
   room: RoomState,
   enabled: unknown
 ): boolean {
-  const fairHandRotation = enabled === true;
-  if (room.settings.fairHandRotation === fairHandRotation) {
-    return false;
-  }
-
-  room.settings.fairHandRotation = fairHandRotation;
-  if (!fairHandRotation) {
-    room.queuedHands = [];
-  }
-  return true;
+  return setRoomFairHandMode(room, enabled === true ? "rotate" : "off");
 }
 
 export function setRoomAILevel(room: RoomState, speed: number): void {

@@ -35,6 +35,7 @@ import {
   resetRoom,
   scheduleAIReactionBoard,
   setRoomPlayerStuck,
+  setRoomFairHandMode,
   setRoomFairHandRotation,
   setRoomAILevel,
   setRoomPaused,
@@ -383,6 +384,12 @@ export default function useLocalGame(name: string | null) {
           setRoomAILevel(room, setAIArgs.speed);
           markRoomUpdated();
           emitUpdate();
+        } else if (event === "set_fair_hand_mode") {
+          const setFairHandModeArgs = args[0] as { mode: string };
+          if (setRoomFairHandMode(room, setFairHandModeArgs.mode)) {
+            markRoomUpdated();
+            emitUpdate();
+          }
         } else if (event === "set_fair_hand_rotation") {
           const setFairHandRotationArgs = args[0] as { enabled: boolean };
           if (

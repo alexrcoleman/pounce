@@ -10,6 +10,7 @@ import type { RoomSettings } from "./RoomState";
 import type { RoundAnalysis } from "./RoundAnalysis";
 import type { RoomToast } from "./RoomToast";
 import type { PlayerReaction, ReactionId } from "./Reactions";
+import type { FairHandMode } from "./FairHands";
 
 export type ActionEnvelope<T> = {
   actionId: string;
@@ -113,7 +114,11 @@ export type ClientToServerEvents = {
   add_ai: () => void;
   remove_ai: () => void;
   set_ai_count: (args: { count: number }) => void;
-  set_fair_hand_rotation: (args: { enabled: boolean }) => void;
+  set_fair_hand_mode: (args: { mode: FairHandMode }) => void;
+  set_fair_hand_rotation: (args: {
+    enabled?: boolean;
+    mode?: FairHandMode;
+  }) => void;
   send_reaction: (args: { reactionId: ReactionId }) => void;
   remove_disconnected_players: () => void;
   room_ping: (

@@ -827,6 +827,7 @@ function applyBoardUpdate(
       board: deepClone(board),
       settings: {
         aiSpeed: 3,
+        fairHandMode: "off",
         fairHandRotation: false,
         simulationMode: false,
       },

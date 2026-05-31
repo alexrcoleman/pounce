@@ -23,6 +23,7 @@ const SERVER_TIME_SAFETY_BUFFER_MS = 100;
 
 function createDefaultRoomSettings(): RoomSettings {
   return {
+    fairHandMode: "off",
     fairHandRotation: false,
     aiSpeed: 3,
     simulationMode: false,

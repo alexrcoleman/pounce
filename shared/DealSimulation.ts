@@ -61,6 +61,7 @@ type DealSimulationOptions = {
   strategyComparisonTrials?: number;
   includeStrategyComparisons?: boolean;
   strategyComparisonPlayerIndices?: number[];
+  sharedStrategyProfile?: AIStrategyProfile;
 };
 
 type PlayerTrialResult = {
@@ -128,7 +129,8 @@ export function simulateDealQuality(
   const baseSeed = getBoardSeed(startBoard);
   const strategyAssignments = getDefaultStrategyAssignments(
     startBoard,
-    activePlayerIndices
+    activePlayerIndices,
+    options.sharedStrategyProfile
   );
   const totals = runDealSimulationTrials(
     startBoard,
@@ -211,10 +213,31 @@ export function simulateDealQuality(
   return unranked;
 }
 
+export function simulateBalancedDealScores(
+  startBoard: BoardState,
+  options: Pick<DealSimulationOptions, "maxTrials" | "maxMovesPerTrial"> = {}
+): DealSimulationPlayerResult[] {
+  return simulateDealQuality(startBoard, {
+    ...options,
+    includeStrategyComparisons: false,
+    sharedStrategyProfile: defaultHumanAnalysisStrategyProfile,
+  });
+}
+
 function getDefaultStrategyAssignments(
   startBoard: BoardState,
-  activePlayerIndices: number[]
+  activePlayerIndices: number[],
+  sharedStrategyProfile?: AIStrategyProfile
 ): Map<number, PlayerStrategyAssignment> {
+  if (sharedStrategyProfile) {
+    return new Map(
+      activePlayerIndices.map((playerIndex) => [
+        playerIndex,
+        { type: "fixed", profile: sharedStrategyProfile },
+      ])
+    );
+  }
+
   return new Map(
     activePlayerIndices.map((playerIndex) => {
       const player = startBoard.players[playerIndex];

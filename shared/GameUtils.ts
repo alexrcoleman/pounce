@@ -1,4 +1,5 @@
 import { getDistance } from "./MoveHandler";
+import { getFairHandMode, type FairHandMode } from "./FairHands";
 import shuffle from "./shuffle";
 
 const colors = ["red", "blue", "green", "orange", "yellow", "pink"];
@@ -77,6 +78,7 @@ export type PlayerState = {
   flippedDeck: CardState[];
   totalPoints: number;
   currentPoints: number;
+  fairHandExpectedScoreTotal?: number;
   scores: (number | null)[];
 };
 export type BoardState = {
@@ -95,7 +97,8 @@ type StartGameRoomState = {
   hands: CursorState[];
   queuedHands: CardState[][][];
   settings: {
-    fairHandRotation: boolean;
+    fairHandMode?: FairHandMode;
+    fairHandRotation?: boolean;
   };
 };
 
@@ -298,9 +301,9 @@ function updateQueuedHands(
   board: BoardState,
   queuedHands: CardState[][][],
   queuedHand: CardState[][] | undefined,
-  fairHandRotation: boolean
+  fairHandMode: FairHandMode
 ) {
-  if (!fairHandRotation) {
+  if (fairHandMode !== "rotate") {
     queuedHands.length = 0;
     return;
   }
@@ -334,13 +337,13 @@ export function dealGameHands(room: StartGameRoomState): boolean {
   if (board.isActive || board.isDealt) {
     return false;
   }
-  const fairHandRotation = room.settings.fairHandRotation;
-  const queuedHand = fairHandRotation ? queuedHands.splice(0, 1) : [];
+  const fairHandMode = getFairHandMode(room.settings);
+  const queuedHand = fairHandMode === "rotate" ? queuedHands.splice(0, 1) : [];
   if (queuedHand.length > 0) {
     console.log("Dealing queued hand");
   }
   resetBoard(board, queuedHand[0]);
-  updateQueuedHands(board, queuedHands, queuedHand[0], fairHandRotation);
+  updateQueuedHands(board, queuedHands, queuedHand[0], fairHandMode);
   dealHands(board);
   board.isDealt = true;
   room.hands = [];
