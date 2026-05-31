@@ -27,6 +27,7 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "source.exposedCanPlaySoon",
   "source.exposedMatchesPounceParity",
   "source.exposedPounceConnectorCloseness",
+  "source.exposedOwnSolitaireDestinationCount",
   "dest.center",
   "dest.solitaire",
   "card.value",
@@ -107,6 +108,11 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "own.pounceCenterPlayable",
   "own.deckCenterPlayable",
   "own.stackCenterPlayableCount",
+  "own.stackTopCanPlaySoonCount",
+  "own.stackNextCenterPlayableCount",
+  "own.stackNextCanPlaySoonCount",
+  "own.stackNextPounceConnectorCloseness",
+  "own.stackBottomPounceConnectorCloseness",
   "own.pounceCanPlaySoon",
   "opponent.pounceCenterPlayableCount",
   "opponent.deckCenterPlayableCount",
@@ -380,6 +386,7 @@ function buildActionRankingFeatures(
     card
   );
   const pressureFeatures = getVisiblePressureFeatures(board, playerIndex);
+  const solitaireContext = getOwnSolitaireContextFeatures(board, player);
   const botIndex = player
     ? board.players
         .filter((candidate) => candidate.socketId == null)
@@ -404,6 +411,7 @@ function buildActionRankingFeatures(
     bool(sourceShape.exposedCanPlaySoon),
     bool(sourceShape.exposedMatchesPounceParity),
     normalize(sourceShape.exposedPounceConnectorCloseness, 1),
+    normalize(sourceShape.exposedOwnSolitaireDestinationCount, 4),
     bool(move.type === "c2c"),
     bool(move.type === "c2s" || move.type === "s2s"),
     normalizeCardValue(card),
@@ -496,6 +504,11 @@ function buildActionRankingFeatures(
     bool(pressureFeatures.ownPounceCenterPlayable),
     bool(pressureFeatures.ownDeckCenterPlayable),
     normalize(pressureFeatures.ownStackCenterPlayableCount, 4),
+    normalize(solitaireContext.stackTopCanPlaySoonCount, 4),
+    normalize(solitaireContext.stackNextCenterPlayableCount, 4),
+    normalize(solitaireContext.stackNextCanPlaySoonCount, 4),
+    normalize(solitaireContext.stackNextPounceConnectorCloseness, 1),
+    normalize(solitaireContext.stackBottomPounceConnectorCloseness, 1),
     bool(pressureFeatures.ownPounceCanPlaySoon),
     normalize(pressureFeatures.opponentPounceCenterPlayableCount, 6),
     normalize(pressureFeatures.opponentDeckCenterPlayableCount, 6),
@@ -569,6 +582,7 @@ function getSourceShapeFeatures(
     exposedCanPlaySoon: false,
     exposedMatchesPounceParity: false,
     exposedPounceConnectorCloseness: 0,
+    exposedOwnSolitaireDestinationCount: 0,
   };
   if (!player) {
     return emptyFeatures;
@@ -583,6 +597,9 @@ function getSourceShapeFeatures(
   const exposedCard = getExposedSourceCard(player, move);
   const pounceCard = peek(player.pounceDeck);
   const centerPiles = getCenterPilesAfterCenterMove(board, move, card);
+  const exposedSolitaireDestinations = exposedCard
+    ? getExposedSourceSolitaireDestinations(player, move, exposedCard)
+    : [];
   return {
     stackHeight: sourceStack.length,
     bottomCard: sourceStack[0],
@@ -602,6 +619,7 @@ function getSourceShapeFeatures(
       exposedCard && pounceCard
         ? getConnectorCloseness(exposedCard, pounceCard)
         : 0,
+    exposedOwnSolitaireDestinationCount: exposedSolitaireDestinations.length,
   };
 }
 
@@ -885,6 +903,55 @@ function getVisiblePressureFeatures(board: BoardState, playerIndex: number) {
   );
 }
 
+function getOwnSolitaireContextFeatures(
+  board: BoardState,
+  player: PlayerState | undefined
+) {
+  const emptyFeatures = {
+    stackTopCanPlaySoonCount: 0,
+    stackNextCenterPlayableCount: 0,
+    stackNextCanPlaySoonCount: 0,
+    stackNextPounceConnectorCloseness: 0,
+    stackBottomPounceConnectorCloseness: 0,
+  };
+  if (!player) {
+    return emptyFeatures;
+  }
+
+  const pounceCard = peek(player.pounceDeck);
+  return player.stacks.reduce((result, stack) => {
+    const topCard = peek(stack);
+    const nextCard = stack[stack.length - 2];
+    const bottomCard = stack[0];
+
+    if (topCard && getCanPlaySoon(topCard, board, 4)) {
+      result.stackTopCanPlaySoonCount += 1;
+    }
+    if (
+      nextCard &&
+      board.piles.some((pile) => canPlayOnCenterPile(pile, nextCard))
+    ) {
+      result.stackNextCenterPlayableCount += 1;
+    }
+    if (nextCard && getCanPlaySoon(nextCard, board, 4)) {
+      result.stackNextCanPlaySoonCount += 1;
+    }
+    if (pounceCard && nextCard) {
+      result.stackNextPounceConnectorCloseness = Math.max(
+        result.stackNextPounceConnectorCloseness,
+        getConnectorCloseness(nextCard, pounceCard)
+      );
+    }
+    if (pounceCard && bottomCard) {
+      result.stackBottomPounceConnectorCloseness = Math.max(
+        result.stackBottomPounceConnectorCloseness,
+        getConnectorCloseness(bottomCard, pounceCard)
+      );
+    }
+    return result;
+  }, emptyFeatures);
+}
+
 function getOwnSolitaireDestinations(
   player: PlayerState,
   move: Move,
@@ -904,6 +971,43 @@ function getOwnSolitaireDestinations(
   return player.stacks.flatMap((stack, dest) =>
     dest !== sourceStackIndex && canMoveToSolitairePile(card, stack) ? [dest] : []
   );
+}
+
+function getExposedSourceSolitaireDestinations(
+  player: PlayerState,
+  move: Move,
+  exposedCard: CardState
+): number[] {
+  const sourceStackIndex = getSolitaireSourceIndex(move);
+  if (sourceStackIndex == null) {
+    return [];
+  }
+
+  const stacks = getSolitaireStacksAfterSourceMove(player, move);
+  return stacks.flatMap((stack, dest) =>
+    dest !== sourceStackIndex && canMoveToSolitairePile(exposedCard, stack)
+      ? [dest]
+      : []
+  );
+}
+
+function getSolitaireStacksAfterSourceMove(
+  player: PlayerState,
+  move: Move
+): PlayerState["stacks"] {
+  const stacks = player.stacks.map((stack) =>
+    stack.slice()
+  ) as PlayerState["stacks"];
+
+  if (move.type === "c2c" && move.source.type === "solitaire") {
+    stacks[move.source.index].pop();
+  } else if (move.type === "s2s") {
+    const source = stacks[move.source];
+    const movingCards = source.splice(source.length - move.count, move.count);
+    stacks[move.dest].push(...movingCards);
+  }
+
+  return stacks;
 }
 
 function getCardToSolitaireSource(

@@ -351,7 +351,7 @@ assert.ok(
 
 const connectorAnchoredValue = trainNeuralActionRankingPolicy({
   ...commonOptions,
-  seed: "action-ranking-rl-mode-check:connector-anchored-value",
+  seed: "action-ranking-rl-mode-check:connector-anchored-value:0",
   rlCounterfactualTrainingMode: "value",
   rlCounterfactualCandidateLimit: 5,
   rlCounterfactualValueTargetScale: 4,
@@ -374,7 +374,7 @@ assert.ok(
 
 const symmetricConnectorAnchoredValue = trainNeuralActionRankingPolicy({
   ...commonOptions,
-  seed: "action-ranking-rl-mode-check:symmetric-connector-anchored-value",
+  seed: "action-ranking-rl-mode-check:symmetric-connector-anchored-value:0",
   rlCounterfactualTrainingMode: "value",
   rlCounterfactualCandidateLimit: 5,
   rlCounterfactualValueTargetScale: 4,
@@ -740,6 +740,7 @@ function assertLegacyFeatureExpansion() {
     "source.exposedCanPlaySoon",
     "source.exposedMatchesPounceParity",
     "source.exposedPounceConnectorCloseness",
+    "source.exposedOwnSolitaireDestinationCount",
     "cycle.revealsCard",
     "cycle.revealedValue",
     "cycle.revealedCenterPlayable",
@@ -783,6 +784,11 @@ function assertLegacyFeatureExpansion() {
     "own.pounceCenterPlayable",
     "own.deckCenterPlayable",
     "own.stackCenterPlayableCount",
+    "own.stackTopCanPlaySoonCount",
+    "own.stackNextCenterPlayableCount",
+    "own.stackNextCanPlaySoonCount",
+    "own.stackNextPounceConnectorCloseness",
+    "own.stackBottomPounceConnectorCloseness",
     "own.pounceCanPlaySoon",
     "opponent.pounceCenterPlayableCount",
     "opponent.deckCenterPlayableCount",
@@ -867,7 +873,12 @@ function assertTacticalFeatureSurface() {
   board.players[0].pounceDeck = [card("clubs", 4, 0)];
   board.players[0].deck = [];
   board.players[0].flippedDeck = [card("hearts", 5, 0)];
-  board.players[0].stacks = [[card("spades", 6, 0)], [], [], []];
+  board.players[0].stacks = [
+    [card("spades", 6, 0), card("hearts", 5, 0)],
+    [card("hearts", 7, 0)],
+    [],
+    [],
+  ];
   board.players[1].pounceDeck = [card("spades", 6, 1)];
   board.players[1].deck = [];
   board.players[1].flippedDeck = [card("diamonds", 5, 1)];
@@ -923,6 +934,26 @@ function assertTacticalFeatureSurface() {
     "visible pressure should count own playable solitaire tops"
   );
   assert.ok(
+    getFeature(cycleCandidate, "own.stackTopCanPlaySoonCount") > 0,
+    "solitaire context should count own stack tops close to center play"
+  );
+  assert.ok(
+    getFeature(cycleCandidate, "own.stackNextCenterPlayableCount") > 0,
+    "solitaire context should count buried cards that can play if exposed"
+  );
+  assert.ok(
+    getFeature(cycleCandidate, "own.stackNextCanPlaySoonCount") > 0,
+    "solitaire context should count buried cards close to center play"
+  );
+  assert.ok(
+    getFeature(cycleCandidate, "own.stackNextPounceConnectorCloseness") > 0,
+    "solitaire context should expose buried pounce connector closeness"
+  );
+  assert.ok(
+    getFeature(cycleCandidate, "own.stackBottomPounceConnectorCloseness") > 0,
+    "solitaire context should expose bottom-card pounce connector closeness"
+  );
+  assert.ok(
     getFeature(cycleCandidate, "opponent.pounceCenterPlayableCount") > 0,
     "visible pressure should count opponent playable pounce cards"
   );
@@ -937,6 +968,26 @@ function assertTacticalFeatureSurface() {
   assert.ok(
     getFeature(cycleCandidate, "opponent.pounceCanPlaySoonCount") > 0,
     "visible pressure should count opponent pounce cards close to center play"
+  );
+
+  const exposingCenterCandidate = enumerateActionRankingCandidates(
+    board,
+    0
+  ).find(
+    (candidate) =>
+      candidate.move.type === "c2c" &&
+      candidate.move.source.type === "solitaire"
+  );
+  assert.ok(
+    exposingCenterCandidate,
+    "feature check should include a center move exposing a solitaire card"
+  );
+  assert.ok(
+    getFeature(
+      exposingCenterCandidate,
+      "source.exposedOwnSolitaireDestinationCount"
+    ) > 0,
+    "source exposure should count solitaire destinations for the exposed card"
   );
 
   const stockLookaheadBoard = createBoard(2);

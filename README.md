@@ -58,6 +58,12 @@ source-stack height/bottom/exposed-card information, whether exposed cards can
 play or match the pounce card's stack-compatibility parity, destination bottom
 value, card parity and pounce-connector closeness, and opponent follow pressure
 split by pounce/deck/solitaire visible cards after center plays.
+The current 108-input surface adds a compact whole-solitaire context: how many
+own stack tops can play soon, how many newly exposed second cards could play
+center or soon, best buried/bottom pounce-connector closeness, and whether a
+source move exposes a card with another solitaire destination. These are meant
+to let rollout labels explain why exposing or preserving a pile matters without
+feeding the network a full recurrent board memory.
 Cycle moves now include a stock-memory proxy: the card that would become visible
 after cycling, whether it can play center/solitaire/soon, whether it can connect
 to the pounce card, whether the action only resets the waste pile, and the
@@ -108,6 +114,21 @@ point-differential deltas of `+1.530` vs `Mom`, `-0.065` vs `Alex-v2`,
 `+0.454` vs `Alex 75%`, `-0.214` vs `Alex 66%`, and `+0.187` vs `Alex 1.0`.
 That is roughly parity around the tuned Alex variants rather than an independent
 new cutoff strategy.
+A follow-up warmup onto the 108-input solitaire-context surface from the
+lookahead checkpoint (`48` deals, `2` epochs, `IMITATION_LR=0.005`) also
+preserved behavior: 99.85% top-action agreement over 2,000 teacher states and
+`-0.079 +/- 0.135` against the lookahead warmup over 384 paired games, while
+measuring `+0.049 +/- 0.061` against the older behavior-scope checkpoint on the
+same budget. The saved JSON is about 667 KB. The comparable guarded audit from
+that warmup skipped 1 feature-tie label, down from 2 in the previous lookahead
+audit, and accepted a more mixed label batch including `s2s>s2s` refinements.
+Training those labels with the old default imitation-continuation plus pairwise
+RL regressed (`-0.603 +/- 0.144` against the 108-input warmup). Re-running as a
+pure RL update avoided the large regression but still did not promote:
+`-0.034 +/- 0.071` against the 108-input warmup and `-0.085 +/- 0.152` against
+the behavior-scope checkpoint. The lesson is that the extra solitaire context is
+useful infrastructure, but the small 8-label pairwise recipe remains too noisy
+or underpowered to create a stronger deployed policy by itself.
 The global visible-pressure inputs count own and opponent pounce/deck/solitaire
 cards that are playable on center now, plus pounce cards close to center play;
 those are intended to help reward training learn tempo and opponent-help costs
