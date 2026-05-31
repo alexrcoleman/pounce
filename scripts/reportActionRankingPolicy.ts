@@ -1,5 +1,8 @@
 import fs from "fs";
-import { ACTION_RANKING_FEATURE_NAMES } from "../shared/ActionRankingPolicy";
+import {
+  ACTION_RANKING_FEATURE_NAMES,
+  type ActionRankingOptions,
+} from "../shared/ActionRankingPolicy";
 import { getBasicAIStyleNames } from "../shared/ComputerV1";
 import {
   compareNeuralModels,
@@ -67,6 +70,7 @@ const selfPlayComparisonEnabled =
   selfPlayGames > 0;
 const selfPlaySwapSeats = readBooleanEnv("SELF_PLAY_SWAP_SEATS", true);
 const styles = styleEvaluationEnabled ? readStyleList() : [];
+const actionOptions = readActionOptionsEnv();
 
 const defaultEvaluation =
   evaluationGames > 0
@@ -76,6 +80,7 @@ const defaultEvaluation =
           games: evaluationGames,
           seed: `${evalSeed}:default`,
           maxMovesPerGame,
+          actionOptions,
         })
       )
     : undefined;
@@ -88,6 +93,7 @@ const byStyle = styles.map((style) => ({
       games: styleEvaluationGames,
       seed: `${evalSeed}:style:${style}`,
       maxMovesPerGame,
+      actionOptions,
     })
   ),
 }));
@@ -100,6 +106,7 @@ const baselineComparison =
           games: compareGames,
           seed: `${compareSeed}:paired`,
           maxMovesPerGame,
+          actionOptions,
         })
       )
     : undefined;
@@ -113,6 +120,7 @@ const selfPlayComparison =
           seed: `${compareSeed}:self-play`,
           maxMovesPerGame,
           swapSeats: selfPlaySwapSeats,
+          actionOptions,
         })
       )
     : undefined;
@@ -132,6 +140,7 @@ console.log(
         selfPlayGamesPerSeed: selfPlayGames,
         styles,
         selfPlaySwapSeats,
+        actionOptions,
       },
       defaultEvaluation,
       byStyle,
@@ -283,6 +292,26 @@ function summarizeEvaluations(
       "averageTeacherBaselineCycleMoveRate",
       games
     ),
+    averageNeuralWaitMoveRate: weightedMean(
+      evaluations,
+      "averageNeuralWaitMoveRate",
+      games
+    ),
+    averageTeacherBaselineWaitMoveRate: weightedMean(
+      evaluations,
+      "averageTeacherBaselineWaitMoveRate",
+      games
+    ),
+    averageNeuralPremoveMoveRate: weightedMean(
+      evaluations,
+      "averageNeuralPremoveMoveRate",
+      games
+    ),
+    averageTeacherBaselinePremoveMoveRate: weightedMean(
+      evaluations,
+      "averageTeacherBaselinePremoveMoveRate",
+      games
+    ),
     averageNeuralPounceRemaining: weightedMean(
       evaluations,
       "averageNeuralPounceRemaining",
@@ -382,6 +411,26 @@ function summarizeComparisons(
     averageModelBCycleMoveRate: weightedMean(
       comparisons,
       "averageModelBCycleMoveRate",
+      games
+    ),
+    averageModelAWaitMoveRate: weightedMean(
+      comparisons,
+      "averageModelAWaitMoveRate",
+      games
+    ),
+    averageModelBWaitMoveRate: weightedMean(
+      comparisons,
+      "averageModelBWaitMoveRate",
+      games
+    ),
+    averageModelAPremoveMoveRate: weightedMean(
+      comparisons,
+      "averageModelAPremoveMoveRate",
+      games
+    ),
+    averageModelBPremoveMoveRate: weightedMean(
+      comparisons,
+      "averageModelBPremoveMoveRate",
       games
     ),
     averageModelAPounceRemaining: weightedMean(
@@ -535,7 +584,20 @@ function readBooleanEnv(name: string, fallback: boolean): boolean {
   if (value == null || value.trim() === "") {
     return fallback;
   }
-  return ["1", "true", "yes", "on"].includes(value.toLowerCase());
+  if (["1", "true", "yes", "on"].includes(value.toLowerCase())) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(value.toLowerCase())) {
+    return false;
+  }
+  return fallback;
+}
+
+function readActionOptionsEnv(): ActionRankingOptions {
+  return {
+    includeWait: readBooleanEnv("RL_INCLUDE_WAIT_ACTIONS", false),
+    includePremove: readBooleanEnv("RL_INCLUDE_PREMOVE_ACTIONS", false),
+  };
 }
 
 function readSeedList(seed: string): string[] {

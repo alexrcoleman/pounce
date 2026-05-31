@@ -4,6 +4,7 @@ import {
   evaluateNeuralModelAgainstBasicStyle,
   type PolicyEvaluationResult,
 } from "../shared/ActionRankingTraining";
+import type { ActionRankingOptions } from "../shared/ActionRankingPolicy";
 import type { NeuralActionRankingModel } from "../shared/NeuralActionRankingPolicy";
 
 type StyleSeedComparison = {
@@ -19,6 +20,12 @@ type StyleSeedComparison = {
   modelAScore: number;
   modelBScore: number;
   scoreDelta: number;
+  modelAWaitMoveRate: number;
+  modelBWaitMoveRate: number;
+  waitMoveRateDelta: number;
+  modelAPremoveMoveRate: number;
+  modelBPremoveMoveRate: number;
+  premoveMoveRateDelta: number;
   modelAPounceOutRate: number;
   modelBPounceOutRate: number;
   pounceOutRateDelta: number;
@@ -42,6 +49,7 @@ const seed = process.env.SEED ?? "action-ranking-compare-by-style";
 const maxMovesPerGame = readIntegerEnv("MAX_MOVES", 1800);
 const styles = readStyleList();
 const seeds = readSeedList(seed);
+const actionOptions = readActionOptionsEnv();
 
 const byStyle = styles.map((style) => {
   const comparisons = seeds.map((styleSeed) =>
@@ -80,6 +88,15 @@ const aggregate =
                   modelAScore: item.summary.averageModelAScore,
                   modelBScore: item.summary.averageModelBScore,
                   scoreDelta: item.summary.averageScoreDelta,
+                  modelAWaitMoveRate: item.summary.averageModelAWaitMoveRate,
+                  modelBWaitMoveRate: item.summary.averageModelBWaitMoveRate,
+                  waitMoveRateDelta: item.summary.averageWaitMoveRateDelta,
+                  modelAPremoveMoveRate:
+                    item.summary.averageModelAPremoveMoveRate,
+                  modelBPremoveMoveRate:
+                    item.summary.averageModelBPremoveMoveRate,
+                  premoveMoveRateDelta:
+                    item.summary.averagePremoveMoveRateDelta,
                   modelAPounceOutRate: item.summary.averageModelAPounceOutRate,
                   modelBPounceOutRate: item.summary.averageModelBPounceOutRate,
                   pounceOutRateDelta:
@@ -108,6 +125,7 @@ console.log(
         maxMovesPerGame,
         styles,
         seeds,
+        actionOptions,
       },
       aggregate,
       byStyle,
@@ -127,12 +145,14 @@ function compareModelsAgainstStyle(
     games,
     seed: evaluationSeed,
     maxMovesPerGame,
+    actionOptions,
   });
   const evaluationB = evaluateNeuralModelAgainstBasicStyle(modelB, style, {
     playerCount,
     games,
     seed: evaluationSeed,
     maxMovesPerGame,
+    actionOptions,
   });
   return createStyleSeedComparison(style, evaluationSeed, evaluationA, evaluationB);
 }
@@ -162,6 +182,16 @@ function createStyleSeedComparison(
     modelAScore: evaluationA.averageNeuralScore,
     modelBScore: evaluationB.averageNeuralScore,
     scoreDelta: evaluationA.averageNeuralScore - evaluationB.averageNeuralScore,
+    modelAWaitMoveRate: evaluationA.averageNeuralWaitMoveRate,
+    modelBWaitMoveRate: evaluationB.averageNeuralWaitMoveRate,
+    waitMoveRateDelta:
+      evaluationA.averageNeuralWaitMoveRate -
+      evaluationB.averageNeuralWaitMoveRate,
+    modelAPremoveMoveRate: evaluationA.averageNeuralPremoveMoveRate,
+    modelBPremoveMoveRate: evaluationB.averageNeuralPremoveMoveRate,
+    premoveMoveRateDelta:
+      evaluationA.averageNeuralPremoveMoveRate -
+      evaluationB.averageNeuralPremoveMoveRate,
     modelAPounceOutRate: evaluationA.neuralPounceOutRate,
     modelBPounceOutRate: evaluationB.neuralPounceOutRate,
     pounceOutRateDelta:
@@ -178,6 +208,10 @@ function summarizeStyleComparisons(comparisons: readonly StyleSeedComparison[]) 
     (item) => item.pointDifferentialDelta
   );
   const scoreDeltas = comparisons.map((item) => item.scoreDelta);
+  const waitMoveRateDeltas = comparisons.map((item) => item.waitMoveRateDelta);
+  const premoveMoveRateDeltas = comparisons.map(
+    (item) => item.premoveMoveRateDelta
+  );
   const pounceOutRateDeltas = comparisons.map((item) => item.pounceOutRateDelta);
   return {
     games,
@@ -221,6 +255,23 @@ function summarizeStyleComparisons(comparisons: readonly StyleSeedComparison[]) 
     averageScoreDelta: weightedMean(comparisons, "scoreDelta"),
     scoreDeltaStandardError: standardError(scoreDeltas),
     scoreDeltaConfidenceInterval95: confidenceInterval95(scoreDeltas),
+    averageModelAWaitMoveRate: weightedMean(comparisons, "modelAWaitMoveRate"),
+    averageModelBWaitMoveRate: weightedMean(comparisons, "modelBWaitMoveRate"),
+    averageWaitMoveRateDelta: weightedMean(comparisons, "waitMoveRateDelta"),
+    waitMoveRateDeltaStandardError: standardError(waitMoveRateDeltas),
+    averageModelAPremoveMoveRate: weightedMean(
+      comparisons,
+      "modelAPremoveMoveRate"
+    ),
+    averageModelBPremoveMoveRate: weightedMean(
+      comparisons,
+      "modelBPremoveMoveRate"
+    ),
+    averagePremoveMoveRateDelta: weightedMean(
+      comparisons,
+      "premoveMoveRateDelta"
+    ),
+    premoveMoveRateDeltaStandardError: standardError(premoveMoveRateDeltas),
     averageModelAPounceOutRate: weightedMean(
       comparisons,
       "modelAPounceOutRate"
@@ -302,6 +353,27 @@ function readIntegerEnv(name: string, fallback: number): number {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : fallback;
+}
+
+function readBooleanEnv(name: string, fallback: boolean): boolean {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  if (["1", "true", "yes", "on"].includes(value.toLowerCase())) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(value.toLowerCase())) {
+    return false;
+  }
+  return fallback;
+}
+
+function readActionOptionsEnv(): ActionRankingOptions {
+  return {
+    includeWait: readBooleanEnv("RL_INCLUDE_WAIT_ACTIONS", false),
+    includePremove: readBooleanEnv("RL_INCLUDE_PREMOVE_ACTIONS", false),
+  };
 }
 
 function weightedMean<T extends { games: number }>(

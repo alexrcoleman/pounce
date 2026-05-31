@@ -1,5 +1,6 @@
 import fs from "fs";
 import { evaluateNeuralModel } from "../shared/ActionRankingTraining";
+import type { ActionRankingOptions } from "../shared/ActionRankingPolicy";
 import type { NeuralActionRankingModel } from "../shared/NeuralActionRankingPolicy";
 
 const modelIn = process.env.MODEL_IN;
@@ -14,6 +15,7 @@ const playerCount = readIntegerEnv("PLAYERS", 4);
 const games = readIntegerEnv("EVAL_GAMES", 48);
 const seed = process.env.SEED ?? "action-ranking-eval";
 const maxMovesPerGame = readIntegerEnv("MAX_MOVES", 1800);
+const actionOptions = readActionOptionsEnv();
 const seeds = readSeedList(seed);
 const evaluations = seeds.map((evalSeed) =>
   evaluateNeuralModel(model, {
@@ -21,6 +23,7 @@ const evaluations = seeds.map((evalSeed) =>
     games,
     seed: evalSeed,
     maxMovesPerGame,
+    actionOptions,
   })
 );
 const evaluation =
@@ -30,6 +33,7 @@ console.log(
   JSON.stringify(
     {
       modelIn,
+      actionOptions,
       evaluation,
       perSeed: evaluations.length === 1 ? undefined : evaluations,
     },
@@ -45,6 +49,27 @@ function readIntegerEnv(name: string, fallback: number): number {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : fallback;
+}
+
+function readBooleanEnv(name: string, fallback: boolean): boolean {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  if (["1", "true", "yes", "on"].includes(value.toLowerCase())) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(value.toLowerCase())) {
+    return false;
+  }
+  return fallback;
+}
+
+function readActionOptionsEnv(): ActionRankingOptions {
+  return {
+    includeWait: readBooleanEnv("RL_INCLUDE_WAIT_ACTIONS", false),
+    includePremove: readBooleanEnv("RL_INCLUDE_PREMOVE_ACTIONS", false),
+  };
 }
 
 function readSeedList(seed: string): string[] {
@@ -116,6 +141,22 @@ function summarizeEvaluations(evaluations: ReturnType<typeof evaluateNeuralModel
     averageTeacherBaselineCycleMoveRate: weightedMean(
       evaluations,
       "averageTeacherBaselineCycleMoveRate"
+    ),
+    averageNeuralWaitMoveRate: weightedMean(
+      evaluations,
+      "averageNeuralWaitMoveRate"
+    ),
+    averageTeacherBaselineWaitMoveRate: weightedMean(
+      evaluations,
+      "averageTeacherBaselineWaitMoveRate"
+    ),
+    averageNeuralPremoveMoveRate: weightedMean(
+      evaluations,
+      "averageNeuralPremoveMoveRate"
+    ),
+    averageTeacherBaselinePremoveMoveRate: weightedMean(
+      evaluations,
+      "averageTeacherBaselinePremoveMoveRate"
     ),
     averageNeuralPounceRemaining: weightedMean(
       evaluations,

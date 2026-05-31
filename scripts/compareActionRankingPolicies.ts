@@ -1,5 +1,6 @@
 import fs from "fs";
 import { compareNeuralModels } from "../shared/ActionRankingTraining";
+import type { ActionRankingOptions } from "../shared/ActionRankingPolicy";
 import type { NeuralActionRankingModel } from "../shared/NeuralActionRankingPolicy";
 
 const modelAPath = process.env.MODEL_A;
@@ -18,6 +19,7 @@ const playerCount = readIntegerEnv("PLAYERS", 4);
 const games = readIntegerEnv("EVAL_GAMES", 48);
 const seed = process.env.SEED ?? "action-ranking-compare";
 const maxMovesPerGame = readIntegerEnv("MAX_MOVES", 1800);
+const actionOptions = readActionOptionsEnv();
 const seeds = readSeedList(seed);
 const comparisons = seeds.map((compareSeed) =>
   compareNeuralModels(modelA, modelB, {
@@ -25,6 +27,7 @@ const comparisons = seeds.map((compareSeed) =>
     games,
     seed: compareSeed,
     maxMovesPerGame,
+    actionOptions,
   })
 );
 const comparison =
@@ -41,6 +44,7 @@ console.log(
         path: modelBPath,
         label: process.env.LABEL_B ?? null,
       },
+      actionOptions,
       comparison,
       perSeed: comparisons.length === 1 ? undefined : comparisons,
     },
@@ -56,6 +60,27 @@ function readIntegerEnv(name: string, fallback: number): number {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : fallback;
+}
+
+function readBooleanEnv(name: string, fallback: boolean): boolean {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  if (["1", "true", "yes", "on"].includes(value.toLowerCase())) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(value.toLowerCase())) {
+    return false;
+  }
+  return fallback;
+}
+
+function readActionOptionsEnv(): ActionRankingOptions {
+  return {
+    includeWait: readBooleanEnv("RL_INCLUDE_WAIT_ACTIONS", false),
+    includePremove: readBooleanEnv("RL_INCLUDE_PREMOVE_ACTIONS", false),
+  };
 }
 
 function readSeedList(seed: string): string[] {
@@ -135,6 +160,22 @@ function summarizeComparisons(
     averageModelBCycleMoveRate: weightedMean(
       comparisons,
       "averageModelBCycleMoveRate"
+    ),
+    averageModelAWaitMoveRate: weightedMean(
+      comparisons,
+      "averageModelAWaitMoveRate"
+    ),
+    averageModelBWaitMoveRate: weightedMean(
+      comparisons,
+      "averageModelBWaitMoveRate"
+    ),
+    averageModelAPremoveMoveRate: weightedMean(
+      comparisons,
+      "averageModelAPremoveMoveRate"
+    ),
+    averageModelBPremoveMoveRate: weightedMean(
+      comparisons,
+      "averageModelBPremoveMoveRate"
     ),
     averageModelAPounceRemaining: weightedMean(
       comparisons,

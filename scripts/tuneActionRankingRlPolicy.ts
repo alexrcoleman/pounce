@@ -1,6 +1,9 @@
 import fs from "fs";
 import path from "path";
-import { enumerateActionRankingCandidates } from "../shared/ActionRankingPolicy";
+import {
+  enumerateActionRankingCandidates,
+  type ActionRankingOptions,
+} from "../shared/ActionRankingPolicy";
 import {
   compareNeuralModels,
   compareNeuralModelsSelfPlay,
@@ -134,11 +137,13 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
 
   for (let recipeIndex = 0; recipeIndex < recipes.length; recipeIndex++) {
     const recipe = recipes[recipeIndex];
+    const recipeActionOptions =
+      recipe.options.actionOptions ?? readActionOptionsEnv();
     const candidateResult = trainNeuralActionRankingPolicy({
       playerCount,
       maxMovesPerGame,
       ...recipe.options,
-      actionOptions: recipe.options.actionOptions ?? readActionOptionsEnv(),
+      actionOptions: recipeActionOptions,
       initialModel: bestModel,
       rlOpponentModel:
         recipe.options.rlOpponentModel ??
@@ -160,6 +165,7 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       runs: compareRuns,
       seed: `${seed}:compare:${roundNumber}:${recipe.name}`,
       maxMovesPerGame,
+      actionOptions: recipeActionOptions,
     });
     const comparison = comparisonBatch.comparison;
     const policyStateDiagnostics =
@@ -187,6 +193,7 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
           runs: confirmRuns,
           seed: `${seed}:confirm:${roundNumber}:${recipe.name}`,
           maxMovesPerGame,
+          actionOptions: recipeActionOptions,
         })
       : null;
     const confirmationLowerBound = confirmationBatch
@@ -208,6 +215,7 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
           seed: `${seed}:style-gate:${roundNumber}:${recipe.name}`,
           maxMovesPerGame,
           styles: styleGateStyles,
+          actionOptions: recipeActionOptions,
         })
       : null;
     const styleGateLowerBound = styleGateBatch
@@ -230,6 +238,7 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
           seed: `${seed}:self-play-gate:${roundNumber}:${recipe.name}`,
           maxMovesPerGame,
           swapSeats: selfPlayGateSwapSeats,
+          actionOptions: recipeActionOptions,
         })
       : null;
     const selfPlayGateLowerBound = selfPlayGateBatch
@@ -1188,6 +1197,7 @@ function compareModelBatch(
     runs: number;
     seed: string;
     maxMovesPerGame: number;
+    actionOptions?: ActionRankingOptions;
   }
 ) {
   const runCount = Math.max(1, options.runs);
@@ -1197,6 +1207,7 @@ function compareModelBatch(
       games: options.games,
       seed: runCount === 1 ? options.seed : `${options.seed}:${index}`,
       maxMovesPerGame: options.maxMovesPerGame,
+      actionOptions: options.actionOptions,
     })
   );
   return {
@@ -1218,6 +1229,7 @@ function compareModelBatchSelfPlay(
     seed: string;
     maxMovesPerGame: number;
     swapSeats: boolean;
+    actionOptions?: ActionRankingOptions;
   }
 ) {
   const runCount = Math.max(1, options.runs);
@@ -1228,6 +1240,7 @@ function compareModelBatchSelfPlay(
       seed: runCount === 1 ? options.seed : `${options.seed}:${index}`,
       maxMovesPerGame: options.maxMovesPerGame,
       swapSeats: options.swapSeats,
+      actionOptions: options.actionOptions,
     })
   );
   return {
@@ -1249,6 +1262,7 @@ function compareModelBatchByStyle(
     seed: string;
     maxMovesPerGame: number;
     styles: string[];
+    actionOptions?: ActionRankingOptions;
   }
 ) {
   const runCount = Math.max(1, options.runs);
@@ -1263,6 +1277,7 @@ function compareModelBatchByStyle(
         playerCount: options.playerCount,
         games: options.games,
         maxMovesPerGame: options.maxMovesPerGame,
+        actionOptions: options.actionOptions,
       });
     });
     allComparisons.push(...perSeed);
@@ -1287,6 +1302,7 @@ function compareModelsAgainstStyle(
     playerCount: number;
     games: number;
     maxMovesPerGame: number;
+    actionOptions?: ActionRankingOptions;
   }
 ): StyleSeedComparison {
   const evaluationA = evaluateNeuralModelAgainstBasicStyle(modelA, style, {
@@ -1294,12 +1310,14 @@ function compareModelsAgainstStyle(
     games: options.games,
     seed,
     maxMovesPerGame: options.maxMovesPerGame,
+    actionOptions: options.actionOptions,
   });
   const evaluationB = evaluateNeuralModelAgainstBasicStyle(modelB, style, {
     playerCount: options.playerCount,
     games: options.games,
     seed,
     maxMovesPerGame: options.maxMovesPerGame,
+    actionOptions: options.actionOptions,
   });
   return createStyleSeedComparison(style, seed, evaluationA, evaluationB);
 }
@@ -1493,6 +1511,22 @@ function summarizeComparisons(comparisons: ModelComparisonResult[]) {
     averageModelBCycleMoveRate: weightedMean(
       comparisons,
       "averageModelBCycleMoveRate"
+    ),
+    averageModelAWaitMoveRate: weightedMean(
+      comparisons,
+      "averageModelAWaitMoveRate"
+    ),
+    averageModelBWaitMoveRate: weightedMean(
+      comparisons,
+      "averageModelBWaitMoveRate"
+    ),
+    averageModelAPremoveMoveRate: weightedMean(
+      comparisons,
+      "averageModelAPremoveMoveRate"
+    ),
+    averageModelBPremoveMoveRate: weightedMean(
+      comparisons,
+      "averageModelBPremoveMoveRate"
     ),
     averageModelAPounceRemaining: weightedMean(
       comparisons,

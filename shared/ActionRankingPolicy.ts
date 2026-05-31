@@ -182,6 +182,8 @@ export type ActionRankingCandidate = {
   endsRound: boolean;
 };
 
+const MAX_PREMOVE_CENTER_DISTANCE = 4;
+
 export type ActionRankingOptions = {
   includeCycle?: boolean;
   includeFlipDeck?: boolean;
@@ -231,7 +233,23 @@ export function enumerateLegalMoves(
   );
 
   if (options.includePremove) {
-    enumeratePremoveMoves(player).forEach((move) => moves.push(move));
+    const productiveMoveCards = moves
+      .map((move) => getMoveCard(board, playerIndex, move))
+      .filter((card): card is CardState => card != null);
+    enumeratePremoveMoves(player)
+      .filter((move) => {
+        const card = getMoveCard(board, playerIndex, move);
+        const centerDistance = getCenterDistanceToCard(board, card);
+        return (
+          card != null &&
+          centerDistance > 0 &&
+          centerDistance <= MAX_PREMOVE_CENTER_DISTANCE &&
+          !productiveMoveCards.some((productiveCard) =>
+            cardEquals(productiveCard, card)
+          )
+        );
+      })
+      .forEach((move) => moves.push(move));
   }
 
   if (options.includeWait) {

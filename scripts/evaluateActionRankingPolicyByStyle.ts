@@ -4,6 +4,7 @@ import {
   evaluateNeuralModelAgainstBasicStyle,
   type PolicyEvaluationResult,
 } from "../shared/ActionRankingTraining";
+import type { ActionRankingOptions } from "../shared/ActionRankingPolicy";
 import type { NeuralActionRankingModel } from "../shared/NeuralActionRankingPolicy";
 
 const modelPath = process.env.MODEL_IN;
@@ -20,6 +21,7 @@ const seed = process.env.SEED ?? "action-ranking-style-eval";
 const maxMovesPerGame = readIntegerEnv("MAX_MOVES", 1800);
 const seeds = readSeedList(seed);
 const styles = readStyleList();
+const actionOptions = readActionOptionsEnv();
 
 const byStyle = styles.map((style) => {
   const perSeed = seeds.map((styleSeed) =>
@@ -28,6 +30,7 @@ const byStyle = styles.map((style) => {
       games,
       seed: `${styleSeed}:${style}`,
       maxMovesPerGame,
+      actionOptions,
     })
   );
   return {
@@ -51,6 +54,7 @@ console.log(
         maxMovesPerGame,
         styles,
         seeds,
+        actionOptions,
       },
       byStyle,
     },
@@ -164,6 +168,26 @@ function summarizeEvaluations(
       "averageTeacherBaselineCycleMoveRate",
       games
     ),
+    averageNeuralWaitMoveRate: weightedMean(
+      evaluations,
+      "averageNeuralWaitMoveRate",
+      games
+    ),
+    averageTeacherBaselineWaitMoveRate: weightedMean(
+      evaluations,
+      "averageTeacherBaselineWaitMoveRate",
+      games
+    ),
+    averageNeuralPremoveMoveRate: weightedMean(
+      evaluations,
+      "averageNeuralPremoveMoveRate",
+      games
+    ),
+    averageTeacherBaselinePremoveMoveRate: weightedMean(
+      evaluations,
+      "averageTeacherBaselinePremoveMoveRate",
+      games
+    ),
     averageNeuralPounceRemaining: weightedMean(
       evaluations,
       "averageNeuralPounceRemaining",
@@ -207,4 +231,25 @@ function readIntegerEnv(name: string, fallback: number): number {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : fallback;
+}
+
+function readBooleanEnv(name: string, fallback: boolean): boolean {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  if (["1", "true", "yes", "on"].includes(value.toLowerCase())) {
+    return true;
+  }
+  if (["0", "false", "no", "off"].includes(value.toLowerCase())) {
+    return false;
+  }
+  return fallback;
+}
+
+function readActionOptionsEnv(): ActionRankingOptions {
+  return {
+    includeWait: readBooleanEnv("RL_INCLUDE_WAIT_ACTIONS", false),
+    includePremove: readBooleanEnv("RL_INCLUDE_PREMOVE_ACTIONS", false),
+  };
 }
