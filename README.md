@@ -78,6 +78,15 @@ soon/play-to-solitaire/pounce-connector shape plus stock-lookahead reach for
 center play, soon play, solitaire destinations, and pounce connectors. That gives
 non-cycle moves a lightweight memory proxy for the deck opportunity they are
 preserving or delaying.
+A first 118-input deck-context warmup from the 108-input solitaire-context
+checkpoint (`48` imitation deals, `2` epochs, `IMITATION_LR=0.005`) reached
+`92.97%` teacher accuracy and saved a `730 KB` model with 23,041 parameters. It
+preserved the 108-input policy in paired play (`+0.089 +/- 0.265` over 64 games)
+but was not a promotion by itself, and the first tiny direct self-play
+policy-gradient probe from it changed no paired heuristic-seat outcomes over 64
+games while measuring `-0.229 +/- 0.229` in neural self-play. Treat the deck
+context as a better feature substrate for future reward labels, not as an
+already stronger policy.
 Cycle moves now include a stock-memory proxy: the card that would become visible
 after cycling, whether it can play center/solitaire/soon, whether it can connect
 to the pounce card, whether the action only resets the waste pile, and the
