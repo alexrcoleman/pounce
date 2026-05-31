@@ -26,6 +26,7 @@ Useful training knobs:
 - `RL_ONLY=true MODEL_IN=...\model.json npm run action-ranking:train` to run a pure RL fine-tune without accidental imitation or improvement updates
 - `MODEL_IN=...\model.json npm run action-ranking:evaluate` to evaluate saved weights
 - `MODEL_IN=...\model.json npm run action-ranking:evaluate-by-style` to evaluate saved weights against each fixed heuristic AI style
+- `MODEL_IN=...\candidate.json BASELINE_MODEL=...\baseline.json npm run action-ranking:report` to summarize model size/features, fixed-heuristic strength, paired baseline comparison, and neural self-play comparison in one output
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare` to compare two models on paired deals/seats
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:compare-self-play` to compare two models sharing the same self-play table
 - `MODEL_A=...\candidate.json MODEL_B=...\baseline.json npm run action-ranking:diagnose` to compare top-ranked actions on sampled teacher states
