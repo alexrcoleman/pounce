@@ -64,6 +64,8 @@ export type RewardTargetTrainingOptions = ImitationTrainingOptions & {
   targetTemperature?: number;
 };
 
+export type PairwiseFeatureMode = "raw" | "delta";
+
 export type PreferenceTrainingOptions = ImitationTrainingOptions & {
   minReturnGap?: number;
   maxPairsPerExample?: number;
@@ -73,6 +75,7 @@ export type PreferenceTrainingOptions = ImitationTrainingOptions & {
   pairWeightMode?: "uniform" | "return_gap";
   pairWeightScale?: number;
   pairWeightMax?: number;
+  featureMode?: PairwiseFeatureMode;
 };
 
 export type ValueRegressionTrainingOptions = ImitationTrainingOptions & {
@@ -378,6 +381,7 @@ export class NeuralActionRankingPolicy {
       options.pairWeightScale ?? Math.max(1, minReturnGap)
     );
     const pairWeightMax = Math.max(0, options.pairWeightMax ?? 1);
+    const featureMode = options.featureMode ?? "raw";
     const random = createSeededRandom(options.shuffleSeed ?? "preferences");
     let totalLoss = 0;
     let totalExamples = 0;
@@ -426,15 +430,22 @@ export class NeuralActionRankingPolicy {
           }
 
           const effectiveLearningRate = learningRate * pairWeight;
+          const [winnerTrainingFeatures, loserTrainingFeatures] =
+            featureMode === "delta"
+              ? getPairwiseDeltaTrainingFeatures(
+                  winner.features,
+                  loser.features
+                )
+              : [winner.features, loser.features];
           this.applyScoreGradient(
-            winner.features,
+            winnerTrainingFeatures,
             -mistakeProbability / temperature,
             effectiveLearningRate,
             l2,
             trainableLayers
           );
           this.applyScoreGradient(
-            loser.features,
+            loserTrainingFeatures,
             mistakeProbability / temperature,
             effectiveLearningRate,
             l2,
@@ -722,6 +733,29 @@ export class NeuralActionRankingPolicy {
     }
     return this.featureInputIndices.map((featureIndex) => features[featureIndex]);
   }
+}
+
+function getPairwiseDeltaTrainingFeatures(
+  winnerFeatures: readonly number[],
+  loserFeatures: readonly number[]
+): [number[], number[]] {
+  const winnerTrainingFeatures = winnerFeatures.slice();
+  const loserTrainingFeatures = loserFeatures.slice();
+  for (
+    let featureIndex = 0;
+    featureIndex < winnerTrainingFeatures.length &&
+    featureIndex < loserTrainingFeatures.length;
+    featureIndex++
+  ) {
+    if (
+      Math.abs(winnerTrainingFeatures[featureIndex] - loserTrainingFeatures[featureIndex]) <
+      1e-9
+    ) {
+      winnerTrainingFeatures[featureIndex] = 0;
+      loserTrainingFeatures[featureIndex] = 0;
+    }
+  }
+  return [winnerTrainingFeatures, loserTrainingFeatures];
 }
 
 function getImitationTargetProbabilities(

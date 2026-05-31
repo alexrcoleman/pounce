@@ -23,6 +23,7 @@ import {
   NeuralActionRankingPolicy,
   type ImitationTrainingStats,
   type NeuralActionRankingModel,
+  type PairwiseFeatureMode,
 } from "./NeuralActionRankingPolicy";
 import { executeMove, type Move } from "./MoveHandler";
 import {
@@ -72,6 +73,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualPairwiseWeightMode?: "uniform" | "return_gap";
   rlCounterfactualPairwiseWeightScale?: number;
   rlCounterfactualPairwiseMaxWeight?: number;
+  rlCounterfactualPairwiseFeatureMode?: PairwiseFeatureMode;
   rlCounterfactualMaxScoreGap?: number;
   rlCounterfactualScoreGapBudget?: number;
   rlCounterfactualMaxLabelsPerMovePair?: number;
@@ -631,6 +633,8 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualPairwiseWeightScale ?? 1,
     counterfactualPairwiseMaxWeight:
       options.rlCounterfactualPairwiseMaxWeight ?? 1,
+    counterfactualPairwiseFeatureMode:
+      options.rlCounterfactualPairwiseFeatureMode ?? "raw",
     counterfactualMaxScoreGap: options.rlCounterfactualMaxScoreGap ?? 0,
     counterfactualScoreGapBudget:
       options.rlCounterfactualScoreGapBudget ?? 0,
@@ -1671,6 +1675,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualPairwiseWeightMode: "uniform" | "return_gap";
     counterfactualPairwiseWeightScale: number;
     counterfactualPairwiseMaxWeight: number;
+    counterfactualPairwiseFeatureMode: PairwiseFeatureMode;
     counterfactualMaxScoreGap: number;
     counterfactualScoreGapBudget: number;
     counterfactualMaxLabelsPerMovePair: number;
@@ -2254,6 +2259,7 @@ export function trainPolicyGradientFromRollouts(
           pairwiseWeightMode: options.counterfactualPairwiseWeightMode,
           pairwiseWeightScale: options.counterfactualPairwiseWeightScale,
           pairwiseMaxWeight: options.counterfactualPairwiseMaxWeight,
+          pairwiseFeatureMode: options.counterfactualPairwiseFeatureMode,
           anchorExamples: counterfactualAnchorExamples,
           anchorWeight: options.counterfactualAnchorWeight,
           anchorMaxExamples: options.counterfactualAnchorMaxExamples,
@@ -2936,6 +2942,7 @@ function trainCounterfactualSupervisedBatch(
     pairwiseWeightMode: "uniform" | "return_gap";
     pairwiseWeightScale: number;
     pairwiseMaxWeight: number;
+    pairwiseFeatureMode: PairwiseFeatureMode;
     anchorExamples: ActionRankingImitationExample[];
     anchorWeight: number;
     anchorMaxExamples: number;
@@ -3000,6 +3007,7 @@ function trainCounterfactualSupervisedBatch(
           pairWeightMode: options.pairwiseWeightMode,
           pairWeightScale: options.pairwiseWeightScale,
           pairWeightMax: options.pairwiseMaxWeight,
+          featureMode: options.pairwiseFeatureMode,
           trainableLayers: options.trainableLayers,
           shuffleSeed: options.shuffleSeed,
         });
@@ -3013,6 +3021,7 @@ function trainCounterfactualSupervisedBatch(
           maxPairsPerExample: 1,
           preferenceScope: "behavior",
           targetMargin: options.behaviorCorrectionMargin,
+          featureMode: options.pairwiseFeatureMode,
           trainableLayers: options.trainableLayers,
           shuffleSeed: `${options.shuffleSeed}:behavior-correction`,
         });

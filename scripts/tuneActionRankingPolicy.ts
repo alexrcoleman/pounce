@@ -203,6 +203,10 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
       "RL_COUNTERFACTUAL_PAIRWISE_MAX_WEIGHT",
       1
     ),
+    rlCounterfactualPairwiseFeatureMode: readPairwiseFeatureModeEnv(
+      "RL_COUNTERFACTUAL_PAIRWISE_FEATURE_MODE",
+      "raw"
+    ),
     rlCounterfactualMaxScoreGap: readNumberEnv(
       "RL_COUNTERFACTUAL_MAX_SCORE_GAP",
       0
@@ -587,6 +591,17 @@ function readPairwiseWeightModeEnv(
     return fallback;
   }
   return value.toLowerCase() === "return_gap" ? "return_gap" : fallback;
+}
+
+function readPairwiseFeatureModeEnv(
+  name: string,
+  fallback: "raw" | "delta"
+): "raw" | "delta" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  return value.toLowerCase() === "delta" ? "delta" : fallback;
 }
 
 function readTrainableLayersEnv(

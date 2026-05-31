@@ -160,6 +160,19 @@ assert.equal(
   "weighted pairwise mode should not fall back to policy-gradient updates"
 );
 
+const deltaPairwise = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:delta-pairwise",
+  rlCounterfactualTrainingMode: "pairwise",
+  rlCounterfactualPairwiseFeatureMode: "delta",
+});
+assertCounterfactualWork(deltaPairwise, "pairwise");
+assert.equal(
+  deltaPairwise.reinforcement.averagePolicyUpdates,
+  0,
+  "delta-feature pairwise mode should not fall back to policy-gradient updates"
+);
+
 const outputOnlyInitialModel = createNeuralActionRankingModel(
   [16],
   "action-ranking-rl-mode-check:output-only-model"
