@@ -192,6 +192,10 @@ const options = {
     "RL_COUNTERFACTUAL_MAX_LABELS_PER_MOVE_PAIR",
     0
   ),
+  rlCounterfactualExcludedMovePairs: readStringListEnv(
+    "RL_COUNTERFACTUAL_EXCLUDE_MOVE_PAIRS",
+    []
+  ),
   rlCounterfactualStopAfterLabels: readIntegerEnv(
     "RL_COUNTERFACTUAL_STOP_AFTER_LABELS",
     0
@@ -328,6 +332,18 @@ function readIntegerListEnv(name: string, fallback: number[]): number[] {
     .filter((item) => Number.isFinite(item))
     .map((item) => Math.max(0, Math.floor(item)))
     .filter((item) => item > 0);
+  return parsed.length > 0 ? parsed : fallback;
+}
+
+function readStringListEnv(name: string, fallback: string[]): string[] {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  const parsed = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
   return parsed.length > 0 ? parsed : fallback;
 }
 

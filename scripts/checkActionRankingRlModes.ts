@@ -567,6 +567,51 @@ assert.ok(
   "move-pair budget filtering should cap accepted labels by winner-vs-behavior move pair"
 );
 
+const movePairExcluded = trainNeuralActionRankingPolicy({
+  ...commonOptions,
+  seed: "action-ranking-rl-mode-check:move-pair-excluded",
+  rlCounterfactualTrainingMode: "value",
+  rlCounterfactualStateSource: "greedy",
+  rlUpdateScope: "all",
+  rlCounterfactualCandidateLimit: 5,
+  rlCounterfactualMinReturnGap: 0,
+  rlCounterfactualRequirePolicyChange: true,
+  rlCounterfactualExcludedMovePairs: [
+    "c2c>cycle",
+    "c2s>cycle",
+    "s2s>cycle",
+    "cycle>c2s",
+    "cycle>s2s",
+    "c2c>c2c",
+    "s2s>s2s",
+    "c2s>c2s",
+  ],
+  rlCounterfactualValueTargetScale: 4,
+  rlCounterfactualValueCenterTargets: true,
+  rlCounterfactualValueHuberDelta: 0,
+});
+assert.ok(
+  movePairExcluded.reinforcement.counterfactualMovePairExcludedSkippedCount > 0,
+  "move-pair exclusion should skip matching supervised labels"
+);
+assert.ok(
+  !Object.keys(
+    movePairExcluded.reinforcement.counterfactualAcceptedMovePairCounts
+  ).some((pair) =>
+    [
+      "c2c>cycle",
+      "c2s>cycle",
+      "s2s>cycle",
+      "cycle>c2s",
+      "cycle>s2s",
+      "c2c>c2c",
+      "s2s>s2s",
+      "c2s>c2s",
+    ].includes(pair)
+  ),
+  "move-pair exclusion should remove excluded pairs from accepted labels"
+);
+
 const cappedScoreGapBudgetFiltered = trainNeuralActionRankingPolicy({
   ...commonOptions,
   seed: "action-ranking-rl-mode-check:capped-score-gap-budget-filtered",
@@ -663,6 +708,7 @@ console.log(
       behaviorCorrectionValue: summarize(behaviorCorrectionValue),
       scoreGapBudgetFiltered: summarize(scoreGapBudgetFiltered),
       movePairBudgetFiltered: summarize(movePairBudgetFiltered),
+      movePairExcluded: summarize(movePairExcluded),
       cappedScoreGapBudgetFiltered: summarize(cappedScoreGapBudgetFiltered),
       labelTargetStopped: summarize(labelTargetStopped),
       maxReturnGapFiltered: summarize(maxReturnGapFiltered),
@@ -729,6 +775,8 @@ function summarize(result: NeuralTrainingResult) {
       result.reinforcement.counterfactualScoreGapBudgetSkippedCount,
     counterfactualMovePairBudgetSkippedCount:
       result.reinforcement.counterfactualMovePairBudgetSkippedCount,
+    counterfactualMovePairExcludedSkippedCount:
+      result.reinforcement.counterfactualMovePairExcludedSkippedCount,
     counterfactualFeatureTieSkippedCount:
       result.reinforcement.counterfactualFeatureTieSkippedCount,
     counterfactualConnectorCycleSkippedCount:

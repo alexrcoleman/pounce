@@ -145,6 +145,10 @@ const options = {
     "RL_COUNTERFACTUAL_MAX_LABELS_PER_MOVE_PAIR",
     0
   ),
+  counterfactualExcludedMovePairs: readStringListEnv(
+    "RL_COUNTERFACTUAL_EXCLUDE_MOVE_PAIRS",
+    []
+  ),
   counterfactualStopAfterLabels: readIntegerEnv(
     "RL_COUNTERFACTUAL_STOP_AFTER_LABELS",
     0
@@ -208,6 +212,7 @@ console.log(
         scoreGapSkippedCount: audit.scoreGapSkippedCount,
         scoreGapBudgetSkippedCount: audit.scoreGapBudgetSkippedCount,
         movePairBudgetSkippedCount: audit.movePairBudgetSkippedCount,
+        movePairExcludedSkippedCount: audit.movePairExcludedSkippedCount,
         featureTieSkippedCount: audit.featureTieSkippedCount,
         connectorCycleSkippedCount: audit.connectorCycleSkippedCount,
         usefulCycleSkippedCount: audit.usefulCycleSkippedCount,
@@ -827,6 +832,18 @@ function readIntegerEnv(name: string, fallback: number): number {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : fallback;
+}
+
+function readStringListEnv(name: string, fallback: string[]): string[] {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  const parsed = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return parsed.length > 0 ? parsed : fallback;
 }
 
 function readNumberEnv(name: string, fallback: number): number {

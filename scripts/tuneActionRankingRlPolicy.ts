@@ -489,6 +489,10 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
       "RL_COUNTERFACTUAL_MAX_LABELS_PER_MOVE_PAIR",
       0
     ),
+    rlCounterfactualExcludedMovePairs: readStringListEnv(
+      "RL_COUNTERFACTUAL_EXCLUDE_MOVE_PAIRS",
+      []
+    ),
     rlCounterfactualStopAfterLabels: readIntegerEnv(
       "RL_COUNTERFACTUAL_STOP_AFTER_LABELS",
       0
@@ -712,6 +716,18 @@ function readStyleListEnv(name: string, fallback: string[]): string[] {
       return knownStyle;
     });
   return styles.length === 0 ? fallback : styles;
+}
+
+function readStringListEnv(name: string, fallback: string[]): string[] {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  const parsed = value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return parsed.length > 0 ? parsed : fallback;
 }
 
 function sanitizeFilePart(value: string): string {
