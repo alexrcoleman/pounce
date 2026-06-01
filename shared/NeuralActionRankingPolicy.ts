@@ -864,6 +864,25 @@ function isPairwiseTacticalFeature(
     );
   }
 
+  if (moveType === "premove") {
+    return (
+      featureName === "move.premove" ||
+      featureName.startsWith("premove.") ||
+      featureName.startsWith("source.") ||
+      featureName === "card.centerDistance" ||
+      featureName === "card.canPlaySoon" ||
+      featureName === "card.matchesPounceParity" ||
+      featureName === "card.pounceConnectorCloseness" ||
+      featureName === "card.ownSolitaireDestinationCount" ||
+      featureName === "card.ownSolitaireConnectorForPounce" ||
+      featureName === "own.pounceCount" ||
+      featureName === "own.currentPoints" ||
+      featureName === "own.pointDifferential" ||
+      featureName === "opponent.minPounceCount" ||
+      featureName === "opponent.maxPouncePressure"
+    );
+  }
+
   return false;
 }
 
