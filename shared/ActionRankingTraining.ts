@@ -1,4 +1,8 @@
 import {
+  canPlayOnCenterPile,
+  peek,
+} from "./CardUtils";
+import {
   getBasicAIMove,
   getBasicAIMoveForStyle,
   getCurrentAIDragMove,
@@ -106,6 +110,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualPounceRewardWeight?: number;
   rlCounterfactualMinScoreReturnGap?: number;
   rlCounterfactualMinPounceProgressGap?: number;
+  rlCounterfactualRequireStuck?: boolean;
   rlCounterfactualSkipCycleOverConnector?: boolean;
   rlCounterfactualSkipWeakCycleOverConnector?: boolean;
   rlCounterfactualSkipSolitaireOverUsefulCycle?: boolean;
@@ -735,6 +740,7 @@ export function trainNeuralActionRankingPolicy(
       options.rlCounterfactualMinScoreReturnGap ?? 0,
     counterfactualMinPounceProgressGap:
       options.rlCounterfactualMinPounceProgressGap ?? 0,
+    counterfactualRequireStuck: options.rlCounterfactualRequireStuck ?? false,
     counterfactualSkipCycleOverConnector:
       options.rlCounterfactualSkipCycleOverConnector ?? false,
     counterfactualSkipWeakCycleOverConnector:
@@ -1904,6 +1910,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualPounceRewardWeight: number;
     counterfactualMinScoreReturnGap: number;
     counterfactualMinPounceProgressGap: number;
+    counterfactualRequireStuck: boolean;
     counterfactualSkipCycleOverConnector: boolean;
     counterfactualSkipWeakCycleOverConnector: boolean;
     counterfactualSkipSolitaireOverUsefulCycle: boolean;
@@ -2163,6 +2170,13 @@ export function trainPolicyGradientFromRollouts(
       const applyExploratoryFilter =
         updateScope === "exploratory" && !useGreedyCounterfactualStates;
       if (applyExploratoryFilter && !isExploratoryDecision) {
+        return;
+      }
+      if (
+        creditMode === "counterfactual" &&
+        options.counterfactualRequireStuck &&
+        !isCounterfactualTransitionStuck(transition)
+      ) {
         return;
       }
       if (creditMode === "counterfactual") {
@@ -2767,6 +2781,7 @@ export function collectCounterfactualRlLabelAudit(
     counterfactualPounceRewardWeight: number;
     counterfactualMinScoreReturnGap: number;
     counterfactualMinPounceProgressGap: number;
+    counterfactualRequireStuck: boolean;
     counterfactualSkipCycleOverConnector: boolean;
     counterfactualSkipWeakCycleOverConnector: boolean;
     counterfactualSkipSolitaireOverUsefulCycle: boolean;
@@ -2901,6 +2916,12 @@ export function collectCounterfactualRlLabelAudit(
       const applyExploratoryFilter =
         options.updateScope === "exploratory" && !useGreedyCounterfactualStates;
       if (applyExploratoryFilter && !isExploratoryDecision) {
+        return;
+      }
+      if (
+        options.counterfactualRequireStuck &&
+        !isCounterfactualTransitionStuck(transition)
+      ) {
         return;
       }
 
@@ -5221,6 +5242,35 @@ function getCounterfactualMoveTypeCandidateFilter(options: {
     return "different";
   }
   return "none";
+}
+
+function isCounterfactualTransitionStuck(
+  transition: RolloutTransition
+): boolean {
+  return transition.board ? isBoardVisiblyStuck(transition.board) : false;
+}
+
+function isBoardVisiblyStuck(board: BoardState): boolean {
+  return board.players
+    .map((player, playerIndex) => ({ player, playerIndex }))
+    .filter(({ player }) => !player.isSpectating)
+    .every(({ playerIndex }) => !hasVisibleCenterMove(board, playerIndex));
+}
+
+function hasVisibleCenterMove(board: BoardState, playerIndex: number): boolean {
+  const player = board.players[playerIndex];
+  if (!player) {
+    return false;
+  }
+  const visibleCards = [
+    peek(player.pounceDeck),
+    peek(player.flippedDeck),
+    ...player.stacks.map(peek),
+  ].filter((card): card is CardState => card != null);
+
+  return visibleCards.some((card) =>
+    board.piles.some((pile) => canPlayOnCenterPile(pile, card))
+  );
 }
 
 function isCounterfactualBehaviorMoveTypeAllowed(

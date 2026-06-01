@@ -581,6 +581,10 @@ function getDefaultRecipeOptions(): NeuralTrainingOptions {
       "RL_COUNTERFACTUAL_MIN_POUNCE_PROGRESS_GAP",
       0
     ),
+    rlCounterfactualRequireStuck: readBooleanEnv(
+      "RL_COUNTERFACTUAL_REQUIRE_STUCK",
+      false
+    ),
     rlCounterfactualSkipCycleOverConnector: readBooleanEnv(
       "RL_COUNTERFACTUAL_SKIP_CYCLE_OVER_CONNECTOR",
       false

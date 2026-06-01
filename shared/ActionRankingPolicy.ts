@@ -165,6 +165,15 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "center.opponentHandCanFollowAfter",
   "center.opponentHandCanPlaySameNow",
   "premove.centerDistance",
+  "stuck.noVisibleCenterMoves",
+  "stuck.ownVisibleCenterPlayableCount",
+  "stuck.opponentVisibleCenterPlayableCount",
+  "stuck.ownClosestCenterDistance",
+  "stuck.opponentClosestCenterDistance",
+  "stuck.closestCenterDistanceAdvantage",
+  "stuck.moveCycleLike",
+  "stuck.movePremove",
+  "stuck.moveSolitaire",
 ] as const;
 
 export type ActionRankingFeatureName =
@@ -493,6 +502,7 @@ function buildActionRankingFeatures(
   );
   const pressureFeatures = getVisiblePressureFeatures(board, playerIndex);
   const solitaireContext = getOwnSolitaireContextFeatures(board, player);
+  const stuckContext = getStuckContextFeatures(board, playerIndex);
   const ownPounceCard = player ? peek(player.pounceDeck) : undefined;
   const cardCenterDistance = getCenterDistanceToCard(board, card);
   const ownCurrentPoints = player
@@ -675,7 +685,99 @@ function buildActionRankingFeatures(
     bool(centerFollow.opponentHandCanFollowAfter),
     bool(centerFollow.opponentHandCanPlaySameNow),
     move.type === "premove" ? normalize(cardCenterDistance, 13) : 0,
+    bool(stuckContext.noVisibleCenterMoves),
+    normalize(stuckContext.ownVisibleCenterPlayableCount, 6),
+    normalize(stuckContext.opponentVisibleCenterPlayableCount, 24),
+    normalize(stuckContext.ownClosestCenterDistance, 13),
+    normalize(stuckContext.opponentClosestCenterDistance, 13),
+    normalizeSigned(stuckContext.closestCenterDistanceAdvantage, 13),
+    bool(
+      stuckContext.noVisibleCenterMoves &&
+        (move.type === "cycle" || move.type === "flip_deck")
+    ),
+    bool(stuckContext.noVisibleCenterMoves && move.type === "premove"),
+    bool(
+      stuckContext.noVisibleCenterMoves &&
+        (move.type === "c2s" || move.type === "s2s")
+    ),
   ];
+}
+
+function getStuckContextFeatures(
+  board: BoardState,
+  playerIndex: number
+): {
+  noVisibleCenterMoves: boolean;
+  ownVisibleCenterPlayableCount: number;
+  opponentVisibleCenterPlayableCount: number;
+  ownClosestCenterDistance: number;
+  opponentClosestCenterDistance: number;
+  closestCenterDistanceAdvantage: number;
+} {
+  const activePlayerIndices = board.players
+    .map((player, index) => ({ player, index }))
+    .filter(({ player }) => !player.isSpectating)
+    .map(({ index }) => index);
+  const statsByPlayer = activePlayerIndices.map((index) => ({
+    index,
+    stats: getPlayerVisibleCenterStats(board, index),
+  }));
+  const ownStats =
+    statsByPlayer.find((entry) => entry.index === playerIndex)?.stats ??
+    createEmptyVisibleCenterStats();
+  const opponentStats = statsByPlayer
+    .filter((entry) => entry.index !== playerIndex)
+    .map((entry) => entry.stats);
+  const opponentVisibleCenterPlayableCount = opponentStats.reduce(
+    (sum, stats) => sum + stats.centerPlayableCount,
+    0
+  );
+  const opponentClosestCenterDistance =
+    opponentStats.length === 0
+      ? 13
+      : Math.min(...opponentStats.map((stats) => stats.closestCenterDistance));
+  const totalVisibleCenterPlayableCount =
+    ownStats.centerPlayableCount + opponentVisibleCenterPlayableCount;
+
+  return {
+    noVisibleCenterMoves: totalVisibleCenterPlayableCount === 0,
+    ownVisibleCenterPlayableCount: ownStats.centerPlayableCount,
+    opponentVisibleCenterPlayableCount,
+    ownClosestCenterDistance: ownStats.closestCenterDistance,
+    opponentClosestCenterDistance,
+    closestCenterDistanceAdvantage:
+      opponentClosestCenterDistance - ownStats.closestCenterDistance,
+  };
+}
+
+function getPlayerVisibleCenterStats(
+  board: BoardState,
+  playerIndex: number
+): { centerPlayableCount: number; closestCenterDistance: number } {
+  const player = board.players[playerIndex];
+  if (!player) {
+    return createEmptyVisibleCenterStats();
+  }
+  const visibleCards = [
+    peek(player.pounceDeck),
+    peek(player.flippedDeck),
+    ...player.stacks.map(peek),
+  ].filter((card): card is CardState => card != null);
+  const centerPlayableCount = visibleCards.filter((card) =>
+    board.piles.some((pile) => canPlayOnCenterPile(pile, card))
+  ).length;
+  const closestCenterDistance = visibleCards.reduce(
+    (best, card) => Math.min(best, getCenterDistanceToCard(board, card)),
+    13
+  );
+  return { centerPlayableCount, closestCenterDistance };
+}
+
+function createEmptyVisibleCenterStats(): {
+  centerPlayableCount: number;
+  closestCenterDistance: number;
+} {
+  return { centerPlayableCount: 0, closestCenterDistance: 13 };
 }
 
 function getCardAlternativeFeatures(

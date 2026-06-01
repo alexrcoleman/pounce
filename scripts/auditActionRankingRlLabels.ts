@@ -219,6 +219,10 @@ const options = {
     "RL_COUNTERFACTUAL_MIN_POUNCE_PROGRESS_GAP",
     0
   ),
+  counterfactualRequireStuck: readBooleanEnv(
+    "RL_COUNTERFACTUAL_REQUIRE_STUCK",
+    false
+  ),
   counterfactualSkipCycleOverConnector: readBooleanEnv(
     "RL_COUNTERFACTUAL_SKIP_CYCLE_OVER_CONNECTOR",
     false
