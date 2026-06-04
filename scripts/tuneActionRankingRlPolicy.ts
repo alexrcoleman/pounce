@@ -51,16 +51,17 @@ type RlTuneRecipe = {
   options: NeuralTrainingOptions;
 };
 
+const seed = process.env.SEED ?? "action-ranking-rl-tune";
 const modelIn = process.env.MODEL_IN;
 if (!modelIn) {
   throw new Error("MODEL_IN is required.");
 }
 
 const initialModel = readModel(modelIn);
+const resizeHiddenLayerSizes = readOptionalIntegerListEnv("RESIZE_HIDDEN_LAYERS");
 const outputDir = process.env.RL_TUNE_OUT_DIR ?? ".\\node_modules\\pounce-rl-tuning";
 const modelOut = process.env.MODEL_OUT;
 const rounds = readIntegerEnv("RL_TUNE_ROUNDS", 1);
-const seed = process.env.SEED ?? "action-ranking-rl-tune";
 const promoteMinDelta = readNumberEnv("PROMOTE_MIN_DELTA", 0);
 const promoteStandardErrorMultiplier = readNumberEnv(
   "PROMOTE_SE_MULTIPLIER",
@@ -139,10 +140,13 @@ for (let roundIndex = 0; roundIndex < rounds; roundIndex++) {
     const recipe = recipes[recipeIndex];
     const recipeActionOptions =
       recipe.options.actionOptions ?? readActionOptionsEnv();
+    const recipeHiddenLayerSizes =
+      recipe.options.hiddenLayerSizes ?? resizeHiddenLayerSizes;
     const candidateResult = trainNeuralActionRankingPolicy({
       playerCount,
       maxMovesPerGame,
       ...recipe.options,
+      hiddenLayerSizes: recipeHiddenLayerSizes,
       actionOptions: recipeActionOptions,
       initialModel: bestModel,
       rlOpponentModel:
@@ -839,6 +843,20 @@ function readStringListEnv(name: string, fallback: string[]): string[] {
     .map((item) => item.trim())
     .filter(Boolean);
   return parsed.length > 0 ? parsed : fallback;
+}
+
+function readOptionalIntegerListEnv(name: string): number[] | undefined {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return undefined;
+  }
+  const parsed = value
+    .split(",")
+    .map((item) => Number(item.trim()))
+    .filter((item) => Number.isFinite(item))
+    .map((item) => Math.max(0, Math.floor(item)))
+    .filter((item) => item > 0);
+  return parsed.length > 0 ? parsed : undefined;
 }
 
 function readMoveTypeListEnv(

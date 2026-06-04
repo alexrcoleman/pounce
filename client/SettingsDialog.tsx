@@ -14,11 +14,19 @@ import {
   type FairHandMode,
 } from "../shared/FairHands";
 import type { BoardState, PlayerState } from "../shared/GameUtils";
+import type { AIMode } from "../shared/RoomState";
 import useNetworkInformation, {
   getNetworkInformationTitle,
   getNetworkSummary,
   type NetworkInformationSnapshot,
 } from "./useNetworkInformation";
+
+export type SettingsPage = "main" | "room" | "appearance";
+
+export type SettingsOpenRequest = {
+  id: number;
+  page: SettingsPage;
+};
 
 type SettingsDialogProps = {
   roomId?: string | null;
@@ -35,6 +43,12 @@ const AI_DIFFICULTY_PRESETS = [
   { key: "easy", label: "Easy", speed: 3 },
   { key: "medium", label: "Medium", speed: 4 },
   { key: "hard", label: "Hard", speed: 5 },
+] as const;
+
+const AI_MODE_OPTIONS = [
+  { key: "fixed", label: "Fixed AIs" },
+  { key: "trained", label: "Trained model" },
+  { key: "hybrid", label: "Hybrid" },
 ] as const;
 
 export type AIDifficultyMode =
@@ -67,6 +81,7 @@ export default observer(function SettingsDialog({
   const [customAISpeed, setCustomAISpeed] = useState(() =>
     normalizeCustomAISpeed(currentAISpeed)
   );
+  const currentAIMode = state.roomSettings.aiMode ?? "fixed";
   const page = settings.settingsPage;
   const canChangeAI = isHost && !isStarted;
   const roomLabel = props.roomId ?? "Unknown";
@@ -99,6 +114,9 @@ export default observer(function SettingsDialog({
     setAIDifficultyMode("custom");
     setCustomAISpeed(normalizedSpeed);
     socket?.emit("set_ai_level", { speed: normalizedSpeed });
+  };
+  const selectAIMode = (mode: AIMode) => {
+    socket?.emit("set_ai_mode", { mode });
   };
 
   useEffect(() => {
@@ -146,6 +164,8 @@ export default observer(function SettingsDialog({
       open={settings.isSettingsOpen}
       onCancel={settings.closeSettings}
       closable={false}
+      transitionName=""
+      maskTransitionName=""
       footer={null}
     >
       {page === "main" ? (
@@ -318,6 +338,11 @@ export default observer(function SettingsDialog({
                 mode={aiDifficultyMode}
                 onSelectMode={selectAIDifficulty}
                 onSetCustomSpeed={setCustomAIDifficulty}
+              />
+              <AIModeControl
+                disabled={!canChangeAI}
+                mode={currentAIMode}
+                onSelectMode={selectAIMode}
               />
               <SettingRow
                 title="Simulation mode"
@@ -617,6 +642,42 @@ function formatFairHandLuck(score: number): string {
   return `${sign}${rounded.toFixed(1)}`;
 }
 
+function AIModeControl({
+  disabled,
+  mode,
+  onSelectMode,
+}: {
+  disabled: boolean;
+  mode: AIMode;
+  onSelectMode: (mode: AIMode) => void;
+}) {
+  return (
+    <div className={styles.aiModeBlock}>
+      <div className={styles.sliderHeader}>
+        <span>Type</span>
+        <strong>{getAIModeSummary(mode)}</strong>
+      </div>
+      <div
+        className={styles.aiModeControl}
+        role="group"
+        aria-label="AI type"
+      >
+        {AI_MODE_OPTIONS.map((option) => (
+          <button
+            key={option.key}
+            type="button"
+            aria-pressed={mode === option.key}
+            disabled={disabled}
+            onClick={() => onSelectMode(option.key)}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SettingsSection({
   title,
   children,
@@ -792,6 +853,10 @@ function getAIDifficultySummary(
   return (
     AI_DIFFICULTY_PRESETS.find((preset) => preset.key === mode)?.label ?? ""
   );
+}
+
+function getAIModeSummary(mode: AIMode): string {
+  return AI_MODE_OPTIONS.find((option) => option.key === mode)?.label ?? "Fixed AIs";
 }
 
 function useLocalBuildDate(buildDate: string | undefined) {

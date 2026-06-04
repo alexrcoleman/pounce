@@ -19,7 +19,7 @@ import {
   startGame,
 } from "./GameUtils";
 
-import type { AIPileKnowledge, RoomState } from "./RoomState";
+import type { AIMode, AIPileKnowledge, RoomState } from "./RoomState";
 import {
   getFairHandMode,
   normalizeFairHandMode,
@@ -35,7 +35,8 @@ import {
   getApproximateCardLocation,
   getPlayerStackLocation,
 } from "./CardLocations";
-import { getAIMove, getCurrentAIDragMove } from "./ComputerV1";
+import { getCurrentAIDragMove } from "./ComputerV1";
+import { getConfiguredAIMove } from "./NeuralActionRankingBot";
 import deepClone from "./deepClone";
 import { cardEquals, peek } from "./CardUtils";
 import {
@@ -130,7 +131,14 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       const currentDragMove = getCurrentAIDragMove(board, index, hand);
       const visibleBoard = getVisibleBoard(room, index, now);
       const move =
-        currentDragMove ?? getAIMove(visibleBoard, index, hand, room.hands);
+        currentDragMove ??
+        getConfiguredAIMove(
+          visibleBoard,
+          index,
+          hand,
+          room.hands,
+          room.settings.aiMode
+        );
 
       if (move) {
         rememberAIMoveFocus(room, index, move, now);
@@ -1032,6 +1040,24 @@ export function setRoomAILevel(room: RoomState, speed: number): void {
     room.settings.simulationMode = false;
   }
   clearPlayersReadyForRound(room.board);
+}
+
+export function setRoomAIMode(room: RoomState, mode: unknown): boolean {
+  const normalizedMode = normalizeAIMode(mode);
+  if (room.settings.aiMode === normalizedMode) {
+    return false;
+  }
+
+  room.settings.aiMode = normalizedMode;
+  clearRoomStuckPlayers(room);
+  clearPlayersReadyForRound(room.board);
+  return true;
+}
+
+function normalizeAIMode(mode: unknown): AIMode {
+  return mode === "trained" || mode === "hybrid" || mode === "fixed"
+    ? mode
+    : "fixed";
 }
 
 export type RoundReadyUpdate = {

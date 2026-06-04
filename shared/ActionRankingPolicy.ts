@@ -71,6 +71,7 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "own.currentPoints",
   "own.pointDifferential",
   "board.ticksSinceMove",
+  "board.ticksSinceNonWaitMove",
   "move.immediatePointDelta",
   "move.immediatePointDifferentialDelta",
   "move.clearsPounce",
@@ -84,6 +85,7 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "player.index",
   "player.botIndex",
   "board.playerCount",
+  "board.isHeadsUp",
   "card.canPlaySoon",
   "card.centerPlayableDestinationCount",
   "card.ownSolitaireDestinationCount",
@@ -102,6 +104,10 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "solitaire.postTopConnectsPounce",
   "solitaire.postTopConnectsStackRoot",
   "solitaire.deckStockFraction",
+  "solitaire.sourceCenterLowerDistance",
+  "solitaire.destTopCenterLowerDistance",
+  "solitaire.sourceCenterAboveCount",
+  "solitaire.destTopCenterAboveCount",
   "cycle.resetRevealsCard",
   "cycle.resetRevealedValue",
   "cycle.resetRevealedCenterPlayable",
@@ -128,6 +134,34 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "own.stackNextCanPlaySoonCount",
   "own.stackNextPounceConnectorCloseness",
   "own.stackBottomPounceConnectorCloseness",
+  "own.stack0BottomPresent",
+  "own.stack0BottomValue",
+  "own.stack0BottomSuitHearts",
+  "own.stack0BottomSuitSpades",
+  "own.stack0BottomSuitDiamonds",
+  "own.stack0BottomSuitClubs",
+  "own.stack0BottomStackParity",
+  "own.stack1BottomPresent",
+  "own.stack1BottomValue",
+  "own.stack1BottomSuitHearts",
+  "own.stack1BottomSuitSpades",
+  "own.stack1BottomSuitDiamonds",
+  "own.stack1BottomSuitClubs",
+  "own.stack1BottomStackParity",
+  "own.stack2BottomPresent",
+  "own.stack2BottomValue",
+  "own.stack2BottomSuitHearts",
+  "own.stack2BottomSuitSpades",
+  "own.stack2BottomSuitDiamonds",
+  "own.stack2BottomSuitClubs",
+  "own.stack2BottomStackParity",
+  "own.stack3BottomPresent",
+  "own.stack3BottomValue",
+  "own.stack3BottomSuitHearts",
+  "own.stack3BottomSuitSpades",
+  "own.stack3BottomSuitDiamonds",
+  "own.stack3BottomSuitClubs",
+  "own.stack3BottomStackParity",
   "own.pounceCanPlaySoon",
   "opponent.pounceCenterPlayableCount",
   "opponent.deckCenterPlayableCount",
@@ -500,8 +534,10 @@ function buildActionRankingFeatures(
     move,
     card
   );
+  const solitaireFlow = getSolitaireFlowFeatures(board, move, card, dest?.topCard);
   const pressureFeatures = getVisiblePressureFeatures(board, playerIndex);
   const solitaireContext = getOwnSolitaireContextFeatures(board, player);
+  const solitaireBottomCards = getOwnSolitaireBottomCards(player);
   const stuckContext = getStuckContextFeatures(board, playerIndex);
   const ownPounceCard = player ? peek(player.pounceDeck) : undefined;
   const cardCenterDistance = getCenterDistanceToCard(board, card);
@@ -517,6 +553,9 @@ function buildActionRankingFeatures(
         .filter((candidate) => candidate.socketId == null)
         .indexOf(player)
     : -1;
+  const activePlayerCount = board.players.filter(
+    (candidate) => !candidate.isSpectating
+  ).length;
 
   return [
     1,
@@ -575,6 +614,7 @@ function buildActionRankingFeatures(
     normalizeSigned(ownCurrentPoints, 52),
     normalizeSigned(ownPointDifferential, 52),
     normalize(board.ticksSinceMove, 30),
+    normalize(board.ticksSinceNonWaitMove ?? 0, 30),
     normalizeSigned(immediatePointDelta, 3),
     normalizeSigned(immediatePointDifferentialDelta, 3),
     bool(
@@ -594,6 +634,7 @@ function buildActionRankingFeatures(
     normalize(playerIndex, Math.max(1, board.players.length - 1)),
     normalize(botIndex, Math.max(1, board.players.length - 1)),
     normalize(board.players.length, 6),
+    bool(activePlayerCount === 2),
     bool(card != null && getCanPlaySoon(card, board, 4)),
     normalize(
       cardAlternatives.centerPlayableDestinationCount,
@@ -615,6 +656,10 @@ function buildActionRankingFeatures(
     bool(strategyFeatures.postTopConnectsPounce),
     bool(strategyFeatures.postTopConnectsStackRoot),
     normalize(strategyFeatures.deckStockFraction, 1),
+    normalize(solitaireFlow.sourceCenterLowerDistance, 13),
+    normalize(solitaireFlow.destTopCenterLowerDistance, 13),
+    normalize(solitaireFlow.sourceCenterAboveCount, Math.max(1, board.piles.length)),
+    normalize(solitaireFlow.destTopCenterAboveCount, Math.max(1, board.piles.length)),
     bool(cycleShape.resetRevealedCard != null),
     normalizeCardValue(cycleShape.resetRevealedCard),
     bool(cycleShape.resetRevealedCenterPlayable),
@@ -641,6 +686,7 @@ function buildActionRankingFeatures(
     normalize(solitaireContext.stackNextCanPlaySoonCount, 4),
     normalize(solitaireContext.stackNextPounceConnectorCloseness, 1),
     normalize(solitaireContext.stackBottomPounceConnectorCloseness, 1),
+    ...solitaireBottomCards.flatMap(getSolitaireBottomCardFeatureValues),
     bool(pressureFeatures.ownPounceCanPlaySoon),
     normalize(pressureFeatures.opponentPounceCenterPlayableCount, 6),
     normalize(pressureFeatures.opponentDeckCenterPlayableCount, 6),
@@ -1292,6 +1338,26 @@ function getOwnSolitaireContextFeatures(
   }, emptyFeatures);
 }
 
+function getOwnSolitaireBottomCards(
+  player: PlayerState | undefined
+): (CardState | undefined)[] {
+  return [0, 1, 2, 3].map((index) => player?.stacks[index]?.[0]);
+}
+
+function getSolitaireBottomCardFeatureValues(
+  card: CardState | undefined
+): number[] {
+  return [
+    bool(card != null),
+    normalizeCardValue(card),
+    bool(card?.suit === "hearts"),
+    bool(card?.suit === "spades"),
+    bool(card?.suit === "diamonds"),
+    bool(card?.suit === "clubs"),
+    bool(card != null && getStackCompatibilityParity(card) === 1),
+  ];
+}
+
 function getOwnSolitaireDestinations(
   player: PlayerState,
   move: Move,
@@ -1479,6 +1545,68 @@ function getSolitaireStrategyFeatures(
         ? getDeckStockFraction(player)
         : 0,
   };
+}
+
+function getSolitaireFlowFeatures(
+  board: BoardState,
+  move: Move,
+  sourceCard: CardState | undefined,
+  destTopCard: CardState | undefined
+) {
+  const emptyFeatures = {
+    sourceCenterLowerDistance: 0,
+    destTopCenterLowerDistance: 0,
+    sourceCenterAboveCount: 0,
+    destTopCenterAboveCount: 0,
+  };
+  if (move.type !== "c2s" && move.type !== "s2s") {
+    return emptyFeatures;
+  }
+
+  return {
+    sourceCenterLowerDistance: getCenterLowerDistanceToCard(board, sourceCard),
+    destTopCenterLowerDistance: getCenterLowerDistanceToCard(board, destTopCard),
+    sourceCenterAboveCount: getCenterAboveCountForCard(board, sourceCard),
+    destTopCenterAboveCount: getCenterAboveCountForCard(board, destTopCard),
+  };
+}
+
+function getCenterLowerDistanceToCard(
+  board: BoardState,
+  card: CardState | undefined
+): number {
+  if (!card) {
+    return 0;
+  }
+
+  const distances = board.piles
+    .map(peek)
+    .filter(
+      (topCard): topCard is CardState =>
+        topCard != null &&
+        topCard.suit === card.suit &&
+        topCard.value < card.value
+    )
+    .map((topCard) => card.value - topCard.value);
+  return distances.length === 0 ? card.value : Math.min(...distances);
+}
+
+function getCenterAboveCountForCard(
+  board: BoardState,
+  card: CardState | undefined
+): number {
+  if (!card) {
+    return 0;
+  }
+
+  return board.piles.filter((pile) => {
+    const topCard = peek(pile);
+    return (
+      topCard != null &&
+      topCard.suit === card.suit &&
+      topCard.value > card.value
+    );
+  }).length;
 }
 
 const POST_TOP_CONNECTOR_THRESHOLD = 5;

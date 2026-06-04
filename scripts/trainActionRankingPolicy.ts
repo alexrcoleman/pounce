@@ -4,6 +4,7 @@ import { trainNeuralActionRankingPolicy } from "../shared/ActionRankingTraining"
 import type { NeuralActionRankingModel } from "../shared/NeuralActionRankingPolicy";
 import type { Move } from "../shared/MoveHandler";
 
+const seed = process.env.SEED ?? "action-ranking-training";
 const modelIn = process.env.MODEL_IN;
 const initialModel = modelIn
   ? (JSON.parse(fs.readFileSync(modelIn, "utf8")) as NeuralActionRankingModel)
@@ -14,16 +15,17 @@ const opponentModel = opponentModelPath
       fs.readFileSync(opponentModelPath, "utf8")
     ) as NeuralActionRankingModel)
   : undefined;
+const resizeHiddenLayerSizes = readOptionalIntegerListEnv("RESIZE_HIDDEN_LAYERS");
 const hiddenLayerSizes =
   initialModel == null
     ? readIntegerListEnv("HIDDEN_LAYERS", readIntegerListEnv("HIDDEN", [48]))
-    : getModelHiddenLayerSizes(initialModel);
+    : resizeHiddenLayerSizes ?? getModelHiddenLayerSizes(initialModel);
 const rlOnly = readBooleanEnv("RL_ONLY", false);
 
 const options = {
   playerCount: readIntegerEnv("PLAYERS", 4),
   hiddenLayerSizes,
-  seed: process.env.SEED ?? "action-ranking-training",
+  seed,
   actionOptions: readActionOptionsEnv(),
   imitationDeals: rlOnly ? 0 : readIntegerEnv("IMITATION_DEALS", 24),
   imitationEpochs: readIntegerEnv("IMITATION_EPOCHS", 4),
@@ -416,6 +418,20 @@ function readIntegerListEnv(name: string, fallback: number[]): number[] {
     .map((item) => Math.max(0, Math.floor(item)))
     .filter((item) => item > 0);
   return parsed.length > 0 ? parsed : fallback;
+}
+
+function readOptionalIntegerListEnv(name: string): number[] | undefined {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return undefined;
+  }
+  const parsed = value
+    .split(",")
+    .map((item) => Number(item.trim()))
+    .filter((item) => Number.isFinite(item))
+    .map((item) => Math.max(0, Math.floor(item)))
+    .filter((item) => item > 0);
+  return parsed.length > 0 ? parsed : undefined;
 }
 
 function readStringListEnv(name: string, fallback: string[]): string[] {

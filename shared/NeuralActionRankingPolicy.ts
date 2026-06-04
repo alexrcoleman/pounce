@@ -1093,6 +1093,64 @@ export function createNeuralActionRankingModel(
   };
 }
 
+export function resizeNeuralActionRankingModel(
+  model: NeuralActionRankingModel,
+  hiddenLayerInput: number | readonly number[],
+  seed = "neural-action-ranking-resize"
+): NeuralActionRankingModelV2 {
+  const source = alignModelToCurrentFeatures(toV2Model(model));
+  const targetHiddenLayerSizes = normalizeHiddenLayerSizes(hiddenLayerInput);
+  if (targetHiddenLayerSizes.length !== source.hiddenLayerSizes.length) {
+    throw new Error(
+      "Cannot resize a neural action ranking model to a different hidden layer count."
+    );
+  }
+  source.hiddenLayerSizes.forEach((sourceLayerSize, layerIndex) => {
+    const targetLayerSize = targetHiddenLayerSizes[layerIndex];
+    if (targetLayerSize < sourceLayerSize) {
+      throw new Error(
+        "Cannot resize a neural action ranking model to a smaller hidden layer."
+      );
+    }
+  });
+
+  const resized = createNeuralActionRankingModel(targetHiddenLayerSizes, seed);
+  source.hiddenLayerSizes.forEach((sourceLayerSize, layerIndex) => {
+    const previousSourceSize =
+      layerIndex === 0
+        ? source.inputSize
+        : source.hiddenLayerSizes[layerIndex - 1];
+    for (let hiddenIndex = 0; hiddenIndex < sourceLayerSize; hiddenIndex++) {
+      resized.layerBiases[layerIndex][hiddenIndex] =
+        source.layerBiases[layerIndex][hiddenIndex];
+      for (
+        let inputIndex = 0;
+        inputIndex < resized.layerWeights[layerIndex][hiddenIndex].length;
+        inputIndex++
+      ) {
+        resized.layerWeights[layerIndex][hiddenIndex][inputIndex] =
+          inputIndex < previousSourceSize
+            ? source.layerWeights[layerIndex][hiddenIndex][inputIndex] ?? 0
+            : 0;
+      }
+    }
+  });
+
+  source.outputWeights.forEach((weight, outputIndex) => {
+    resized.outputWeights[outputIndex] = weight;
+  });
+  for (
+    let outputIndex = source.outputWeights.length;
+    outputIndex < resized.outputWeights.length;
+    outputIndex++
+  ) {
+    resized.outputWeights[outputIndex] = 0;
+  }
+  resized.outputBias = source.outputBias;
+  assertModelShape(resized);
+  return resized;
+}
+
 function assertModelShape(model: NeuralActionRankingModelV2): void {
   if (model.version !== 2) {
     throw new Error(`Unsupported neural action ranking model: ${model.version}`);

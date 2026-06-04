@@ -10,6 +10,7 @@ import {
 import {
   createNeuralActionRankingModel,
   NeuralActionRankingPolicy,
+  resizeNeuralActionRankingModel,
   type NeuralActionRankingModelV2,
 } from "../shared/NeuralActionRankingPolicy";
 import {
@@ -47,6 +48,7 @@ const commonOptions = {
 };
 
 const featureExpansion = assertLegacyFeatureExpansion();
+const modelResize = assertModelResize();
 const tacticalFeatureSurface = assertTacticalFeatureSurface();
 
 const policyGradient = trainNeuralActionRankingPolicy({
@@ -907,6 +909,7 @@ console.log(
   JSON.stringify(
     {
       featureExpansion,
+      modelResize,
       tacticalFeatureSurface,
       policyGradient: summarize(policyGradient),
       selfPlayEpisodePolicyGradient: summarize(selfPlayEpisodePolicyGradient),
@@ -1112,6 +1115,7 @@ function assertLegacyFeatureExpansion() {
     "own.wasteOwnSolitaireConnectorForPounce",
     "own.wasteMatchesPounceParity",
     "own.wastePounceConnectorCloseness",
+    "board.ticksSinceNonWaitMove",
     "dest.bottomValue",
     "card.stackParity",
     "card.matchesPounceParity",
@@ -1128,6 +1132,10 @@ function assertLegacyFeatureExpansion() {
     "solitaire.postTopConnectsPounce",
     "solitaire.postTopConnectsStackRoot",
     "solitaire.deckStockFraction",
+    "solitaire.sourceCenterLowerDistance",
+    "solitaire.destTopCenterLowerDistance",
+    "solitaire.sourceCenterAboveCount",
+    "solitaire.destTopCenterAboveCount",
     "cycle.resetRevealsCard",
     "cycle.resetRevealedValue",
     "cycle.resetRevealedCenterPlayable",
@@ -1154,6 +1162,13 @@ function assertLegacyFeatureExpansion() {
     "own.stackNextCanPlaySoonCount",
     "own.stackNextPounceConnectorCloseness",
     "own.stackBottomPounceConnectorCloseness",
+    "own.stack0BottomPresent",
+    "own.stack0BottomValue",
+    "own.stack0BottomSuitHearts",
+    "own.stack0BottomSuitSpades",
+    "own.stack0BottomSuitDiamonds",
+    "own.stack0BottomSuitClubs",
+    "own.stack0BottomStackParity",
     "own.pounceCanPlaySoon",
     "opponent.pounceCenterPlayableCount",
     "opponent.deckCenterPlayableCount",
@@ -1171,6 +1186,7 @@ function assertLegacyFeatureExpansion() {
     "center.opponentFollowPressureAfter",
     "center.opponentPounceFollowPressureAfter",
     "center.opponentSameNowPressure",
+    "board.isHeadsUp",
   ].filter((featureName) => baseModel.featureNames.includes(featureName));
   assert.ok(
     droppedFeatures.length > 0,
@@ -1233,10 +1249,46 @@ function assertLegacyFeatureExpansion() {
   };
 }
 
+function assertModelResize() {
+  const baseModel = createNeuralActionRankingModel(
+    [8],
+    "action-ranking-model-resize-check"
+  );
+  const features = ACTION_RANKING_FEATURE_NAMES.map(
+    (_, index) => ((index % 13) - 6) / 6
+  );
+  const basePolicy = new NeuralActionRankingPolicy(baseModel);
+  const baseScore = basePolicy.scoreFeatures(features);
+  const resizedModel = resizeNeuralActionRankingModel(
+    baseModel,
+    [12],
+    "action-ranking-model-resize-check:resized"
+  );
+  const resizedPolicy = new NeuralActionRankingPolicy(resizedModel);
+  const resizedScore = resizedPolicy.scoreFeatures(features);
+
+  assert.deepEqual(resizedModel.hiddenLayerSizes, [12]);
+  assert.equal(resizedModel.outputWeights.length, 12);
+  assert.ok(
+    Math.abs(baseScore - resizedScore) < 1e-12,
+    "widening a model should preserve scores before further training"
+  );
+  resizedModel.outputWeights.slice(8).forEach((weight) => {
+    assert.equal(weight, 0, "new hidden units should start with zero output weight");
+  });
+
+  return {
+    originalHiddenLayerSizes: baseModel.hiddenLayerSizes,
+    resizedHiddenLayerSizes: resizedModel.hiddenLayerSizes,
+    maxScoreDelta: Math.abs(baseScore - resizedScore),
+  };
+}
+
 function assertTacticalFeatureSurface() {
   const board = createBoard(2);
   board.isActive = true;
   board.isDealt = true;
+  board.ticksSinceNonWaitMove = 6;
   board.piles = [
     [card("hearts", 4, -1)],
     [card("clubs", 3, -1)],
@@ -1281,7 +1333,33 @@ function assertTacticalFeatureSurface() {
     "wait candidates should carry an explicit wait feature"
   );
 
-  const deckPremoveCandidate = expandedCandidates.find(
+  const deckPremoveBoard = createBoard(2);
+  deckPremoveBoard.isActive = true;
+  deckPremoveBoard.isDealt = true;
+  deckPremoveBoard.piles = [
+    [card("clubs", 3, -1)],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+    [],
+  ];
+  deckPremoveBoard.players[0].pounceDeck = [card("hearts", 9, 0)];
+  deckPremoveBoard.players[0].deck = [];
+  deckPremoveBoard.players[0].flippedDeck = [card("clubs", 5, 0)];
+  deckPremoveBoard.players[0].stacks = [
+    [card("hearts", 10, 0)],
+    [card("spades", 9, 0)],
+    [card("diamonds", 8, 0)],
+    [card("clubs", 7, 0)],
+  ];
+  const deckPremoveCandidate = enumerateActionRankingCandidates(
+    deckPremoveBoard,
+    0,
+    expandedActionOptions
+  ).find(
     (candidate) =>
       candidate.move.type === "premove" &&
       candidate.move.source.type === "deck"
@@ -1297,7 +1375,7 @@ function assertTacticalFeatureSurface() {
   );
   assert.equal(
     getFeature(deckPremoveCandidate, "premove.centerDistance"),
-    1 / 13,
+    2 / 13,
     "premove candidates should expose distance to the closest center pile"
   );
 
@@ -1335,6 +1413,16 @@ function assertTacticalFeatureSurface() {
     getFeature(cycleCandidate, "own.pounceCenterPlayable"),
     1,
     "visible pressure should mark own playable pounce card"
+  );
+  assert.equal(
+    getFeature(cycleCandidate, "board.ticksSinceNonWaitMove"),
+    6 / 30,
+    "board context should expose time since the last non-wait action"
+  );
+  assert.equal(
+    getFeature(cycleCandidate, "board.isHeadsUp"),
+    1,
+    "board context should mark two active players as heads-up"
   );
   assert.equal(
     getFeature(cycleCandidate, "own.deckCenterPlayable"),
@@ -1705,17 +1793,93 @@ function assertTacticalFeatureSurface() {
     expandedActionOptions
   ).find(
     (candidate) =>
-      candidate.move.type === "premove" &&
-      candidate.move.source.type === "deck"
+      candidate.move.type === "c2s" && candidate.move.source === "deck"
   );
   assert.ok(
     wrappedDistanceCandidate,
-    "feature check should include a premove for center-distance wrap cases"
+    "feature check should include a deck move for center-distance wrap cases"
   );
   assert.equal(
     getFeature(wrappedDistanceCandidate, "card.centerDistance"),
     11 / 13,
     "center distance should treat a jack under only a queen as eleven away via an empty pile"
+  );
+
+  const solitaireFlowBoard = createBoard(2);
+  solitaireFlowBoard.isActive = true;
+  solitaireFlowBoard.isDealt = true;
+  solitaireFlowBoard.piles = [
+    [],
+    [card("clubs", 8, -1)],
+    [card("hearts", 4, -1)],
+    [card("hearts", 9, -1)],
+    [],
+    [],
+    [],
+    [],
+  ];
+  solitaireFlowBoard.players[0].pounceDeck = [card("diamonds", 11, 0)];
+  solitaireFlowBoard.players[0].deck = [];
+  solitaireFlowBoard.players[0].flippedDeck = [card("clubs", 5, 0)];
+  solitaireFlowBoard.players[0].stacks = [
+    [card("hearts", 6, 0)],
+    [card("spades", 9, 0)],
+    [card("diamonds", 8, 0)],
+    [card("clubs", 7, 0)],
+  ];
+  const solitaireFlowCandidate = enumerateActionRankingCandidates(
+    solitaireFlowBoard,
+    0,
+    expandedActionOptions
+  ).find(
+    (candidate) =>
+      candidate.move.type === "c2s" &&
+      candidate.move.source === "deck" &&
+      candidate.move.dest === 0
+  );
+  assert.ok(
+    solitaireFlowCandidate,
+    "feature check should include a deck-to-solitaire flow candidate"
+  );
+  assert.equal(
+    getFeature(solitaireFlowCandidate, "solitaire.sourceCenterLowerDistance"),
+    5 / 13,
+    "solitaire flow should treat no lower center pile as distance from zero"
+  );
+  assert.equal(
+    getFeature(solitaireFlowCandidate, "solitaire.destTopCenterLowerDistance"),
+    2 / 13,
+    "solitaire flow should expose destination top distance above the closest lower center pile"
+  );
+  assert.equal(
+    getFeature(solitaireFlowCandidate, "solitaire.sourceCenterAboveCount"),
+    1 / 8,
+    "solitaire flow should count center piles already above the source card"
+  );
+  assert.equal(
+    getFeature(solitaireFlowCandidate, "solitaire.destTopCenterAboveCount"),
+    1 / 8,
+    "solitaire flow should count center piles already above the destination top card"
+  );
+  assert.equal(
+    getFeature(solitaireFlowCandidate, "own.stack0BottomPresent"),
+    1,
+    "raw solitaire bottom features should mark non-empty stacks"
+  );
+  assert.equal(
+    getFeature(solitaireFlowCandidate, "own.stack0BottomValue"),
+    6 / 13,
+    "raw solitaire bottom features should expose stack-bottom values"
+  );
+  assert.equal(
+    getFeature(solitaireFlowCandidate, "own.stack0BottomSuitHearts"),
+    1,
+    "raw solitaire bottom features should one-hot encode stack-bottom suits"
+  );
+  assert.equal(
+    getFeature(solitaireFlowCandidate, "own.stack1BottomSuitSpades"),
+    1,
+    "raw solitaire bottom features should preserve every stack slot"
   );
 
   return {
@@ -1743,6 +1907,16 @@ function assertTacticalFeatureSurface() {
       handAwareCenterCandidate,
       "opponent.handVisibleCount"
     ),
+    isHeadsUp: getFeature(cycleCandidate, "board.isHeadsUp"),
+    ticksSinceNonWaitMove: getFeature(
+      cycleCandidate,
+      "board.ticksSinceNonWaitMove"
+    ),
+    solitaireSourceCenterLowerDistance: getFeature(
+      solitaireFlowCandidate,
+      "solitaire.sourceCenterLowerDistance"
+    ),
+    stack0BottomValue: getFeature(solitaireFlowCandidate, "own.stack0BottomValue"),
     cycleOwnPounceCount: getFeature(stockLookaheadCycle, "cycle.ownPounceCount"),
   };
 }

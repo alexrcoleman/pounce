@@ -35,6 +35,7 @@ import {
   setRoomFairHandMode,
   setRoomFairHandRotation,
   setRoomAILevel,
+  setRoomAIMode,
   setRoomPaused,
   setPlayerReadyForRound,
   startRoomGame,
@@ -551,6 +552,19 @@ export default function createSocketIOServer() {
       setRoomAILevel(room, typeof args.speed === "number" ? args.speed : 3);
       markRoomUpdated(user.currentRoom);
       broadcastUpdate(user.currentRoom);
+    });
+    socket.on("set_ai_mode", (args) => {
+      if (user.currentRoom == null) {
+        return;
+      }
+      const room = getRoom(user.currentRoom);
+      if (!isHost(room.board, socket.id) || room.board.isActive) {
+        return;
+      }
+      if (setRoomAIMode(room, args.mode)) {
+        markRoomUpdated(user.currentRoom);
+        broadcastUpdate(user.currentRoom);
+      }
     });
     socket.on("disconnecting", () => {
       Array.from(socket.rooms)

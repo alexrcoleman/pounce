@@ -1,7 +1,6 @@
 import createSocketIOServer from "./createSocketIOServer";
 import fs from "fs";
-import { setAIMoveProvider } from "../shared/ComputerV1";
-import { getNeuralAIMove, setNeuralAIModel } from "../shared/NeuralActionRankingBot";
+import { setNeuralAIModel } from "../shared/NeuralActionRankingBot";
 import type { NeuralActionRankingModel } from "../shared/NeuralActionRankingPolicy";
 
 configureNeuralAI();
@@ -17,6 +16,5 @@ function configureNeuralAI(): void {
     fs.readFileSync(modelPath, "utf8")
   ) as NeuralActionRankingModel;
   setNeuralAIModel(model);
-  setAIMoveProvider(getNeuralAIMove);
   console.log(`Loaded neural AI model from ${modelPath}`);
 }

@@ -6,7 +6,7 @@ import {
 } from "./GameUtils";
 import { Move } from "./MoveHandler";
 import type { ServerDrainStage } from "./ServerDrainNotice";
-import type { RoomSettings } from "./RoomState";
+import type { AIMode, RoomSettings } from "./RoomState";
 import type { RoundAnalysis } from "./RoundAnalysis";
 import type { RoomToast } from "./RoomToast";
 import type { PlayerReaction, ReactionId } from "./Reactions";
@@ -97,6 +97,7 @@ export type ClientToServerEvents = {
     ack?: (args: JoinRoomAck) => void
   ) => void;
   set_ai_level: (args: { speed: number }) => void;
+  set_ai_mode: (args: { mode: AIMode }) => void;
   restart_game: () => void;
   update_hand: (args: {
     item?: CardState | null;

@@ -141,6 +141,8 @@ export function executeMove(
     if (move.type === "wait") {
       moveResult = { boardChanged: false };
       board.ticksSinceMove += 1 / board.players.length;
+      board.ticksSinceNonWaitMove =
+        (board.ticksSinceNonWaitMove ?? 0) + 1 / board.players.length;
       return moveResult;
     }
     const card = getSourceCard(board, player, move);
@@ -238,6 +240,7 @@ export function executeMove(
       // Progress is made on the board
       board.ticksSinceMove = 0;
     }
+    board.ticksSinceNonWaitMove = 0;
     board.ticksSinceMove += 1 / board.players.length;
     return moveResult;
   } catch (e) {

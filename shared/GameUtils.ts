@@ -91,6 +91,7 @@ export type BoardState = {
   piles: CardState[][];
   pileLocs: [number, number, number][];
   ticksSinceMove: number;
+  ticksSinceNonWaitMove: number;
 };
 type StartGameRoomState = {
   board: BoardState;
@@ -246,6 +247,7 @@ export function createBoard(playerCount: number): BoardState {
       .map(() => []),
     pileLocs: generateLocations(playerCount * 4),
     ticksSinceMove: 0,
+    ticksSinceNonWaitMove: 0,
   };
   resetBoard(boardState);
   return boardState;
@@ -384,6 +386,7 @@ export function resetCenterPiles(boardState: BoardState): void {
 
 export function resetBoard(boardState: BoardState, decks?: CardState[][]) {
   boardState.ticksSinceMove = 0;
+  boardState.ticksSinceNonWaitMove = 0;
   boardState.pouncer = undefined;
   boardState.isDealt = false;
   boardState.isPaused = false;
@@ -408,6 +411,7 @@ export function resetBoard(boardState: BoardState, decks?: CardState[][]) {
 
 export function rotateDecks(board: BoardState) {
   board.ticksSinceMove = 0;
+  board.ticksSinceNonWaitMove = 0;
   board.players.forEach((player) => {
     player.deck.push(...player.flippedDeck.reverse());
     player.flippedDeck = [];

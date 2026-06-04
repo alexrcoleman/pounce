@@ -37,6 +37,7 @@ import {
 import {
   createSeededRandom,
   NeuralActionRankingPolicy,
+  resizeNeuralActionRankingModel,
   type ImitationTrainingStats,
   type NeuralActionRankingModel,
   type PairwiseFeatureMode,
@@ -578,8 +579,11 @@ export function trainNeuralActionRankingPolicy(
   const rlEpisodes = options.rlEpisodes ?? 32;
   const improvementStates = options.improvementStates ?? 0;
   const maxMovesPerGame = options.maxMovesPerGame ?? DEFAULT_MAX_MOVES_PER_GAME;
-  const policy = options.initialModel
-    ? new NeuralActionRankingPolicy(options.initialModel)
+  const initialModel = options.initialModel
+    ? getTrainingInitialModel(options, seed)
+    : undefined;
+  const policy = initialModel
+    ? new NeuralActionRankingPolicy(initialModel)
     : NeuralActionRankingPolicy.create({
         hiddenSize: options.hiddenSize,
         hiddenLayerSizes: options.hiddenLayerSizes,
@@ -845,6 +849,23 @@ export function trainNeuralActionRankingPolicy(
       maxMovesPerGame,
     }),
   };
+}
+
+function getTrainingInitialModel(
+  options: NeuralTrainingOptions,
+  seed: string
+): NeuralActionRankingModel {
+  if (!options.initialModel) {
+    throw new Error("Initial model is required.");
+  }
+  const hiddenLayerInput = options.hiddenLayerSizes ?? options.hiddenSize;
+  return hiddenLayerInput == null
+    ? options.initialModel
+    : resizeNeuralActionRankingModel(
+        options.initialModel,
+        hiddenLayerInput,
+        `${seed}:resize`
+      );
 }
 
 export function collectRewardImprovementExamples(options: {

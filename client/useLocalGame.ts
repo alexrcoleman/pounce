@@ -38,6 +38,7 @@ import {
   setRoomFairHandMode,
   setRoomFairHandRotation,
   setRoomAILevel,
+  setRoomAIMode,
   setRoomPaused,
   setPlayerReadyForRound,
   startRoomGame,
@@ -387,6 +388,12 @@ export default function useLocalGame(name: string | null) {
         } else if (event === "set_fair_hand_mode") {
           const setFairHandModeArgs = args[0] as { mode: string };
           if (setRoomFairHandMode(room, setFairHandModeArgs.mode)) {
+            markRoomUpdated();
+            emitUpdate();
+          }
+        } else if (event === "set_ai_mode") {
+          const setAIArgs = args[0] as { mode: unknown };
+          if (setRoomAIMode(room, setAIArgs.mode)) {
             markRoomUpdated();
             emitUpdate();
           }

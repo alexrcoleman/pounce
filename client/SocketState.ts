@@ -25,6 +25,7 @@ function createDefaultRoomSettings(): RoomSettings {
   return {
     fairHandMode: "off",
     fairHandRotation: false,
+    aiMode: "fixed",
     aiSpeed: 3,
     simulationMode: false,
   };

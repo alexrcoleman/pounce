@@ -12,10 +12,13 @@ export type AIPileKnowledge = {
   expiresAt: number;
 };
 
+export type AIMode = "fixed" | "trained" | "hybrid";
+
 export type RoomSettings = {
   fairHandMode: FairHandMode;
   /** @deprecated Prefer fairHandMode. Kept for older clients. */
   fairHandRotation: boolean;
+  aiMode: AIMode;
   aiSpeed: number;
   simulationMode: boolean;
 };
@@ -64,6 +67,7 @@ export function createRoomState(playerCount: number): RoomState {
     settings: {
       fairHandMode: "off",
       fairHandRotation: false,
+      aiMode: "fixed",
       aiSpeed: 3,
       simulationMode: false,
     },
