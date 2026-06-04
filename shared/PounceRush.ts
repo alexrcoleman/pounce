@@ -1068,6 +1068,13 @@ export function isExpectedPounceRushMove(
     case "cycle":
     case "flip_deck":
       return true;
+    case "wait":
+      return true;
+    case "premove":
+      return actual.type === "premove" && premoveSourcesMatch(
+        actual.source,
+        expected.source
+      );
     case "move_field_stack":
       return (
         actual.type === "move_field_stack" && actual.index === expected.index
@@ -1116,6 +1123,21 @@ function isEquivalentPounceToSolitaireClear(
 function centerSourcesMatch(
   actual: Extract<Move, { type: "c2c" }>["source"],
   expected: Extract<Move, { type: "c2c" }>["source"]
+): boolean {
+  if (actual.type !== expected.type) {
+    return false;
+  }
+
+  if (actual.type !== "solitaire" || expected.type !== "solitaire") {
+    return true;
+  }
+
+  return actual.index === expected.index;
+}
+
+function premoveSourcesMatch(
+  actual: Extract<Move, { type: "premove" }>["source"],
+  expected: Extract<Move, { type: "premove" }>["source"]
 ): boolean {
   if (actual.type !== expected.type) {
     return false;
@@ -1529,6 +1551,19 @@ function transformMove(
       };
     case "cycle":
     case "flip_deck":
+    case "wait":
+      return deepClone(move);
+    case "premove":
+      return {
+        ...move,
+        source:
+          move.source.type === "solitaire"
+            ? {
+                type: "solitaire",
+                index: transforms.stackMap[move.source.index],
+              }
+            : move.source,
+      };
     case "move_field_stack":
       return deepClone(move);
   }
@@ -1903,10 +1938,21 @@ function getMoveKey(move: Move): string {
       return `s2s:${move.source}:${move.dest}:${move.count}`;
     case "cycle":
     case "flip_deck":
+    case "wait":
       return move.type;
+    case "premove":
+      return `premove:${getPremoveSourceKey(move.source)}`;
     case "move_field_stack":
       return `move_field_stack:${move.index}`;
   }
+}
+
+function getPremoveSourceKey(
+  source: Extract<Move, { type: "premove" }>["source"]
+): string {
+  return source.type === "solitaire"
+    ? `solitaire:${source.index}`
+    : source.type;
 }
 
 function getCenterSourceKey(

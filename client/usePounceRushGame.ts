@@ -827,6 +827,7 @@ function applyBoardUpdate(
       board: deepClone(board),
       settings: {
         aiSpeed: 3,
+        aiMode: "fixed",
         fairHandMode: "off",
         fairHandRotation: false,
         simulationMode: false,
@@ -883,6 +884,8 @@ function getHintCard(board: BoardState, move: Move | undefined): CardState | nul
     }
     case "cycle":
     case "flip_deck":
+    case "wait":
+    case "premove":
     case "move_field_stack":
       return null;
   }

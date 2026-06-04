@@ -421,7 +421,18 @@ function getMoveSourceCard(
     case "cycle":
     case "flip_deck":
     case "move_field_stack":
+    case "wait":
       return null;
+    case "premove":
+      if (move.source.type === "pounce") {
+        return player.pounceDeck[player.pounceDeck.length - 1] ?? null;
+      }
+      if (move.source.type === "deck") {
+        return player.flippedDeck[player.flippedDeck.length - 1] ?? null;
+      }
+      return player.stacks[move.source.index]?.[
+        player.stacks[move.source.index].length - 1
+      ] ?? null;
   }
 }
 
