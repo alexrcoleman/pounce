@@ -63,10 +63,22 @@ export type NeuralTrainingOptions = {
   imitationEquivalentTargets?: boolean;
   imitationTeacherStyleName?: string;
   rlEpisodes?: number;
+  rlAlgorithm?: "policy_gradient" | "ppo";
   rlLearningRate?: number;
   rlTemperature?: number;
   rlLocalRewardWeight?: number;
   rlLocalRewardDiscount?: number;
+  rlPpoClipRatio?: number;
+  rlPpoEntropyBonus?: number;
+  rlPpoGamma?: number;
+  rlPpoUpdateEpochs?: number;
+  rlPpoWaitPenalty?: number;
+  rlPpoPremovePenalty?: number;
+  rlPpoCyclePenalty?: number;
+  rlPpoScoreRewardWeight?: number;
+  rlPpoPounceRewardWeight?: number;
+  rlPpoMaxConsecutiveWaitMoves?: number;
+  rlPpoAdvantageBaseline?: PpoAdvantageBaselineMode;
   rlOpponentMode?: "teacher" | "self" | "champion";
   rlBaselineMode?: "teacher" | "greedy";
   rlCommonRandom?: boolean;
@@ -200,6 +212,7 @@ export type NeuralTrainingResult = {
     stats: ImitationTrainingStats;
   };
   reinforcement: {
+    algorithm: "policy_gradient" | "ppo";
     opponentMode: "teacher" | "self" | "champion";
     averageTrainingPlayerCount: number;
     episodes: number;
@@ -256,6 +269,16 @@ export type NeuralTrainingResult = {
     counterfactualMoveTypeAnchorExamples: number;
     counterfactualMoveTypeAnchorUpdates: number;
     counterfactualPolicyShift: CounterfactualPolicyShiftStats;
+    ppoClipRatio: number;
+    ppoEntropyBonus: number;
+    ppoAverageEntropy: number;
+    ppoAverageApproximateKl: number;
+    ppoClippedUpdateRate: number;
+    ppoAverageReturn: number;
+    ppoReturnStdDev: number;
+    ppoAverageWaitMoveRate: number;
+    ppoAveragePremoveMoveRate: number;
+    ppoAdvantageBaseline: PpoAdvantageBaselineMode;
     averagePolicyUpdates: number;
     averageGradientUpdates: number;
     averageRawAdvantage: number;
@@ -405,6 +428,9 @@ type RolloutTransition = {
   candidates: ActionRankingCandidate[];
   selectedCandidateIndex: number;
   greedyCandidateIndex: number;
+  selectedProbability: number;
+  selectedLogProbability: number;
+  policyEntropy: number;
   localReward: number;
 };
 
@@ -426,8 +452,11 @@ type RolloutResult = {
 type PolicyGradientUpdate = {
   candidates: ActionRankingCandidate[];
   selectedCandidateIndex: number;
+  oldProbability?: number;
   rawAdvantage: number;
 };
+
+type PpoAdvantageBaselineMode = "batch" | "trajectory";
 
 type CounterfactualSupervisedLabel = {
   example: ActionRankingImitationExample;
@@ -652,146 +681,181 @@ export function trainNeuralActionRankingPolicy(
           shuffleSeed: `${seed}:improvement-shuffle`,
         });
 
-  const reinforcement = trainPolicyGradientFromRollouts(policy, {
-    playerCount,
-    episodes: rlEpisodes,
-    seed: `${seed}:rl`,
-    learningRate: options.rlLearningRate ?? 0.001,
-    temperature: options.rlTemperature ?? 0.85,
-    localRewardWeight: options.rlLocalRewardWeight ?? 0.15,
-    localRewardDiscount: options.rlLocalRewardDiscount ?? 0,
-    opponentMode: options.rlOpponentMode ?? "teacher",
-    opponentPolicy: options.rlOpponentModel
-      ? new NeuralActionRankingPolicy(options.rlOpponentModel)
-      : undefined,
-    baselineMode: options.rlBaselineMode ?? "teacher",
-    commonRandom: options.rlCommonRandom ?? true,
-    creditMode: options.rlCreditMode ?? "episode",
-    counterfactualScanEpisodes:
-      options.rlCounterfactualScanEpisodes ?? rlEpisodes,
-    counterfactualScanSeedCount:
-      options.rlCounterfactualScanSeedCount ?? 1,
-    counterfactualRolloutCount: options.rlCounterfactualRolloutCount ?? 1,
-    counterfactualRolloutMoves:
-      options.rlCounterfactualRolloutMoves ?? Math.min(450, maxMovesPerGame),
-    counterfactualCandidateLimit: options.rlCounterfactualCandidateLimit ?? 2,
-    counterfactualMinReturnGap: options.rlCounterfactualMinReturnGap ?? 1,
-    counterfactualMaxReturnGap: options.rlCounterfactualMaxReturnGap ?? 0,
-    counterfactualRequireBehaviorGap:
-      options.rlCounterfactualRequireBehaviorGap ?? false,
-    counterfactualMinBehaviorImprovement:
-      options.rlCounterfactualMinBehaviorImprovement ??
-      options.rlCounterfactualMinReturnGap ??
-      1,
-    counterfactualStateSource:
-      options.rlCounterfactualStateSource ?? "sampled",
-    counterfactualTrainingMode:
-      options.rlCounterfactualTrainingMode ?? "policy_gradient",
-    counterfactualGapStandardErrorMultiplier:
-      options.rlCounterfactualGapStandardErrorMultiplier ?? 0,
-    counterfactualMinBehaviorWinRate:
-      options.rlCounterfactualMinBehaviorWinRate ?? 0,
-    counterfactualMinBehaviorWins:
-      options.rlCounterfactualMinBehaviorWins ?? 0,
-    counterfactualMaxPolicyMargin:
-      options.rlCounterfactualMaxPolicyMargin ?? 0,
-    counterfactualRequirePolicyChange:
-      options.rlCounterfactualRequirePolicyChange ?? false,
-    counterfactualPreferenceScope:
-      options.rlCounterfactualPreferenceScope ?? "all",
-    counterfactualPairwiseTargetMargin:
-      options.rlCounterfactualPairwiseTargetMargin ?? 0,
-    counterfactualPairwiseWeightMode:
-      options.rlCounterfactualPairwiseWeightMode ?? "uniform",
-    counterfactualPairwiseWeightScale:
-      options.rlCounterfactualPairwiseWeightScale ?? 1,
-    counterfactualPairwiseMaxWeight:
-      options.rlCounterfactualPairwiseMaxWeight ?? 1,
-    counterfactualPairwiseFeatureMode:
-      options.rlCounterfactualPairwiseFeatureMode ?? "raw",
-    counterfactualPairwiseStopMargin:
-      options.rlCounterfactualPairwiseStopMargin ?? -1,
-    counterfactualMaxTransitionsPerEpisode:
-      options.rlCounterfactualMaxTransitionsPerEpisode ?? 0,
-    counterfactualMaxScoreGap: options.rlCounterfactualMaxScoreGap ?? 0,
-    counterfactualScoreGapBudget:
-      options.rlCounterfactualScoreGapBudget ?? 0,
-    counterfactualMaxLabelsPerMovePair:
-      options.rlCounterfactualMaxLabelsPerMovePair ?? 0,
-    counterfactualIncludedMovePairs:
-      options.rlCounterfactualIncludedMovePairs ?? [],
-    counterfactualExcludedMovePairs:
-      options.rlCounterfactualExcludedMovePairs ?? [],
-    counterfactualBehaviorMoveTypes:
-      options.rlCounterfactualBehaviorMoveTypes ?? [],
-    counterfactualRequireSameMoveType:
-      options.rlCounterfactualRequireSameMoveType ?? false,
-    counterfactualRequireDifferentMoveType:
-      options.rlCounterfactualRequireDifferentMoveType ?? false,
-    counterfactualStopAfterLabels:
-      options.rlCounterfactualStopAfterLabels ?? 0,
-    counterfactualValidationRolloutCount:
-      options.rlCounterfactualValidationRolloutCount ?? 0,
-    counterfactualMinValidationReturnGap:
-      options.rlCounterfactualMinValidationReturnGap ?? 0,
-    counterfactualMinValidationWins:
-      options.rlCounterfactualMinValidationWins ?? 0,
-    counterfactualScoreRewardWeight:
-      options.rlCounterfactualScoreRewardWeight ?? 0,
-    counterfactualPounceRewardWeight:
-      options.rlCounterfactualPounceRewardWeight ?? 0,
-    counterfactualMinScoreReturnGap:
-      options.rlCounterfactualMinScoreReturnGap ?? 0,
-    counterfactualMinPounceProgressGap:
-      options.rlCounterfactualMinPounceProgressGap ?? 0,
-    counterfactualRequireStuck: options.rlCounterfactualRequireStuck ?? false,
-    counterfactualSkipCycleOverConnector:
-      options.rlCounterfactualSkipCycleOverConnector ?? false,
-    counterfactualSkipWeakCycleOverConnector:
-      options.rlCounterfactualSkipWeakCycleOverConnector ?? false,
-    counterfactualSkipSolitaireOverUsefulCycle:
-      options.rlCounterfactualSkipSolitaireOverUsefulCycle ?? false,
-    counterfactualAnchorWeight: options.rlCounterfactualAnchorWeight ?? 0,
-    counterfactualAnchorMaxExamples:
-      options.rlCounterfactualAnchorMaxExamples ?? 512,
-    counterfactualAnchorTemperature:
-      options.rlCounterfactualAnchorTemperature ?? 1,
-    counterfactualBehaviorCorrectionWeight:
-      options.rlCounterfactualBehaviorCorrectionWeight ?? 0,
-    counterfactualBehaviorCorrectionMargin:
-      options.rlCounterfactualBehaviorCorrectionMargin ?? 0.05,
-    counterfactualConnectorAnchorWeight:
-      options.rlCounterfactualConnectorAnchorWeight ?? 0,
-    counterfactualConnectorAnchorMaxExamples:
-      options.rlCounterfactualConnectorAnchorMaxExamples ?? 512,
-    counterfactualConnectorAnchorMargin:
-      options.rlCounterfactualConnectorAnchorMargin ?? 0.05,
-    counterfactualConnectorAnchorMaxPolicyMargin:
-      options.rlCounterfactualConnectorAnchorMaxPolicyMargin ?? 0,
-    counterfactualConnectorAnchorMode:
-      options.rlCounterfactualConnectorAnchorMode ?? "connector",
-    counterfactualMoveTypeAnchorWeight:
-      options.rlCounterfactualMoveTypeAnchorWeight ?? 0,
-    counterfactualMoveTypeAnchorMaxExamples:
-      options.rlCounterfactualMoveTypeAnchorMaxExamples ?? 512,
-    counterfactualMoveTypeAnchorTemperature:
-      options.rlCounterfactualMoveTypeAnchorTemperature ?? 1,
-    counterfactualValueTargetScale:
-      options.rlCounterfactualValueTargetScale ?? 4,
-    counterfactualValueCenterTargets:
-      options.rlCounterfactualValueCenterTargets ?? true,
-    counterfactualValueTargetMode:
-      options.rlCounterfactualValueTargetMode ?? "absolute",
-    counterfactualValueHuberDelta:
-      options.rlCounterfactualValueHuberDelta ?? 0,
-    updateEpochs: options.rlUpdateEpochs ?? 1,
-    updateScope: options.rlUpdateScope ?? "all",
-    trainableLayers: options.rlTrainableLayers ?? "all",
-    normalizeAdvantages: options.rlNormalizeAdvantages ?? true,
-    advantageClip: options.rlAdvantageClip ?? 3,
-    maxMovesPerGame,
-    actionOptions: options.actionOptions,
-  });
+  const opponentPolicy = options.rlOpponentModel
+    ? new NeuralActionRankingPolicy(options.rlOpponentModel)
+    : undefined;
+  const reinforcement =
+    options.rlAlgorithm === "ppo"
+      ? trainPpoFromSelfPlay(policy, {
+          playerCount,
+          episodes: rlEpisodes,
+          seed: `${seed}:ppo`,
+          learningRate: options.rlLearningRate ?? 0.00005,
+          temperature: options.rlTemperature ?? 1.05,
+          localRewardWeight: options.rlLocalRewardWeight ?? 0.05,
+          opponentMode: options.rlOpponentMode ?? "self",
+          opponentPolicy,
+          clipRatio: options.rlPpoClipRatio ?? 0.2,
+          entropyBonus: options.rlPpoEntropyBonus ?? 0.01,
+          gamma: options.rlPpoGamma ?? 0.995,
+          updateEpochs: options.rlPpoUpdateEpochs ?? options.rlUpdateEpochs ?? 4,
+          waitPenalty: options.rlPpoWaitPenalty ?? 0.05,
+          premovePenalty: options.rlPpoPremovePenalty ?? 0.005,
+          cyclePenalty: options.rlPpoCyclePenalty ?? 0,
+          scoreRewardWeight: options.rlPpoScoreRewardWeight ?? 0,
+          pounceRewardWeight: options.rlPpoPounceRewardWeight ?? 0.5,
+          maxConsecutiveWaitMoves:
+            options.rlPpoMaxConsecutiveWaitMoves ?? 40,
+          advantageBaseline: options.rlPpoAdvantageBaseline ?? "batch",
+          trainableLayers: options.rlTrainableLayers ?? "all",
+          normalizeAdvantages: options.rlNormalizeAdvantages ?? true,
+          advantageClip: options.rlAdvantageClip ?? 3,
+          maxMovesPerGame,
+          actionOptions: options.actionOptions,
+        })
+      : trainPolicyGradientFromRollouts(policy, {
+          playerCount,
+          episodes: rlEpisodes,
+          seed: `${seed}:rl`,
+          learningRate: options.rlLearningRate ?? 0.001,
+          temperature: options.rlTemperature ?? 0.85,
+          localRewardWeight: options.rlLocalRewardWeight ?? 0.15,
+          localRewardDiscount: options.rlLocalRewardDiscount ?? 0,
+          opponentMode: options.rlOpponentMode ?? "teacher",
+          opponentPolicy,
+          baselineMode: options.rlBaselineMode ?? "teacher",
+          commonRandom: options.rlCommonRandom ?? true,
+          creditMode: options.rlCreditMode ?? "episode",
+          counterfactualScanEpisodes:
+            options.rlCounterfactualScanEpisodes ?? rlEpisodes,
+          counterfactualScanSeedCount:
+            options.rlCounterfactualScanSeedCount ?? 1,
+          counterfactualRolloutCount: options.rlCounterfactualRolloutCount ?? 1,
+          counterfactualRolloutMoves:
+            options.rlCounterfactualRolloutMoves ??
+            Math.min(450, maxMovesPerGame),
+          counterfactualCandidateLimit:
+            options.rlCounterfactualCandidateLimit ?? 2,
+          counterfactualMinReturnGap:
+            options.rlCounterfactualMinReturnGap ?? 1,
+          counterfactualMaxReturnGap:
+            options.rlCounterfactualMaxReturnGap ?? 0,
+          counterfactualRequireBehaviorGap:
+            options.rlCounterfactualRequireBehaviorGap ?? false,
+          counterfactualMinBehaviorImprovement:
+            options.rlCounterfactualMinBehaviorImprovement ??
+            options.rlCounterfactualMinReturnGap ??
+            1,
+          counterfactualStateSource:
+            options.rlCounterfactualStateSource ?? "sampled",
+          counterfactualTrainingMode:
+            options.rlCounterfactualTrainingMode ?? "policy_gradient",
+          counterfactualGapStandardErrorMultiplier:
+            options.rlCounterfactualGapStandardErrorMultiplier ?? 0,
+          counterfactualMinBehaviorWinRate:
+            options.rlCounterfactualMinBehaviorWinRate ?? 0,
+          counterfactualMinBehaviorWins:
+            options.rlCounterfactualMinBehaviorWins ?? 0,
+          counterfactualMaxPolicyMargin:
+            options.rlCounterfactualMaxPolicyMargin ?? 0,
+          counterfactualRequirePolicyChange:
+            options.rlCounterfactualRequirePolicyChange ?? false,
+          counterfactualPreferenceScope:
+            options.rlCounterfactualPreferenceScope ?? "all",
+          counterfactualPairwiseTargetMargin:
+            options.rlCounterfactualPairwiseTargetMargin ?? 0,
+          counterfactualPairwiseWeightMode:
+            options.rlCounterfactualPairwiseWeightMode ?? "uniform",
+          counterfactualPairwiseWeightScale:
+            options.rlCounterfactualPairwiseWeightScale ?? 1,
+          counterfactualPairwiseMaxWeight:
+            options.rlCounterfactualPairwiseMaxWeight ?? 1,
+          counterfactualPairwiseFeatureMode:
+            options.rlCounterfactualPairwiseFeatureMode ?? "raw",
+          counterfactualPairwiseStopMargin:
+            options.rlCounterfactualPairwiseStopMargin ?? -1,
+          counterfactualMaxTransitionsPerEpisode:
+            options.rlCounterfactualMaxTransitionsPerEpisode ?? 0,
+          counterfactualMaxScoreGap: options.rlCounterfactualMaxScoreGap ?? 0,
+          counterfactualScoreGapBudget:
+            options.rlCounterfactualScoreGapBudget ?? 0,
+          counterfactualMaxLabelsPerMovePair:
+            options.rlCounterfactualMaxLabelsPerMovePair ?? 0,
+          counterfactualIncludedMovePairs:
+            options.rlCounterfactualIncludedMovePairs ?? [],
+          counterfactualExcludedMovePairs:
+            options.rlCounterfactualExcludedMovePairs ?? [],
+          counterfactualBehaviorMoveTypes:
+            options.rlCounterfactualBehaviorMoveTypes ?? [],
+          counterfactualRequireSameMoveType:
+            options.rlCounterfactualRequireSameMoveType ?? false,
+          counterfactualRequireDifferentMoveType:
+            options.rlCounterfactualRequireDifferentMoveType ?? false,
+          counterfactualStopAfterLabels:
+            options.rlCounterfactualStopAfterLabels ?? 0,
+          counterfactualValidationRolloutCount:
+            options.rlCounterfactualValidationRolloutCount ?? 0,
+          counterfactualMinValidationReturnGap:
+            options.rlCounterfactualMinValidationReturnGap ?? 0,
+          counterfactualMinValidationWins:
+            options.rlCounterfactualMinValidationWins ?? 0,
+          counterfactualScoreRewardWeight:
+            options.rlCounterfactualScoreRewardWeight ?? 0,
+          counterfactualPounceRewardWeight:
+            options.rlCounterfactualPounceRewardWeight ?? 0,
+          counterfactualMinScoreReturnGap:
+            options.rlCounterfactualMinScoreReturnGap ?? 0,
+          counterfactualMinPounceProgressGap:
+            options.rlCounterfactualMinPounceProgressGap ?? 0,
+          counterfactualRequireStuck:
+            options.rlCounterfactualRequireStuck ?? false,
+          counterfactualSkipCycleOverConnector:
+            options.rlCounterfactualSkipCycleOverConnector ?? false,
+          counterfactualSkipWeakCycleOverConnector:
+            options.rlCounterfactualSkipWeakCycleOverConnector ?? false,
+          counterfactualSkipSolitaireOverUsefulCycle:
+            options.rlCounterfactualSkipSolitaireOverUsefulCycle ?? false,
+          counterfactualAnchorWeight: options.rlCounterfactualAnchorWeight ?? 0,
+          counterfactualAnchorMaxExamples:
+            options.rlCounterfactualAnchorMaxExamples ?? 512,
+          counterfactualAnchorTemperature:
+            options.rlCounterfactualAnchorTemperature ?? 1,
+          counterfactualBehaviorCorrectionWeight:
+            options.rlCounterfactualBehaviorCorrectionWeight ?? 0,
+          counterfactualBehaviorCorrectionMargin:
+            options.rlCounterfactualBehaviorCorrectionMargin ?? 0.05,
+          counterfactualConnectorAnchorWeight:
+            options.rlCounterfactualConnectorAnchorWeight ?? 0,
+          counterfactualConnectorAnchorMaxExamples:
+            options.rlCounterfactualConnectorAnchorMaxExamples ?? 512,
+          counterfactualConnectorAnchorMargin:
+            options.rlCounterfactualConnectorAnchorMargin ?? 0.05,
+          counterfactualConnectorAnchorMaxPolicyMargin:
+            options.rlCounterfactualConnectorAnchorMaxPolicyMargin ?? 0,
+          counterfactualConnectorAnchorMode:
+            options.rlCounterfactualConnectorAnchorMode ?? "connector",
+          counterfactualMoveTypeAnchorWeight:
+            options.rlCounterfactualMoveTypeAnchorWeight ?? 0,
+          counterfactualMoveTypeAnchorMaxExamples:
+            options.rlCounterfactualMoveTypeAnchorMaxExamples ?? 512,
+          counterfactualMoveTypeAnchorTemperature:
+            options.rlCounterfactualMoveTypeAnchorTemperature ?? 1,
+          counterfactualValueTargetScale:
+            options.rlCounterfactualValueTargetScale ?? 4,
+          counterfactualValueCenterTargets:
+            options.rlCounterfactualValueCenterTargets ?? true,
+          counterfactualValueTargetMode:
+            options.rlCounterfactualValueTargetMode ?? "absolute",
+          counterfactualValueHuberDelta:
+            options.rlCounterfactualValueHuberDelta ?? 0,
+          updateEpochs: options.rlUpdateEpochs ?? 1,
+          updateScope: options.rlUpdateScope ?? "all",
+          trainableLayers: options.rlTrainableLayers ?? "all",
+          normalizeAdvantages: options.rlNormalizeAdvantages ?? true,
+          advantageClip: options.rlAdvantageClip ?? 3,
+          maxMovesPerGame,
+          actionOptions: options.actionOptions,
+        });
 
   return {
     model: policy.getModel(),
@@ -2642,6 +2706,7 @@ export function trainPolicyGradientFromRollouts(
         });
 
   return {
+    algorithm: "policy_gradient" as const,
     opponentMode: options.opponentMode,
     averageTrainingPlayerCount:
       options.episodes === 0 ? 0 : trainingPlayerCountTotal / options.episodes,
@@ -2749,12 +2814,226 @@ export function trainPolicyGradientFromRollouts(
     counterfactualMoveTypeAnchorUpdates:
       advantageStats.moveTypeAnchorUpdates,
     counterfactualPolicyShift: advantageStats.policyShift,
+    ppoClipRatio: 0,
+    ppoEntropyBonus: 0,
+    ppoAverageEntropy: 0,
+    ppoAverageApproximateKl: 0,
+    ppoClippedUpdateRate: 0,
+    ppoAverageReturn: 0,
+    ppoReturnStdDev: 0,
+    ppoAverageWaitMoveRate: 0,
+    ppoAveragePremoveMoveRate: 0,
+    ppoAdvantageBaseline: "batch" as const,
     averagePolicyUpdates:
       options.episodes === 0 ? 0 : updates.length / options.episodes,
     averageGradientUpdates:
       options.episodes === 0
         ? 0
         : advantageStats.appliedUpdates / options.episodes,
+    averageRawAdvantage: advantageStats.mean,
+    rawAdvantageStdDev: advantageStats.stdDev,
+  };
+}
+
+export function trainPpoFromSelfPlay(
+  policy: NeuralActionRankingPolicy,
+  options: {
+    playerCount: number;
+    episodes: number;
+    seed: string;
+    learningRate: number;
+    temperature: number;
+    localRewardWeight: number;
+    opponentMode: PolicyGradientOpponentMode;
+    opponentPolicy?: NeuralActionRankingPolicy;
+    clipRatio: number;
+    entropyBonus: number;
+    gamma: number;
+    updateEpochs: number;
+    waitPenalty: number;
+    premovePenalty: number;
+    cyclePenalty: number;
+    scoreRewardWeight: number;
+    pounceRewardWeight: number;
+    maxConsecutiveWaitMoves: number;
+    advantageBaseline: PpoAdvantageBaselineMode;
+    trainableLayers: "all" | "output";
+    normalizeAdvantages: boolean;
+    advantageClip: number;
+    maxMovesPerGame: number;
+    actionOptions?: ActionRankingOptions;
+  }
+) {
+  const useChampionOpponents = options.opponentMode === "champion";
+  if (useChampionOpponents && !options.opponentPolicy) {
+    throw new Error("Champion opponent mode requires a frozen opponent policy.");
+  }
+
+  const activePlayerIndices = Array.from(
+    { length: options.playerCount },
+    (_, index) => index
+  );
+  const updates: PolicyGradientUpdate[] = [];
+  const rawReturns: number[] = [];
+  let trainingPlayerCountTotal = 0;
+  let finalPointDifferentialTotal = 0;
+  let sampledDecisionCountTotal = 0;
+  let waitMoveRateTotal = 0;
+  let premoveMoveRateTotal = 0;
+
+  for (let episode = 0; episode < options.episodes; episode++) {
+    const learningPlayerIndices =
+      options.opponentMode === "self"
+        ? activePlayerIndices
+        : [episode % options.playerCount];
+    const learningPlayerSet = new Set(learningPlayerIndices);
+    const board = createTrainingBoard(
+      options.playerCount,
+      `${options.seed}:deal:${episode}`
+    );
+    const rollout = runPolicyRollout(board, {
+      policy,
+      random: createSeededRandom(`${options.seed}:timing:${episode}`),
+      decisionRandom: createSeededRandom(`${options.seed}:sample:${episode}`),
+      temperature: options.temperature,
+      sample: true,
+      maxMovesPerGame: options.maxMovesPerGame,
+      neuralPlayerIndices: useChampionOpponents
+        ? activePlayerIndices
+        : learningPlayerIndices,
+      samplePlayerIndices: useChampionOpponents
+        ? learningPlayerIndices
+        : undefined,
+      capturePlayerIndices: learningPlayerIndices,
+      policyByPlayer: useChampionOpponents
+        ? (playerIndex) =>
+            learningPlayerSet.has(playerIndex)
+              ? policy
+              : options.opponentPolicy
+        : undefined,
+      maxConsecutiveWaitMoves: options.maxConsecutiveWaitMoves,
+      actionOptions: options.actionOptions,
+    });
+    const returns = getPpoTransitionReturns(rollout, {
+      gamma: options.gamma,
+      localRewardWeight: options.localRewardWeight,
+      waitPenalty: options.waitPenalty,
+      premovePenalty: options.premovePenalty,
+      cyclePenalty: options.cyclePenalty,
+      scoreRewardWeight: options.scoreRewardWeight,
+      pounceRewardWeight: options.pounceRewardWeight,
+    });
+    rawReturns.push(...returns);
+    const advantages = getPpoTransitionAdvantages(
+      rollout,
+      returns,
+      options.advantageBaseline
+    );
+
+    rollout.transitions.forEach((transition, transitionIndex) => {
+      updates.push({
+        candidates: transition.candidates,
+        selectedCandidateIndex: transition.selectedCandidateIndex,
+        oldProbability: transition.selectedProbability,
+        rawAdvantage: advantages[transitionIndex] ?? 0,
+      });
+    });
+
+    trainingPlayerCountTotal += learningPlayerIndices.length;
+    sampledDecisionCountTotal += rollout.transitions.length;
+    finalPointDifferentialTotal += getMeanPlayerPointDifferential(
+      rollout,
+      learningPlayerIndices
+    );
+    const groupMetrics = getRolloutGroupMetrics(rollout, learningPlayerIndices);
+    waitMoveRateTotal += groupMetrics.waitMoveRate;
+    premoveMoveRateTotal += groupMetrics.premoveMoveRate;
+  }
+
+  const advantageStats = applyPpoBatch(policy, updates, {
+    learningRate: options.learningRate,
+    temperature: options.temperature,
+    clipRatio: options.clipRatio,
+    entropyBonus: options.entropyBonus,
+    updateEpochs: options.updateEpochs,
+    shuffleSeed: `${options.seed}:ppo-shuffle`,
+    trainableLayers: options.trainableLayers,
+    normalizeAdvantages: options.normalizeAdvantages,
+    advantageClip: options.advantageClip,
+  });
+  const returnStats = summarizeValues(rawReturns);
+
+  const episodeCount = Math.max(1, options.episodes);
+  return {
+    algorithm: "ppo" as const,
+    opponentMode: options.opponentMode,
+    averageTrainingPlayerCount: trainingPlayerCountTotal / episodeCount,
+    episodes: options.episodes,
+    counterfactualScannedEpisodes: 0,
+    counterfactualStoppedAfterLabelTarget: false,
+    averageFinalPointDifferential: finalPointDifferentialTotal / episodeCount,
+    averageTeacherBaselinePointDifferential: 0,
+    averageGreedyBaselinePointDifferential: 0,
+    averageBaselinePointDifferential: 0,
+    averageBaselineAdjustedReturn: 0,
+    averageSampleMinusGreedyReturn: 0,
+    averageSampledDecisionCount: sampledDecisionCountTotal / episodeCount,
+    averageCounterfactualScannedDecisionCount: 0,
+    averageExploratoryDecisionCount: sampledDecisionCountTotal / episodeCount,
+    averageCounterfactualReturnGap: 0,
+    averageCounterfactualCandidateCount: 0,
+    counterfactualTrainingUpdates: 0,
+    counterfactualUpdateCount: 0,
+    counterfactualMaxReturnGapSkippedCount: 0,
+    counterfactualBehaviorGapSkippedCount: 0,
+    counterfactualBehaviorConfidenceSkippedCount: 0,
+    counterfactualBehaviorWinRateSkippedCount: 0,
+    counterfactualPolicyMarginSkippedCount: 0,
+    counterfactualPolicyChangeSkippedCount: 0,
+    counterfactualConfidenceSkippedCount: 0,
+    counterfactualTransitionBudgetSkippedCount: 0,
+    counterfactualScoreGapSkippedCount: 0,
+    counterfactualScoreGapBudgetSkippedCount: 0,
+    counterfactualMovePairBudgetSkippedCount: 0,
+    counterfactualMovePairIncludedSkippedCount: 0,
+    counterfactualMovePairExcludedSkippedCount: 0,
+    counterfactualBehaviorMoveTypeSkippedCount: 0,
+    counterfactualMoveTypeMismatchSkippedCount: 0,
+    counterfactualMoveTypeMatchSkippedCount: 0,
+    counterfactualValidationSkippedCount: 0,
+    counterfactualScoreReturnGapSkippedCount: 0,
+    counterfactualPounceProgressGapSkippedCount: 0,
+    counterfactualFeatureTieSkippedCount: 0,
+    counterfactualConnectorCycleSkippedCount: 0,
+    counterfactualWeakConnectorCycleSkippedCount: 0,
+    counterfactualUsefulCycleSkippedCount: 0,
+    counterfactualAcceptedMovePairCounts: {},
+    counterfactualAcceptedMovePairSummaries: [],
+    averageCounterfactualScoreGap: 0,
+    averageCounterfactualBehaviorWinRate: 0,
+    averageCounterfactualValidationReturnGap: 0,
+    averageCounterfactualValidationWinRate: 0,
+    counterfactualAveragePairWeight: 0,
+    counterfactualAnchorExamples: 0,
+    counterfactualAnchorUpdates: 0,
+    counterfactualBehaviorCorrectionUpdates: 0,
+    counterfactualConnectorAnchorExamples: 0,
+    counterfactualConnectorAnchorUpdates: 0,
+    counterfactualMoveTypeAnchorExamples: 0,
+    counterfactualMoveTypeAnchorUpdates: 0,
+    counterfactualPolicyShift: createEmptyCounterfactualPolicyShiftStats(),
+    ppoClipRatio: options.clipRatio,
+    ppoEntropyBonus: options.entropyBonus,
+    ppoAverageEntropy: advantageStats.averageEntropy,
+    ppoAverageApproximateKl: advantageStats.averageApproximateKl,
+    ppoClippedUpdateRate: advantageStats.clippedUpdateRate,
+    ppoAverageReturn: returnStats.mean,
+    ppoReturnStdDev: returnStats.stdDev,
+    ppoAverageWaitMoveRate: waitMoveRateTotal / episodeCount,
+    ppoAveragePremoveMoveRate: premoveMoveRateTotal / episodeCount,
+    ppoAdvantageBaseline: options.advantageBaseline,
+    averagePolicyUpdates: updates.length / episodeCount,
+    averageGradientUpdates: advantageStats.appliedUpdates / episodeCount,
     averageRawAdvantage: advantageStats.mean,
     rawAdvantageStdDev: advantageStats.stdDev,
   };
@@ -3425,6 +3704,92 @@ function applyPolicyGradientBatch(
     moveTypeAnchorExamples: 0,
     moveTypeAnchorUpdates: 0,
     policyShift: createEmptyCounterfactualPolicyShiftStats(),
+  };
+}
+
+function applyPpoBatch(
+  policy: NeuralActionRankingPolicy,
+  updates: PolicyGradientUpdate[],
+  options: {
+    learningRate: number;
+    temperature: number;
+    clipRatio: number;
+    entropyBonus: number;
+    updateEpochs: number;
+    shuffleSeed: string;
+    trainableLayers: "all" | "output";
+    normalizeAdvantages: boolean;
+    advantageClip: number;
+  }
+) {
+  const mean =
+    updates.length === 0
+      ? 0
+      : updates.reduce((sum, update) => sum + update.rawAdvantage, 0) /
+        updates.length;
+  const variance =
+    updates.length <= 1
+      ? 0
+      : updates.reduce((sum, update) => {
+          const delta = update.rawAdvantage - mean;
+          return sum + delta * delta;
+        }, 0) /
+        (updates.length - 1);
+  const stdDev = Math.sqrt(variance);
+  const scale = options.normalizeAdvantages
+    ? Math.max(1e-6, stdDev)
+    : 20;
+  const clip = Math.max(0, options.advantageClip);
+  const updateEpochs = Math.max(1, Math.floor(options.updateEpochs));
+  const random = createSeededRandom(options.shuffleSeed);
+  let appliedUpdates = 0;
+  let clippedUpdates = 0;
+  let entropyTotal = 0;
+  let approximateKlTotal = 0;
+  let measuredUpdates = 0;
+
+  for (let epoch = 0; epoch < updateEpochs; epoch++) {
+    shuffleCopy(updates, random).forEach((update) => {
+      const centered = options.normalizeAdvantages
+        ? update.rawAdvantage - mean
+        : update.rawAdvantage;
+      const normalized = centered / scale;
+      const advantage =
+        clip > 0 ? Math.max(-clip, Math.min(clip, normalized)) : normalized;
+      const result = policy.trainClippedPolicyGradient(
+        update.candidates,
+        update.selectedCandidateIndex,
+        advantage,
+        update.oldProbability ?? 1,
+        options.learningRate,
+        {
+          temperature: options.temperature,
+          clipRatio: options.clipRatio,
+          entropyBonus: options.entropyBonus,
+          trainableLayers: options.trainableLayers,
+        }
+      );
+      if (result.applied) {
+        appliedUpdates += 1;
+      }
+      if (result.clipped) {
+        clippedUpdates += 1;
+      }
+      entropyTotal += result.entropy;
+      approximateKlTotal += result.approximateKl;
+      measuredUpdates += 1;
+    });
+  }
+
+  return {
+    mean,
+    stdDev,
+    appliedUpdates,
+    averageEntropy: measuredUpdates === 0 ? 0 : entropyTotal / measuredUpdates,
+    averageApproximateKl:
+      measuredUpdates === 0 ? 0 : approximateKlTotal / measuredUpdates,
+    clippedUpdateRate:
+      measuredUpdates === 0 ? 0 : clippedUpdates / measuredUpdates,
   };
 }
 
@@ -5504,6 +5869,102 @@ function getDiscountedLocalRewardReturns(
   return returns;
 }
 
+function getPpoTransitionReturns(
+  rollout: RolloutResult,
+  options: {
+    gamma: number;
+    localRewardWeight: number;
+    waitPenalty: number;
+    premovePenalty: number;
+    cyclePenalty: number;
+    scoreRewardWeight: number;
+    pounceRewardWeight: number;
+  }
+): number[] {
+  const gamma = Math.max(0, Math.min(1, options.gamma));
+  const returns = Array.from({ length: rollout.transitions.length }, () => 0);
+  const runningReturnByPlayer = new Map<number, number>();
+
+  rollout.finalPointDifferentials.forEach((pointDifferential, playerIndex) => {
+    const score = rollout.finalScores[playerIndex] ?? 0;
+    const pounceRemaining = rollout.finalPounceCounts[playerIndex] ?? 0;
+    runningReturnByPlayer.set(
+      playerIndex,
+      pointDifferential +
+        options.scoreRewardWeight * score -
+        options.pounceRewardWeight * pounceRemaining
+    );
+  });
+
+  for (let index = rollout.transitions.length - 1; index >= 0; index--) {
+    const transition = rollout.transitions[index];
+    const selectedMove =
+      transition.candidates[transition.selectedCandidateIndex]?.move;
+    const stepReward =
+      options.localRewardWeight * transition.localReward -
+      getPpoMovePenalty(selectedMove, options);
+    const runningReturn =
+      stepReward + gamma * (runningReturnByPlayer.get(transition.playerIndex) ?? 0);
+    returns[index] =
+      runningReturn -
+      (transition.pointDifferentialBefore +
+        options.scoreRewardWeight * transition.scoreBefore -
+        options.pounceRewardWeight * transition.pounceRemainingBefore);
+    runningReturnByPlayer.set(transition.playerIndex, runningReturn);
+  }
+
+  return returns;
+}
+
+function getPpoTransitionAdvantages(
+  rollout: RolloutResult,
+  returns: readonly number[],
+  baselineMode: PpoAdvantageBaselineMode
+): number[] {
+  if (baselineMode !== "trajectory") {
+    return returns.slice();
+  }
+
+  const statsByPlayer = new Map<number, { total: number; count: number }>();
+  rollout.transitions.forEach((transition, index) => {
+    const value = returns[index] ?? 0;
+    const stats =
+      statsByPlayer.get(transition.playerIndex) ?? { total: 0, count: 0 };
+    stats.total += value;
+    stats.count += 1;
+    statsByPlayer.set(transition.playerIndex, stats);
+  });
+
+  return returns.map((value, index) => {
+    const playerIndex = rollout.transitions[index]?.playerIndex;
+    const stats =
+      playerIndex == null ? undefined : statsByPlayer.get(playerIndex);
+    const baseline =
+      stats == null || stats.count === 0 ? 0 : stats.total / stats.count;
+    return value - baseline;
+  });
+}
+
+function getPpoMovePenalty(
+  move: Move | undefined,
+  options: {
+    waitPenalty: number;
+    premovePenalty: number;
+    cyclePenalty: number;
+  }
+): number {
+  if (move?.type === "wait") {
+    return Math.max(0, options.waitPenalty);
+  }
+  if (move?.type === "premove") {
+    return Math.max(0, options.premovePenalty);
+  }
+  if (move?.type === "cycle" || move?.type === "flip_deck") {
+    return Math.max(0, options.cyclePenalty);
+  }
+  return 0;
+}
+
 export function evaluateNeuralPolicy(
   policy: NeuralActionRankingPolicy,
   options: {
@@ -6104,6 +6565,7 @@ function runPolicyRollout(
     basicMoveProvider?: BasicMoveProvider;
     actionOptions?: ActionRankingOptions;
     initialHands?: readonly CursorState[];
+    maxConsecutiveWaitMoves?: number;
   }
 ): RolloutResult {
   const board = deepClone(startBoard);
@@ -6130,6 +6592,11 @@ function runPolicyRollout(
   const transitions: RolloutTransition[] = [];
   const moveTypeCountsByPlayer = board.players.map(() => createMoveTypeCounts());
   const hands = createSimulationHands(board, options.initialHands);
+  const maxConsecutiveWaitMoves = Math.max(
+    0,
+    Math.floor(options.maxConsecutiveWaitMoves ?? 0)
+  );
+  let consecutiveWaitMoves = 0;
 
   board.isActive = true;
   board.isDealt = true;
@@ -6188,6 +6655,13 @@ function runPolicyRollout(
       applySimulationMoveResult(board, playerIndex, move, hand, result);
       moveTypeCountsByPlayer[playerIndex][move.type] += 1;
     }
+    consecutiveWaitMoves = move?.type === "wait" ? consecutiveWaitMoves + 1 : 0;
+    if (
+      maxConsecutiveWaitMoves > 0 &&
+      consecutiveWaitMoves >= maxConsecutiveWaitMoves
+    ) {
+      break;
+    }
     cooldowns[playerIndex] += getMoveDelay(move?.type, options.random);
   }
 
@@ -6236,26 +6710,26 @@ function chooseNeuralMove(
   const scoreBefore = getCurrentPointsFromCards(board.players[playerIndex]);
   const pounceRemainingBefore =
     board.players[playerIndex]?.pounceDeck.length ?? 0;
-  const greedy = options.policy.chooseCandidate(candidates, {
-    temperature: 1,
-    random: options.decisionRandom ?? options.random,
-    sample: false,
-  });
-  const selected = options.policy.chooseCandidate(candidates, {
-    temperature: options.temperature,
-    random: options.decisionRandom ?? options.random,
-    sample: options.sample,
-  });
+  const scores = candidates.map((candidate) =>
+    options.policy.scoreFeatures(candidate.features)
+  );
+  const probabilities = getSoftmaxProbabilities(scores, options.temperature);
+  const greedyCandidateIndex = getBestScoreIndex(scores);
+  const selectedCandidateIndex = options.sample
+    ? sampleProbabilityIndex(
+        probabilities,
+        options.decisionRandom ?? options.random
+      )
+    : greedyCandidateIndex;
+  const selected = candidates[selectedCandidateIndex];
   if (!selected) {
     return;
   }
 
-  const selectedCandidateIndex = candidates.findIndex(
-    (candidate) => candidate.key === selected.key
+  const selectedProbability = Math.max(
+    1e-12,
+    probabilities[selectedCandidateIndex] ?? 0
   );
-  const greedyCandidateIndex = greedy
-    ? candidates.findIndex((candidate) => candidate.key === greedy.key)
-    : selectedCandidateIndex;
   if (
     selectedCandidateIndex >= 0 &&
     options.captureTransition !== false &&
@@ -6274,6 +6748,9 @@ function chooseNeuralMove(
       candidates,
       selectedCandidateIndex,
       greedyCandidateIndex,
+      selectedProbability,
+      selectedLogProbability: Math.log(selectedProbability),
+      policyEntropy: getProbabilityEntropy(probabilities),
       localReward: selected.immediatePointDifferentialDelta,
     });
   }
@@ -6424,6 +6901,45 @@ function getMoveDelay(
     return 0.62 * jitter;
   }
   return 1.1 * jitter;
+}
+
+function getSoftmaxProbabilities(
+  scores: readonly number[],
+  temperature = 1
+): number[] {
+  if (scores.length === 0) {
+    return [];
+  }
+  const safeTemperature = Math.max(1e-6, temperature);
+  const scaled = scores.map((score) => score / safeTemperature);
+  const maxScore = Math.max(...scaled);
+  const exps = scaled.map((score) => Math.exp(score - maxScore));
+  const total = exps.reduce((sum, value) => sum + value, 0);
+  return exps.map((value) => value / total);
+}
+
+function sampleProbabilityIndex(
+  probabilities: readonly number[],
+  random: () => number
+): number {
+  const roll = random();
+  let cumulative = 0;
+  for (let index = 0; index < probabilities.length; index++) {
+    cumulative += probabilities[index];
+    if (roll <= cumulative) {
+      return index;
+    }
+  }
+  return Math.max(0, probabilities.length - 1);
+}
+
+function getProbabilityEntropy(probabilities: readonly number[]): number {
+  return probabilities.reduce((sum, probability) => {
+    if (probability <= 0) {
+      return sum;
+    }
+    return sum - probability * Math.log(probability);
+  }, 0);
 }
 
 function createMoveTypeCounts(): MoveTypeCounts {

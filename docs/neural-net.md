@@ -102,6 +102,9 @@ features were added, so those new inputs have zero model weights until retrained
 Useful scripts:
 
 - `npm run action-ranking:train`: train imitation / improvement / RL variants.
+- `npm run action-ranking:train-ppo`: run the PPO-style self-play training
+  path. This sets `RL_ALGORITHM=ppo`, `RL_ONLY=1`, and uses the runtime
+  wait/premove action space.
 - `npm run action-ranking:tune`: run imitation/improvement tuning sweeps.
 - `npm run action-ranking:tune-rl`: run RL fine-tuning sweeps.
 - `npm run action-ranking:check-rl-modes`: compare RL mode candidates.
@@ -110,10 +113,66 @@ Useful scripts:
   ablate feature groups and measure how much a model's decisions depend on them.
 - `ts-node --transpile-only scripts/probeEndgameActionRanking.ts`: inspect
   targeted endgame behavior.
+- `npm run action-ranking:probe-slot-tradeoffs`: inspect solitaire-slot
+  tradeoffs such as visible `JC / QH / KC` chains where an immediate center
+  play competes with freeing solitaire capacity.
+- `npm run action-ranking:probe-tactics`: inspect tactical timing probes for
+  ace timing, center-slot scarcity, visible-hand races, pounce pressure, and
+  open-slot pounce tradeoffs.
 
 Important environment knobs include `MODEL_IN`, `MODEL_OUT`, `PLAYERS`,
 `HIDDEN_LAYERS`, `IMITATION_DEALS`, `IMPROVEMENT_STATES`, `RL_EPISODES`,
 `INCLUDE_WAIT`, `INCLUDE_PREMOVE`, and `SEED`.
+
+## PPO-Style Self-Play
+
+`RL_ALGORITHM=ppo` shifts training away from fixed-teacher imitation and toward
+on-policy self-play. It samples moves from the current policy, stores the
+behavior-policy probability for each selected action, then applies clipped
+policy-gradient updates over long-horizon rollout returns. This is closer to the
+OpenAI Five training shape than the older counterfactual mode, while still using
+Pounce's action-ranking model rather than a full recurrent policy/value network.
+
+Useful PPO knobs:
+
+- `RL_ONLY=1`: skip imitation and improvement phases.
+- `RL_INCLUDE_WAIT_ACTIONS=1` and `RL_INCLUDE_PREMOVE_ACTIONS=1`: match runtime
+  neural bot action space.
+- `RL_OPPONENT_MODE=self`: train all seats with the current policy. This is the
+  default when `RL_ALGORITHM=ppo`.
+- `RL_PPO_CLIP`: probability-ratio clip, default `0.2`.
+- `RL_PPO_ENTROPY`: entropy bonus for exploration, default `0.01`.
+- `RL_PPO_GAMMA`: long-horizon discount, default `0.995`.
+- `RL_PPO_WAIT_PENALTY`, `RL_PPO_PREMOVE_PENALTY`, and
+  `RL_PPO_MAX_CONSECUTIVE_WAITS`: guardrails against waiting loops.
+- `RL_PPO_POUNCE_WEIGHT`: terminal shaping for pounce progress, default `0.5`.
+- `RL_PPO_ADVANTAGE_BASELINE=batch|trajectory`: `batch` keeps the historical
+  whole-batch return centering. `trajectory` first subtracts each learning
+  player's mean return within that rollout, which is a lightweight variance
+  reduction step short of a full persistent value-function critic.
+
+A starting long-run command:
+
+```powershell
+$env:MODEL_IN = "shared/models/pounce-action-ranking-cursor-champion.json"
+$env:MODEL_OUT = "shared/models/pounce-action-ranking-ppo-candidate.json"
+$env:RL_ALGORITHM = "ppo"
+$env:RL_ONLY = "1"
+$env:RL_INCLUDE_WAIT_ACTIONS = "1"
+$env:RL_INCLUDE_PREMOVE_ACTIONS = "1"
+$env:RL_EPISODES = "512"
+$env:RL_LR = "0.00002"
+$env:RL_TEMPERATURE = "1.08"
+$env:RL_PPO_EPOCHS = "3"
+$env:RL_PPO_ENTROPY = "0.01"
+$env:RL_PPO_GAMMA = "0.995"
+$env:RL_PPO_ADVANTAGE_BASELINE = "trajectory"
+$env:RL_PPO_WAIT_PENALTY = "0.05"
+$env:RL_PPO_MAX_CONSECUTIVE_WAITS = "20"
+$env:MAX_MOVES = "420"
+$env:EVAL_GAMES = "24"
+npm run action-ranking:train
+```
 
 ## Current Status
 

@@ -299,6 +299,97 @@ export class NeuralActionRankingPolicy {
     );
   }
 
+  trainClippedPolicyGradient(
+    candidates: readonly ActionRankingCandidate[],
+    selectedCandidateIndex: number,
+    advantage: number,
+    oldProbability: number,
+    learningRate: number,
+    options: {
+      temperature?: number;
+      clipRatio?: number;
+      entropyBonus?: number;
+      l2?: number;
+      trainableLayers?: "all" | "output";
+    } = {}
+  ): {
+    applied: boolean;
+    ratio: number;
+    clipped: boolean;
+    entropy: number;
+    approximateKl: number;
+  } {
+    if (
+      candidates.length === 0 ||
+      selectedCandidateIndex < 0 ||
+      selectedCandidateIndex >= candidates.length ||
+      advantage === 0
+    ) {
+      return {
+        applied: false,
+        ratio: 1,
+        clipped: false,
+        entropy: 0,
+        approximateKl: 0,
+      };
+    }
+
+    const temperature = options.temperature ?? 1;
+    const scores = candidates.map((candidate) =>
+      this.scoreFeatures(candidate.features)
+    );
+    const probabilities = softmax(scores, temperature);
+    const currentProbability = Math.max(
+      1e-12,
+      probabilities[selectedCandidateIndex]
+    );
+    const safeOldProbability = Math.max(1e-12, oldProbability);
+    const ratio = currentProbability / safeOldProbability;
+    const clipRatio = Math.max(0, options.clipRatio ?? 0.2);
+    const upper = 1 + clipRatio;
+    const lower = 1 - clipRatio;
+    const clipped =
+      clipRatio > 0 &&
+      ((advantage > 0 && ratio > upper) ||
+        (advantage < 0 && ratio < lower));
+    const entropy = getEntropy(probabilities);
+    const approximateKl =
+      Math.log(safeOldProbability) - Math.log(currentProbability);
+
+    if (!clipped) {
+      this.applyListwiseGradient(
+        candidates,
+        probabilities,
+        selectedCandidateIndex,
+        learningRate,
+        advantage * ratio,
+        options.l2 ?? 0,
+        options.trainableLayers ?? "all"
+      );
+    }
+
+    const entropyBonus = Math.max(0, options.entropyBonus ?? 0);
+    if (entropyBonus > 0) {
+      this.applyEntropyGradient(
+        candidates,
+        probabilities,
+        entropy,
+        learningRate,
+        entropyBonus,
+        options.l2 ?? 0,
+        options.trainableLayers ?? "all"
+      );
+    }
+
+    return {
+      applied: !clipped || entropyBonus > 0,
+      ratio,
+      clipped,
+      entropy,
+      approximateKl,
+    };
+  }
+
   trainRewardTargets(
     examples: readonly ActionRankingImitationExample[],
     options: RewardTargetTrainingOptions = {}
@@ -600,6 +691,28 @@ export class NeuralActionRankingPolicy {
     candidates.forEach((candidate, candidateIndex) => {
       const dScore =
         scale * (probabilities[candidateIndex] - targets[candidateIndex]);
+      this.applyScoreGradient(
+        candidate.features,
+        dScore,
+        learningRate,
+        l2,
+        trainableLayers
+      );
+    });
+  }
+
+  private applyEntropyGradient(
+    candidates: readonly Pick<ActionRankingCandidate, "features">[],
+    probabilities: readonly number[],
+    entropy: number,
+    learningRate: number,
+    entropyBonus: number,
+    l2: number,
+    trainableLayers: "all" | "output"
+  ): void {
+    candidates.forEach((candidate, candidateIndex) => {
+      const probability = Math.max(1e-12, probabilities[candidateIndex] ?? 0);
+      const dScore = entropyBonus * probability * (Math.log(probability) + entropy);
       this.applyScoreGradient(
         candidate.features,
         dScore,
@@ -1322,6 +1435,15 @@ function softmax(scores: readonly number[], temperature = 1): number[] {
   const exps = scaled.map((score) => Math.exp(score - maxScore));
   const total = exps.reduce((sum, value) => sum + value, 0);
   return exps.map((value) => value / total);
+}
+
+function getEntropy(probabilities: readonly number[]): number {
+  return probabilities.reduce((sum, probability) => {
+    if (probability <= 0) {
+      return sum;
+    }
+    return sum - probability * Math.log(probability);
+  }, 0);
 }
 
 function sigmoid(value: number): number {

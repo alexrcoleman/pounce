@@ -21,6 +21,7 @@ const hiddenLayerSizes =
     ? readIntegerListEnv("HIDDEN_LAYERS", readIntegerListEnv("HIDDEN", [48]))
     : resizeHiddenLayerSizes ?? getModelHiddenLayerSizes(initialModel);
 const rlOnly = readBooleanEnv("RL_ONLY", false);
+const rlAlgorithm = readRlAlgorithmEnv("RL_ALGORITHM", "policy_gradient");
 
 const options = {
   playerCount: readIntegerEnv("PLAYERS", 4),
@@ -104,12 +105,33 @@ const options = {
   improvementEpochs: readIntegerEnv("IMPROVEMENT_EPOCHS", 3),
   improvementLearningRate: readNumberEnv("IMPROVEMENT_LR", 0.01),
   improvementTargetTemperature: readNumberEnv("IMPROVEMENT_TEMPERATURE", 4),
+  rlAlgorithm,
   rlEpisodes: readIntegerEnv("RL_EPISODES", 32),
   rlLearningRate: readNumberEnv("RL_LR", 0.001),
   rlTemperature: readNumberEnv("RL_TEMPERATURE", 0.85),
   rlLocalRewardWeight: readNumberEnv("RL_LOCAL_REWARD_WEIGHT", 0.15),
   rlLocalRewardDiscount: readNumberEnv("RL_LOCAL_REWARD_DISCOUNT", 0),
-  rlOpponentMode: readRlOpponentModeEnv("RL_OPPONENT_MODE", "teacher"),
+  rlPpoClipRatio: readNumberEnv("RL_PPO_CLIP", 0.2),
+  rlPpoEntropyBonus: readNumberEnv("RL_PPO_ENTROPY", 0.01),
+  rlPpoGamma: readNumberEnv("RL_PPO_GAMMA", 0.995),
+  rlPpoUpdateEpochs: readIntegerEnv("RL_PPO_EPOCHS", 4),
+  rlPpoWaitPenalty: readNumberEnv("RL_PPO_WAIT_PENALTY", 0.05),
+  rlPpoPremovePenalty: readNumberEnv("RL_PPO_PREMOVE_PENALTY", 0.005),
+  rlPpoCyclePenalty: readNumberEnv("RL_PPO_CYCLE_PENALTY", 0),
+  rlPpoScoreRewardWeight: readNumberEnv("RL_PPO_SCORE_WEIGHT", 0),
+  rlPpoPounceRewardWeight: readNumberEnv("RL_PPO_POUNCE_WEIGHT", 0.5),
+  rlPpoMaxConsecutiveWaitMoves: readIntegerEnv(
+    "RL_PPO_MAX_CONSECUTIVE_WAITS",
+    40
+  ),
+  rlPpoAdvantageBaseline: readPpoAdvantageBaselineEnv(
+    "RL_PPO_ADVANTAGE_BASELINE",
+    "batch"
+  ),
+  rlOpponentMode: readRlOpponentModeEnv(
+    "RL_OPPONENT_MODE",
+    rlAlgorithm === "ppo" ? "self" : "teacher"
+  ),
   rlBaselineMode: readRlBaselineModeEnv("RL_BASELINE_MODE", "teacher"),
   rlCommonRandom: readBooleanEnv("RL_COMMON_RANDOM", true),
   rlCreditMode: readRlCreditModeEnv(
@@ -607,6 +629,28 @@ function readRlOpponentModeEnv(
     return normalized;
   }
   return fallback;
+}
+
+function readRlAlgorithmEnv(
+  name: string,
+  fallback: "policy_gradient" | "ppo"
+): "policy_gradient" | "ppo" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  return value.toLowerCase() === "ppo" ? "ppo" : fallback;
+}
+
+function readPpoAdvantageBaselineEnv(
+  name: string,
+  fallback: "batch" | "trajectory"
+): "batch" | "trajectory" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  return value.toLowerCase() === "trajectory" ? "trajectory" : fallback;
 }
 
 function readRlCreditModeEnv(
