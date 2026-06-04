@@ -1428,7 +1428,12 @@ export function recordRoundSnapshot(
   playerIndex?: number,
   move?: Move
 ): void {
-  if (!room.board.isActive || isRoundStartPending(room.board, now)) {
+  if (
+    room.autoStart ||
+    room.settings.simulationMode ||
+    !room.board.isActive ||
+    isRoundStartPending(room.board, now)
+  ) {
     return;
   }
 
@@ -1443,6 +1448,11 @@ export function recordRoundSnapshot(
 
 function startRoundAnalysis(room: RoomState, now: number): void {
   room.lastRoundAnalysis = null;
+  if (room.autoStart || room.settings.simulationMode) {
+    room.roundSnapshots = [];
+    return;
+  }
+
   room.roundSnapshots = [
     {
       time: now,

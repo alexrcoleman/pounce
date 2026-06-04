@@ -1,4 +1,3 @@
-import { cardEquals } from "./CardUtils";
 import { BoardState, CardState } from "./GameUtils";
 
 type Location = [number, number];
@@ -50,32 +49,53 @@ export function getApproximateCardLocation(
   board: BoardState,
   card: CardState
 ): Location {
-  const pile = board.piles.findIndex((p) => p.some((c) => cardEquals(c, card)));
-  if (pile >= 0) {
-    return getBoardPileLocation(board, pile);
+  for (let pileIndex = 0; pileIndex < board.piles.length; pileIndex++) {
+    const pile = board.piles[pileIndex];
+    for (let cardIndex = 0; cardIndex < pile.length; cardIndex++) {
+      if (cardMatches(pile[cardIndex], card)) {
+        return getBoardPileLocation(board, pileIndex);
+      }
+    }
   }
+
   const playerIdx = card.player;
   const player = board.players[playerIdx];
-  const stackIdx = player.stacks.findIndex((s) =>
-    s.some((c) => cardEquals(c, card))
+  for (let stackIndex = 0; stackIndex < player.stacks.length; stackIndex++) {
+    const stack = player.stacks[stackIndex];
+    for (let cardIndex = 0; cardIndex < stack.length; cardIndex++) {
+      if (cardMatches(stack[cardIndex], card)) {
+        return getPlayerStackLocation(playerIdx, stackIndex, cardIndex);
+      }
+    }
+  }
+
+  for (let cardIndex = 0; cardIndex < player.pounceDeck.length; cardIndex++) {
+    if (cardMatches(player.pounceDeck[cardIndex], card)) {
+      return getPlayerPounceCardLocation(playerIdx, cardIndex);
+    }
+  }
+
+  for (let cardIndex = 0; cardIndex < player.deck.length; cardIndex++) {
+    if (cardMatches(player.deck[cardIndex], card)) {
+      return getPlayerDeckLocation(playerIdx, cardIndex);
+    }
+  }
+
+  for (let cardIndex = 0; cardIndex < player.flippedDeck.length; cardIndex++) {
+    if (cardMatches(player.flippedDeck[cardIndex], card)) {
+      return getPlayerFlippedDeckLocation(playerIdx, cardIndex);
+    }
+  }
+
+  return getPlayerFlippedDeckLocation(playerIdx, -1);
+}
+
+function cardMatches(left: CardState, right: CardState): boolean {
+  return (
+    left.player === right.player &&
+    left.suit === right.suit &&
+    left.value === right.value
   );
-  if (stackIdx >= 0) {
-    const cardIndex = player.stacks[stackIdx].findIndex((c) =>
-      cardEquals(c, card)
-    );
-    return getPlayerStackLocation(playerIdx, stackIdx, cardIndex);
-  }
-  if (player.pounceDeck.some((c) => cardEquals(c, card))) {
-    const cardIndex = player.pounceDeck.findIndex((c) => cardEquals(c, card));
-    return getPlayerPounceCardLocation(playerIdx, cardIndex);
-  }
-  if (player.deck.some((c) => cardEquals(c, card))) {
-    const cardIndex = player.deck.findIndex((c) => cardEquals(c, card));
-    return getPlayerDeckLocation(playerIdx, cardIndex);
-  }
-  // must be in flipped deck
-  const cardIndex = player.flippedDeck.findIndex((c) => cardEquals(c, card));
-  return getPlayerFlippedDeckLocation(playerIdx, cardIndex);
 }
 export function getPlayerLocation(
   playerIndex: number,
@@ -102,6 +122,17 @@ export function getBoardPileLocation(
     550 + board.pileLocs[index][0] * FIELD_PILE_AREA_SIZE,
     50 + board.pileLocs[index][1] * FIELD_PILE_AREA_SIZE,
   ];
+}
+
+export function getBoardPileDistanceToLocation(
+  board: BoardState,
+  index: number,
+  location: readonly [number, number]
+): number {
+  const pileLoc = board.pileLocs[index];
+  const dx = 550 + pileLoc[0] * FIELD_PILE_AREA_SIZE - location[0];
+  const dy = 50 + pileLoc[1] * FIELD_PILE_AREA_SIZE - location[1];
+  return Math.sqrt(dx * dx + dy * dy);
 }
 
 export function getBoardPileCardLocation(

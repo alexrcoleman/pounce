@@ -19,6 +19,7 @@
     "action-ranking:tournament": "ts-node --transpile-only scripts/runActionRankingTournament.ts",
     "action-ranking:diagnose": "ts-node --transpile-only scripts/diagnoseActionRankingPolicyDifferences.ts",
     "action-ranking:trace-divergences": "ts-node --transpile-only scripts/traceActionRankingPolicyDivergences.ts",
+    "simulation:benchmark": "ts-node --transpile-only scripts/benchmarkSimulation.ts",
     "action-ranking:audit-labels": "ts-node --transpile-only scripts/auditActionRankingLabels.ts",
     "action-ranking:audit-rl-labels": "ts-node --transpile-only scripts/auditActionRankingRlLabels.ts",
     "action-ranking:tune": "ts-node --transpile-only scripts/tuneActionRankingPolicy.ts",
@@ -27,6 +28,7 @@
     "start": "PORT=3000 next start -p 3000",
     "build-socketio": "echo 'no build needed for socketio server'",
     "start-socketio": "PORT=3001 ts-node --transpile-only server/socketioMain.ts",
+    "test:action-ranking-policy": "ts-node --transpile-only shared/ActionRankingPolicy.test.ts",
     "test:pounce-rush": "ts-node --transpile-only shared/PounceRush.test.ts",
     "lint": "next lint"
   },

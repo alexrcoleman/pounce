@@ -1,17 +1,18 @@
 import type { CardState } from "./GameUtils";
 
-const black = ["clubs", "spades"];
-
 export function peek(cards: CardState[]): CardState | undefined {
-  return cards[cards.length - 1] ?? undefined;
+  return cards[cards.length - 1];
 }
 
 export function cardEquals(
   a: CardState | null | undefined,
   b: CardState | null | undefined
 ) {
+  if (a == null || b == null) {
+    return a == null && b == null;
+  }
   return (
-    a?.player === b?.player && a?.suit === b?.suit && a?.value === b?.value
+    a.player === b.player && a.suit === b.suit && a.value === b.value
   );
 }
 
@@ -24,7 +25,7 @@ export function canMoveToSolitairePile(
   }
   const destTopCard = peek(solitairePile);
   if (destTopCard != null) {
-    if (black.includes(destTopCard.suit) === black.includes(card.suit)) {
+    if (isBlackSuit(destTopCard.suit) === isBlackSuit(card.suit)) {
       return false;
     }
     if (destTopCard.value !== card.value + 1) {
@@ -50,4 +51,8 @@ export function couldMatch(a: CardState, b: CardState): boolean {
       (b.suit === "spades" || b.suit === "clubs" ? 1 : 0)) ===
     0
   );
+}
+
+function isBlackSuit(suit: CardState["suit"]): boolean {
+  return suit === "clubs" || suit === "spades";
 }

@@ -13,10 +13,10 @@ import {
   peek,
 } from "./CardUtils";
 
-import { getDistance, type Move } from "./MoveHandler";
+import type { Move } from "./MoveHandler";
 import {
   getApproximateCardLocation,
-  getBoardPileLocation,
+  getBoardPileDistanceToLocation,
   getPlayerLocation,
 } from "./CardLocations";
 
@@ -70,25 +70,66 @@ export function clearAIMoveProvider(): void {
 }
 
 class AIStrategy {
-  private sortedPiles: (readonly [CardState[], number])[] = [];
+  private centerPileBySuitValue = new Int8Array(56);
+  private centerPileDistanceBySuitValue = new Float64Array(56);
   constructor(
     private settings: StrategySettings,
     private boardState: BoardState,
     private player: PlayerState,
+    private playerIndex: number,
     private cursor: CursorState
   ) {
-    this.sortedPiles = boardState.piles
-      .map((pile, index) => [pile, index] as const)
-      .sort((a, b) => {
-        // Get a rough idea of the closest target before we grab something, but update once we have grabbed something
-        const c =
-          cursor.location && isCardCursorLocation(cursor.location)
-          ? getApproximateCardLocation(boardState, cursor.location)
-          : getPlayerLocation(boardState.players.indexOf(player));
-        const p1 = getBoardPileLocation(boardState, a[1]);
-        const p2 = getBoardPileLocation(boardState, b[1]);
-        return getDistance(p1, c) - getDistance(p2, c);
-      });
+    const cursorPosition =
+      cursor.location && isCardCursorLocation(cursor.location)
+        ? getApproximateCardLocation(boardState, cursor.location)
+        : getPlayerLocation(playerIndex);
+    this.indexPlayableCenterPiles(cursorPosition);
+  }
+
+  private indexPlayableCenterPiles(
+    cursorPosition: readonly [number, number]
+  ): void {
+    this.boardState.piles.forEach((pile, index) => {
+      const distance = getBoardPileDistanceToLocation(
+        this.boardState,
+        index,
+        cursorPosition
+      );
+      const topCard = peek(pile);
+      if (!topCard) {
+        for (let suitIndex = 0; suitIndex < 4; suitIndex++) {
+          this.indexCenterPileDestination(suitIndex, 1, index, distance);
+        }
+        return;
+      }
+
+      const nextValue = topCard.value + 1;
+      if (nextValue > 13) {
+        return;
+      }
+      this.indexCenterPileDestination(
+        getSuitIndex(topCard.suit),
+        nextValue,
+        index,
+        distance
+      );
+    });
+  }
+
+  private indexCenterPileDestination(
+    suitIndex: number,
+    value: number,
+    pileIndex: number,
+    distance: number
+  ): void {
+    const key = getSuitValueIndex(suitIndex, value);
+    if (
+      this.centerPileBySuitValue[key] === 0 ||
+      distance < this.centerPileDistanceBySuitValue[key]
+    ) {
+      this.centerPileBySuitValue[key] = pileIndex + 1;
+      this.centerPileDistanceBySuitValue[key] = distance;
+    }
   }
 
   private getPounceToCenterMove(
@@ -389,17 +430,15 @@ class AIStrategy {
     const player = this.player;
     const boardState = this.boardState;
 
-    const moves: (Move | undefined)[] = [
-      this.getPounceToCenterMove(boardState, player),
-      this.getPounceToSolitaireMove(player, boardState),
-      this.getSolitaireToCenterMove(boardState, player),
-      this.getDeckToCenterMove(boardState, player),
-      this.getSolitaireToSolitaireMove(player, boardState),
-      this.getDeckToSolitaireMove(player, boardState),
-      this.settings.disableCycling ? undefined : { type: "cycle" },
-    ];
-
-    return moves.filter(Boolean)[0];
+    return (
+      this.getPounceToCenterMove(boardState, player) ??
+      this.getPounceToSolitaireMove(player, boardState) ??
+      this.getSolitaireToCenterMove(boardState, player) ??
+      this.getDeckToCenterMove(boardState, player) ??
+      this.getSolitaireToSolitaireMove(player, boardState) ??
+      this.getDeckToSolitaireMove(player, boardState) ??
+      (this.settings.disableCycling ? undefined : { type: "cycle" })
+    );
   }
 
   private getCentralPileForCardIndex(card: CardState | undefined) {
@@ -407,10 +446,26 @@ class AIStrategy {
       return -1;
     }
     return (
-      this.sortedPiles.find(([pile]) => canPlayOnCenterPile(pile, card))?.[1] ??
-      -1
+      this.centerPileBySuitValue[
+        getSuitValueIndex(getSuitIndex(card.suit), card.value)
+      ] -
+      1
     );
   }
+}
+
+function getSuitIndex(suit: CardState["suit"]): number {
+  if (suit === "hearts") {
+    return 0;
+  }
+  if (suit === "spades") {
+    return 1;
+  }
+  return suit === "diamonds" ? 2 : 3;
+}
+
+function getSuitValueIndex(suitIndex: number, value: number): number {
+  return suitIndex * 14 + value;
 }
 
 export function getCurrentAIDragMove(
@@ -693,6 +748,10 @@ const playerStyles: AIStrategyProfile[] = [
   // },
 ];
 
+const defaultPlayerStyleRotation = playerStyles.filter(
+  (style) => style.includeInDefaultRotation !== false
+);
+
 export const analysisStrategyProfiles: AIStrategyProfile[] = [
   playerStyles[0],
   playerStyles[3],
@@ -704,11 +763,10 @@ export const defaultHumanAnalysisStrategyProfile = playerStyles[3];
 export function getAIPlayerStrategyProfileByBotIndex(
   botIndex: number
 ): AIStrategyProfile {
-  const defaultPlayerStyles = playerStyles.filter(
-    (style) => style.includeInDefaultRotation !== false
-  );
   return (
-    defaultPlayerStyles[Math.max(0, botIndex) % defaultPlayerStyles.length] ??
+    defaultPlayerStyleRotation[
+      Math.max(0, botIndex) % defaultPlayerStyleRotation.length
+    ] ??
     playerStyles[0]
   );
 }
@@ -729,7 +787,13 @@ export function getBasicAIMoveForStyle(
     return;
   }
 
-  const ai = new AIStrategy(playerStyle.strategy, boardState, player, cursor);
+  const ai = new AIStrategy(
+    playerStyle.strategy,
+    boardState,
+    player,
+    playerIndex,
+    cursor
+  );
   return ai.getMove();
 }
 
@@ -741,15 +805,19 @@ export function getAIPlayerStrategyProfile(
   if (!player) {
     return defaultHumanAnalysisStrategyProfile;
   }
-  const botIndex = boardState.players
-    .filter((p) => p.socketId == null)
-    .indexOf(player);
 
-  if (botIndex < 0) {
-    return defaultHumanAnalysisStrategyProfile;
+  let botIndex = 0;
+  for (let index = 0; index < boardState.players.length; index++) {
+    if (boardState.players[index].socketId != null) {
+      continue;
+    }
+    if (index === playerIndex) {
+      return getAIPlayerStrategyProfileByBotIndex(botIndex);
+    }
+    botIndex += 1;
   }
 
-  return getAIPlayerStrategyProfileByBotIndex(botIndex);
+  return defaultHumanAnalysisStrategyProfile;
 }
 
 export function getBasicAIMove(
@@ -763,6 +831,7 @@ export function getBasicAIMove(
     strategyProfile.strategy,
     boardState,
     player,
+    playerIndex,
     cursor
   );
   return ai.getMove();
