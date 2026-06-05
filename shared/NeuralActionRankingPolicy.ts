@@ -947,7 +947,8 @@ function isPairwiseTacticalFeature(
       featureName.startsWith("own.stockLookahead") ||
       featureName.startsWith("own.waste") ||
       featureName === "own.stockFraction" ||
-      featureName === "own.wasteFraction"
+      featureName === "own.wasteFraction" ||
+      featureName === "own.playedDeckCardThisCycle"
     );
   }
 

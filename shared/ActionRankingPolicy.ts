@@ -50,6 +50,7 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "own.pounceCount",
   "own.deckCount",
   "own.flippedCount",
+  "own.playedDeckCardThisCycle",
   "own.wasteCanPlaySoon",
   "own.wasteOwnSolitaireDestinationCount",
   "own.wasteOwnSolitaireConnectorForPounce",
@@ -325,8 +326,8 @@ export function enumerateLegalMoves(
     }
   }
 
-  if (options.includeFlipDeck) {
-    if (player.deck.length > 0 || player.flippedDeck.length > 0) {
+  if (options.includeFlipDeck ?? true) {
+    if (player.deck.length > 0) {
       moves.push({ type: "flip_deck" });
     }
   }
@@ -683,6 +684,7 @@ function buildActionRankingFeatures(
     normalize(player?.pounceDeck.length, 13),
     normalize(player?.deck.length, 35),
     normalize(player?.flippedDeck.length, 35),
+    bool(player?.playedDeckCardThisCycle),
     bool(deckContext.wasteCanPlaySoon),
     normalize(deckContext.wasteOwnSolitaireDestinationCount, 4),
     bool(deckContext.wasteOwnSolitaireConnectorForPounce),
@@ -1082,7 +1084,7 @@ function getCycleShapeFeatures(
     lookaheadOwnSolitaireConnectorForPounceReach: 0,
     lookaheadPounceConnectorReach: 0,
   };
-  if (!player || move.type !== "cycle") {
+  if (!player || (move.type !== "cycle" && move.type !== "flip_deck")) {
     return emptyFeatures;
   }
 
@@ -1142,7 +1144,10 @@ function getCycleShapeFeatures(
     };
   }
 
-  const cardsAdvanced = Math.min(3, player.deck.length);
+  const cardsAdvanced =
+    move.type === "flip_deck"
+      ? player.deck.length
+      : Math.min(3, player.deck.length);
   const revealedCard = peek(player.deck.slice(-cardsAdvanced).reverse());
   const pounceCard = peek(player.pounceDeck);
   const solitaireDestinations = revealedCard
@@ -1177,7 +1182,10 @@ function getCycleShapeFeatures(
         ? getConnectorCloseness(revealedCard, pounceCard)
         : 0,
     resetsWaste: false,
-    stockFractionAfter: (player.deck.length - cardsAdvanced) / total,
+    stockFractionAfter:
+      move.type === "flip_deck"
+        ? 0
+        : (player.deck.length - cardsAdvanced) / total,
     cardsAdvanced,
     resetRevealedCard: undefined,
     resetRevealedCenterPlayable: false,

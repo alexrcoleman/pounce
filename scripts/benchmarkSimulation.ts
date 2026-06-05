@@ -38,10 +38,12 @@ const maxMovesPerGame = readIntegerEnv("MAX_MOVES", 1800);
 const seed = process.env.SEED ?? "simulation-benchmark";
 const includeWait = readBooleanEnv("INCLUDE_WAIT", false);
 const includePremove = readBooleanEnv("INCLUDE_PREMOVE", false);
+const includeFlipDeck = readBooleanEnv("INCLUDE_FLIP_DECK", true);
 
 const actionOptions: ActionRankingOptions = {
   includeWait,
   includePremove,
+  includeFlipDeck,
 };
 
 for (let index = 0; index < warmupGames; index++) {

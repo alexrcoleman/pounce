@@ -118,6 +118,10 @@ const options = {
   rlPpoWaitPenalty: readNumberEnv("RL_PPO_WAIT_PENALTY", 0.05),
   rlPpoPremovePenalty: readNumberEnv("RL_PPO_PREMOVE_PENALTY", 0.005),
   rlPpoCyclePenalty: readNumberEnv("RL_PPO_CYCLE_PENALTY", 0),
+  rlPpoFlipDeckPenalty: readNumberEnv(
+    "RL_PPO_FLIP_DECK_PENALTY",
+    readNumberEnv("RL_PPO_CYCLE_PENALTY", 0)
+  ),
   rlPpoScoreRewardWeight: readNumberEnv("RL_PPO_SCORE_WEIGHT", 0),
   rlPpoPounceRewardWeight: readNumberEnv("RL_PPO_POUNCE_WEIGHT", 0.5),
   rlPpoMaxConsecutiveWaitMoves: readIntegerEnv(
@@ -499,6 +503,7 @@ function readActionOptionsEnv() {
   return {
     includeWait: readBooleanEnv("RL_INCLUDE_WAIT_ACTIONS", false),
     includePremove: readBooleanEnv("RL_INCLUDE_PREMOVE_ACTIONS", false),
+    includeFlipDeck: readBooleanEnv("RL_INCLUDE_FLIP_DECK_ACTIONS", true),
   };
 }
 

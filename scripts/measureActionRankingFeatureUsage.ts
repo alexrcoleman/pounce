@@ -52,6 +52,7 @@ const statePolicy = new NeuralActionRankingPolicy(readModel(stateModelPath));
 const actionOptions: ActionRankingOptions = {
   includeWait: readBooleanEnv("RL_INCLUDE_WAIT_ACTIONS", false),
   includePremove: readBooleanEnv("RL_INCLUDE_PREMOVE_ACTIONS", false),
+  includeFlipDeck: readBooleanEnv("RL_INCLUDE_FLIP_DECK_ACTIONS", true),
 };
 const playerCounts = readIntegerListEnv("FEATURE_USAGE_PLAYERS", [2, 4]);
 const deals = readIntegerEnv("FEATURE_USAGE_DEALS", 96);

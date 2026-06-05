@@ -76,6 +76,7 @@ export type PlayerState = {
   pounceDeck: CardState[];
   deck: CardState[];
   flippedDeck: CardState[];
+  playedDeckCardThisCycle?: boolean;
   totalPoints: number;
   currentPoints: number;
   fairHandExpectedScoreTotal?: number;
@@ -216,6 +217,7 @@ function createPlayer(
     pounceDeck: [],
     deck: createShuffledDeck(index),
     flippedDeck: [],
+    playedDeckCardThisCycle: false,
     totalPoints: 0,
     currentPoints: 0,
     scores: [],
@@ -396,6 +398,7 @@ export function resetBoard(boardState: BoardState, decks?: CardState[][]) {
       decks?.[index]?.map((c) => ({ ...c, player: index })) ??
       createShuffledDeck(index);
     player.flippedDeck = [];
+    player.playedDeckCardThisCycle = false;
     player.pounceDeck = [];
     player.isReadyForRound = false;
     if (boardState.isActive) {
@@ -415,6 +418,7 @@ export function rotateDecks(board: BoardState) {
   board.players.forEach((player) => {
     player.deck.push(...player.flippedDeck.reverse());
     player.flippedDeck = [];
+    player.playedDeckCardThisCycle = false;
     player.deck.unshift(player.deck.pop() as CardState);
   });
 }

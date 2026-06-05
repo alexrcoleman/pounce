@@ -1,8 +1,12 @@
 import assert from "assert";
 import {
+  ACTION_RANKING_FEATURE_NAMES,
+  enumerateActionRankingCandidates,
+  enumerateLegalMoves,
   getMoveImmediatePointDelta,
 } from "./ActionRankingPolicy";
-import type { Move } from "./MoveHandler";
+import { createBoard, type BoardState, type CardState } from "./GameUtils";
+import { executeMove, type Move } from "./MoveHandler";
 
 const expectedMovesByType = {
   c2c: [
@@ -38,4 +42,97 @@ Object.values(expectedMovesByType)
     );
   });
 
-console.log("Validated action-ranking immediate point deltas.");
+const deckCycleFeatureIndex = ACTION_RANKING_FEATURE_NAMES.indexOf(
+  "own.playedDeckCardThisCycle"
+);
+assert.notStrictEqual(deckCycleFeatureIndex, -1);
+
+{
+  const board = createActiveBoard();
+  const player = board.players[0];
+  player.deck = [card("hearts", 2), card("spades", 3)];
+  player.flippedDeck = [card("diamonds", 4)];
+
+  assert(
+    enumerateLegalMoves(board, 0).some((move) => move.type === "flip_deck"),
+    "flip_deck should be a default neural action when stock cards remain"
+  );
+  assert(
+    !enumerateLegalMoves(board, 0, { includeFlipDeck: false }).some(
+      (move) => move.type === "flip_deck"
+    ),
+    "includeFlipDeck: false should suppress the full-deck flip action"
+  );
+
+  player.deck = [];
+  assert(
+    !enumerateLegalMoves(board, 0).some((move) => move.type === "flip_deck"),
+    "flip_deck should not duplicate the cycle reset when only waste remains"
+  );
+}
+
+{
+  const board = createActiveBoard();
+  const player = board.players[0];
+  player.deck = [card("hearts", 2), card("spades", 3)];
+  player.playedDeckCardThisCycle = true;
+
+  const candidates = enumerateActionRankingCandidates(board, 0);
+  assert(candidates.length > 0);
+  candidates.forEach((candidate) => {
+    assert.strictEqual(
+      candidate.features.length,
+      ACTION_RANKING_FEATURE_NAMES.length,
+      `${candidate.key} feature vector should match feature names`
+    );
+  });
+  const cycle = candidates.find((candidate) => candidate.move.type === "cycle");
+  assert(cycle);
+  assert.strictEqual(cycle.features[deckCycleFeatureIndex], 1);
+}
+
+{
+  const board = createActiveBoard();
+  const player = board.players[0];
+  player.flippedDeck = [card("hearts", 1)];
+
+  const playResult = executeMove(board, 0, {
+    type: "c2c",
+    source: { type: "deck" },
+    dest: 0,
+  });
+  assert(playResult?.boardChanged);
+  assert.strictEqual(player.playedDeckCardThisCycle, true);
+
+  player.deck = [];
+  player.flippedDeck = [card("spades", 2)];
+  const resetResult = executeMove(board, 0, { type: "cycle" });
+  assert(resetResult?.boardChanged);
+  assert.strictEqual(player.playedDeckCardThisCycle, false);
+}
+
+console.log("Validated action-ranking policy helpers.");
+
+function createActiveBoard(): BoardState {
+  const board = createBoard(2);
+  board.isActive = true;
+  board.isDealt = true;
+  board.roundStartsAt = undefined;
+  board.players.forEach((player, playerIndex) => {
+    player.pounceDeck = [card("clubs", 13, playerIndex)];
+    player.deck = [];
+    player.flippedDeck = [];
+    player.stacks = [[], [], [], []];
+    player.playedDeckCardThisCycle = false;
+    player.currentPoints = -26;
+  });
+  return board;
+}
+
+function card(
+  suit: CardState["suit"],
+  value: CardState["value"],
+  player = 0
+): CardState {
+  return { suit, value, player };
+}

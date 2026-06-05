@@ -890,6 +890,7 @@ function readActionOptionsEnv() {
   return {
     includeWait: readBooleanEnv("RL_INCLUDE_WAIT_ACTIONS", false),
     includePremove: readBooleanEnv("RL_INCLUDE_PREMOVE_ACTIONS", false),
+    includeFlipDeck: readBooleanEnv("RL_INCLUDE_FLIP_DECK_ACTIONS", true),
   };
 }
 
@@ -1533,6 +1534,14 @@ function summarizeComparisons(comparisons: ModelComparisonResult[]) {
     averageModelBCycleMoveRate: weightedMean(
       comparisons,
       "averageModelBCycleMoveRate"
+    ),
+    averageModelAFlipDeckMoveRate: weightedMean(
+      comparisons,
+      "averageModelAFlipDeckMoveRate"
+    ),
+    averageModelBFlipDeckMoveRate: weightedMean(
+      comparisons,
+      "averageModelBFlipDeckMoveRate"
     ),
     averageModelAWaitMoveRate: weightedMean(
       comparisons,

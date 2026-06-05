@@ -198,6 +198,7 @@ export function executeMove(
       if (player.deck.length === 0) {
         player.deck = player.flippedDeck.reverse();
         player.flippedDeck = [];
+        player.playedDeckCardThisCycle = false;
       } else {
         player.flippedDeck.push(...player.deck.reverse());
         player.deck = [];
@@ -228,6 +229,9 @@ export function executeMove(
 
     if (moveResult.cursorMove == null && moveResult.boardChanged !== false) {
       moveResult.boardChanged = true;
+    }
+    if (moveResult.boardChanged && isDeckCardPlay(move)) {
+      player.playedDeckCardThisCycle = true;
     }
 
     player.currentPoints =
@@ -409,6 +413,7 @@ function cycleDeck(
     }
     player.deck = player.flippedDeck.reverse();
     player.flippedDeck = [];
+    player.playedDeckCardThisCycle = false;
   } else {
     const triple = player.deck.slice(-3).reverse();
     if (aiCursor && !cursorLocationEqualsCard(aiCursor.location, peek(triple))) {
@@ -420,6 +425,13 @@ function cycleDeck(
     player.flippedDeck.push(...triple);
   }
   return {};
+}
+
+function isDeckCardPlay(move: Move): boolean {
+  return (
+    (move.type === "c2c" && move.source.type === "deck") ||
+    (move.type === "c2s" && move.source === "deck")
+  );
 }
 
 function isHoldingCardOverSolitairePile(

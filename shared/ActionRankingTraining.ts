@@ -75,6 +75,7 @@ export type NeuralTrainingOptions = {
   rlPpoWaitPenalty?: number;
   rlPpoPremovePenalty?: number;
   rlPpoCyclePenalty?: number;
+  rlPpoFlipDeckPenalty?: number;
   rlPpoScoreRewardWeight?: number;
   rlPpoPounceRewardWeight?: number;
   rlPpoMaxConsecutiveWaitMoves?: number;
@@ -278,6 +279,7 @@ export type NeuralTrainingResult = {
     ppoReturnStdDev: number;
     ppoAverageWaitMoveRate: number;
     ppoAveragePremoveMoveRate: number;
+    ppoAverageFlipDeckMoveRate: number;
     ppoAdvantageBaseline: PpoAdvantageBaselineMode;
     averagePolicyUpdates: number;
     averageGradientUpdates: number;
@@ -303,6 +305,8 @@ export type PolicyEvaluationResult = {
   averageTeacherBaselineSolitaireMoveRate: number;
   averageNeuralCycleMoveRate: number;
   averageTeacherBaselineCycleMoveRate: number;
+  averageNeuralFlipDeckMoveRate: number;
+  averageTeacherBaselineFlipDeckMoveRate: number;
   averageNeuralWaitMoveRate: number;
   averageTeacherBaselineWaitMoveRate: number;
   averageNeuralPremoveMoveRate: number;
@@ -333,6 +337,8 @@ export type PolicyComparisonResult = {
   averageModelBSolitaireMoveRate: number;
   averageModelACycleMoveRate: number;
   averageModelBCycleMoveRate: number;
+  averageModelAFlipDeckMoveRate: number;
+  averageModelBFlipDeckMoveRate: number;
   averageModelAWaitMoveRate: number;
   averageModelBWaitMoveRate: number;
   averageModelAPremoveMoveRate: number;
@@ -702,6 +708,8 @@ export function trainNeuralActionRankingPolicy(
           waitPenalty: options.rlPpoWaitPenalty ?? 0.05,
           premovePenalty: options.rlPpoPremovePenalty ?? 0.005,
           cyclePenalty: options.rlPpoCyclePenalty ?? 0,
+          flipDeckPenalty:
+            options.rlPpoFlipDeckPenalty ?? options.rlPpoCyclePenalty ?? 0,
           scoreRewardWeight: options.rlPpoScoreRewardWeight ?? 0,
           pounceRewardWeight: options.rlPpoPounceRewardWeight ?? 0.5,
           maxConsecutiveWaitMoves:
@@ -2823,6 +2831,7 @@ export function trainPolicyGradientFromRollouts(
     ppoReturnStdDev: 0,
     ppoAverageWaitMoveRate: 0,
     ppoAveragePremoveMoveRate: 0,
+    ppoAverageFlipDeckMoveRate: 0,
     ppoAdvantageBaseline: "batch" as const,
     averagePolicyUpdates:
       options.episodes === 0 ? 0 : updates.length / options.episodes,
@@ -2853,6 +2862,7 @@ export function trainPpoFromSelfPlay(
     waitPenalty: number;
     premovePenalty: number;
     cyclePenalty: number;
+    flipDeckPenalty: number;
     scoreRewardWeight: number;
     pounceRewardWeight: number;
     maxConsecutiveWaitMoves: number;
@@ -2880,6 +2890,7 @@ export function trainPpoFromSelfPlay(
   let sampledDecisionCountTotal = 0;
   let waitMoveRateTotal = 0;
   let premoveMoveRateTotal = 0;
+  let flipDeckMoveRateTotal = 0;
 
   for (let episode = 0; episode < options.episodes; episode++) {
     const learningPlayerIndices =
@@ -2920,6 +2931,7 @@ export function trainPpoFromSelfPlay(
       waitPenalty: options.waitPenalty,
       premovePenalty: options.premovePenalty,
       cyclePenalty: options.cyclePenalty,
+      flipDeckPenalty: options.flipDeckPenalty,
       scoreRewardWeight: options.scoreRewardWeight,
       pounceRewardWeight: options.pounceRewardWeight,
     });
@@ -2948,6 +2960,7 @@ export function trainPpoFromSelfPlay(
     const groupMetrics = getRolloutGroupMetrics(rollout, learningPlayerIndices);
     waitMoveRateTotal += groupMetrics.waitMoveRate;
     premoveMoveRateTotal += groupMetrics.premoveMoveRate;
+    flipDeckMoveRateTotal += groupMetrics.flipDeckMoveRate;
   }
 
   const advantageStats = applyPpoBatch(policy, updates, {
@@ -3031,6 +3044,7 @@ export function trainPpoFromSelfPlay(
     ppoReturnStdDev: returnStats.stdDev,
     ppoAverageWaitMoveRate: waitMoveRateTotal / episodeCount,
     ppoAveragePremoveMoveRate: premoveMoveRateTotal / episodeCount,
+    ppoAverageFlipDeckMoveRate: flipDeckMoveRateTotal / episodeCount,
     ppoAdvantageBaseline: options.advantageBaseline,
     averagePolicyUpdates: updates.length / episodeCount,
     averageGradientUpdates: advantageStats.appliedUpdates / episodeCount,
@@ -5877,6 +5891,7 @@ function getPpoTransitionReturns(
     waitPenalty: number;
     premovePenalty: number;
     cyclePenalty: number;
+    flipDeckPenalty: number;
     scoreRewardWeight: number;
     pounceRewardWeight: number;
   }
@@ -5951,6 +5966,7 @@ function getPpoMovePenalty(
     waitPenalty: number;
     premovePenalty: number;
     cyclePenalty: number;
+    flipDeckPenalty: number;
   }
 ): number {
   if (move?.type === "wait") {
@@ -5959,8 +5975,11 @@ function getPpoMovePenalty(
   if (move?.type === "premove") {
     return Math.max(0, options.premovePenalty);
   }
-  if (move?.type === "cycle" || move?.type === "flip_deck") {
+  if (move?.type === "cycle") {
     return Math.max(0, options.cyclePenalty);
+  }
+  if (move?.type === "flip_deck") {
+    return Math.max(0, options.flipDeckPenalty);
   }
   return 0;
 }
@@ -5995,6 +6014,8 @@ export function evaluateNeuralPolicy(
   let teacherBaselineSolitaireMoveRateTotal = 0;
   let neuralCycleMoveRateTotal = 0;
   let teacherBaselineCycleMoveRateTotal = 0;
+  let neuralFlipDeckMoveRateTotal = 0;
+  let teacherBaselineFlipDeckMoveRateTotal = 0;
   let neuralWaitMoveRateTotal = 0;
   let teacherBaselineWaitMoveRateTotal = 0;
   let neuralPremoveMoveRateTotal = 0;
@@ -6081,6 +6102,13 @@ export function evaluateNeuralPolicy(
       teacherBaselineMoveCounts,
       ["cycle", "flip_deck"]
     );
+    neuralFlipDeckMoveRateTotal += getMoveRate(neuralMoveCounts, [
+      "flip_deck",
+    ]);
+    teacherBaselineFlipDeckMoveRateTotal += getMoveRate(
+      teacherBaselineMoveCounts,
+      ["flip_deck"]
+    );
     neuralWaitMoveRateTotal += getMoveRate(neuralMoveCounts, ["wait"]);
     teacherBaselineWaitMoveRateTotal += getMoveRate(teacherBaselineMoveCounts, [
       "wait",
@@ -6130,6 +6158,10 @@ export function evaluateNeuralPolicy(
       games === 0 ? 0 : neuralCycleMoveRateTotal / games,
     averageTeacherBaselineCycleMoveRate:
       games === 0 ? 0 : teacherBaselineCycleMoveRateTotal / games,
+    averageNeuralFlipDeckMoveRate:
+      games === 0 ? 0 : neuralFlipDeckMoveRateTotal / games,
+    averageTeacherBaselineFlipDeckMoveRate:
+      games === 0 ? 0 : teacherBaselineFlipDeckMoveRateTotal / games,
     averageNeuralWaitMoveRate:
       games === 0 ? 0 : neuralWaitMoveRateTotal / games,
     averageTeacherBaselineWaitMoveRate:
@@ -6253,6 +6285,8 @@ export function compareNeuralModels(
   let modelBSolitaireMoveRateTotal = 0;
   let modelACycleMoveRateTotal = 0;
   let modelBCycleMoveRateTotal = 0;
+  let modelAFlipDeckMoveRateTotal = 0;
+  let modelBFlipDeckMoveRateTotal = 0;
   let modelAWaitMoveRateTotal = 0;
   let modelBWaitMoveRateTotal = 0;
   let modelAPremoveMoveRateTotal = 0;
@@ -6301,6 +6335,8 @@ export function compareNeuralModels(
     modelBSolitaireMoveRateTotal += metricsB.solitaireMoveRate;
     modelACycleMoveRateTotal += metricsA.cycleMoveRate;
     modelBCycleMoveRateTotal += metricsB.cycleMoveRate;
+    modelAFlipDeckMoveRateTotal += metricsA.flipDeckMoveRate;
+    modelBFlipDeckMoveRateTotal += metricsB.flipDeckMoveRate;
     modelAWaitMoveRateTotal += metricsA.waitMoveRate;
     modelBWaitMoveRateTotal += metricsB.waitMoveRate;
     modelAPremoveMoveRateTotal += metricsA.premoveMoveRate;
@@ -6360,6 +6396,10 @@ export function compareNeuralModels(
       games === 0 ? 0 : modelACycleMoveRateTotal / games,
     averageModelBCycleMoveRate:
       games === 0 ? 0 : modelBCycleMoveRateTotal / games,
+    averageModelAFlipDeckMoveRate:
+      games === 0 ? 0 : modelAFlipDeckMoveRateTotal / games,
+    averageModelBFlipDeckMoveRate:
+      games === 0 ? 0 : modelBFlipDeckMoveRateTotal / games,
     averageModelAWaitMoveRate:
       games === 0 ? 0 : modelAWaitMoveRateTotal / games,
     averageModelBWaitMoveRate:
@@ -6408,6 +6448,8 @@ export function compareNeuralModelsSelfPlay(
   let modelBSolitaireMoveRateTotal = 0;
   let modelACycleMoveRateTotal = 0;
   let modelBCycleMoveRateTotal = 0;
+  let modelAFlipDeckMoveRateTotal = 0;
+  let modelBFlipDeckMoveRateTotal = 0;
   let modelAWaitMoveRateTotal = 0;
   let modelBWaitMoveRateTotal = 0;
   let modelAPremoveMoveRateTotal = 0;
@@ -6459,6 +6501,8 @@ export function compareNeuralModelsSelfPlay(
       modelBSolitaireMoveRateTotal += metricsB.solitaireMoveRate;
       modelACycleMoveRateTotal += metricsA.cycleMoveRate;
       modelBCycleMoveRateTotal += metricsB.cycleMoveRate;
+      modelAFlipDeckMoveRateTotal += metricsA.flipDeckMoveRate;
+      modelBFlipDeckMoveRateTotal += metricsB.flipDeckMoveRate;
       modelAWaitMoveRateTotal += metricsA.waitMoveRate;
       modelBWaitMoveRateTotal += metricsB.waitMoveRate;
       modelAPremoveMoveRateTotal += metricsA.premoveMoveRate;
@@ -6526,6 +6570,10 @@ export function compareNeuralModelsSelfPlay(
       rolloutCount === 0 ? 0 : modelACycleMoveRateTotal / rolloutCount,
     averageModelBCycleMoveRate:
       rolloutCount === 0 ? 0 : modelBCycleMoveRateTotal / rolloutCount,
+    averageModelAFlipDeckMoveRate:
+      rolloutCount === 0 ? 0 : modelAFlipDeckMoveRateTotal / rolloutCount,
+    averageModelBFlipDeckMoveRate:
+      rolloutCount === 0 ? 0 : modelBFlipDeckMoveRateTotal / rolloutCount,
     averageModelAWaitMoveRate:
       rolloutCount === 0 ? 0 : modelAWaitMoveRateTotal / rolloutCount,
     averageModelBWaitMoveRate:
@@ -6768,6 +6816,7 @@ function getRolloutPlayerMetrics(rollout: RolloutResult, playerIndex: number) {
     centerMoveRate: getMoveRate(moveCounts, ["c2c"]),
     solitaireMoveRate: getMoveRate(moveCounts, ["c2s", "s2s"]),
     cycleMoveRate: getMoveRate(moveCounts, ["cycle", "flip_deck"]),
+    flipDeckMoveRate: getMoveRate(moveCounts, ["flip_deck"]),
     waitMoveRate: getMoveRate(moveCounts, ["wait"]),
     premoveMoveRate: getMoveRate(moveCounts, ["premove"]),
   };
@@ -6812,6 +6861,7 @@ function getRolloutGroupMetrics(
     centerMoveRate: getMoveRate(moveCounts, ["c2c"]),
     solitaireMoveRate: getMoveRate(moveCounts, ["c2s", "s2s"]),
     cycleMoveRate: getMoveRate(moveCounts, ["cycle", "flip_deck"]),
+    flipDeckMoveRate: getMoveRate(moveCounts, ["flip_deck"]),
     waitMoveRate: getMoveRate(moveCounts, ["wait"]),
     premoveMoveRate: getMoveRate(moveCounts, ["premove"]),
   };

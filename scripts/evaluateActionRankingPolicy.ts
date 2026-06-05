@@ -69,6 +69,7 @@ function readActionOptionsEnv(): ActionRankingOptions {
   return {
     includeWait: readBooleanEnv("RL_INCLUDE_WAIT_ACTIONS", false),
     includePremove: readBooleanEnv("RL_INCLUDE_PREMOVE_ACTIONS", false),
+    includeFlipDeck: readBooleanEnv("RL_INCLUDE_FLIP_DECK_ACTIONS", true),
   };
 }
 
@@ -141,6 +142,14 @@ function summarizeEvaluations(evaluations: ReturnType<typeof evaluateNeuralModel
     averageTeacherBaselineCycleMoveRate: weightedMean(
       evaluations,
       "averageTeacherBaselineCycleMoveRate"
+    ),
+    averageNeuralFlipDeckMoveRate: weightedMean(
+      evaluations,
+      "averageNeuralFlipDeckMoveRate"
+    ),
+    averageTeacherBaselineFlipDeckMoveRate: weightedMean(
+      evaluations,
+      "averageTeacherBaselineFlipDeckMoveRate"
     ),
     averageNeuralWaitMoveRate: weightedMean(
       evaluations,

@@ -292,6 +292,16 @@ function summarizeEvaluations(
       "averageTeacherBaselineCycleMoveRate",
       games
     ),
+    averageNeuralFlipDeckMoveRate: weightedMean(
+      evaluations,
+      "averageNeuralFlipDeckMoveRate",
+      games
+    ),
+    averageTeacherBaselineFlipDeckMoveRate: weightedMean(
+      evaluations,
+      "averageTeacherBaselineFlipDeckMoveRate",
+      games
+    ),
     averageNeuralWaitMoveRate: weightedMean(
       evaluations,
       "averageNeuralWaitMoveRate",
@@ -411,6 +421,16 @@ function summarizeComparisons(
     averageModelBCycleMoveRate: weightedMean(
       comparisons,
       "averageModelBCycleMoveRate",
+      games
+    ),
+    averageModelAFlipDeckMoveRate: weightedMean(
+      comparisons,
+      "averageModelAFlipDeckMoveRate",
+      games
+    ),
+    averageModelBFlipDeckMoveRate: weightedMean(
+      comparisons,
+      "averageModelBFlipDeckMoveRate",
       games
     ),
     averageModelAWaitMoveRate: weightedMean(
@@ -597,6 +617,7 @@ function readActionOptionsEnv(): ActionRankingOptions {
   return {
     includeWait: readBooleanEnv("RL_INCLUDE_WAIT_ACTIONS", false),
     includePremove: readBooleanEnv("RL_INCLUDE_PREMOVE_ACTIONS", false),
+    includeFlipDeck: readBooleanEnv("RL_INCLUDE_FLIP_DECK_ACTIONS", true),
   };
 }
 

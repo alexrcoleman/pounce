@@ -30,7 +30,12 @@ export function getNeuralAIMove(
   hands?: readonly CursorState[]
 ): Move | undefined {
   return neuralAIPolicy?.chooseMove(boardState, playerIndex, {
-    actionOptions: { hands, includeWait: true, includePremove: true },
+    actionOptions: {
+      hands,
+      includeWait: true,
+      includePremove: true,
+      includeFlipDeck: true,
+    },
   });
 }
 
