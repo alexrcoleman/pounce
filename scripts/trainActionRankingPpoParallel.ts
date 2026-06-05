@@ -79,18 +79,21 @@ const hiddenLayerSizes =
   initialModel == null
     ? readIntegerListEnv("HIDDEN_LAYERS", readIntegerListEnv("HIDDEN", [48]))
     : resizeHiddenLayerSizes ?? getModelHiddenLayerSizes(initialModel);
+const recurrentStateSize = readOptionalIntegerEnv("RECURRENT_STATE_SIZE");
 const trainingInitialModel =
-  initialModel && resizeHiddenLayerSizes
+  initialModel && (resizeHiddenLayerSizes || recurrentStateSize != null)
     ? resizeNeuralActionRankingModel(
         initialModel,
-        resizeHiddenLayerSizes,
-        `${seed}:resize`
+        resizeHiddenLayerSizes ?? getModelHiddenLayerSizes(initialModel),
+        `${seed}:resize`,
+        recurrentStateSize
       )
     : initialModel;
 const policy = trainingInitialModel
   ? new NeuralActionRankingPolicy(trainingInitialModel)
   : NeuralActionRankingPolicy.create({
       hiddenLayerSizes,
+      recurrentStateSize,
       seed,
     });
 
@@ -734,6 +737,15 @@ function readIntegerEnv(name: string, fallback: number): number {
   }
   const parsed = Number.parseInt(value, 10);
   return Number.isFinite(parsed) ? parsed : fallback;
+}
+
+function readOptionalIntegerEnv(name: string): number | undefined {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return undefined;
+  }
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? Math.max(0, parsed) : undefined;
 }
 
 function readIntegerListEnv(name: string, fallback: number[]): number[] {

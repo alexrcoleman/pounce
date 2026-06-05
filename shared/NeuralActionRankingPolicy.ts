@@ -34,9 +34,25 @@ export type NeuralActionRankingModelV2 = {
   outputBias: number;
 };
 
+export type NeuralActionRankingModelV3 = {
+  version: 3;
+  featureNames: string[];
+  inputSize: number;
+  hiddenLayerSizes: number[];
+  layerWeights: number[][][];
+  layerBiases: number[][];
+  outputWeights: number[];
+  outputBias: number;
+  recurrentStateSize: number;
+  recurrentInputWeights: number[][];
+  recurrentStateWeights: number[][];
+  recurrentBiases: number[];
+};
+
 export type NeuralActionRankingModel =
   | NeuralActionRankingModelV1
-  | NeuralActionRankingModelV2;
+  | NeuralActionRankingModelV2
+  | NeuralActionRankingModelV3;
 
 export type ActionRankingPrediction = {
   candidate: ActionRankingCandidate;
@@ -115,6 +131,7 @@ export type ClippedPolicyGradientBatchUpdate = {
   selectedCandidateIndex: number;
   advantage: number;
   oldProbability?: number;
+  memoryState?: readonly number[];
 };
 
 export type ClippedPolicyGradientBatchStats = {
@@ -135,12 +152,12 @@ const DEFAULT_HIDDEN_LAYER_SIZES = [48];
 const DEFAULT_LEARNING_RATE = 0.02;
 
 export class NeuralActionRankingPolicy {
-  private model: NeuralActionRankingModelV2;
+  private model: NeuralActionRankingModelV2 | NeuralActionRankingModelV3;
   private featureInputIndices: number[];
 
   constructor(model?: NeuralActionRankingModel) {
     this.model = model
-      ? alignModelToCurrentFeatures(toV2Model(model))
+      ? alignModelToCurrentFeatures(toCurrentModelVersion(model))
       : createNeuralActionRankingModel();
     assertModelShape(this.model);
     this.featureInputIndices = getFeatureInputIndices(this.model.featureNames);
@@ -150,13 +167,15 @@ export class NeuralActionRankingPolicy {
     options: {
       hiddenSize?: number;
       hiddenLayerSizes?: readonly number[];
+      recurrentStateSize?: number;
       seed?: string;
     } = {}
   ) {
     return new NeuralActionRankingPolicy(
       createNeuralActionRankingModel(
         options.hiddenLayerSizes ?? options.hiddenSize,
-        options.seed
+        options.seed,
+        options.recurrentStateSize
       )
     );
   }
@@ -167,14 +186,15 @@ export class NeuralActionRankingPolicy {
 
   rankCandidates(
     candidates: readonly ActionRankingCandidate[],
-    temperature = 1
+    temperature = 1,
+    memoryState?: readonly number[]
   ): ActionRankingPrediction[] {
     if (candidates.length === 0) {
       return [];
     }
 
     const scores = candidates.map((candidate) =>
-      this.scoreFeatures(candidate.features)
+      this.scoreFeatures(candidate.features, memoryState)
     );
     const probabilities = softmax(scores, temperature);
     return candidates
@@ -194,6 +214,7 @@ export class NeuralActionRankingPolicy {
       random?: () => number;
       sample?: boolean;
       actionOptions?: ActionRankingOptions;
+      memoryState?: readonly number[];
     } = {}
   ): Move | undefined {
     const candidates = enumerateActionRankingCandidates(
@@ -207,14 +228,19 @@ export class NeuralActionRankingPolicy {
 
   chooseCandidate(
     candidates: readonly ActionRankingCandidate[],
-    options: { temperature?: number; random?: () => number; sample?: boolean } = {}
+    options: {
+      temperature?: number;
+      random?: () => number;
+      sample?: boolean;
+      memoryState?: readonly number[];
+    } = {}
   ): ActionRankingCandidate | undefined {
     if (candidates.length === 0) {
       return;
     }
 
     const scores = candidates.map((candidate) =>
-      this.scoreFeatures(candidate.features)
+      this.scoreFeatures(candidate.features, options.memoryState)
     );
     if (!options.sample) {
       return candidates[getBestIndex(scores)];
@@ -224,8 +250,63 @@ export class NeuralActionRankingPolicy {
     return candidates[sampleIndex(probabilities, options.random ?? Math.random)];
   }
 
-  scoreFeatures(features: readonly number[]): number {
-    return this.forward(this.prepareFeatures(features)).score;
+  chooseCandidateWithMemory(
+    candidates: readonly ActionRankingCandidate[],
+    memoryState: readonly number[],
+    options: { temperature?: number; random?: () => number; sample?: boolean } = {}
+  ): { candidate: ActionRankingCandidate; memoryState: number[] } | undefined {
+    const candidate = this.chooseCandidate(candidates, {
+      ...options,
+      memoryState,
+    });
+    if (!candidate) {
+      return;
+    }
+    return {
+      candidate,
+      memoryState: this.advanceMemoryState(memoryState, candidate.features),
+    };
+  }
+
+  scoreFeatures(
+    features: readonly number[],
+    memoryState?: readonly number[]
+  ): number {
+    return this.forward(this.prepareFeatures(features, memoryState)).score;
+  }
+
+  getRecurrentStateSize(): number {
+    return getModelRecurrentStateSize(this.model);
+  }
+
+  createInitialMemoryState(): number[] {
+    return Array.from({ length: this.getRecurrentStateSize() }, () => 0);
+  }
+
+  advanceMemoryState(
+    memoryState: readonly number[],
+    selectedFeatures: readonly number[]
+  ): number[] {
+    if (!isRecurrentModel(this.model)) {
+      return [];
+    }
+    const model = this.model;
+    const featureInputs = this.prepareFeatureInputs(selectedFeatures);
+    const previousState = normalizeMemoryState(
+      memoryState,
+      model.recurrentStateSize
+    );
+    return model.recurrentBiases.map((bias, stateIndex) => {
+      const featureInput = model.recurrentInputWeights[stateIndex].reduce(
+        (sum, weight, inputIndex) => sum + weight * featureInputs[inputIndex],
+        0
+      );
+      const stateInput = model.recurrentStateWeights[stateIndex].reduce(
+        (sum, weight, inputIndex) => sum + weight * previousState[inputIndex],
+        0
+      );
+      return Math.tanh(bias + featureInput + stateInput);
+    });
   }
 
   trainImitation(
@@ -536,7 +617,10 @@ export class NeuralActionRankingPolicy {
       }
 
       const candidateForwards = update.candidates.map((candidate) => {
-        const modelFeatures = this.prepareFeatures(candidate.features);
+        const modelFeatures = this.prepareFeatures(
+          candidate.features,
+          update.memoryState
+        );
         return {
           modelFeatures,
           forward: this.forward(modelFeatures),
@@ -1234,7 +1318,21 @@ export class NeuralActionRankingPolicy {
     return { layerInputs, activations, score };
   }
 
-  private prepareFeatures(features: readonly number[]): number[] {
+  private prepareFeatures(
+    features: readonly number[],
+    memoryState?: readonly number[]
+  ): number[] {
+    const featureInputs = this.prepareFeatureInputs(features);
+    if (!isRecurrentModel(this.model)) {
+      return featureInputs;
+    }
+    return [
+      ...featureInputs,
+      ...normalizeMemoryState(memoryState, this.model.recurrentStateSize),
+    ];
+  }
+
+  private prepareFeatureInputs(features: readonly number[]): number[] {
     if (features.length !== ACTION_RANKING_FEATURE_NAMES.length) {
       throw new Error(
         `Expected ${ACTION_RANKING_FEATURE_NAMES.length} features, received ${features.length}`
@@ -1323,7 +1421,6 @@ function isPairwiseTacticalFeature(
   if (moveType === "cycle" || moveType === "flip_deck") {
     return (
       featureName.startsWith("cycle.") ||
-      featureName.startsWith("own.stockLookahead") ||
       featureName.startsWith("own.waste") ||
       featureName === "own.stockFraction" ||
       featureName === "own.wasteFraction" ||
@@ -1551,9 +1648,14 @@ function getCandidateReturn(
 
 export function createNeuralActionRankingModel(
   hiddenLayerInput: number | readonly number[] = DEFAULT_HIDDEN_LAYER_SIZES,
-  seed = "neural-action-ranking"
-): NeuralActionRankingModelV2 {
-  const inputSize = ACTION_RANKING_FEATURE_NAMES.length;
+  seed = "neural-action-ranking",
+  recurrentStateSizeInput = 0
+): NeuralActionRankingModelV2 | NeuralActionRankingModelV3 {
+  const recurrentStateSize = Math.max(
+    0,
+    Math.floor(recurrentStateSizeInput)
+  );
+  const inputSize = ACTION_RANKING_FEATURE_NAMES.length + recurrentStateSize;
   const hiddenLayerSizes = normalizeHiddenLayerSizes(hiddenLayerInput);
   const random = createSeededRandom(seed);
   const layerWeights = hiddenLayerSizes.map((layerSize, layerIndex) => {
@@ -1569,7 +1671,7 @@ export function createNeuralActionRankingModel(
   });
   const outputScale = Math.sqrt(2 / hiddenLayerSizes[hiddenLayerSizes.length - 1]);
 
-  return {
+  const base: NeuralActionRankingModelV2 = {
     version: 2,
     featureNames: ACTION_RANKING_FEATURE_NAMES.slice(),
     inputSize,
@@ -1583,6 +1685,32 @@ export function createNeuralActionRankingModel(
       () => randomCentered(random) * outputScale
     ),
     outputBias: 0,
+  };
+  if (recurrentStateSize <= 0) {
+    return base;
+  }
+
+  const recurrentInputScale = Math.sqrt(
+    1 / Math.max(1, ACTION_RANKING_FEATURE_NAMES.length)
+  );
+  const recurrentStateScale = Math.sqrt(1 / Math.max(1, recurrentStateSize));
+  return {
+    ...base,
+    version: 3,
+    recurrentStateSize,
+    recurrentInputWeights: Array.from({ length: recurrentStateSize }, () =>
+      Array.from(
+        { length: ACTION_RANKING_FEATURE_NAMES.length },
+        () => randomCentered(random) * recurrentInputScale
+      )
+    ),
+    recurrentStateWeights: Array.from({ length: recurrentStateSize }, () =>
+      Array.from(
+        { length: recurrentStateSize },
+        () => randomCentered(random) * recurrentStateScale * 0.25
+      )
+    ),
+    recurrentBiases: Array.from({ length: recurrentStateSize }, () => 0),
   };
 }
 
@@ -1632,9 +1760,14 @@ export function mergeNeuralPolicyGradientAccumulators(
 export function resizeNeuralActionRankingModel(
   model: NeuralActionRankingModel,
   hiddenLayerInput: number | readonly number[],
-  seed = "neural-action-ranking-resize"
-): NeuralActionRankingModelV2 {
-  const source = alignModelToCurrentFeatures(toV2Model(model));
+  seed = "neural-action-ranking-resize",
+  recurrentStateSizeInput?: number
+): NeuralActionRankingModelV2 | NeuralActionRankingModelV3 {
+  const source = alignModelToCurrentFeatures(toCurrentModelVersion(model));
+  const targetRecurrentStateSize =
+    recurrentStateSizeInput == null
+      ? getModelRecurrentStateSize(source)
+      : Math.max(0, Math.floor(recurrentStateSizeInput));
   const targetHiddenLayerSizes = normalizeHiddenLayerSizes(hiddenLayerInput);
   if (targetHiddenLayerSizes.length !== source.hiddenLayerSizes.length) {
     throw new Error(
@@ -1649,8 +1782,17 @@ export function resizeNeuralActionRankingModel(
       );
     }
   });
+  if (targetRecurrentStateSize < getModelRecurrentStateSize(source)) {
+    throw new Error(
+      "Cannot resize a neural action ranking model to a smaller recurrent state."
+    );
+  }
 
-  const resized = createNeuralActionRankingModel(targetHiddenLayerSizes, seed);
+  const resized = createNeuralActionRankingModel(
+    targetHiddenLayerSizes,
+    seed,
+    targetRecurrentStateSize
+  );
   source.hiddenLayerSizes.forEach((sourceLayerSize, layerIndex) => {
     const previousSourceSize =
       layerIndex === 0
@@ -1672,6 +1814,22 @@ export function resizeNeuralActionRankingModel(
     }
   });
 
+  if (isRecurrentModel(resized)) {
+    if (isRecurrentModel(source)) {
+      copyRecurrentWeights(source, resized);
+    } else {
+      resized.layerWeights[0].forEach((weights) => {
+        for (
+          let inputIndex = ACTION_RANKING_FEATURE_NAMES.length;
+          inputIndex < weights.length;
+          inputIndex++
+        ) {
+          weights[inputIndex] = 0;
+        }
+      });
+    }
+  }
+
   source.outputWeights.forEach((weight, outputIndex) => {
     resized.outputWeights[outputIndex] = weight;
   });
@@ -1687,13 +1845,17 @@ export function resizeNeuralActionRankingModel(
   return resized;
 }
 
-function assertModelShape(model: NeuralActionRankingModelV2): void {
-  if (model.version !== 2) {
-    throw new Error(`Unsupported neural action ranking model: ${model.version}`);
+function assertModelShape(
+  model: NeuralActionRankingModelV2 | NeuralActionRankingModelV3
+): void {
+  const version = (model as { version: number }).version;
+  if (version !== 2 && version !== 3) {
+    throw new Error(`Unsupported neural action ranking model: ${version}`);
   }
-  if (model.inputSize !== model.featureNames.length) {
+  const recurrentStateSize = getModelRecurrentStateSize(model);
+  if (model.inputSize !== model.featureNames.length + recurrentStateSize) {
     throw new Error(
-      `Model input size ${model.inputSize} does not match feature count ${model.featureNames.length}`
+      `Model input size ${model.inputSize} does not match feature and memory count ${model.featureNames.length + recurrentStateSize}`
     );
   }
   const featureSet = new Set<string>(ACTION_RANKING_FEATURE_NAMES);
@@ -1725,6 +1887,27 @@ function assertModelShape(model: NeuralActionRankingModelV2): void {
       throw new Error("Model weight matrix shape is invalid.");
     }
   });
+
+  if (isRecurrentModel(model)) {
+    if (
+      model.recurrentStateSize <= 0 ||
+      model.recurrentInputWeights.length !== model.recurrentStateSize ||
+      model.recurrentStateWeights.length !== model.recurrentStateSize ||
+      model.recurrentBiases.length !== model.recurrentStateSize
+    ) {
+      throw new Error("Model recurrent weight matrix shape is invalid.");
+    }
+    model.recurrentInputWeights.forEach((weights) => {
+      if (weights.length !== model.featureNames.length) {
+        throw new Error("Model recurrent weight matrix shape is invalid.");
+      }
+    });
+    model.recurrentStateWeights.forEach((weights) => {
+      if (weights.length !== model.recurrentStateSize) {
+        throw new Error("Model recurrent weight matrix shape is invalid.");
+      }
+    });
+  }
 }
 
 function getFeatureInputIndices(modelFeatureNames: readonly string[]): number[] {
@@ -1753,8 +1936,7 @@ function cloneModel(model: NeuralActionRankingModel): NeuralActionRankingModel {
       outputBias: model.outputBias,
     };
   }
-  return {
-    version: model.version,
+  const base = {
     featureNames: model.featureNames.slice(),
     inputSize: model.inputSize,
     hiddenLayerSizes: model.hiddenLayerSizes.slice(),
@@ -1765,37 +1947,58 @@ function cloneModel(model: NeuralActionRankingModel): NeuralActionRankingModel {
     outputWeights: model.outputWeights.slice(),
     outputBias: model.outputBias,
   };
+  if (model.version === 3) {
+    return {
+      ...base,
+      version: 3,
+      recurrentStateSize: model.recurrentStateSize,
+      recurrentInputWeights: model.recurrentInputWeights.map((weights) =>
+        weights.slice()
+      ),
+      recurrentStateWeights: model.recurrentStateWeights.map((weights) =>
+        weights.slice()
+      ),
+      recurrentBiases: model.recurrentBiases.slice(),
+    };
+  }
+  return {
+    ...base,
+    version: 2,
+  };
 }
 
 function alignModelToCurrentFeatures(
-  model: NeuralActionRankingModelV2
-): NeuralActionRankingModelV2 {
+  model: NeuralActionRankingModelV2 | NeuralActionRankingModelV3
+): NeuralActionRankingModelV2 | NeuralActionRankingModelV3 {
   if (arraysEqual(model.featureNames, ACTION_RANKING_FEATURE_NAMES)) {
-    return cloneModel(model) as NeuralActionRankingModelV2;
+    return cloneModel(model) as NeuralActionRankingModelV2 | NeuralActionRankingModelV3;
   }
 
   const currentFeatureIndex = new Map(
     ACTION_RANKING_FEATURE_NAMES.map((name, index) => [name, index])
   );
+  const recurrentStateSize = getModelRecurrentStateSize(model);
   const expandedInputWeights = model.layerWeights[0].map((weights) => {
     const expanded = Array.from(
-      { length: ACTION_RANKING_FEATURE_NAMES.length },
+      { length: ACTION_RANKING_FEATURE_NAMES.length + recurrentStateSize },
       () => 0
     );
     model.featureNames.forEach((name, oldIndex) => {
       const newIndex = currentFeatureIndex.get(name as ActionRankingFeatureName);
-      if (newIndex == null) {
-        throw new Error(`Model feature ${name} does not exist in this build.`);
+      if (newIndex != null) {
+        expanded[newIndex] = weights[oldIndex] ?? 0;
       }
-      expanded[newIndex] = weights[oldIndex] ?? 0;
     });
+    for (let stateIndex = 0; stateIndex < recurrentStateSize; stateIndex++) {
+      expanded[ACTION_RANKING_FEATURE_NAMES.length + stateIndex] =
+        weights[model.featureNames.length + stateIndex] ?? 0;
+    }
     return expanded;
   });
 
-  return {
-    version: 2,
+  const base = {
     featureNames: ACTION_RANKING_FEATURE_NAMES.slice(),
-    inputSize: ACTION_RANKING_FEATURE_NAMES.length,
+    inputSize: ACTION_RANKING_FEATURE_NAMES.length + recurrentStateSize,
     hiddenLayerSizes: model.hiddenLayerSizes.slice(),
     layerWeights: [
       expandedInputWeights,
@@ -1807,11 +2010,42 @@ function alignModelToCurrentFeatures(
     outputWeights: model.outputWeights.slice(),
     outputBias: model.outputBias,
   };
+  if (!isRecurrentModel(model)) {
+    return {
+      ...base,
+      version: 2,
+    };
+  }
+
+  return {
+    ...base,
+    version: 3,
+    recurrentStateSize: model.recurrentStateSize,
+    recurrentInputWeights: model.recurrentInputWeights.map((weights) => {
+      const expanded = Array.from(
+        { length: ACTION_RANKING_FEATURE_NAMES.length },
+        () => 0
+      );
+      model.featureNames.forEach((name, oldIndex) => {
+        const newIndex = currentFeatureIndex.get(name as ActionRankingFeatureName);
+        if (newIndex != null) {
+          expanded[newIndex] = weights[oldIndex] ?? 0;
+        }
+      });
+      return expanded;
+    }),
+    recurrentStateWeights: model.recurrentStateWeights.map((weights) =>
+      weights.slice()
+    ),
+    recurrentBiases: model.recurrentBiases.slice(),
+  };
 }
 
-function toV2Model(model: NeuralActionRankingModel): NeuralActionRankingModelV2 {
-  if (model.version === 2) {
-    return cloneModel(model) as NeuralActionRankingModelV2;
+function toCurrentModelVersion(
+  model: NeuralActionRankingModel
+): NeuralActionRankingModelV2 | NeuralActionRankingModelV3 {
+  if (model.version === 2 || model.version === 3) {
+    return cloneModel(model) as NeuralActionRankingModelV2 | NeuralActionRankingModelV3;
   }
 
   return {
@@ -1824,6 +2058,54 @@ function toV2Model(model: NeuralActionRankingModel): NeuralActionRankingModelV2 
     outputWeights: model.hiddenToOutput.slice(),
     outputBias: model.outputBias,
   };
+}
+
+function isRecurrentModel(
+  model: NeuralActionRankingModelV2 | NeuralActionRankingModelV3
+): model is NeuralActionRankingModelV3 {
+  return model.version === 3;
+}
+
+function getModelRecurrentStateSize(
+  model: NeuralActionRankingModelV2 | NeuralActionRankingModelV3
+): number {
+  return isRecurrentModel(model) ? model.recurrentStateSize : 0;
+}
+
+function normalizeMemoryState(
+  memoryState: readonly number[] | undefined,
+  recurrentStateSize: number
+): number[] {
+  return Array.from({ length: recurrentStateSize }, (_, index) => {
+    const value = memoryState?.[index] ?? 0;
+    return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
+  });
+}
+
+function copyRecurrentWeights(
+  source: NeuralActionRankingModelV3,
+  target: NeuralActionRankingModelV3
+): void {
+  const stateCount = Math.min(
+    source.recurrentStateSize,
+    target.recurrentStateSize
+  );
+  for (let stateIndex = 0; stateIndex < stateCount; stateIndex++) {
+    for (
+      let featureIndex = 0;
+      featureIndex < target.recurrentInputWeights[stateIndex].length;
+      featureIndex++
+    ) {
+      target.recurrentInputWeights[stateIndex][featureIndex] =
+        source.recurrentInputWeights[stateIndex][featureIndex] ?? 0;
+    }
+    for (let inputIndex = 0; inputIndex < stateCount; inputIndex++) {
+      target.recurrentStateWeights[stateIndex][inputIndex] =
+        source.recurrentStateWeights[stateIndex][inputIndex] ?? 0;
+    }
+    target.recurrentBiases[stateIndex] =
+      source.recurrentBiases[stateIndex] ?? 0;
+  }
 }
 
 function arraysEqual(

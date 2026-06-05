@@ -319,13 +319,16 @@ function createFeatureGroups(): FeatureGroup[] {
       ]),
     },
     {
-      name: "cycleLookahead",
+      name: "visibleDeckCycleContext",
       indices: selectFeatureIndices(
         (name) =>
-          name.startsWith("cycle.lookahead") ||
-          name.startsWith("cycle.revealed") ||
-          name.startsWith("cycle.reset") ||
-          name.startsWith("own.stockLookahead")
+          name === "cycle.resetsWaste" ||
+          name === "cycle.stockFractionAfter" ||
+          name === "cycle.cardsAdvanced" ||
+          name.startsWith("own.waste") ||
+          name === "own.stockFraction" ||
+          name === "own.wasteFraction" ||
+          name === "own.playedDeckCardThisCycle"
       ),
     },
     {
@@ -412,9 +415,9 @@ function createIndividualFeatureGroups(): FeatureGroup[] {
     "own.stack1BottomValue",
     "own.stack2BottomValue",
     "own.stack3BottomValue",
-    "cycle.lookaheadPounceConnectorReach",
-    "cycle.lookaheadOwnSolitaireDestinationReach",
-    "own.stockLookaheadPounceConnectorReach",
+    "cycle.stockFractionAfter",
+    "cycle.cardsAdvanced",
+    "own.playedDeckCardThisCycle",
     "board.isHeadsUp",
     "board.ticksSinceNonWaitMove",
     "opponent.handMinCenterDistance",
@@ -530,7 +533,7 @@ function summarizeStates(items: readonly SampledState[]) {
 }
 
 function describeModel(model: NeuralActionRankingModel) {
-  if (model.version === 2) {
+  if (model.version === 2 || model.version === 3) {
     const hiddenParameters = model.layerWeights.reduce(
       (sum, layer, layerIndex) =>
         sum +
@@ -538,11 +541,25 @@ function describeModel(model: NeuralActionRankingModel) {
         model.layerBiases[layerIndex].length,
       0
     );
+    const recurrentParameters =
+      model.version === 3
+        ? model.recurrentInputWeights.reduce(
+            (sum, weights) => sum + weights.length,
+            0
+          ) +
+          model.recurrentStateWeights.reduce(
+            (sum, weights) => sum + weights.length,
+            0
+          ) +
+          model.recurrentBiases.length
+        : 0;
     return {
-      version: 2,
+      version: model.version,
       inputSize: model.inputSize,
       hiddenLayerSizes: model.hiddenLayerSizes,
-      parameterCount: hiddenParameters + model.outputWeights.length + 1,
+      recurrentStateSize: model.version === 3 ? model.recurrentStateSize : 0,
+      parameterCount:
+        hiddenParameters + model.outputWeights.length + 1 + recurrentParameters,
     };
   }
   return {

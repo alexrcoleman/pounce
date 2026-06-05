@@ -65,6 +65,7 @@ parentPort?.on("message", (message) => {
     candidates: update.candidates,
     selectedCandidateIndex: update.selectedCandidateIndex,
     oldProbability: update.oldProbability,
+    memoryState: update.memoryState,
     advantage: getNormalizedAdvantage(update.rawAdvantage, request),
   }));
   const result = policy.computeClippedPolicyGradientBatchGradient(

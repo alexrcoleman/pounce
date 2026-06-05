@@ -53,6 +53,7 @@ export type NeuralTrainingOptions = {
   playerCount?: number;
   hiddenSize?: number;
   hiddenLayerSizes?: number[];
+  recurrentStateSize?: number;
   initialModel?: NeuralActionRankingModel;
   actionOptions?: ActionRankingOptions;
   rlOpponentModel?: NeuralActionRankingModel;
@@ -435,6 +436,7 @@ type RolloutTransition = {
   pointDifferentialBefore: number;
   scoreBefore: number;
   pounceRemainingBefore: number;
+  memoryState?: number[];
   board?: BoardState;
   hands?: CursorState[];
   candidates: ActionRankingCandidate[];
@@ -465,6 +467,7 @@ export type PolicyGradientUpdate = {
   candidates: Pick<ActionRankingCandidate, "features">[];
   selectedCandidateIndex: number;
   oldProbability?: number;
+  memoryState?: number[];
   rawAdvantage: number;
 };
 
@@ -682,6 +685,7 @@ export function trainNeuralActionRankingPolicy(
     : NeuralActionRankingPolicy.create({
         hiddenSize: options.hiddenSize,
         hiddenLayerSizes: options.hiddenLayerSizes,
+        recurrentStateSize: options.recurrentStateSize,
         seed,
       });
 
@@ -993,13 +997,21 @@ function getTrainingInitialModel(
     throw new Error("Initial model is required.");
   }
   const hiddenLayerInput = options.hiddenLayerSizes ?? options.hiddenSize;
-  return hiddenLayerInput == null
-    ? options.initialModel
-    : resizeNeuralActionRankingModel(
-        options.initialModel,
-        hiddenLayerInput,
-        `${seed}:resize`
-      );
+  const recurrentStateSize = options.recurrentStateSize;
+  if (hiddenLayerInput == null && recurrentStateSize == null) {
+    return options.initialModel;
+  }
+  const modelHiddenLayerInput =
+    hiddenLayerInput ??
+    (options.initialModel.version === 1
+      ? [options.initialModel.hiddenSize]
+      : options.initialModel.hiddenLayerSizes);
+  return resizeNeuralActionRankingModel(
+    options.initialModel,
+    modelHiddenLayerInput,
+    `${seed}:resize`,
+    recurrentStateSize
+  );
 }
 
 export function collectRewardImprovementExamples(options: {
@@ -2995,6 +3007,7 @@ export function collectPpoSelfPlayRolloutBatch(
         })),
         selectedCandidateIndex: transition.selectedCandidateIndex,
         oldProbability: transition.selectedProbability,
+        memoryState: transition.memoryState,
         rawAdvantage: advantages[transitionIndex] ?? 0,
       });
     });
@@ -3874,6 +3887,7 @@ function applyPpoBatch(
         selectedCandidateIndex: update.selectedCandidateIndex,
         advantage,
         oldProbability: update.oldProbability ?? 1,
+        memoryState: update.memoryState,
       };
     });
     const result = policy.trainClippedPolicyGradientBatch(
@@ -5116,63 +5130,9 @@ function isDeckPounceParitySupportCandidate(
 }
 
 function isUsefulCycleRevealCandidate(
-  candidate: ActionRankingCandidate
+  _candidate: ActionRankingCandidate
 ): boolean {
-  if (candidate.move.type !== "cycle") {
-    return false;
-  }
-
-  const centerPlayable =
-    getCandidateFeature(candidate, "cycle.revealedCenterPlayable") > 0 ||
-    getCandidateFeature(candidate, "cycle.resetRevealedCenterPlayable") > 0 ||
-    getCandidateFeature(candidate, "cycle.lookaheadCenterPlayableReach") > 0;
-  const soonPlayable =
-    getCandidateFeature(candidate, "cycle.revealedCanPlaySoon") > 0 ||
-    getCandidateFeature(candidate, "cycle.resetRevealedCanPlaySoon") > 0 ||
-    getCandidateFeature(candidate, "cycle.lookaheadCanPlaySoonReach") > 0;
-  const solitaireDestination =
-    getCandidateFeature(
-      candidate,
-      "cycle.revealedOwnSolitaireDestinationCount"
-    ) > 0 ||
-    getCandidateFeature(
-      candidate,
-      "cycle.resetRevealedOwnSolitaireDestinationCount"
-    ) > 0 ||
-    getCandidateFeature(
-      candidate,
-      "cycle.lookaheadOwnSolitaireDestinationReach"
-    ) > 0;
-  const pounceConnector =
-    getCandidateFeature(
-      candidate,
-      "cycle.revealedOwnSolitaireConnectorForPounce"
-    ) > 0 ||
-    getCandidateFeature(
-      candidate,
-      "cycle.resetRevealedOwnSolitaireConnectorForPounce"
-    ) > 0 ||
-    getCandidateFeature(
-      candidate,
-      "cycle.lookaheadOwnSolitaireConnectorForPounceReach"
-    ) > 0;
-  const parityMatch =
-    getCandidateFeature(candidate, "cycle.revealedMatchesPounceParity") > 0 ||
-    getCandidateFeature(candidate, "cycle.resetRevealedMatchesPounceParity") >
-      0;
-  const pounceCloseness =
-    getCandidateFeature(candidate, "cycle.revealedPounceConnectorCloseness") >
-      0 ||
-    getCandidateFeature(
-      candidate,
-      "cycle.resetRevealedPounceConnectorCloseness"
-    ) > 0 ||
-    getCandidateFeature(candidate, "cycle.lookaheadPounceConnectorReach") > 0;
-  return (
-    centerPlayable ||
-    (soonPlayable &&
-      (solitaireDestination || pounceConnector || parityMatch || pounceCloseness))
-  );
+  return false;
 }
 
 function getCandidateFeature(
@@ -6743,6 +6703,7 @@ function runPolicyRollout(
   const transitions: RolloutTransition[] = [];
   const moveTypeCountsByPlayer = board.players.map(() => createMoveTypeCounts());
   const hands = createSimulationHands(board, options.initialHands);
+  const memoryStates = board.players.map(() => [] as number[]);
   const maxConsecutiveWaitMoves = Math.max(
     0,
     Math.floor(options.maxConsecutiveWaitMoves ?? 0)
@@ -6782,10 +6743,10 @@ function runPolicyRollout(
       options.sample && (samplePlayers == null || samplePlayers.has(playerIndex));
     const shouldCapture =
       capturePlayers == null || capturePlayers.has(playerIndex);
-    const move =
-      currentDragMove ??
-      (playerPolicy
-        ? chooseNeuralMove(
+    const neuralChoice =
+      currentDragMove || !playerPolicy
+        ? undefined
+        : chooseNeuralMove(
             board,
             playerIndex,
             {
@@ -6794,12 +6755,24 @@ function runPolicyRollout(
               sample: shouldSample,
               captureTransition: shouldCapture,
               actionOptions,
+              memoryState: getRolloutMemoryState(
+                memoryStates[playerIndex],
+                playerPolicy
+              ),
             },
             transitions
-          )
-        : options.basicMoveProvider
+          );
+    if (neuralChoice) {
+      memoryStates[playerIndex] = neuralChoice.memoryState;
+    }
+    const move =
+      currentDragMove ??
+      neuralChoice?.move ??
+      (!playerPolicy && options.basicMoveProvider
         ? options.basicMoveProvider(board, playerIndex, hand, hands)
-        : getBasicAIMove(board, playerIndex, hand));
+        : !playerPolicy
+        ? getBasicAIMove(board, playerIndex, hand)
+        : undefined);
 
     if (move) {
       const result = executeMove(board, playerIndex, move, hand);
@@ -6845,9 +6818,10 @@ function chooseNeuralMove(
     captureTransitionBoards?: boolean;
     captureTransition?: boolean;
     actionOptions?: ActionRankingOptions;
+    memoryState?: readonly number[];
   },
   transitions: RolloutTransition[]
-): Move | undefined {
+): { move: Move; memoryState: number[] } | undefined {
   const candidates = enumerateActionRankingCandidates(
     board,
     playerIndex,
@@ -6862,7 +6836,7 @@ function chooseNeuralMove(
   const pounceRemainingBefore =
     board.players[playerIndex]?.pounceDeck.length ?? 0;
   const scores = candidates.map((candidate) =>
-    options.policy.scoreFeatures(candidate.features)
+    options.policy.scoreFeatures(candidate.features, options.memoryState)
   );
   const probabilities = getSoftmaxProbabilities(scores, options.temperature);
   const greedyCandidateIndex = getBestScoreIndex(scores);
@@ -6891,6 +6865,7 @@ function chooseNeuralMove(
       pointDifferentialBefore,
       scoreBefore,
       pounceRemainingBefore,
+      memoryState: options.memoryState?.slice(),
       board: options.captureTransitionBoards ? deepClone(board) : undefined,
       hands:
         options.captureTransitionBoards && options.actionOptions?.hands
@@ -6905,7 +6880,22 @@ function chooseNeuralMove(
       localReward: selected.immediatePointDifferentialDelta,
     });
   }
-  return selected.move;
+  return {
+    move: selected.move,
+    memoryState: options.policy.advanceMemoryState(
+      options.memoryState ?? [],
+      selected.features
+    ),
+  };
+}
+
+function getRolloutMemoryState(
+  memoryState: readonly number[],
+  policy: NeuralActionRankingPolicy
+): number[] {
+  return memoryState.length === policy.getRecurrentStateSize()
+    ? memoryState.slice()
+    : policy.createInitialMemoryState();
 }
 
 function getRolloutPlayerMetrics(rollout: RolloutResult, playerIndex: number) {

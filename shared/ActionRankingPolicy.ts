@@ -56,14 +56,6 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "own.wasteOwnSolitaireConnectorForPounce",
   "own.wasteMatchesPounceParity",
   "own.wastePounceConnectorCloseness",
-  "cycle.revealsCard",
-  "cycle.revealedValue",
-  "cycle.revealedCenterPlayable",
-  "cycle.revealedCanPlaySoon",
-  "cycle.revealedOwnSolitaireDestinationCount",
-  "cycle.revealedOwnSolitaireConnectorForPounce",
-  "cycle.revealedMatchesPounceParity",
-  "cycle.revealedPounceConnectorCloseness",
   "cycle.resetsWaste",
   "cycle.stockFractionAfter",
   "cycle.cardsAdvanced",
@@ -108,24 +100,6 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "solitaire.destTopCenterLowerDistance",
   "solitaire.sourceCenterAboveCount",
   "solitaire.destTopCenterAboveCount",
-  "cycle.resetRevealsCard",
-  "cycle.resetRevealedValue",
-  "cycle.resetRevealedCenterPlayable",
-  "cycle.resetRevealedCanPlaySoon",
-  "cycle.resetRevealedOwnSolitaireDestinationCount",
-  "cycle.resetRevealedOwnSolitaireConnectorForPounce",
-  "cycle.resetRevealedMatchesPounceParity",
-  "cycle.resetRevealedPounceConnectorCloseness",
-  "cycle.lookaheadCenterPlayableReach",
-  "cycle.lookaheadCanPlaySoonReach",
-  "cycle.lookaheadOwnSolitaireDestinationReach",
-  "cycle.lookaheadOwnSolitaireConnectorForPounceReach",
-  "cycle.lookaheadPounceConnectorReach",
-  "own.stockLookaheadCenterPlayableReach",
-  "own.stockLookaheadCanPlaySoonReach",
-  "own.stockLookaheadOwnSolitaireDestinationReach",
-  "own.stockLookaheadOwnSolitaireConnectorForPounceReach",
-  "own.stockLookaheadPounceConnectorReach",
   "own.pounceCenterPlayable",
   "own.deckCenterPlayable",
   "own.stackCenterPlayableCount",
@@ -690,14 +664,6 @@ function buildActionRankingFeatures(
     bool(deckContext.wasteOwnSolitaireConnectorForPounce),
     bool(deckContext.wasteMatchesPounceParity),
     normalize(deckContext.wastePounceConnectorCloseness, 1),
-    bool(cycleShape.revealedCard != null),
-    normalizeCardValue(cycleShape.revealedCard),
-    bool(cycleShape.revealedCenterPlayable),
-    bool(cycleShape.revealedCanPlaySoon),
-    normalize(cycleShape.revealedOwnSolitaireDestinationCount, 4),
-    bool(cycleShape.revealedOwnSolitaireConnectorForPounce),
-    bool(cycleShape.revealedMatchesPounceParity),
-    normalize(cycleShape.revealedPounceConnectorCloseness, 1),
     bool(cycleShape.resetsWaste),
     normalize(cycleShape.stockFractionAfter, 1),
     normalize(cycleShape.cardsAdvanced, 3),
@@ -751,24 +717,6 @@ function buildActionRankingFeatures(
     normalize(solitaireFlow.destTopCenterLowerDistance, 13),
     normalize(solitaireFlow.sourceCenterAboveCount, Math.max(1, board.piles.length)),
     normalize(solitaireFlow.destTopCenterAboveCount, Math.max(1, board.piles.length)),
-    bool(cycleShape.resetRevealedCard != null),
-    normalizeCardValue(cycleShape.resetRevealedCard),
-    bool(cycleShape.resetRevealedCenterPlayable),
-    bool(cycleShape.resetRevealedCanPlaySoon),
-    normalize(cycleShape.resetRevealedOwnSolitaireDestinationCount, 4),
-    bool(cycleShape.resetRevealedOwnSolitaireConnectorForPounce),
-    bool(cycleShape.resetRevealedMatchesPounceParity),
-    normalize(cycleShape.resetRevealedPounceConnectorCloseness, 1),
-    normalize(cycleShape.lookaheadCenterPlayableReach, 1),
-    normalize(cycleShape.lookaheadCanPlaySoonReach, 1),
-    normalize(cycleShape.lookaheadOwnSolitaireDestinationReach, 1),
-    normalize(cycleShape.lookaheadOwnSolitaireConnectorForPounceReach, 1),
-    normalize(cycleShape.lookaheadPounceConnectorReach, 1),
-    normalize(deckContext.stockLookaheadCenterPlayableReach, 1),
-    normalize(deckContext.stockLookaheadCanPlaySoonReach, 1),
-    normalize(deckContext.stockLookaheadOwnSolitaireDestinationReach, 1),
-    normalize(deckContext.stockLookaheadOwnSolitaireConnectorForPounceReach, 1),
-    normalize(deckContext.stockLookaheadPounceConnectorReach, 1),
     bool(pressureFeatures.ownPounceCenterPlayable),
     bool(pressureFeatures.ownDeckCenterPlayable),
     normalize(pressureFeatures.ownStackCenterPlayableCount, 4),
@@ -1056,33 +1004,14 @@ function getSourceShapeFeatures(
 }
 
 function getCycleShapeFeatures(
-  board: BoardState,
+  _board: BoardState,
   player: PlayerState | undefined,
   move: Move
 ) {
   const emptyFeatures = {
-    revealedCard: undefined as CardState | undefined,
-    revealedCenterPlayable: false,
-    revealedCanPlaySoon: false,
-    revealedOwnSolitaireDestinationCount: 0,
-    revealedOwnSolitaireConnectorForPounce: false,
-    revealedMatchesPounceParity: false,
-    revealedPounceConnectorCloseness: 0,
     resetsWaste: false,
     stockFractionAfter: 0,
     cardsAdvanced: 0,
-    resetRevealedCard: undefined as CardState | undefined,
-    resetRevealedCenterPlayable: false,
-    resetRevealedCanPlaySoon: false,
-    resetRevealedOwnSolitaireDestinationCount: 0,
-    resetRevealedOwnSolitaireConnectorForPounce: false,
-    resetRevealedMatchesPounceParity: false,
-    resetRevealedPounceConnectorCloseness: 0,
-    lookaheadCenterPlayableReach: 0,
-    lookaheadCanPlaySoonReach: 0,
-    lookaheadOwnSolitaireDestinationReach: 0,
-    lookaheadOwnSolitaireConnectorForPounceReach: 0,
-    lookaheadPounceConnectorReach: 0,
   };
   if (!player || (move.type !== "cycle" && move.type !== "flip_deck")) {
     return emptyFeatures;
@@ -1093,54 +1022,11 @@ function getCycleShapeFeatures(
     return emptyFeatures;
   }
 
-  const lookaheadFeatures = getCycleLookaheadFeatures(board, player);
-
   if (player.deck.length === 0) {
-    const resetDeck = player.flippedDeck.slice().reverse();
-    const cardsAdvancedAfterReset = Math.min(3, resetDeck.length);
-    const resetRevealedCard =
-      cardsAdvancedAfterReset > 0
-        ? peek(resetDeck.slice(-cardsAdvancedAfterReset).reverse())
-        : undefined;
-    const pounceCard = peek(player.pounceDeck);
-    const resetSolitaireDestinations = resetRevealedCard
-      ? player.stacks.flatMap((_, dest) =>
-          canMoveCardToSolitaireStack(player, resetRevealedCard, dest)
-            ? [dest]
-            : []
-        )
-      : [];
     return {
       ...emptyFeatures,
       resetsWaste: player.flippedDeck.length > 0,
       stockFractionAfter: 1,
-      resetRevealedCard,
-      resetRevealedCenterPlayable:
-        resetRevealedCard != null &&
-        board.piles.some((pile) => canPlayOnCenterPile(pile, resetRevealedCard)),
-      resetRevealedCanPlaySoon:
-        resetRevealedCard != null && getCanPlaySoon(resetRevealedCard, board, 4),
-      resetRevealedOwnSolitaireDestinationCount:
-        resetSolitaireDestinations.length,
-      resetRevealedOwnSolitaireConnectorForPounce:
-        resetRevealedCard != null &&
-        resetSolitaireDestinations.some((dest) =>
-          getMakesPouncePlayable(
-            player,
-            { type: "c2s", source: "deck", dest },
-            resetRevealedCard
-          )
-        ),
-      resetRevealedMatchesPounceParity:
-        resetRevealedCard != null &&
-        pounceCard != null &&
-        getStackCompatibilityParity(resetRevealedCard) ===
-          getStackCompatibilityParity(pounceCard),
-      resetRevealedPounceConnectorCloseness:
-        resetRevealedCard && pounceCard
-          ? getConnectorCloseness(resetRevealedCard, pounceCard)
-          : 0,
-      ...lookaheadFeatures,
     };
   }
 
@@ -1148,136 +1034,14 @@ function getCycleShapeFeatures(
     move.type === "flip_deck"
       ? player.deck.length
       : Math.min(3, player.deck.length);
-  const revealedCard = peek(player.deck.slice(-cardsAdvanced).reverse());
-  const pounceCard = peek(player.pounceDeck);
-  const solitaireDestinations = revealedCard
-    ? player.stacks.flatMap((_, dest) =>
-        canMoveCardToSolitaireStack(player, revealedCard, dest) ? [dest] : []
-      )
-    : [];
   return {
-    revealedCard,
-    revealedCenterPlayable:
-      revealedCard != null &&
-      board.piles.some((pile) => canPlayOnCenterPile(pile, revealedCard)),
-    revealedCanPlaySoon:
-      revealedCard != null && getCanPlaySoon(revealedCard, board, 4),
-    revealedOwnSolitaireDestinationCount: solitaireDestinations.length,
-    revealedOwnSolitaireConnectorForPounce:
-      revealedCard != null &&
-      solitaireDestinations.some((dest) =>
-        getMakesPouncePlayable(
-          player,
-          { type: "c2s", source: "deck", dest },
-          revealedCard
-        )
-      ),
-    revealedMatchesPounceParity:
-      revealedCard != null &&
-      pounceCard != null &&
-      getStackCompatibilityParity(revealedCard) ===
-        getStackCompatibilityParity(pounceCard),
-    revealedPounceConnectorCloseness:
-      revealedCard && pounceCard
-        ? getConnectorCloseness(revealedCard, pounceCard)
-        : 0,
     resetsWaste: false,
     stockFractionAfter:
       move.type === "flip_deck"
         ? 0
         : (player.deck.length - cardsAdvanced) / total,
     cardsAdvanced,
-    resetRevealedCard: undefined,
-    resetRevealedCenterPlayable: false,
-    resetRevealedCanPlaySoon: false,
-    resetRevealedOwnSolitaireDestinationCount: 0,
-    resetRevealedOwnSolitaireConnectorForPounce: false,
-    resetRevealedMatchesPounceParity: false,
-    resetRevealedPounceConnectorCloseness: 0,
-    ...lookaheadFeatures,
   };
-}
-
-const CYCLE_LOOKAHEAD_MAX_STEPS = 16;
-
-function getCycleLookaheadFeatures(board: BoardState, player: PlayerState) {
-  const features = {
-    lookaheadCenterPlayableReach: 0,
-    lookaheadCanPlaySoonReach: 0,
-    lookaheadOwnSolitaireDestinationReach: 0,
-    lookaheadOwnSolitaireConnectorForPounceReach: 0,
-    lookaheadPounceConnectorReach: 0,
-  };
-  let deck = player.deck.slice();
-  let flippedDeck = player.flippedDeck.slice();
-  const pounceCard = peek(player.pounceDeck);
-
-  for (
-    let step = 0;
-    step < CYCLE_LOOKAHEAD_MAX_STEPS &&
-    (deck.length > 0 || flippedDeck.length > 0);
-    step += 1
-  ) {
-    if (deck.length === 0) {
-      deck = flippedDeck.slice().reverse();
-      flippedDeck = [];
-      continue;
-    }
-
-    const cardsAdvanced = Math.min(3, deck.length);
-    const triple = deck.slice(-cardsAdvanced).reverse();
-    deck.splice(deck.length - cardsAdvanced, cardsAdvanced);
-    flippedDeck.push(...triple);
-
-    const visibleCard = peek(flippedDeck);
-    if (!visibleCard) {
-      continue;
-    }
-
-    const reach = 1 / (step + 1);
-    const solitaireDestinations = player.stacks.flatMap((_, dest) =>
-      canMoveCardToSolitaireStack(player, visibleCard, dest) ? [dest] : []
-    );
-
-    if (board.piles.some((pile) => canPlayOnCenterPile(pile, visibleCard))) {
-      features.lookaheadCenterPlayableReach = Math.max(
-        features.lookaheadCenterPlayableReach,
-        reach
-      );
-    }
-    if (getCanPlaySoon(visibleCard, board, 4)) {
-      features.lookaheadCanPlaySoonReach = Math.max(
-        features.lookaheadCanPlaySoonReach,
-        reach
-      );
-    }
-    features.lookaheadOwnSolitaireDestinationReach = Math.max(
-      features.lookaheadOwnSolitaireDestinationReach,
-      reach * normalize(solitaireDestinations.length, 4)
-    );
-    if (
-      solitaireDestinations.some((dest) =>
-        getMakesPouncePlayable(
-          player,
-          { type: "c2s", source: "deck", dest },
-          visibleCard
-        )
-      )
-    ) {
-      features.lookaheadOwnSolitaireConnectorForPounceReach = Math.max(
-        features.lookaheadOwnSolitaireConnectorForPounceReach,
-        reach
-      );
-    }
-    if (pounceCard) {
-      features.lookaheadPounceConnectorReach = Math.max(
-        features.lookaheadPounceConnectorReach,
-        reach * getConnectorCloseness(visibleCard, pounceCard)
-      );
-    }
-  }
-
-  return features;
 }
 
 function getOwnDeckContextFeatures(
@@ -1293,11 +1057,6 @@ function getOwnDeckContextFeatures(
     wasteCenterDistance: 0,
     stockFraction: 0,
     wasteFraction: 0,
-    stockLookaheadCenterPlayableReach: 0,
-    stockLookaheadCanPlaySoonReach: 0,
-    stockLookaheadOwnSolitaireDestinationReach: 0,
-    stockLookaheadOwnSolitaireConnectorForPounceReach: 0,
-    stockLookaheadPounceConnectorReach: 0,
   };
   if (!player) {
     return emptyFeatures;
@@ -1311,7 +1070,6 @@ function getOwnDeckContextFeatures(
         canMoveCardToSolitaireStack(player, wasteCard, dest) ? [dest] : []
       )
     : [];
-  const lookahead = getCycleLookaheadFeatures(board, player);
 
   return {
     wasteCanPlaySoon: wasteCard != null && getCanPlaySoon(wasteCard, board, 4),
@@ -1335,13 +1093,6 @@ function getOwnDeckContextFeatures(
     wasteCenterDistance: getCenterDistanceToCard(board, wasteCard),
     stockFraction: deckTotal <= 0 ? 0 : player.deck.length / deckTotal,
     wasteFraction: deckTotal <= 0 ? 0 : player.flippedDeck.length / deckTotal,
-    stockLookaheadCenterPlayableReach: lookahead.lookaheadCenterPlayableReach,
-    stockLookaheadCanPlaySoonReach: lookahead.lookaheadCanPlaySoonReach,
-    stockLookaheadOwnSolitaireDestinationReach:
-      lookahead.lookaheadOwnSolitaireDestinationReach,
-    stockLookaheadOwnSolitaireConnectorForPounceReach:
-      lookahead.lookaheadOwnSolitaireConnectorForPounceReach,
-    stockLookaheadPounceConnectorReach: lookahead.lookaheadPounceConnectorReach,
   };
 }
 

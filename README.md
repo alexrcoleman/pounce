@@ -5,9 +5,9 @@ This is a project to simulate the game Nertz / Pounce. It includes some online m
 ## Neural action-ranking training
 
 The action-ranking prototype trains a small neural network to score the legal
-moves generated from each board state. It first imitates the existing heuristic
-bot, then optionally fine-tunes with rollout reward against teacher bots or
-neural self-play opponents.
+moves generated from each board state. It still supports imitation for
+bootstrapping and diagnostics, but current model work should favor PPO/reward
+training against point differential and neural self-play/champion opponents.
 
 ```powershell
 npm run action-ranking:examples
@@ -21,6 +21,7 @@ Useful training knobs:
 - `RL_EPISODES`, `RL_LR`, `RL_TEMPERATURE`, `RL_LOCAL_REWARD_WEIGHT`, `RL_LOCAL_REWARD_DISCOUNT`, `RL_OPPONENT_MODE`, `RL_OPPONENT_MODEL`, `RL_BASELINE_MODE`, `RL_COMMON_RANDOM`, `RL_CREDIT_MODE`, `RL_INCLUDE_WAIT_ACTIONS`, `RL_INCLUDE_PREMOVE_ACTIONS`, `RL_INCLUDE_FLIP_DECK_ACTIONS`, `RL_PPO_FLIP_DECK_PENALTY`, `RL_COUNTERFACTUAL_SCAN_EPISODES`, `RL_COUNTERFACTUAL_SCAN_SEED_COUNT`, `RL_COUNTERFACTUAL_ROLLOUTS`, `RL_COUNTERFACTUAL_ROLLOUT_MOVES`, `RL_COUNTERFACTUAL_CANDIDATES`, `RL_COUNTERFACTUAL_MIN_RETURN_GAP`, `RL_COUNTERFACTUAL_MAX_RETURN_GAP`, `RL_COUNTERFACTUAL_REQUIRE_BEHAVIOR_GAP`, `RL_COUNTERFACTUAL_MIN_BEHAVIOR_IMPROVEMENT`, `RL_COUNTERFACTUAL_STATE_SOURCE`, `RL_COUNTERFACTUAL_MODE`, `RL_COUNTERFACTUAL_GAP_SE_MULTIPLIER`, `RL_COUNTERFACTUAL_MIN_BEHAVIOR_WIN_RATE`, `RL_COUNTERFACTUAL_MIN_BEHAVIOR_WINS`, `RL_COUNTERFACTUAL_MAX_POLICY_MARGIN`, `RL_COUNTERFACTUAL_REQUIRE_POLICY_CHANGE`, `RL_COUNTERFACTUAL_PREFERENCE_SCOPE`, `RL_COUNTERFACTUAL_PAIRWISE_MARGIN`, `RL_COUNTERFACTUAL_PAIRWISE_WEIGHT_MODE`, `RL_COUNTERFACTUAL_PAIRWISE_WEIGHT_SCALE`, `RL_COUNTERFACTUAL_PAIRWISE_MAX_WEIGHT`, `RL_COUNTERFACTUAL_PAIRWISE_FEATURE_MODE`, `RL_COUNTERFACTUAL_PAIRWISE_STOP_MARGIN`, `RL_COUNTERFACTUAL_MAX_TRANSITIONS_PER_EPISODE`, `RL_COUNTERFACTUAL_MAX_SCORE_GAP`, `RL_COUNTERFACTUAL_SCORE_GAP_BUDGET`, `RL_COUNTERFACTUAL_MAX_LABELS_PER_MOVE_PAIR`, `RL_COUNTERFACTUAL_INCLUDE_MOVE_PAIRS`, `RL_COUNTERFACTUAL_EXCLUDE_MOVE_PAIRS`, `RL_COUNTERFACTUAL_BEHAVIOR_MOVE_TYPES`, `RL_COUNTERFACTUAL_STOP_AFTER_LABELS`, `RL_COUNTERFACTUAL_VALIDATION_ROLLOUTS`, `RL_COUNTERFACTUAL_MIN_VALIDATION_RETURN_GAP`, `RL_COUNTERFACTUAL_MIN_VALIDATION_WINS`, `RL_COUNTERFACTUAL_SCORE_WEIGHT`, `RL_COUNTERFACTUAL_POUNCE_WEIGHT`, `RL_COUNTERFACTUAL_SKIP_CYCLE_OVER_CONNECTOR`, `RL_COUNTERFACTUAL_SKIP_WEAK_CYCLE_OVER_CONNECTOR`, `RL_COUNTERFACTUAL_SKIP_SOLITAIRE_OVER_USEFUL_CYCLE`, `RL_COUNTERFACTUAL_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_ANCHOR_TEMPERATURE`, `RL_COUNTERFACTUAL_BEHAVIOR_CORRECTION_WEIGHT`, `RL_COUNTERFACTUAL_BEHAVIOR_CORRECTION_MARGIN`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MARGIN`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MAX_POLICY_MARGIN`, `RL_COUNTERFACTUAL_CONNECTOR_ANCHOR_MODE`, `RL_COUNTERFACTUAL_MOVE_TYPE_ANCHOR_WEIGHT`, `RL_COUNTERFACTUAL_MOVE_TYPE_ANCHOR_EXAMPLES`, `RL_COUNTERFACTUAL_MOVE_TYPE_ANCHOR_TEMPERATURE`, `RL_COUNTERFACTUAL_VALUE_SCALE`, `RL_COUNTERFACTUAL_VALUE_CENTER`, `RL_COUNTERFACTUAL_VALUE_TARGET_MODE`, `RL_COUNTERFACTUAL_VALUE_HUBER`, `RL_UPDATE_EPOCHS`, `RL_UPDATE_SCOPE`, `RL_TRAINABLE_LAYERS`, `RL_NORMALIZE_ADVANTAGES`, `RL_ADVANTAGE_CLIP`
 - `PLAYERS`, `HIDDEN`, `HIDDEN_LAYERS`, `MAX_MOVES`, `SEED`
 - `HIDDEN` and `HIDDEN_LAYERS` accept comma-separated layer sizes, for example `HIDDEN=192,96`
+- `RECURRENT_STATE_SIZE=N` converts or creates a version 3 action-ranking model with a per-player recurrent memory vector. Existing feed-forward checkpoints start with zero scorer weights for the new memory inputs, so PPO can train memory usage without an immediate behavior jump.
 - `MODEL_OUT=C:\tmp\pounce-action-ranking-model.json` to save model weights
 - `MODEL_IN=...\model.json npm run action-ranking:train` to fine-tune saved weights
 - `RL_ONLY=true MODEL_IN=...\model.json npm run action-ranking:train` to run a pure RL fine-tune without accidental imitation or improvement updates
@@ -51,11 +52,11 @@ environment variable as a single direct recipe.
 
 Evaluation output includes same-seat teacher baseline metrics plus behavior
 diagnostics such as decision count, center/solitaire/cycle/flip-deck move rates,
-pounce remaining, and pounce-out rate. The model loader accepts both the original
-single-hidden-layer checkpoint format and the newer multi-layer format. It also
-expands older checkpoints onto the current action-feature list with zero weights
-for new inputs, preserving existing scores while allowing future fine-tunes to
-train newly added tactical features.
+pounce remaining, and pounce-out rate. The model loader accepts the original
+single-hidden-layer checkpoint format, the multi-layer feed-forward format, and
+the recurrent version 3 format. It expands older checkpoints onto the current
+action-feature list with zero weights for new inputs, and drops obsolete feature
+columns such as the removed stock lookahead inputs.
 The live neural AI action surface can include `wait`, `premove`, and full-deck
 `flip_deck` decisions.
 Training and audit scripts keep `wait` and `premove` candidates disabled by
@@ -99,15 +100,13 @@ or soon, best buried/bottom pounce-connector closeness, and whether a source mov
 exposes a card with another solitaire destination. These are meant to let rollout
 labels explain why exposing or preserving a pile matters without feeding the
 network a full recurrent board memory.
-It also repeats a compact own-deck context on every candidate: visible waste-card
-soon/play-to-solitaire/pounce-connector shape plus stock-lookahead reach for
-center play, soon play, solitaire destinations, and pounce connectors. That gives
-non-cycle moves a lightweight memory proxy for the deck opportunity they are
-preserving or delaying. The current feature surface also exposes direct
-stock/waste fractions, whether a deck card has been played this stock cycle,
-plus the current pounce-card value/parity on every
-candidate, so reward labels do not have to reconstruct those ideas from separate
-count features.
+It also repeats compact visible own-deck context on every candidate: current
+waste-card soon/play-to-solitaire/pounce-connector shape, direct stock/waste
+fractions, whether a deck card has been played this stock cycle, plus the current
+pounce-card value/parity. The previous future-card stock lookahead/reveal inputs
+have been removed; memory-sensitive stock behavior should now come from
+`playedDeckCardThisCycle` and recurrent PPO experiments rather than privileged
+future deck features.
 Center moves now carry a sharper tempo/threat signal: own follow-up cards are
 split by pounce/deck/solitaire source, and opponent follow-up pressure is
 weighted by how close that opponent is to pouncing out. This is meant to give RL
@@ -277,28 +276,20 @@ Because that was not a strict greedy-state reproduction, do not use it as the
 final verdict on the compact champion recipe. The broader lesson still holds:
 the path is seed-sensitive, and the next useful work is improving label
 yield/reliability before spending larger confirmation budgets.
-Cycle moves now include a stock-memory proxy: the card that would become visible
-after cycling, whether it can play center/solitaire/soon, whether it can connect
-to the pounce card, whether the action only resets the waste pile, and the
-remaining stock fraction after the cycle. These inputs are meant to let reward
-labels explain when cycling is good because a remembered stock card is useful,
-rather than pushing every cycle action up globally.
-Cycle reset moves also expose the known card that would become visible after
-resetting the waste and cycling once, so the policy can learn "reset because I
-remember the next pass is useful" instead of treating all waste resets alike.
-Cycle moves also include distance-weighted lookahead summaries across the
-known stock order: whether a future visible stock card can play to center, can
-play soon, can move to solitaire, or can act as a pounce connector. This is a
-stateless memory proxy for the feed-forward model, giving it a way to value
-cycling back toward a remembered card without adding recurrent network state.
+Cycle moves now expose only observable deck-cycle shape: whether the action
+resets waste, the remaining stock fraction after the cycle, and cards advanced.
+The previous revealed-card/reset-card/lookahead summaries were removed because
+they leaked future stock order into a feed-forward action feature. The intended
+replacement path is recurrent PPO memory, optionally helped by the targeted
+`own.playedDeckCardThisCycle` input.
 A light imitation warmup from the behavior-scope checkpoint on the expanded
 102-feature surface (`48` deals, `2` epochs, `IMITATION_LR=0.005`) preserved
 behavior: it measured `-0.008 +/- 0.114` over 384 paired games against the
 starting checkpoint, with matching `20.8%` pounce-out rate. A 2,000-state
-teacher diagnostic found `99.7%` top-action agreement, with the new
-`cycle.lookaheadCanPlaySoonReach` showing up in the few cycle-vs-deck-solitaire
-divergences. This is not a promotion, but it confirms the lookahead inputs can
-be introduced without destabilizing the current policy.
+teacher diagnostic found `99.7%` top-action agreement, with the removed
+lookahead inputs showing up in the few cycle-vs-deck-solitaire divergences.
+This remains useful historical context, but the active feature surface no longer
+uses those inputs.
 A first reliability-gated RL probe from that lookahead warmup accepted 8
 behavior-changing pairwise labels after 61 greedy-state scan episodes
 (`RL_COUNTERFACTUAL_ROLLOUTS=2`,
@@ -368,19 +359,22 @@ champion models directly instead of using heuristic opponents. By default it
 splits seats by parity and replays each deal with the assignments swapped, so a
 candidate can be checked for actual neural-vs-neural strength before promotion.
 
-Current useful baseline recipe:
+Current preferred PPO/recurrent probe recipe:
 
 ```powershell
-$env:HIDDEN='96'
-$env:IMITATION_DEALS='240'
-$env:IMITATION_EPOCHS='8'
-$env:IMPROVEMENT_STATES='0'
-$env:RL_EPISODES='0'
-$env:MODEL_OUT='.\node_modules\pounce-action-ranking-model.json'
-npm run action-ranking:train
+$env:MODEL_IN='.\shared\models\pounce-action-ranking-cursor-champion.json'
+$env:RECURRENT_STATE_SIZE='32'
+$env:RL_EPISODES='128'
+$env:RL_PPO_EPOCHS='4'
+$env:RL_PPO_MINIBATCH_SIZE='128'
+$env:RL_OPPONENT_MODE='self'
+$env:MODEL_OUT='.\node_modules\pounce-action-ranking-recurrent-ppo.json'
+npm run action-ranking:train-ppo
 ```
 
-The strongest imitation-only recipe tried so far has been:
+Compare any recurrent PPO candidate against the current champion with paired
+point-differential checks before promotion. The strongest imitation-only recipe
+tried historically has been:
 
 ```powershell
 $env:HIDDEN='192'

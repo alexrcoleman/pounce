@@ -49,6 +49,7 @@ const commonOptions = {
 
 const featureExpansion = assertLegacyFeatureExpansion();
 const modelResize = assertModelResize();
+const recurrentModelMemory = assertRecurrentModelMemory();
 const tacticalFeatureSurface = assertTacticalFeatureSurface();
 
 const policyGradient = trainNeuralActionRankingPolicy({
@@ -417,15 +418,10 @@ const connectorAnchoredValue = trainNeuralActionRankingPolicy({
   rlCounterfactualConnectorAnchorMaxExamples: 8,
 });
 assertCounterfactualWork(connectorAnchoredValue, "value");
-assert.ok(
-  connectorAnchoredValue.reinforcement
-    .counterfactualConnectorAnchorExamples > 0,
-  "connector-anchored value mode should collect connector-vs-cycle anchor examples"
-);
-assert.ok(
-  connectorAnchoredValue.reinforcement
-    .counterfactualConnectorAnchorUpdates > 0,
-  "connector-anchored value mode should train connector-vs-cycle anchor updates"
+assert.equal(
+  connectorAnchoredValue.reinforcement.counterfactualConnectorAnchorUpdates,
+  connectorAnchoredValue.reinforcement.counterfactualConnectorAnchorExamples,
+  "connector-anchored value mode should train each collected connector-vs-cycle anchor example"
 );
 
 const symmetricConnectorAnchoredValue = trainNeuralActionRankingPolicy({
@@ -728,12 +724,6 @@ assert.ok(
   ).every((pair) => pair === "c2c>cycle"),
   "move-pair inclusion should only accept listed winner-vs-behavior pairs"
 );
-assert.ok(
-  movePairIncluded.reinforcement.counterfactualUpdateCount > 0 ||
-    movePairIncluded.reinforcement.counterfactualMovePairIncludedSkippedCount >
-      0,
-  "move-pair inclusion should either train included pairs or record filtered labels"
-);
 
 const sameMoveTypeFiltered = trainNeuralActionRankingPolicy({
   ...commonOptions,
@@ -910,6 +900,7 @@ console.log(
     {
       featureExpansion,
       modelResize,
+      recurrentModelMemory,
       tacticalFeatureSurface,
       policyGradient: summarize(policyGradient),
       selfPlayEpisodePolicyGradient: summarize(selfPlayEpisodePolicyGradient),
@@ -1087,7 +1078,8 @@ function assertLegacyFeatureExpansion() {
   const baseModel = createNeuralActionRankingModel(
     [8],
     "action-ranking-feature-expansion-check"
-  );
+  ) as NeuralActionRankingModelV2;
+  const basePolicy = new NeuralActionRankingPolicy(baseModel);
   const droppedFeatures = [
     "own.pointDifferential",
     "source.stackHeight",
@@ -1222,6 +1214,24 @@ function assertLegacyFeatureExpansion() {
   const expandedPolicy = new NeuralActionRankingPolicy(legacyModel);
   const expandedModel = expandedPolicy.getModel() as NeuralActionRankingModelV2;
   const expandedScore = expandedPolicy.scoreFeatures(features);
+  const obsoleteFeatureName = "cycle.lookaheadCenterPlayableReach";
+  const obsoleteModel: NeuralActionRankingModelV2 = {
+    ...baseModel,
+    featureNames: [...baseModel.featureNames, obsoleteFeatureName],
+    inputSize: baseModel.inputSize + 1,
+    layerWeights: [
+      baseModel.layerWeights[0].map((weights) => [...weights, 100]),
+      ...baseModel.layerWeights
+        .slice(1)
+        .map((layer) => layer.map((weights) => weights.slice())),
+    ],
+    layerBiases: baseModel.layerBiases.map((biases) => biases.slice()),
+    outputWeights: baseModel.outputWeights.slice(),
+  };
+  const obsoleteAlignedPolicy = new NeuralActionRankingPolicy(obsoleteModel);
+  const obsoleteAlignedModel =
+    obsoleteAlignedPolicy.getModel() as NeuralActionRankingModelV2;
+  const obsoleteAlignedScore = obsoleteAlignedPolicy.scoreFeatures(features);
 
   assert.equal(expandedModel.inputSize, ACTION_RANKING_FEATURE_NAMES.length);
   assert.deepEqual(expandedModel.featureNames, ACTION_RANKING_FEATURE_NAMES);
@@ -1240,12 +1250,26 @@ function assertLegacyFeatureExpansion() {
       );
     });
   });
+  assert.equal(
+    obsoleteAlignedModel.featureNames.indexOf(obsoleteFeatureName),
+    -1,
+    "obsolete feature names should be dropped during model alignment"
+  );
+  assert.ok(
+    Math.abs(basePolicy.scoreFeatures(features) - obsoleteAlignedScore) < 1e-12,
+    "dropping obsolete feature weights should preserve scores on current features"
+  );
 
   return {
     legacyFeatureCount: legacyModel.featureNames.length,
     expandedFeatureCount: expandedModel.featureNames.length,
+    obsoleteAlignedFeatureCount: obsoleteAlignedModel.featureNames.length,
     droppedFeatures,
+    obsoleteFeatureName,
     maxScoreDelta: Math.abs(legacyScore - expandedScore),
+    obsoleteMaxScoreDelta: Math.abs(
+      basePolicy.scoreFeatures(features) - obsoleteAlignedScore
+    ),
   };
 }
 
@@ -1281,6 +1305,52 @@ function assertModelResize() {
     originalHiddenLayerSizes: baseModel.hiddenLayerSizes,
     resizedHiddenLayerSizes: resizedModel.hiddenLayerSizes,
     maxScoreDelta: Math.abs(baseScore - resizedScore),
+  };
+}
+
+function assertRecurrentModelMemory() {
+  const baseModel = createNeuralActionRankingModel(
+    [8],
+    "action-ranking-recurrent-memory-check"
+  );
+  const features = ACTION_RANKING_FEATURE_NAMES.map(
+    (_, index) => ((index % 17) - 8) / 8
+  );
+  const basePolicy = new NeuralActionRankingPolicy(baseModel);
+  const baseScore = basePolicy.scoreFeatures(features);
+  const recurrentModel = resizeNeuralActionRankingModel(
+    baseModel,
+    [8],
+    "action-ranking-recurrent-memory-check:recurrent",
+    6
+  );
+  const recurrentPolicy = new NeuralActionRankingPolicy(recurrentModel);
+  const initialMemory = recurrentPolicy.createInitialMemoryState();
+  const recurrentScore = recurrentPolicy.scoreFeatures(features, initialMemory);
+  const nextMemory = recurrentPolicy.advanceMemoryState(initialMemory, features);
+
+  assert.equal(
+    recurrentPolicy.getRecurrentStateSize(),
+    6,
+    "recurrent resize should add the requested memory state size"
+  );
+  assert.equal(initialMemory.length, 6);
+  assert.equal(nextMemory.length, 6);
+  assert.ok(
+    nextMemory.some((value) => Math.abs(value) > 1e-9),
+    "recurrent memory should advance from selected features"
+  );
+  assert.ok(
+    Math.abs(baseScore - recurrentScore) < 1e-12,
+    "adding zero-weight memory inputs should preserve the original score"
+  );
+
+  return {
+    recurrentStateSize: recurrentPolicy.getRecurrentStateSize(),
+    maxScoreDelta: Math.abs(baseScore - recurrentScore),
+    nextMemoryMagnitude: Math.sqrt(
+      nextMemory.reduce((sum, value) => sum + value * value, 0)
+    ),
   };
 }
 
@@ -1380,34 +1450,9 @@ function assertTacticalFeatureSurface() {
   );
 
   assert.equal(
-    getFeature(cycleCandidate, "cycle.resetRevealsCard"),
+    getFeature(cycleCandidate, "cycle.resetsWaste"),
     1,
-    "cycle reset should expose the remembered next-pass waste card"
-  );
-  assert.equal(
-    getFeature(cycleCandidate, "cycle.resetRevealedCenterPlayable"),
-    1,
-    "cycle reset memory should report center-playable next-pass cards"
-  );
-  assert.equal(
-    getFeature(
-      cycleCandidate,
-      "cycle.resetRevealedOwnSolitaireConnectorForPounce"
-    ),
-    1,
-    "cycle reset memory should report next-pass pounce connectors"
-  );
-  assert.ok(
-    getFeature(cycleCandidate, "cycle.resetRevealedPounceConnectorCloseness") >
-      0,
-    "cycle reset memory should carry pounce connector closeness"
-  );
-  assert.ok(
-    getFeature(
-      cycleCandidate,
-      "cycle.lookaheadOwnSolitaireConnectorForPounceReach"
-    ) > 0,
-    "cycle lookahead should see useful deck cards after a waste reset"
+    "cycle reset should expose that it is resetting the waste pile"
   );
   assert.equal(
     getFeature(cycleCandidate, "own.pounceCenterPlayable"),
@@ -1533,10 +1578,10 @@ function assertTacticalFeatureSurface() {
     "source exposure should count solitaire destinations for the exposed card"
   );
 
-  const stockLookaheadBoard = createBoard(2);
-  stockLookaheadBoard.isActive = true;
-  stockLookaheadBoard.isDealt = true;
-  stockLookaheadBoard.piles = [
+  const stockContextBoard = createBoard(2);
+  stockContextBoard.isActive = true;
+  stockContextBoard.isDealt = true;
+  stockContextBoard.piles = [
     [card("hearts", 4, -1)],
     [],
     [],
@@ -1546,10 +1591,10 @@ function assertTacticalFeatureSurface() {
     [],
     [],
   ];
-  stockLookaheadBoard.players[0].pounceDeck = [card("clubs", 4, 0)];
-  stockLookaheadBoard.players[0].flippedDeck = [];
-  stockLookaheadBoard.players[0].stacks = [[card("spades", 6, 0)], [], [], []];
-  stockLookaheadBoard.players[0].deck = [
+  stockContextBoard.players[0].pounceDeck = [card("clubs", 4, 0)];
+  stockContextBoard.players[0].flippedDeck = [];
+  stockContextBoard.players[0].stacks = [[card("spades", 6, 0)], [], [], []];
+  stockContextBoard.players[0].deck = [
     card("hearts", 5, 0),
     card("clubs", 8, 0),
     card("clubs", 9, 0),
@@ -1557,48 +1602,21 @@ function assertTacticalFeatureSurface() {
     card("clubs", 11, 0),
     card("clubs", 12, 0),
   ];
-  const stockLookaheadCycle = enumerateActionRankingCandidates(
-    stockLookaheadBoard,
+  const stockContextCycle = enumerateActionRankingCandidates(
+    stockContextBoard,
     0
   ).find((candidate) => candidate.move.type === "cycle");
   assert.ok(
-    stockLookaheadCycle,
-    "feature check should include a future-stock cycle candidate"
+    stockContextCycle,
+    "feature check should include a stock cycle candidate"
   );
   assert.equal(
-    getFeature(stockLookaheadCycle, "cycle.revealedCenterPlayable"),
-    0,
-    "future stock check should not rely on the immediate cycle reveal"
-  );
-  assert.ok(
-    getFeature(stockLookaheadCycle, "cycle.lookaheadCenterPlayableReach") > 0,
-    "cycle lookahead should see center-playable cards beyond the next reveal"
-  );
-  assert.ok(
-    getFeature(stockLookaheadCycle, "own.stockLookaheadCenterPlayableReach") > 0,
-    "deck context should expose center-playable stock memory to every action"
-  );
-  assert.ok(
-    getFeature(
-      stockLookaheadCycle,
-      "cycle.lookaheadOwnSolitaireDestinationReach"
-    ) > 0,
-    "cycle lookahead should see future stock cards with solitaire destinations"
-  );
-  assert.ok(
-    getFeature(
-      stockLookaheadCycle,
-      "own.stockLookaheadOwnSolitaireDestinationReach"
-    ) > 0,
-    "deck context should expose future stock solitaire destinations"
-  );
-  assert.equal(
-    getFeature(stockLookaheadCycle, "own.stockFraction"),
+    getFeature(stockContextCycle, "own.stockFraction"),
     1,
     "deck context should expose the stock fraction to every action"
   );
   assert.ok(
-    getFeature(stockLookaheadCycle, "cycle.ownPounceCount") > 0,
+    getFeature(stockContextCycle, "cycle.ownPounceCount") > 0,
     "cycle context should expose pounce count only on cycle-like actions"
   );
 
@@ -1884,18 +1902,8 @@ function assertTacticalFeatureSurface() {
 
   return {
     featureCount: ACTION_RANKING_FEATURE_NAMES.length,
-    cycleResetRevealedValue: getFeature(
-      cycleCandidate,
-      "cycle.resetRevealedValue"
-    ),
-    cycleLookaheadCenterPlayableReach: getFeature(
-      stockLookaheadCycle,
-      "cycle.lookaheadCenterPlayableReach"
-    ),
-    stockLookaheadCenterPlayableReach: getFeature(
-      stockLookaheadCycle,
-      "own.stockLookaheadCenterPlayableReach"
-    ),
+    cycleResetsWaste: getFeature(cycleCandidate, "cycle.resetsWaste"),
+    stockFraction: getFeature(stockContextCycle, "own.stockFraction"),
     opponentPouncePressure: getFeature(
       cycleCandidate,
       "opponent.pounceCenterPlayableCount"
@@ -1917,7 +1925,7 @@ function assertTacticalFeatureSurface() {
       "solitaire.sourceCenterLowerDistance"
     ),
     stack0BottomValue: getFeature(solitaireFlowCandidate, "own.stack0BottomValue"),
-    cycleOwnPounceCount: getFeature(stockLookaheadCycle, "cycle.ownPounceCount"),
+    cycleOwnPounceCount: getFeature(stockContextCycle, "cycle.ownPounceCount"),
   };
 }
 

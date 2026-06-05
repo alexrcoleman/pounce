@@ -20,12 +20,14 @@ const hiddenLayerSizes =
   initialModel == null
     ? readIntegerListEnv("HIDDEN_LAYERS", readIntegerListEnv("HIDDEN", [48]))
     : resizeHiddenLayerSizes ?? getModelHiddenLayerSizes(initialModel);
+const recurrentStateSize = readOptionalIntegerEnv("RECURRENT_STATE_SIZE");
 const rlOnly = readBooleanEnv("RL_ONLY", false);
 const rlAlgorithm = readRlAlgorithmEnv("RL_ALGORITHM", "policy_gradient");
 
 const options = {
   playerCount: readIntegerEnv("PLAYERS", 4),
   hiddenLayerSizes,
+  recurrentStateSize,
   seed,
   actionOptions: readActionOptionsEnv(),
   imitationDeals: rlOnly ? 0 : readIntegerEnv("IMITATION_DEALS", 24),
@@ -432,6 +434,15 @@ function readIntegerEnv(name: string, fallback: number): number {
   }
   const parsed = Number(value);
   return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : fallback;
+}
+
+function readOptionalIntegerEnv(name: string): number | undefined {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return undefined;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : undefined;
 }
 
 function readIntegerListEnv(name: string, fallback: number[]): number[] {
