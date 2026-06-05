@@ -6,7 +6,7 @@ import {
   NeuralActionRankingPolicy,
   type NeuralActionRankingModel,
 } from "./NeuralActionRankingPolicy";
-import type { AIMode } from "./RoomState";
+import { getAIPlayerResolvedMode, type AIMode } from "./RoomState";
 
 let neuralAIPolicy: NeuralActionRankingPolicy | null =
   new NeuralActionRankingPolicy(championModel as NeuralActionRankingModel);
@@ -41,29 +41,11 @@ export function getConfiguredAIMove(
   hands: readonly CursorState[] | undefined,
   mode: AIMode | undefined
 ): Move | undefined {
-  const normalizedMode = mode ?? "fixed";
-  if (normalizedMode === "trained") {
-    return (
-      getNeuralAIMove(boardState, playerIndex, cursor, hands) ??
-      getBasicAIMove(boardState, playerIndex, cursor)
-    );
-  }
-  if (normalizedMode === "hybrid" && isFirstAIPlayer(boardState, playerIndex)) {
+  if (getAIPlayerResolvedMode(boardState, playerIndex, mode) === "trained") {
     return (
       getNeuralAIMove(boardState, playerIndex, cursor, hands) ??
       getBasicAIMove(boardState, playerIndex, cursor)
     );
   }
   return getBasicAIMove(boardState, playerIndex, cursor);
-}
-
-function isFirstAIPlayer(boardState: BoardState, playerIndex: number): boolean {
-  const player = boardState.players[playerIndex];
-  return (
-    player != null &&
-    player.socketId == null &&
-    boardState.players
-      .filter((candidate) => candidate.socketId == null)
-      .indexOf(player) === 0
-  );
 }

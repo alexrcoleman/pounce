@@ -48,6 +48,7 @@ import {
   useResponsiveBoardLayout,
 } from "./BoardLayout";
 import { getPlayerLocation } from "../shared/CardLocations";
+import type { AIMode } from "../shared/RoomState";
 type Props = {
   executeMove: (move: Move) => void;
   onUpdateHand: (location: CursorLocation) => void;
@@ -259,7 +260,10 @@ export default observer(function Board({
         <BoardLayoutProvider value={layout}>
           <div className={styles.rootInside} ref={ref}>
             <PileSection roomId={roomId} />
-            <ScoresTableTabOverlay board={board} />
+            <ScoresTableTabOverlay
+              aiMode={state.roomSettings.aiMode}
+              board={board}
+            />
             <HandPlatesLayer visiblePlayerIndices={visiblePlayerIndices} />
             {canInteractWithCards ? (
               <>
@@ -899,7 +903,13 @@ function isPlayerUndealt(player: PlayerState): boolean {
   );
 }
 
-function ScoresTableTabOverlay({ board }: { board: BoardState }) {
+function ScoresTableTabOverlay({
+  aiMode,
+  board,
+}: {
+  aiMode?: AIMode;
+  board: BoardState;
+}) {
   const [showScores, setShowScores] = useState(false);
   useEffect(() => {
     const keydown = (e: KeyboardEvent) => {
@@ -925,7 +935,7 @@ function ScoresTableTabOverlay({ board }: { board: BoardState }) {
   }
   return (
     <div className={styles.scores}>
-      <ScoresTable board={board} bufferRows={10} />
+      <ScoresTable aiMode={aiMode} board={board} bufferRows={10} />
     </div>
   );
 }

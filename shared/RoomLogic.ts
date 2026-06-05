@@ -19,7 +19,11 @@ import {
   startGame,
 } from "./GameUtils";
 
-import type { AIMode, AIPileKnowledge, RoomState } from "./RoomState";
+import {
+  normalizeAIMode,
+  type AIPileKnowledge,
+  type RoomState,
+} from "./RoomState";
 import {
   getFairHandMode,
   normalizeFairHandMode,
@@ -1129,12 +1133,6 @@ export function setRoomAIMode(room: RoomState, mode: unknown): boolean {
   clearRoomStuckPlayers(room);
   clearPlayersReadyForRound(room.board);
   return true;
-}
-
-function normalizeAIMode(mode: unknown): AIMode {
-  return mode === "trained" || mode === "hybrid" || mode === "fixed"
-    ? mode
-    : "fixed";
 }
 
 export type RoundReadyUpdate = {

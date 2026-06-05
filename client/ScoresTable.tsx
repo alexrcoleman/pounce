@@ -1,15 +1,25 @@
 import { observer } from "mobx-react-lite";
 import { BoardState } from "../shared/GameUtils";
 import { getAIPlayerStrategyProfile } from "../shared/ComputerV1";
+import {
+  getAIPlayerResolvedMode,
+  normalizeAIMode,
+  type AIMode,
+} from "../shared/RoomState";
 import InfoTooltipIcon from "./InfoTooltipIcon";
 import styles from "./ScoresTable.module.css";
 type Props = {
   board: BoardState;
+  aiMode?: AIMode;
   bufferRows?: number;
 };
 
 const MAX_SCORES_ROW = 15;
-export default observer(function ScoresTable({ board, bufferRows = 2 }: Props) {
+export default observer(function ScoresTable({
+  aiMode,
+  board,
+  bufferRows = 2,
+}: Props) {
   const players = board.players;
   const maxScore = Math.max(...players.map((p) => p.totalPoints));
 
@@ -42,7 +52,11 @@ export default observer(function ScoresTable({ board, bufferRows = 2 }: Props) {
             {/* <th style={{ width: "30px" }} /> */}
             {players.map((_, index) => (
               <th key={index}>
-                <PlayerHeader board={board} playerIndex={index} />
+                <PlayerHeader
+                  aiMode={aiMode}
+                  board={board}
+                  playerIndex={index}
+                />
               </th>
             ))}
           </tr>
@@ -88,32 +102,63 @@ export default observer(function ScoresTable({ board, bufferRows = 2 }: Props) {
 });
 
 function PlayerHeader({
+  aiMode,
   board,
   playerIndex,
 }: {
+  aiMode?: AIMode;
   board: BoardState;
   playerIndex: number;
 }) {
   const player = board.players[playerIndex];
-  const strategy =
-    player.socketId == null
-      ? getAIPlayerStrategyProfile(board, playerIndex)
-      : null;
+  const profile = getAIPlayerScoreboardProfile(board, playerIndex, aiMode);
 
   return (
     <span className={styles.playerHeader}>
       <span className={styles.playerName}>{player.name}</span>
-      {strategy ? (
+      {profile ? (
         <InfoTooltipIcon
-          aria-label={`${player.name} AI strategy`}
+          aria-label={`${player.name} AI type`}
           className={styles.aiStrategyInfo}
         >
           <span className={styles.aiStrategyTooltip}>
-            <strong>{strategy.name}</strong>
-            <span>{strategy.summary}</span>
+            <strong>{profile.name}</strong>
+            <span>{profile.summary}</span>
           </span>
         </InfoTooltipIcon>
       ) : null}
     </span>
   );
+}
+
+type AIPlayerScoreboardProfile = {
+  name: string;
+  summary: string;
+};
+
+function getAIPlayerScoreboardProfile(
+  board: BoardState,
+  playerIndex: number,
+  aiMode: AIMode | undefined
+): AIPlayerScoreboardProfile | null {
+  const player = board.players[playerIndex];
+  if (!player || player.socketId != null) {
+    return null;
+  }
+
+  const mode = normalizeAIMode(aiMode);
+  const resolvedMode = getAIPlayerResolvedMode(board, playerIndex, mode);
+  if (resolvedMode === "trained") {
+    return {
+      name: "Trained model",
+      summary:
+        "Uses the trained neural action-ranking model for move choices, with a fixed-AI fallback when no model move is available.",
+    };
+  }
+
+  const strategy = getAIPlayerStrategyProfile(board, playerIndex);
+  return {
+    name: mode === "hybrid" ? strategy.name : `Fixed AI: ${strategy.name}`,
+    summary: strategy.summary,
+  };
 }

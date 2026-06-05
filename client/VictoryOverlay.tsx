@@ -66,7 +66,7 @@ export default observer(function VictoryOverlay() {
             <i>Pounce!</i> by <b>{pouncer.name}</b>
           </span>
         </div>
-        <ScoresTable board={board} />
+        <ScoresTable aiMode={state.roomSettings.aiMode} board={board} />
         <Flex justify="end" align="center" className={styles.actions}>
           <Button
             aria-expanded={isAnalysisOpen}

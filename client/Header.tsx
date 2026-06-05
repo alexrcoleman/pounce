@@ -22,6 +22,7 @@ import useNetworkInformation, {
   getNetworkInformationTitle,
   getNetworkSummary,
 } from "./useNetworkInformation";
+import type { AIMode } from "../shared/RoomState";
 
 const PENDING_MOVE_SYNC_BADGE_DELAY_MS = 2000;
 
@@ -94,7 +95,10 @@ export default observer(function Header(props: Props) {
           />
         ) : null}
         {board != null && board.pouncer == null ? (
-          <HeaderScoreboardButton board={board} />
+          <HeaderScoreboardButton
+            aiMode={state.roomSettings.aiMode}
+            board={board}
+          />
         ) : null}
         {showStuckButton ? (
           <HeaderStuckButton
@@ -562,7 +566,13 @@ function HeaderPauseButton({
   );
 }
 
-function HeaderScoreboardButton({ board }: { board: BoardState }) {
+function HeaderScoreboardButton({
+  aiMode,
+  board,
+}: {
+  aiMode?: AIMode;
+  board: BoardState;
+}) {
   const [isOpen, setOpen] = useState(false);
 
   useEffect(() => {
@@ -613,7 +623,7 @@ function HeaderScoreboardButton({ board }: { board: BoardState }) {
         width={640}
       >
         <div className={styles.scoreboardTableWrapper}>
-          <ScoresTable board={board} />
+          <ScoresTable aiMode={aiMode} board={board} />
         </div>
       </Modal>
     </>

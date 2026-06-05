@@ -13,6 +13,7 @@ export type AIPileKnowledge = {
 };
 
 export type AIMode = "fixed" | "trained" | "hybrid";
+export type ResolvedAIPlayerMode = "fixed" | "trained";
 
 export type RoomSettings = {
   fairHandMode: FairHandMode;
@@ -75,4 +76,36 @@ export function createRoomState(playerCount: number): RoomState {
     roundSnapshots: [],
     lastRoundAnalysis: null,
   };
+}
+
+export function normalizeAIMode(mode: unknown): AIMode {
+  return mode === "trained" || mode === "hybrid" || mode === "fixed"
+    ? mode
+    : "fixed";
+}
+
+export function getAIPlayerResolvedMode(
+  boardState: BoardState,
+  playerIndex: number,
+  mode: AIMode | undefined
+): ResolvedAIPlayerMode {
+  const normalizedMode = mode ?? "fixed";
+  if (normalizedMode === "trained") {
+    return "trained";
+  }
+  if (normalizedMode === "hybrid" && isFirstAIPlayer(boardState, playerIndex)) {
+    return "trained";
+  }
+  return "fixed";
+}
+
+function isFirstAIPlayer(boardState: BoardState, playerIndex: number): boolean {
+  const player = boardState.players[playerIndex];
+  return (
+    player != null &&
+    player.socketId == null &&
+    boardState.players
+      .filter((candidate) => candidate.socketId == null)
+      .indexOf(player) === 0
+  );
 }
