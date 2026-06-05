@@ -2,10 +2,13 @@ import { Server } from "socket.io";
 import { createRoomState, RoomState } from "../shared/RoomState";
 import {
   completeRoundAnalysis,
+  getNextRoomSimulationTickTime,
   getRoomHands,
   getRoomStuckPlayerIndices,
   scheduleAIReactionBoard,
+  shouldFastForwardRoomSimulation,
   tickRoom,
+  type RoomTickResult,
 } from "../shared/RoomLogic";
 import type { RoundSnapshot } from "../shared/RoundAnalysis";
 import type { RoomToast } from "../shared/RoomToast";
@@ -13,7 +16,12 @@ import type { PendingRoomAction, RoomAction } from "../shared/SocketTypes";
 
 export type ServerRoomState = RoomState & {
   io: Server;
-  interval: NodeJS.Timer;
+  tickTimeout: ReturnType<typeof setTimeout> | null;
+  simulatedNow: number;
+  simulationFlushTimeout: ReturnType<typeof setTimeout> | null;
+  pendingSimulationHasUpdate: boolean;
+  pendingSimulationHasHandUpdate: boolean;
+  pendingSimulationRoomToast: RoomToast | null;
 };
 
 export const ROOM_DELETE_GRACE_PERIOD_MS = 10 * 60 * 1000;
@@ -21,6 +29,9 @@ export const ROOM_DELETE_GRACE_PERIOD_MS = 10 * 60 * 1000;
 const rooms: Record<string, ServerRoomState> = {};
 const roomDeleteTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 const ROUND_ANALYSIS_DEFER_MS = 50;
+const SERVER_ROOM_TICK_DELAY_MS = 1;
+const SERVER_SIMULATION_TICK_DELAY_MS = 0;
+const SERVER_SIMULATION_BROADCAST_DELAY_MS = 16;
 
 export function createRoom(io: Server, roomId: string) {
   cancelRoomDelete(roomId);
@@ -34,36 +45,187 @@ export function createRoom(io: Server, roomId: string) {
   const room = {
     ...createRoomState(0),
     io,
-    interval: undefined as unknown as NodeJS.Timer,
+    tickTimeout: null,
+    simulatedNow: Date.now(),
+    simulationFlushTimeout: null,
+    pendingSimulationHasUpdate: false,
+    pendingSimulationHasHandUpdate: false,
+    pendingSimulationRoomToast: null,
   };
-  room.interval = setInterval(() => {
-    const currentRoom = rooms[roomId];
-    const {
-      hasUpdate,
-      hasHandUpdate,
-      actions,
-      roomToast,
-      roundAnalysisSnapshots,
-    } = tickRoom(currentRoom);
-    if (hasUpdate) {
-      markRoomUpdated(roomId);
-      broadcastUpdate(roomId);
-    }
-    if (actions.length > 0) {
-      broadcastRoomActions(roomId, actions);
-    }
-    if (hasHandUpdate) {
-      broadcastHands(roomId);
-    }
-    if (roomToast) {
-      broadcastRoomToast(roomId, roomToast);
-    }
-    if (roundAnalysisSnapshots) {
-      scheduleRoundAnalysis(roomId, roundAnalysisSnapshots);
-    }
-  }, 1);
   rooms[roomId] = room;
+  scheduleNextRoomTick(roomId, 0);
   broadcastUpdate(roomId);
+}
+
+type ServerRoomTickTiming = {
+  now: number;
+  delayMs: number;
+};
+
+function scheduleNextRoomTick(roomId: string, delayMs: number): void {
+  const room = rooms[roomId];
+  if (!room) {
+    return;
+  }
+
+  room.tickTimeout = setTimeout(() => runRoomTick(roomId), delayMs);
+}
+
+function runRoomTick(roomId: string): void {
+  const room = rooms[roomId];
+  if (!room) {
+    return;
+  }
+
+  room.tickTimeout = null;
+  const tickTiming = getServerRoomTickTiming(room);
+  room.simulatedNow = tickTiming.now;
+  const result = tickRoom(room, tickTiming.now);
+  if (room.settings.simulationMode) {
+    queueServerSimulationTickResult(roomId, result);
+  } else {
+    broadcastServerRoomTickResult(roomId, result);
+  }
+
+  scheduleNextRoomTick(roomId, tickTiming.delayMs);
+}
+
+function getServerRoomTickTiming(room: ServerRoomState): ServerRoomTickTiming {
+  if (!shouldFastForwardRoomSimulation(room)) {
+    return {
+      now: Date.now(),
+      delayMs: SERVER_ROOM_TICK_DELAY_MS,
+    };
+  }
+
+  const nextSimulationTickTime = getNextRoomSimulationTickTime(
+    room,
+    room.simulatedNow
+  );
+  if (nextSimulationTickTime == null) {
+    return {
+      now: Number.isFinite(room.simulatedNow)
+        ? room.simulatedNow
+        : Date.now(),
+      delayMs: SERVER_ROOM_TICK_DELAY_MS,
+    };
+  }
+
+  return {
+    now: nextSimulationTickTime,
+    delayMs: SERVER_SIMULATION_TICK_DELAY_MS,
+  };
+}
+
+function broadcastServerRoomTickResult(
+  roomId: string,
+  {
+    hasUpdate,
+    hasHandUpdate,
+    actions,
+    roomToast,
+    roundAnalysisSnapshots,
+  }: RoomTickResult
+): void {
+  if (hasUpdate) {
+    markRoomUpdated(roomId);
+    broadcastUpdate(roomId);
+  }
+  if (actions.length > 0) {
+    broadcastRoomActions(roomId, actions);
+  }
+  if (hasHandUpdate) {
+    broadcastHands(roomId);
+  }
+  if (roomToast) {
+    broadcastRoomToast(roomId, roomToast);
+  }
+  if (roundAnalysisSnapshots) {
+    scheduleRoundAnalysis(roomId, roundAnalysisSnapshots);
+  }
+}
+
+function queueServerSimulationTickResult(
+  roomId: string,
+  {
+    hasUpdate,
+    hasHandUpdate,
+    actions,
+    roomToast,
+    roundAnalysisSnapshots,
+  }: RoomTickResult
+): void {
+  const room = rooms[roomId];
+  if (!room) {
+    return;
+  }
+
+  if (hasUpdate) {
+    markRoomUpdated(roomId);
+    room.pendingSimulationHasUpdate = true;
+  }
+  if (actions.length > 0) {
+    broadcastRoomActions(roomId, actions);
+  }
+  if (hasHandUpdate) {
+    room.pendingSimulationHasHandUpdate = true;
+  }
+  if (roomToast) {
+    room.pendingSimulationRoomToast = roomToast;
+  }
+  if (roundAnalysisSnapshots) {
+    scheduleRoundAnalysis(roomId, roundAnalysisSnapshots);
+  }
+  if (hasUpdate || hasHandUpdate || roomToast) {
+    scheduleSimulationBroadcastFlush(roomId);
+  }
+}
+
+function scheduleSimulationBroadcastFlush(roomId: string): void {
+  const room = rooms[roomId];
+  if (!room || room.simulationFlushTimeout != null) {
+    return;
+  }
+
+  room.simulationFlushTimeout = setTimeout(
+    () => flushServerSimulationBroadcast(roomId),
+    SERVER_SIMULATION_BROADCAST_DELAY_MS
+  );
+}
+
+function flushServerSimulationBroadcast(roomId: string): void {
+  const room = rooms[roomId];
+  if (!room) {
+    return;
+  }
+
+  room.simulationFlushTimeout = null;
+  const shouldBroadcastUpdate = room.pendingSimulationHasUpdate;
+  const shouldBroadcastHands = room.pendingSimulationHasHandUpdate;
+  const roomToast = room.pendingSimulationRoomToast;
+  room.pendingSimulationHasUpdate = false;
+  room.pendingSimulationHasHandUpdate = false;
+  room.pendingSimulationRoomToast = null;
+
+  if (shouldBroadcastUpdate) {
+    broadcastUpdate(roomId);
+  }
+  if (shouldBroadcastHands) {
+    broadcastHands(roomId);
+  }
+  if (roomToast) {
+    broadcastRoomToast(roomId, roomToast);
+  }
+}
+
+function clearServerSimulationBroadcast(room: ServerRoomState): void {
+  room.pendingSimulationHasUpdate = false;
+  room.pendingSimulationHasHandUpdate = false;
+  room.pendingSimulationRoomToast = null;
+  if (room.simulationFlushTimeout != null) {
+    clearTimeout(room.simulationFlushTimeout);
+    room.simulationFlushTimeout = null;
+  }
 }
 
 export function broadcastUpdate(roomId: string) {
@@ -147,7 +309,10 @@ export function deleteRoom(roomId: string) {
   console.log("Rooms: ", Object.keys(rooms), " deleting " + roomId);
   const room = getRoom(roomId);
   if (room) {
-    clearInterval(room.interval);
+    if (room.tickTimeout != null) {
+      clearTimeout(room.tickTimeout);
+    }
+    clearServerSimulationBroadcast(room);
     delete rooms[roomId];
   }
 }

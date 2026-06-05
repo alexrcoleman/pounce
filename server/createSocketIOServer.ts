@@ -26,6 +26,7 @@ import {
   getRoomHandUpdateVersion,
   PLAYER_CENTER_CURSOR_RESET_DELAY_MS,
   recordRoundSnapshot,
+  realignRoomAICooldowns,
   releaseRoomHandAfterCenterPlay,
   removeDisconnectedPlayers,
   resetRoomHandAfterDeckAdvance,
@@ -549,7 +550,13 @@ export default function createSocketIOServer() {
         return;
       }
       const room = getRoom(user.currentRoom);
+      const wasSimulationMode = room.settings.simulationMode;
+      const now = Date.now();
       setRoomAILevel(room, typeof args.speed === "number" ? args.speed : 3);
+      if (wasSimulationMode && !room.settings.simulationMode) {
+        room.simulatedNow = now;
+        realignRoomAICooldowns(room, now);
+      }
       markRoomUpdated(user.currentRoom);
       broadcastUpdate(user.currentRoom);
     });

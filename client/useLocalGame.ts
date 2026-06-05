@@ -28,7 +28,9 @@ import {
   getRoomHands,
   getRoomStuckPlayerIndices,
   PLAYER_CENTER_CURSOR_RESET_DELAY_MS,
+  getNextRoomSimulationTickTime,
   recordRoundSnapshot,
+  realignRoomAICooldowns,
   releaseRoomHandAfterCenterPlay,
   resetRoomHandAfterDeckAdvance,
   resetRoomHandAfterCenterPlay,
@@ -41,6 +43,7 @@ import {
   setRoomAIMode,
   setRoomPaused,
   setPlayerReadyForRound,
+  shouldFastForwardRoomSimulation,
   startRoomGame,
   tickRoom,
   updateRoomHand,
@@ -70,6 +73,8 @@ import {
 const LOCAL_SOCKET_ID = "local-player";
 const LOCAL_PLAYER_SESSION_ID = "local-player-session";
 const DEFAULT_OFFLINE_AI_COUNT = 2;
+const LOCAL_GAME_TICK_DELAY_MS = 16;
+const LOCAL_SIMULATION_TICK_DELAY_MS = 0;
 
 export default function useLocalGame(name: string | null) {
   const state = useLocalObservable(() => new SocketState());
@@ -85,9 +90,15 @@ export default function useLocalGame(name: string | null) {
     roomRef.current = room;
     let isClosed = false;
     let hasJoined = false;
+    let simulatedNow = Date.now();
     const centerCursorResetTimeouts = new Set<number>();
+    let simulationFlushTimeout: number | null = null;
+    let pendingSimulationHasUpdate = false;
+    let pendingSimulationHasHandUpdate = false;
+    let pendingSimulationUpdateTime = simulatedNow;
+    let pendingSimulationRoomToast: RoomToast | null = null;
 
-    const emitUpdate = () => {
+    const emitUpdate = (time = Date.now()) => {
       const hadBoard = state.board != null;
       const wasRoundActive = state.board?.isActive === true;
       runInAction(() => {
@@ -95,7 +106,7 @@ export default function useLocalGame(name: string | null) {
           board: deepClone(room.board),
           settings: deepClone(room.settings),
           stuckPlayerIndices: getRoomStuckPlayerIndices(room),
-          time: Date.now(),
+          time,
           revision: room.revision,
           roundAnalysis: deepClone(room.lastRoundAnalysis),
         });
@@ -133,6 +144,79 @@ export default function useLocalGame(name: string | null) {
     };
     const emitRoomActions = (actions: readonly PendingRoomAction[]) => {
       actions.forEach(emitRoomAction);
+    };
+    const clearPendingSimulationUpdate = () => {
+      pendingSimulationHasUpdate = false;
+      pendingSimulationHasHandUpdate = false;
+      pendingSimulationRoomToast = null;
+      if (simulationFlushTimeout != null) {
+        window.clearTimeout(simulationFlushTimeout);
+        simulationFlushTimeout = null;
+      }
+    };
+    const flushPendingSimulationUpdate = () => {
+      simulationFlushTimeout = null;
+      if (isClosed) {
+        clearPendingSimulationUpdate();
+        return;
+      }
+
+      const shouldEmitUpdate = pendingSimulationHasUpdate;
+      const shouldEmitHands = pendingSimulationHasHandUpdate;
+      const roomToast = pendingSimulationRoomToast;
+      const updateTime = pendingSimulationUpdateTime;
+      pendingSimulationHasUpdate = false;
+      pendingSimulationHasHandUpdate = false;
+      pendingSimulationRoomToast = null;
+
+      if (shouldEmitUpdate) {
+        emitUpdate(updateTime);
+      }
+      if (shouldEmitHands) {
+        emitHands();
+      }
+      if (roomToast) {
+        emitRoomToast(roomToast);
+      }
+    };
+    const scheduleSimulationUpdateFlush = () => {
+      if (simulationFlushTimeout != null) {
+        return;
+      }
+
+      simulationFlushTimeout = window.setTimeout(
+        flushPendingSimulationUpdate,
+        LOCAL_GAME_TICK_DELAY_MS
+      );
+    };
+    const queueSimulationTickUpdate = (
+      now: number,
+      {
+        hasUpdate,
+        hasHandUpdate,
+        roomToast,
+      }: {
+        hasUpdate: boolean;
+        hasHandUpdate: boolean;
+        roomToast?: RoomToast | null;
+      }
+    ) => {
+      if (!hasUpdate && !hasHandUpdate && !roomToast) {
+        return;
+      }
+
+      if (hasUpdate) {
+        room.revision += 1;
+        pendingSimulationHasUpdate = true;
+        pendingSimulationUpdateTime = now;
+      }
+      if (hasHandUpdate) {
+        pendingSimulationHasHandUpdate = true;
+      }
+      if (roomToast) {
+        pendingSimulationRoomToast = roomToast;
+      }
+      scheduleSimulationUpdateFlush();
     };
     const schedulePlayerCenterCursorReset = (
       playerIndex: number,
@@ -382,7 +466,13 @@ export default function useLocalGame(name: string | null) {
           emitHands();
         } else if (event === "set_ai_level") {
           const setAIArgs = args[0] as { speed: number };
+          const wasSimulationMode = room.settings.simulationMode;
           setRoomAILevel(room, setAIArgs.speed);
+          if (wasSimulationMode && !room.settings.simulationMode) {
+            clearPendingSimulationUpdate();
+            simulatedNow = Date.now();
+            realignRoomAICooldowns(room, simulatedNow);
+          }
           markRoomUpdated();
           emitUpdate();
         } else if (event === "set_fair_hand_mode") {
@@ -439,17 +529,38 @@ export default function useLocalGame(name: string | null) {
         playerSessionId: LOCAL_PLAYER_SESSION_ID,
       });
     }
-    const interval = window.setInterval(() => {
+    let tickTimeout: number | null = null;
+
+    const runRoomTick = () => {
+      if (isClosed) {
+        return;
+      }
+
+      const tickTiming = getLocalGameTickTiming(room, simulatedNow);
+      simulatedNow = tickTiming.now;
       const {
         hasUpdate,
         hasHandUpdate,
         actions,
         roomToast,
         roundAnalysisSnapshots,
-      } = tickRoom(room);
+      } = tickRoom(room, tickTiming.now);
+      if (room.settings.simulationMode) {
+        queueSimulationTickUpdate(tickTiming.now, {
+          hasUpdate,
+          hasHandUpdate,
+          roomToast,
+        });
+        if (roundAnalysisSnapshots) {
+          scheduleRoundAnalysis(roundAnalysisSnapshots);
+        }
+        tickTimeout = window.setTimeout(runRoomTick, tickTiming.delayMs);
+        return;
+      }
+
       if (hasUpdate) {
         room.revision += 1;
-        emitUpdate();
+        emitUpdate(tickTiming.now);
       }
       if (actions.length > 0) {
         emitRoomActions(actions);
@@ -463,11 +574,18 @@ export default function useLocalGame(name: string | null) {
       if (roundAnalysisSnapshots) {
         scheduleRoundAnalysis(roundAnalysisSnapshots);
       }
-    }, 16);
+
+      tickTimeout = window.setTimeout(runRoomTick, tickTiming.delayMs);
+    };
+
+    tickTimeout = window.setTimeout(runRoomTick, 0);
 
     return () => {
       isClosed = true;
-      window.clearInterval(interval);
+      if (tickTimeout != null) {
+        window.clearTimeout(tickTimeout);
+      }
+      clearPendingSimulationUpdate();
       centerCursorResetTimeouts.forEach((timeout) =>
         window.clearTimeout(timeout)
       );
@@ -606,6 +724,39 @@ function setRoomAICount(room: RoomState, count: unknown): boolean {
     }
   }
   return true;
+}
+
+type LocalGameTickTiming = {
+  now: number;
+  delayMs: number;
+};
+
+function getLocalGameTickTiming(
+  room: RoomState,
+  previousNow: number
+): LocalGameTickTiming {
+  if (!shouldFastForwardRoomSimulation(room)) {
+    return {
+      now: Date.now(),
+      delayMs: LOCAL_GAME_TICK_DELAY_MS,
+    };
+  }
+
+  const nextSimulationTickTime = getNextRoomSimulationTickTime(
+    room,
+    previousNow
+  );
+  if (nextSimulationTickTime == null) {
+    return {
+      now: Number.isFinite(previousNow) ? previousNow : Date.now(),
+      delayMs: LOCAL_GAME_TICK_DELAY_MS,
+    };
+  }
+
+  return {
+    now: nextSimulationTickTime,
+    delayMs: LOCAL_SIMULATION_TICK_DELAY_MS,
+  };
 }
 
 function normalizeAICount(count: unknown): number | null {

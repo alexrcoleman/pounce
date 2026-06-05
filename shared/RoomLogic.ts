@@ -121,13 +121,16 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       .slice()
       .map((p, i) => [p, i] as const);
     shuffledPlayers.sort((a, b) => aiCooldowns[a[1]] - aiCooldowns[b[1]]);
-    shuffledPlayers.map(([player, index]) => {
+    for (const [player, index] of shuffledPlayers) {
       if (aiCooldowns[index] > now || player.socketId != null) {
-        return false;
+        continue;
       }
       hasUpdate = true;
+      const usesDelayedAIVisibility = !room.settings.simulationMode;
       const hand = (room.hands[index] = room.hands[index] ?? {});
-      rememberAIActiveCenterPile(room, index, now);
+      if (usesDelayedAIVisibility) {
+        rememberAIActiveCenterPile(room, index, now);
+      }
       const currentDragMove = getCurrentAIDragMove(board, index, hand);
       const visibleBoard = getVisibleBoard(room, index, now);
       const move =
@@ -140,28 +143,36 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
           room.settings.aiMode
         );
 
-      if (move) {
+      if (move && usesDelayedAIVisibility) {
         rememberAIMoveFocus(room, index, move, now);
       }
-      if (move && pauseObsoleteAICenterMove(room, index, move)) {
+      if (
+        move &&
+        usesDelayedAIVisibility &&
+        pauseObsoleteAICenterMove(room, index, move)
+      ) {
         hasHandUpdate = true;
         aiCooldowns[index] = now + getAIRetargetDelay(room);
-        return false;
+        continue;
       }
       const moveResult = move
         ? executeMove(board, index, move, hand, now)
         : null;
       // AI cursor movement is an intention, not a completed board move.
       if (move && moveResult?.boardChanged) {
-        rememberAIMoveFocus(room, index, move, now);
-        recordRoundSnapshot(room, "move", now, index, move);
-        actions.push({
-          type: "move",
-          actionId: `ai:${room.revision}:${index}:${now}:${actions.length + 1}`,
-          playerIndex: index,
-          move,
-          time: now,
-        });
+        if (usesDelayedAIVisibility) {
+          rememberAIMoveFocus(room, index, move, now);
+          recordRoundSnapshot(room, "move", now, index, move);
+          actions.push({
+            type: "move",
+            actionId: `ai:${room.revision}:${index}:${now}:${
+              actions.length + 1
+            }`,
+            playerIndex: index,
+            move,
+            time: now,
+          });
+        }
         if (isProductiveMove(move)) {
           clearRoomStuckPlayers(room);
         }
@@ -231,7 +242,7 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
           cooldownDist.mean
         : 200 / room.aiSpeed;
       aiCooldowns[index] = now + delay / room.timescale;
-    });
+    }
   }
 
   if (removeDisconnectedPlayers(room, now, DISCONNECTED_PLAYER_TIMEOUT_MS)) {
@@ -248,6 +259,64 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
   };
 }
 
+export function shouldFastForwardRoomSimulation(room: RoomState): boolean {
+  return (
+    room.settings.simulationMode === true &&
+    room.board.isActive &&
+    !room.board.isPaused
+  );
+}
+
+export function getNextRoomSimulationTickTime(
+  room: RoomState,
+  previousNow: number
+): number | null {
+  const currentNow = Number.isFinite(previousNow) ? previousNow : Date.now();
+  const startsAt = room.board.roundStartsAt;
+  if (startsAt != null && currentNow < startsAt) {
+    return startsAt;
+  }
+  if (startsAt != null || isGameOver(room.board)) {
+    return currentNow;
+  }
+
+  const nextAICooldown = getNextRoomAICooldown(room);
+  return nextAICooldown == null
+    ? null
+    : Math.max(currentNow, nextAICooldown);
+}
+
+export function realignRoomAICooldowns(
+  room: RoomState,
+  now = Date.now()
+): void {
+  for (let index = 0; index < room.aiCooldowns.length; index++) {
+    const cooldown = room.aiCooldowns[index];
+    if (Number.isFinite(cooldown) && cooldown > now) {
+      room.aiCooldowns[index] = now + Math.random();
+    }
+  }
+}
+
+function getNextRoomAICooldown(room: RoomState): number | null {
+  let nextCooldown: number | null = null;
+  for (let index = 0; index < room.board.players.length; index++) {
+    if (room.board.players[index].socketId != null) {
+      continue;
+    }
+
+    const cooldown = room.aiCooldowns[index];
+    if (!Number.isFinite(cooldown)) {
+      continue;
+    }
+
+    if (nextCooldown == null || cooldown < nextCooldown) {
+      nextCooldown = cooldown;
+    }
+  }
+  return nextCooldown;
+}
+
 function shouldAutoRotateDecks(board: BoardState): boolean {
   // This is a move-count heuristic, not an exhaustive search for unblocking moves.
   return (
@@ -262,8 +331,12 @@ function getVisibleBoard(
   playerIndex: number,
   now = Date.now()
 ) {
-  const visibleBoard = deepClone(room.aiBoard);
   const realBoard = room.board;
+  if (room.settings.simulationMode) {
+    return realBoard;
+  }
+
+  const visibleBoard = deepClone(room.aiBoard);
   const player = realBoard.players[playerIndex];
   visibleBoard.players[playerIndex] = player;
   const pileKnowledge = getAIPileKnowledge(room, playerIndex);
@@ -624,6 +697,10 @@ function resetAIVisibilityMemory(room: RoomState): void {
 }
 
 export function scheduleAIReactionBoard(room: RoomState): void {
+  if (room.settings.simulationMode) {
+    return;
+  }
+
   const visibleBoard = deepClone(room.board);
   setTimeout(() => {
     room.aiBoard = visibleBoard;
