@@ -43,6 +43,7 @@ type RolloutShardSummary = RolloutShardResult["timing"] & {
   sampledDecisionCountTotal: number;
   waitMoveRateTotal: number;
   premoveMoveRateTotal: number;
+  flipDeckMoveRateTotal: number;
 };
 
 type GradientShardResult = {
@@ -451,6 +452,10 @@ async function runWithGradientWorkers(
     ppoAveragePremoveMoveRate:
       sumNumbers(shardSummaries.map((summary) => summary.premoveMoveRateTotal)) /
       episodeCount,
+    ppoAverageFlipDeckMoveRate:
+      sumNumbers(
+        shardSummaries.map((summary) => summary.flipDeckMoveRateTotal)
+      ) / episodeCount,
     ppoAdvantageBaseline: updateOptions.advantageBaseline,
     ppoMiniBatchSize: updateOptions.miniBatchSize,
     ppoGradientScale: updateOptions.gradientScale,

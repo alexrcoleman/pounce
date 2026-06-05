@@ -142,5 +142,6 @@ function summarizeBatch() {
     sampledDecisionCountTotal: batch.sampledDecisionCountTotal,
     waitMoveRateTotal: batch.waitMoveRateTotal,
     premoveMoveRateTotal: batch.premoveMoveRateTotal,
+    flipDeckMoveRateTotal: batch.flipDeckMoveRateTotal,
   };
 }
