@@ -150,6 +150,21 @@ Useful PPO knobs:
   whole-batch return centering. `trajectory` first subtracts each learning
   player's mean return within that rollout, which is a lightweight variance
   reduction step short of a full persistent value-function critic.
+- `RL_PPO_MINIBATCH_SIZE`: number of sampled decisions to accumulate into one
+  PPO optimizer step. The `action-ranking:train-ppo` wrapper defaults this to
+  `128`; set it to `1` to force the old per-transition update cadence.
+- `RL_PPO_GRADIENT_SCALE=sum|mean`: `sum` preserves the old effective learning
+  rate more closely when batching; `mean` is the more conventional mini-batch
+  loss scale and usually needs a larger learning rate.
+- `RL_PPO_WORKERS`: optional worker count for PPO-only training. Values greater
+  than `1` route `action-ranking:train-ppo` through worker-thread rollout
+  collection.
+- `RL_PPO_WORKER_GRADIENTS=1`: default when `RL_PPO_WORKERS > 1`. Workers keep
+  rollout transitions local, compute gradient accumulators for their shards, and
+  send only reduced gradients and scalar summaries back to the main process. This
+  is closer to OpenAI Five's rollout/optimizer split than sending all sampled
+  transitions through the main thread. Set this to `0` to use the older raw
+  rollout-batch transfer path for debugging.
 
 A starting long-run command:
 
@@ -167,11 +182,14 @@ $env:RL_PPO_EPOCHS = "3"
 $env:RL_PPO_ENTROPY = "0.01"
 $env:RL_PPO_GAMMA = "0.995"
 $env:RL_PPO_ADVANTAGE_BASELINE = "trajectory"
+$env:RL_PPO_MINIBATCH_SIZE = "128"
+$env:RL_PPO_WORKERS = "8"
+$env:RL_PPO_WORKER_GRADIENTS = "1"
 $env:RL_PPO_WAIT_PENALTY = "0.05"
 $env:RL_PPO_MAX_CONSECUTIVE_WAITS = "20"
 $env:MAX_MOVES = "420"
 $env:EVAL_GAMES = "24"
-npm run action-ranking:train
+npm run action-ranking:train-ppo
 ```
 
 ## Current Status

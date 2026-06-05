@@ -80,6 +80,8 @@ export type NeuralTrainingOptions = {
   rlPpoPounceRewardWeight?: number;
   rlPpoMaxConsecutiveWaitMoves?: number;
   rlPpoAdvantageBaseline?: PpoAdvantageBaselineMode;
+  rlPpoMiniBatchSize?: number;
+  rlPpoGradientScale?: PpoGradientScaleMode;
   rlOpponentMode?: "teacher" | "self" | "champion";
   rlBaselineMode?: "teacher" | "greedy";
   rlCommonRandom?: boolean;
@@ -281,8 +283,12 @@ export type NeuralTrainingResult = {
     ppoAveragePremoveMoveRate: number;
     ppoAverageFlipDeckMoveRate: number;
     ppoAdvantageBaseline: PpoAdvantageBaselineMode;
+    ppoMiniBatchSize: number;
+    ppoGradientScale: PpoGradientScaleMode;
+    ppoGradientBatches: number;
     averagePolicyUpdates: number;
     averageGradientUpdates: number;
+    averageGradientBatches: number;
     averageRawAdvantage: number;
     rawAdvantageStdDev: number;
   };
@@ -455,14 +461,68 @@ type RolloutResult = {
   transitions: RolloutTransition[];
 };
 
-type PolicyGradientUpdate = {
-  candidates: ActionRankingCandidate[];
+export type PolicyGradientUpdate = {
+  candidates: Pick<ActionRankingCandidate, "features">[];
   selectedCandidateIndex: number;
   oldProbability?: number;
   rawAdvantage: number;
 };
 
 type PpoAdvantageBaselineMode = "batch" | "trajectory";
+type PpoGradientScaleMode = "sum" | "mean";
+
+export type PpoSelfPlayRolloutBatch = {
+  updates: PolicyGradientUpdate[];
+  rawReturns: number[];
+  trainingPlayerCountTotal: number;
+  finalPointDifferentialTotal: number;
+  sampledDecisionCountTotal: number;
+  waitMoveRateTotal: number;
+  premoveMoveRateTotal: number;
+  flipDeckMoveRateTotal: number;
+};
+
+export type PpoSelfPlayRolloutOptions = {
+  playerCount: number;
+  episodes: number;
+  episodeStart?: number;
+  seed: string;
+  temperature: number;
+  localRewardWeight: number;
+  opponentMode: PolicyGradientOpponentMode;
+  opponentPolicy?: NeuralActionRankingPolicy;
+  gamma: number;
+  waitPenalty: number;
+  premovePenalty: number;
+  cyclePenalty: number;
+  flipDeckPenalty: number;
+  scoreRewardWeight: number;
+  pounceRewardWeight: number;
+  maxConsecutiveWaitMoves: number;
+  advantageBaseline: PpoAdvantageBaselineMode;
+  maxMovesPerGame: number;
+  actionOptions?: ActionRankingOptions;
+};
+
+export type PpoSelfPlayUpdateOptions = {
+  playerCount: number;
+  episodes: number;
+  learningRate: number;
+  temperature: number;
+  opponentMode: PolicyGradientOpponentMode;
+  clipRatio: number;
+  entropyBonus: number;
+  updateEpochs: number;
+  advantageBaseline: PpoAdvantageBaselineMode;
+  trainableLayers: "all" | "output";
+  normalizeAdvantages: boolean;
+  advantageClip: number;
+  miniBatchSize: number;
+  gradientScale: PpoGradientScaleMode;
+};
+
+export type PpoSelfPlayTrainingOptions = PpoSelfPlayRolloutOptions &
+  PpoSelfPlayUpdateOptions;
 
 type CounterfactualSupervisedLabel = {
   example: ActionRankingImitationExample;
@@ -715,6 +775,8 @@ export function trainNeuralActionRankingPolicy(
           maxConsecutiveWaitMoves:
             options.rlPpoMaxConsecutiveWaitMoves ?? 40,
           advantageBaseline: options.rlPpoAdvantageBaseline ?? "batch",
+          miniBatchSize: options.rlPpoMiniBatchSize ?? 1,
+          gradientScale: options.rlPpoGradientScale ?? "sum",
           trainableLayers: options.rlTrainableLayers ?? "all",
           normalizeAdvantages: options.rlNormalizeAdvantages ?? true,
           advantageClip: options.rlAdvantageClip ?? 3,
@@ -2833,12 +2895,16 @@ export function trainPolicyGradientFromRollouts(
     ppoAveragePremoveMoveRate: 0,
     ppoAverageFlipDeckMoveRate: 0,
     ppoAdvantageBaseline: "batch" as const,
+    ppoMiniBatchSize: 0,
+    ppoGradientScale: "sum" as const,
+    ppoGradientBatches: 0,
     averagePolicyUpdates:
       options.episodes === 0 ? 0 : updates.length / options.episodes,
     averageGradientUpdates:
       options.episodes === 0
         ? 0
         : advantageStats.appliedUpdates / options.episodes,
+    averageGradientBatches: 0,
     averageRawAdvantage: advantageStats.mean,
     rawAdvantageStdDev: advantageStats.stdDev,
   };
@@ -2846,34 +2912,19 @@ export function trainPolicyGradientFromRollouts(
 
 export function trainPpoFromSelfPlay(
   policy: NeuralActionRankingPolicy,
-  options: {
-    playerCount: number;
-    episodes: number;
-    seed: string;
-    learningRate: number;
-    temperature: number;
-    localRewardWeight: number;
-    opponentMode: PolicyGradientOpponentMode;
-    opponentPolicy?: NeuralActionRankingPolicy;
-    clipRatio: number;
-    entropyBonus: number;
-    gamma: number;
-    updateEpochs: number;
-    waitPenalty: number;
-    premovePenalty: number;
-    cyclePenalty: number;
-    flipDeckPenalty: number;
-    scoreRewardWeight: number;
-    pounceRewardWeight: number;
-    maxConsecutiveWaitMoves: number;
-    advantageBaseline: PpoAdvantageBaselineMode;
-    trainableLayers: "all" | "output";
-    normalizeAdvantages: boolean;
-    advantageClip: number;
-    maxMovesPerGame: number;
-    actionOptions?: ActionRankingOptions;
-  }
-) {
+  options: PpoSelfPlayTrainingOptions
+): NeuralTrainingResult["reinforcement"] {
+  const rolloutBatch = collectPpoSelfPlayRolloutBatch(policy, options);
+  return applyPpoSelfPlayRolloutBatch(policy, rolloutBatch, {
+    ...options,
+    seed: `${options.seed}:ppo-shuffle`,
+  });
+}
+
+export function collectPpoSelfPlayRolloutBatch(
+  policy: NeuralActionRankingPolicy,
+  options: PpoSelfPlayRolloutOptions
+): PpoSelfPlayRolloutBatch {
   const useChampionOpponents = options.opponentMode === "champion";
   if (useChampionOpponents && !options.opponentPolicy) {
     throw new Error("Champion opponent mode requires a frozen opponent policy.");
@@ -2883,16 +2934,11 @@ export function trainPpoFromSelfPlay(
     { length: options.playerCount },
     (_, index) => index
   );
-  const updates: PolicyGradientUpdate[] = [];
-  const rawReturns: number[] = [];
-  let trainingPlayerCountTotal = 0;
-  let finalPointDifferentialTotal = 0;
-  let sampledDecisionCountTotal = 0;
-  let waitMoveRateTotal = 0;
-  let premoveMoveRateTotal = 0;
-  let flipDeckMoveRateTotal = 0;
+  const batch = createEmptyPpoSelfPlayRolloutBatch();
+  const episodeStart = Math.max(0, Math.floor(options.episodeStart ?? 0));
 
-  for (let episode = 0; episode < options.episodes; episode++) {
+  for (let episodeOffset = 0; episodeOffset < options.episodes; episodeOffset++) {
+    const episode = episodeStart + episodeOffset;
     const learningPlayerIndices =
       options.opponentMode === "self"
         ? activePlayerIndices
@@ -2935,7 +2981,7 @@ export function trainPpoFromSelfPlay(
       scoreRewardWeight: options.scoreRewardWeight,
       pounceRewardWeight: options.pounceRewardWeight,
     });
-    rawReturns.push(...returns);
+    batch.rawReturns.push(...returns);
     const advantages = getPpoTransitionAdvantages(
       rollout,
       returns,
@@ -2943,56 +2989,72 @@ export function trainPpoFromSelfPlay(
     );
 
     rollout.transitions.forEach((transition, transitionIndex) => {
-      updates.push({
-        candidates: transition.candidates,
+      batch.updates.push({
+        candidates: transition.candidates.map((candidate) => ({
+          features: candidate.features,
+        })),
         selectedCandidateIndex: transition.selectedCandidateIndex,
         oldProbability: transition.selectedProbability,
         rawAdvantage: advantages[transitionIndex] ?? 0,
       });
     });
 
-    trainingPlayerCountTotal += learningPlayerIndices.length;
-    sampledDecisionCountTotal += rollout.transitions.length;
-    finalPointDifferentialTotal += getMeanPlayerPointDifferential(
+    batch.trainingPlayerCountTotal += learningPlayerIndices.length;
+    batch.sampledDecisionCountTotal += rollout.transitions.length;
+    batch.finalPointDifferentialTotal += getMeanPlayerPointDifferential(
       rollout,
       learningPlayerIndices
     );
     const groupMetrics = getRolloutGroupMetrics(rollout, learningPlayerIndices);
-    waitMoveRateTotal += groupMetrics.waitMoveRate;
-    premoveMoveRateTotal += groupMetrics.premoveMoveRate;
-    flipDeckMoveRateTotal += groupMetrics.flipDeckMoveRate;
+    batch.waitMoveRateTotal += groupMetrics.waitMoveRate;
+    batch.premoveMoveRateTotal += groupMetrics.premoveMoveRate;
+    batch.flipDeckMoveRateTotal += groupMetrics.flipDeckMoveRate;
   }
 
-  const advantageStats = applyPpoBatch(policy, updates, {
+  return batch;
+}
+
+export function applyPpoSelfPlayRolloutBatch(
+  policy: NeuralActionRankingPolicy,
+  rolloutBatch: PpoSelfPlayRolloutBatch,
+  options: PpoSelfPlayUpdateOptions & { seed: string }
+): NeuralTrainingResult["reinforcement"] {
+  const advantageStats = applyPpoBatch(policy, rolloutBatch.updates, {
     learningRate: options.learningRate,
     temperature: options.temperature,
     clipRatio: options.clipRatio,
     entropyBonus: options.entropyBonus,
     updateEpochs: options.updateEpochs,
-    shuffleSeed: `${options.seed}:ppo-shuffle`,
+    shuffleSeed: options.seed,
     trainableLayers: options.trainableLayers,
     normalizeAdvantages: options.normalizeAdvantages,
     advantageClip: options.advantageClip,
+    miniBatchSize: options.miniBatchSize,
+    gradientScale: options.gradientScale,
   });
-  const returnStats = summarizeValues(rawReturns);
+  const returnStats = summarizeValues(rolloutBatch.rawReturns);
 
   const episodeCount = Math.max(1, options.episodes);
   return {
     algorithm: "ppo" as const,
     opponentMode: options.opponentMode,
-    averageTrainingPlayerCount: trainingPlayerCountTotal / episodeCount,
+    averageTrainingPlayerCount:
+      rolloutBatch.trainingPlayerCountTotal / episodeCount,
     episodes: options.episodes,
     counterfactualScannedEpisodes: 0,
     counterfactualStoppedAfterLabelTarget: false,
-    averageFinalPointDifferential: finalPointDifferentialTotal / episodeCount,
+    averageFinalPointDifferential:
+      rolloutBatch.finalPointDifferentialTotal / episodeCount,
     averageTeacherBaselinePointDifferential: 0,
     averageGreedyBaselinePointDifferential: 0,
     averageBaselinePointDifferential: 0,
     averageBaselineAdjustedReturn: 0,
     averageSampleMinusGreedyReturn: 0,
-    averageSampledDecisionCount: sampledDecisionCountTotal / episodeCount,
+    averageSampledDecisionCount:
+      rolloutBatch.sampledDecisionCountTotal / episodeCount,
     averageCounterfactualScannedDecisionCount: 0,
-    averageExploratoryDecisionCount: sampledDecisionCountTotal / episodeCount,
+    averageExploratoryDecisionCount:
+      rolloutBatch.sampledDecisionCountTotal / episodeCount,
     averageCounterfactualReturnGap: 0,
     averageCounterfactualCandidateCount: 0,
     counterfactualTrainingUpdates: 0,
@@ -3042,15 +3104,49 @@ export function trainPpoFromSelfPlay(
     ppoClippedUpdateRate: advantageStats.clippedUpdateRate,
     ppoAverageReturn: returnStats.mean,
     ppoReturnStdDev: returnStats.stdDev,
-    ppoAverageWaitMoveRate: waitMoveRateTotal / episodeCount,
-    ppoAveragePremoveMoveRate: premoveMoveRateTotal / episodeCount,
-    ppoAverageFlipDeckMoveRate: flipDeckMoveRateTotal / episodeCount,
+    ppoAverageWaitMoveRate: rolloutBatch.waitMoveRateTotal / episodeCount,
+    ppoAveragePremoveMoveRate: rolloutBatch.premoveMoveRateTotal / episodeCount,
+    ppoAverageFlipDeckMoveRate:
+      rolloutBatch.flipDeckMoveRateTotal / episodeCount,
     ppoAdvantageBaseline: options.advantageBaseline,
-    averagePolicyUpdates: updates.length / episodeCount,
+    ppoMiniBatchSize: options.miniBatchSize,
+    ppoGradientScale: options.gradientScale,
+    ppoGradientBatches: advantageStats.gradientBatches,
+    averagePolicyUpdates: rolloutBatch.updates.length / episodeCount,
     averageGradientUpdates: advantageStats.appliedUpdates / episodeCount,
+    averageGradientBatches: advantageStats.gradientBatches / episodeCount,
     averageRawAdvantage: advantageStats.mean,
     rawAdvantageStdDev: advantageStats.stdDev,
   };
+}
+
+export function createEmptyPpoSelfPlayRolloutBatch(): PpoSelfPlayRolloutBatch {
+  return {
+    updates: [],
+    rawReturns: [],
+    trainingPlayerCountTotal: 0,
+    finalPointDifferentialTotal: 0,
+    sampledDecisionCountTotal: 0,
+    waitMoveRateTotal: 0,
+    premoveMoveRateTotal: 0,
+    flipDeckMoveRateTotal: 0,
+  };
+}
+
+export function mergePpoSelfPlayRolloutBatches(
+  batches: readonly PpoSelfPlayRolloutBatch[]
+): PpoSelfPlayRolloutBatch {
+  return batches.reduce((merged, batch) => {
+    merged.updates.push(...batch.updates);
+    merged.rawReturns.push(...batch.rawReturns);
+    merged.trainingPlayerCountTotal += batch.trainingPlayerCountTotal;
+    merged.finalPointDifferentialTotal += batch.finalPointDifferentialTotal;
+    merged.sampledDecisionCountTotal += batch.sampledDecisionCountTotal;
+    merged.waitMoveRateTotal += batch.waitMoveRateTotal;
+    merged.premoveMoveRateTotal += batch.premoveMoveRateTotal;
+    merged.flipDeckMoveRateTotal += batch.flipDeckMoveRateTotal;
+    return merged;
+  }, createEmptyPpoSelfPlayRolloutBatch());
 }
 
 export function collectCounterfactualRlLabelAudit(
@@ -3734,6 +3830,8 @@ function applyPpoBatch(
     trainableLayers: "all" | "output";
     normalizeAdvantages: boolean;
     advantageClip: number;
+    miniBatchSize: number;
+    gradientScale: PpoGradientScaleMode;
   }
 ) {
   const mean =
@@ -3757,48 +3855,53 @@ function applyPpoBatch(
   const updateEpochs = Math.max(1, Math.floor(options.updateEpochs));
   const random = createSeededRandom(options.shuffleSeed);
   let appliedUpdates = 0;
+  let gradientBatches = 0;
   let clippedUpdates = 0;
   let entropyTotal = 0;
   let approximateKlTotal = 0;
   let measuredUpdates = 0;
 
   for (let epoch = 0; epoch < updateEpochs; epoch++) {
-    shuffleCopy(updates, random).forEach((update) => {
+    const batchUpdates = shuffleCopy(updates, random).map((update) => {
       const centered = options.normalizeAdvantages
         ? update.rawAdvantage - mean
         : update.rawAdvantage;
       const normalized = centered / scale;
       const advantage =
         clip > 0 ? Math.max(-clip, Math.min(clip, normalized)) : normalized;
-      const result = policy.trainClippedPolicyGradient(
-        update.candidates,
-        update.selectedCandidateIndex,
+      return {
+        candidates: update.candidates,
+        selectedCandidateIndex: update.selectedCandidateIndex,
         advantage,
-        update.oldProbability ?? 1,
-        options.learningRate,
-        {
-          temperature: options.temperature,
-          clipRatio: options.clipRatio,
-          entropyBonus: options.entropyBonus,
-          trainableLayers: options.trainableLayers,
-        }
-      );
-      if (result.applied) {
-        appliedUpdates += 1;
-      }
-      if (result.clipped) {
-        clippedUpdates += 1;
-      }
-      entropyTotal += result.entropy;
-      approximateKlTotal += result.approximateKl;
-      measuredUpdates += 1;
+        oldProbability: update.oldProbability ?? 1,
+      };
     });
+    const result = policy.trainClippedPolicyGradientBatch(
+      batchUpdates,
+      options.learningRate,
+      {
+        temperature: options.temperature,
+        clipRatio: options.clipRatio,
+        entropyBonus: options.entropyBonus,
+        trainableLayers: options.trainableLayers,
+        miniBatchSize: options.miniBatchSize,
+        gradientScale: options.gradientScale,
+      }
+    );
+    appliedUpdates += result.appliedUpdates;
+    gradientBatches += result.gradientBatches;
+    clippedUpdates += result.clippedUpdates;
+    entropyTotal += result.averageEntropy * result.measuredUpdates;
+    approximateKlTotal +=
+      result.averageApproximateKl * result.measuredUpdates;
+    measuredUpdates += result.measuredUpdates;
   }
 
   return {
     mean,
     stdDev,
     appliedUpdates,
+    gradientBatches,
     averageEntropy: measuredUpdates === 0 ? 0 : entropyTotal / measuredUpdates,
     averageApproximateKl:
       measuredUpdates === 0 ? 0 : approximateKlTotal / measuredUpdates,

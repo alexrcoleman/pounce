@@ -132,6 +132,8 @@ const options = {
     "RL_PPO_ADVANTAGE_BASELINE",
     "batch"
   ),
+  rlPpoMiniBatchSize: readIntegerEnv("RL_PPO_MINIBATCH_SIZE", 1),
+  rlPpoGradientScale: readPpoGradientScaleEnv("RL_PPO_GRADIENT_SCALE", "sum"),
   rlOpponentMode: readRlOpponentModeEnv(
     "RL_OPPONENT_MODE",
     rlAlgorithm === "ppo" ? "self" : "teacher"
@@ -656,6 +658,17 @@ function readPpoAdvantageBaselineEnv(
     return fallback;
   }
   return value.toLowerCase() === "trajectory" ? "trajectory" : fallback;
+}
+
+function readPpoGradientScaleEnv(
+  name: string,
+  fallback: "sum" | "mean"
+): "sum" | "mean" {
+  const value = process.env[name];
+  if (value == null || value.trim() === "") {
+    return fallback;
+  }
+  return value.toLowerCase() === "mean" ? "mean" : fallback;
 }
 
 function readRlCreditModeEnv(

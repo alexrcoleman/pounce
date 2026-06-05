@@ -96,6 +96,41 @@ type ForwardPass = {
   score: number;
 };
 
+type ScoreGradientInput = {
+  modelFeatures: number[];
+  forward: ForwardPass;
+  dScore: number;
+};
+
+export type NeuralPolicyGradientAccumulator = {
+  outputWeights: number[];
+  outputBias: number;
+  layerWeights: number[][][];
+  layerBiases: number[][];
+  updateCount: number;
+};
+
+export type ClippedPolicyGradientBatchUpdate = {
+  candidates: readonly Pick<ActionRankingCandidate, "features">[];
+  selectedCandidateIndex: number;
+  advantage: number;
+  oldProbability?: number;
+};
+
+export type ClippedPolicyGradientBatchStats = {
+  appliedUpdates: number;
+  gradientBatches: number;
+  clippedUpdates: number;
+  measuredUpdates: number;
+  averageEntropy: number;
+  averageApproximateKl: number;
+  clippedUpdateRate: number;
+};
+
+export type ClippedPolicyGradientBatchGradient = ClippedPolicyGradientBatchStats & {
+  gradient: NeuralPolicyGradientAccumulator;
+};
+
 const DEFAULT_HIDDEN_LAYER_SIZES = [48];
 const DEFAULT_LEARNING_RATE = 0.02;
 
@@ -267,7 +302,7 @@ export class NeuralActionRankingPolicy {
   }
 
   trainPolicyGradient(
-    candidates: readonly ActionRankingCandidate[],
+    candidates: readonly Pick<ActionRankingCandidate, "features">[],
     selectedCandidateIndex: number,
     advantage: number,
     learningRate: number,
@@ -300,7 +335,7 @@ export class NeuralActionRankingPolicy {
   }
 
   trainClippedPolicyGradient(
-    candidates: readonly ActionRankingCandidate[],
+    candidates: readonly Pick<ActionRankingCandidate, "features">[],
     selectedCandidateIndex: number,
     advantage: number,
     oldProbability: number,
@@ -388,6 +423,212 @@ export class NeuralActionRankingPolicy {
       entropy,
       approximateKl,
     };
+  }
+
+  trainClippedPolicyGradientBatch(
+    updates: readonly ClippedPolicyGradientBatchUpdate[],
+    learningRate: number,
+    options: {
+      temperature?: number;
+      clipRatio?: number;
+      entropyBonus?: number;
+      l2?: number;
+      trainableLayers?: "all" | "output";
+      miniBatchSize?: number;
+      gradientScale?: "sum" | "mean";
+    } = {}
+  ): ClippedPolicyGradientBatchStats {
+    const temperature = options.temperature ?? 1;
+    const clipRatio = Math.max(0, options.clipRatio ?? 0.2);
+    const upper = 1 + clipRatio;
+    const lower = 1 - clipRatio;
+    const entropyBonus = Math.max(0, options.entropyBonus ?? 0);
+    const l2 = options.l2 ?? 0;
+    const trainableLayers = options.trainableLayers ?? "all";
+    const miniBatchSize = Math.max(1, Math.floor(options.miniBatchSize ?? 1));
+    const gradientScale = options.gradientScale ?? "sum";
+    let appliedUpdates = 0;
+    let gradientBatches = 0;
+    let clippedUpdates = 0;
+    let entropyTotal = 0;
+    let approximateKlTotal = 0;
+    let measuredUpdates = 0;
+
+    for (
+      let batchStart = 0;
+      batchStart < updates.length;
+      batchStart += miniBatchSize
+    ) {
+      const batchEnd = Math.min(updates.length, batchStart + miniBatchSize);
+      const gradientResult = this.computeClippedPolicyGradientBatchGradient(
+        updates.slice(batchStart, batchEnd),
+        {
+          temperature,
+          clipRatio,
+          entropyBonus,
+          l2,
+          trainableLayers,
+        }
+      );
+
+      if (gradientResult.gradient.updateCount > 0) {
+        this.applyGradientAccumulator(
+          gradientResult.gradient,
+          learningRate,
+          gradientScale === "mean" ? gradientResult.gradient.updateCount : 1
+        );
+        gradientBatches += 1;
+      }
+      appliedUpdates += gradientResult.appliedUpdates;
+      clippedUpdates += gradientResult.clippedUpdates;
+      entropyTotal +=
+        gradientResult.averageEntropy * gradientResult.measuredUpdates;
+      approximateKlTotal +=
+        gradientResult.averageApproximateKl * gradientResult.measuredUpdates;
+      measuredUpdates += gradientResult.measuredUpdates;
+    }
+
+    return {
+      appliedUpdates,
+      gradientBatches,
+      clippedUpdates,
+      measuredUpdates,
+      averageEntropy: measuredUpdates === 0 ? 0 : entropyTotal / measuredUpdates,
+      averageApproximateKl:
+        measuredUpdates === 0 ? 0 : approximateKlTotal / measuredUpdates,
+      clippedUpdateRate:
+        measuredUpdates === 0 ? 0 : clippedUpdates / measuredUpdates,
+    };
+  }
+
+  computeClippedPolicyGradientBatchGradient(
+    updates: readonly ClippedPolicyGradientBatchUpdate[],
+    options: {
+      temperature?: number;
+      clipRatio?: number;
+      entropyBonus?: number;
+      l2?: number;
+      trainableLayers?: "all" | "output";
+    } = {}
+  ): ClippedPolicyGradientBatchGradient {
+    const temperature = options.temperature ?? 1;
+    const clipRatio = Math.max(0, options.clipRatio ?? 0.2);
+    const upper = 1 + clipRatio;
+    const lower = 1 - clipRatio;
+    const entropyBonus = Math.max(0, options.entropyBonus ?? 0);
+    const l2 = options.l2 ?? 0;
+    const trainableLayers = options.trainableLayers ?? "all";
+    const accumulator = this.createGradientAccumulator();
+    let appliedUpdates = 0;
+    let clippedUpdates = 0;
+    let entropyTotal = 0;
+    let approximateKlTotal = 0;
+    let measuredUpdates = 0;
+
+    updates.forEach((update) => {
+      if (
+        update.candidates.length === 0 ||
+        update.selectedCandidateIndex < 0 ||
+        update.selectedCandidateIndex >= update.candidates.length ||
+        update.advantage === 0
+      ) {
+        return;
+      }
+
+      const candidateForwards = update.candidates.map((candidate) => {
+        const modelFeatures = this.prepareFeatures(candidate.features);
+        return {
+          modelFeatures,
+          forward: this.forward(modelFeatures),
+        };
+      });
+      const scores = candidateForwards.map(({ forward }) => forward.score);
+      const probabilities = softmax(scores, temperature);
+      const currentProbability = Math.max(
+        1e-12,
+        probabilities[update.selectedCandidateIndex]
+      );
+      const safeOldProbability = Math.max(1e-12, update.oldProbability ?? 1);
+      const ratio = currentProbability / safeOldProbability;
+      const clipped =
+        clipRatio > 0 &&
+        ((update.advantage > 0 && ratio > upper) ||
+          (update.advantage < 0 && ratio < lower));
+      const entropy = getEntropy(probabilities);
+      const approximateKl =
+        Math.log(safeOldProbability) - Math.log(currentProbability);
+      let contributedGradient = false;
+
+      if (!clipped) {
+        const scale = update.advantage * ratio;
+        candidateForwards.forEach((candidateForward, candidateIndex) => {
+          const target =
+            candidateIndex === update.selectedCandidateIndex ? 1 : 0;
+          const dScore = scale * (probabilities[candidateIndex] - target);
+          this.accumulateScoreGradient(
+            accumulator,
+            candidateForward.modelFeatures,
+            candidateForward.forward,
+            dScore,
+            l2,
+            trainableLayers
+          );
+        });
+        contributedGradient = true;
+      }
+
+      if (entropyBonus > 0) {
+        candidateForwards.forEach((candidateForward, candidateIndex) => {
+          const probability = Math.max(
+            1e-12,
+            probabilities[candidateIndex] ?? 0
+          );
+          const dScore =
+            entropyBonus * probability * (Math.log(probability) + entropy);
+          this.accumulateScoreGradient(
+            accumulator,
+            candidateForward.modelFeatures,
+            candidateForward.forward,
+            dScore,
+            l2,
+            trainableLayers
+          );
+        });
+        contributedGradient = true;
+      }
+
+      if (contributedGradient) {
+        appliedUpdates += 1;
+        accumulator.updateCount += 1;
+      }
+      if (clipped) {
+        clippedUpdates += 1;
+      }
+      entropyTotal += entropy;
+      approximateKlTotal += approximateKl;
+      measuredUpdates += 1;
+    });
+
+    return {
+      gradient: accumulator,
+      appliedUpdates,
+      gradientBatches: accumulator.updateCount > 0 ? 1 : 0,
+      clippedUpdates,
+      measuredUpdates,
+      averageEntropy: measuredUpdates === 0 ? 0 : entropyTotal / measuredUpdates,
+      averageApproximateKl:
+        measuredUpdates === 0 ? 0 : approximateKlTotal / measuredUpdates,
+      clippedUpdateRate:
+        measuredUpdates === 0 ? 0 : clippedUpdates / measuredUpdates,
+    };
+  }
+
+  applyPolicyGradientAccumulator(
+    accumulator: NeuralPolicyGradientAccumulator,
+    learningRate: number,
+    divisor: number
+  ): void {
+    this.applyGradientAccumulator(accumulator, learningRate, divisor);
   }
 
   trainRewardTargets(
@@ -723,6 +964,126 @@ export class NeuralActionRankingPolicy {
     });
   }
 
+  private createGradientAccumulator(): NeuralPolicyGradientAccumulator {
+    return {
+      outputWeights: Array.from(
+        { length: this.model.outputWeights.length },
+        () => 0
+      ),
+      outputBias: 0,
+      layerWeights: this.model.layerWeights.map((layer) =>
+        layer.map((weights) => Array.from({ length: weights.length }, () => 0))
+      ),
+      layerBiases: this.model.layerBiases.map((biases) =>
+        Array.from({ length: biases.length }, () => 0)
+      ),
+      updateCount: 0,
+    };
+  }
+
+  private accumulateScoreGradient(
+    accumulator: NeuralPolicyGradientAccumulator,
+    modelFeatures: readonly number[],
+    forward: ForwardPass,
+    dScore: number,
+    l2: number,
+    trainableLayers: "all" | "output" = "all"
+  ): void {
+    const lastActivation = forward.activations[forward.activations.length - 1];
+
+    for (
+      let outputIndex = 0;
+      outputIndex < this.model.outputWeights.length;
+      outputIndex++
+    ) {
+      accumulator.outputWeights[outputIndex] +=
+        dScore * lastActivation[outputIndex] +
+        l2 * this.model.outputWeights[outputIndex];
+    }
+    accumulator.outputBias += dScore;
+
+    if (trainableLayers === "output") {
+      return;
+    }
+
+    const scoreGradient: ScoreGradientInput = {
+      modelFeatures: modelFeatures.slice(),
+      forward,
+      dScore,
+    };
+    const deltas = this.getHiddenLayerDeltas(scoreGradient);
+
+    for (
+      let layerIndex = 0;
+      layerIndex < this.model.hiddenLayerSizes.length;
+      layerIndex++
+    ) {
+      const previousActivation =
+        layerIndex === 0
+          ? scoreGradient.modelFeatures
+          : forward.activations[layerIndex - 1];
+      for (
+        let hiddenIndex = 0;
+        hiddenIndex < this.model.hiddenLayerSizes[layerIndex];
+        hiddenIndex++
+      ) {
+        const delta = deltas[layerIndex][hiddenIndex];
+        for (
+          let inputIndex = 0;
+          inputIndex < previousActivation.length;
+          inputIndex++
+        ) {
+          accumulator.layerWeights[layerIndex][hiddenIndex][inputIndex] +=
+            delta * previousActivation[inputIndex] +
+            l2 * this.model.layerWeights[layerIndex][hiddenIndex][inputIndex];
+        }
+        accumulator.layerBiases[layerIndex][hiddenIndex] += delta;
+      }
+    }
+  }
+
+  private applyGradientAccumulator(
+    accumulator: NeuralPolicyGradientAccumulator,
+    learningRate: number,
+    divisor: number
+  ): void {
+    const scale = learningRate / Math.max(1, divisor);
+
+    for (
+      let outputIndex = 0;
+      outputIndex < this.model.outputWeights.length;
+      outputIndex++
+    ) {
+      this.model.outputWeights[outputIndex] -=
+        scale * accumulator.outputWeights[outputIndex];
+    }
+    this.model.outputBias -= scale * accumulator.outputBias;
+
+    for (
+      let layerIndex = 0;
+      layerIndex < this.model.hiddenLayerSizes.length;
+      layerIndex++
+    ) {
+      for (
+        let hiddenIndex = 0;
+        hiddenIndex < this.model.hiddenLayerSizes[layerIndex];
+        hiddenIndex++
+      ) {
+        for (
+          let inputIndex = 0;
+          inputIndex <
+          this.model.layerWeights[layerIndex][hiddenIndex].length;
+          inputIndex++
+        ) {
+          this.model.layerWeights[layerIndex][hiddenIndex][inputIndex] -=
+            scale * accumulator.layerWeights[layerIndex][hiddenIndex][inputIndex];
+        }
+        this.model.layerBiases[layerIndex][hiddenIndex] -=
+          scale * accumulator.layerBiases[layerIndex][hiddenIndex];
+      }
+    }
+  }
+
   private applyScoreGradient(
     features: readonly number[],
     dScore: number,
@@ -734,9 +1095,6 @@ export class NeuralActionRankingPolicy {
     const forward = this.forward(modelFeatures);
     const lastActivation = forward.activations[forward.activations.length - 1];
     const oldOutputWeights = this.model.outputWeights.slice();
-    const oldLayerWeights = this.model.layerWeights.map((layer) =>
-      layer.map((weights) => weights.slice())
-    );
 
     for (
       let outputIndex = 0;
@@ -754,41 +1112,14 @@ export class NeuralActionRankingPolicy {
       return;
     }
 
-    const deltas = this.model.hiddenLayerSizes.map((size) =>
-      Array.from({ length: size }, () => 0)
+    const deltas = this.getHiddenLayerDeltas(
+      {
+        modelFeatures,
+        forward,
+        dScore,
+      },
+      oldOutputWeights
     );
-    const lastLayerIndex = this.model.hiddenLayerSizes.length - 1;
-    for (
-      let hiddenIndex = 0;
-      hiddenIndex < this.model.hiddenLayerSizes[lastLayerIndex];
-      hiddenIndex++
-    ) {
-      const activation = forward.activations[lastLayerIndex][hiddenIndex];
-      deltas[lastLayerIndex][hiddenIndex] =
-        dScore * oldOutputWeights[hiddenIndex] * (1 - activation * activation);
-    }
-
-    for (let layerIndex = lastLayerIndex - 1; layerIndex >= 0; layerIndex--) {
-      for (
-        let hiddenIndex = 0;
-        hiddenIndex < this.model.hiddenLayerSizes[layerIndex];
-        hiddenIndex++
-      ) {
-        const downstream = deltas[layerIndex + 1].reduce(
-          (sum, downstreamDelta, downstreamIndex) => {
-            return (
-              sum +
-              downstreamDelta *
-                oldLayerWeights[layerIndex + 1][downstreamIndex][hiddenIndex]
-            );
-          },
-          0
-        );
-        const activation = forward.activations[layerIndex][hiddenIndex];
-        deltas[layerIndex][hiddenIndex] =
-          downstream * (1 - activation * activation);
-      }
-    }
 
     for (
       let layerIndex = 0;
@@ -817,6 +1148,54 @@ export class NeuralActionRankingPolicy {
         this.model.layerBiases[layerIndex][hiddenIndex] -= learningRate * delta;
       }
     }
+  }
+
+  private getHiddenLayerDeltas(
+    scoreGradient: ScoreGradientInput,
+    outputWeights = this.model.outputWeights,
+    layerWeights = this.model.layerWeights
+  ): number[][] {
+    const deltas = this.model.hiddenLayerSizes.map((size) =>
+      Array.from({ length: size }, () => 0)
+    );
+    const lastLayerIndex = this.model.hiddenLayerSizes.length - 1;
+    for (
+      let hiddenIndex = 0;
+      hiddenIndex < this.model.hiddenLayerSizes[lastLayerIndex];
+      hiddenIndex++
+    ) {
+      const activation =
+        scoreGradient.forward.activations[lastLayerIndex][hiddenIndex];
+      deltas[lastLayerIndex][hiddenIndex] =
+        scoreGradient.dScore *
+        outputWeights[hiddenIndex] *
+        (1 - activation * activation);
+    }
+
+    for (let layerIndex = lastLayerIndex - 1; layerIndex >= 0; layerIndex--) {
+      for (
+        let hiddenIndex = 0;
+        hiddenIndex < this.model.hiddenLayerSizes[layerIndex];
+        hiddenIndex++
+      ) {
+        const downstream = deltas[layerIndex + 1].reduce(
+          (sum, downstreamDelta, downstreamIndex) => {
+            return (
+              sum +
+              downstreamDelta *
+                layerWeights[layerIndex + 1][downstreamIndex][hiddenIndex]
+            );
+          },
+          0
+        );
+        const activation =
+          scoreGradient.forward.activations[layerIndex][hiddenIndex];
+        deltas[layerIndex][hiddenIndex] =
+          downstream * (1 - activation * activation);
+      }
+    }
+
+    return deltas;
   }
 
   private forward(features: readonly number[]): ForwardPass {
@@ -1205,6 +1584,49 @@ export function createNeuralActionRankingModel(
     ),
     outputBias: 0,
   };
+}
+
+export function mergeNeuralPolicyGradientAccumulators(
+  accumulators: readonly NeuralPolicyGradientAccumulator[]
+): NeuralPolicyGradientAccumulator {
+  if (accumulators.length === 0) {
+    throw new Error("Cannot merge an empty gradient accumulator list.");
+  }
+
+  const first = accumulators[0];
+  const merged: NeuralPolicyGradientAccumulator = {
+    outputWeights: Array.from({ length: first.outputWeights.length }, () => 0),
+    outputBias: 0,
+    layerWeights: first.layerWeights.map((layer) =>
+      layer.map((weights) => Array.from({ length: weights.length }, () => 0))
+    ),
+    layerBiases: first.layerBiases.map((biases) =>
+      Array.from({ length: biases.length }, () => 0)
+    ),
+    updateCount: 0,
+  };
+
+  accumulators.forEach((accumulator) => {
+    accumulator.outputWeights.forEach((value, index) => {
+      merged.outputWeights[index] += value;
+    });
+    merged.outputBias += accumulator.outputBias;
+    accumulator.layerWeights.forEach((layer, layerIndex) => {
+      layer.forEach((weights, hiddenIndex) => {
+        weights.forEach((value, inputIndex) => {
+          merged.layerWeights[layerIndex][hiddenIndex][inputIndex] += value;
+        });
+      });
+    });
+    accumulator.layerBiases.forEach((biases, layerIndex) => {
+      biases.forEach((value, hiddenIndex) => {
+        merged.layerBiases[layerIndex][hiddenIndex] += value;
+      });
+    });
+    merged.updateCount += accumulator.updateCount;
+  });
+
+  return merged;
 }
 
 export function resizeNeuralActionRankingModel(
