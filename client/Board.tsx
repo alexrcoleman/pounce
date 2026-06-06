@@ -302,7 +302,9 @@ export default observer(function Board({
               visiblePlayerIndices={visiblePlayerIndices}
             />
             <HandsLayer />
-            <ReactionBubbles />
+            <ReactionBubbles
+              presentation={board.pouncer != null ? "postgame" : "board"}
+            />
             <PauseOverlay />
             <VictoryOverlay />
           </div>

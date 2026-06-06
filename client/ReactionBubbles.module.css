@@ -6,6 +6,10 @@
   pointer-events: none;
 }
 
+.layer[data-presentation="postgame"] {
+  z-index: 1000001;
+}
+
 .bubble {
   position: absolute;
   left: var(--reaction-x);

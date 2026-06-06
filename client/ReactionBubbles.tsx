@@ -27,8 +27,18 @@ import styles from "./ReactionBubbles.module.css";
 const REACTION_BUBBLE_DURATION_MS = 4800;
 const REACTION_PLATE_TOP_OFFSET = 24;
 const REACTION_FIELD_EDGE_INSET = 46;
+const POSTGAME_SCOREBOARD_MAX_WIDTH = 600;
+const POSTGAME_SCOREBOARD_MIN_WIDTH = 280;
+const POSTGAME_SCOREBOARD_MAX_HEIGHT = 360;
+const POSTGAME_SCOREBOARD_MIN_HEIGHT = 180;
 
-export default observer(function ReactionBubbles() {
+type ReactionBubblePresentation = "board" | "postgame";
+
+export default observer(function ReactionBubbles({
+  presentation = "board",
+}: {
+  presentation?: ReactionBubblePresentation;
+}) {
   const { state } = useClientContext();
   const board = state.board;
   const layout = useBoardLayout();
@@ -39,13 +49,18 @@ export default observer(function ReactionBubbles() {
   }
 
   return (
-    <div aria-hidden="true" className={styles.layer}>
+    <div
+      aria-hidden="true"
+      className={styles.layer}
+      data-presentation={presentation}
+    >
       {state.reactions.map((reaction) => (
         <ReactionBubble
           activePlayerIndex={activePlayerIndex}
           board={board}
           key={reaction.eventId}
           layout={layout}
+          presentation={presentation}
           reaction={reaction}
         />
       ))}
@@ -57,11 +72,13 @@ function ReactionBubble({
   activePlayerIndex,
   board,
   layout,
+  presentation,
   reaction,
 }: {
   activePlayerIndex: number;
   board: BoardState;
   layout: BoardLayout;
+  presentation: ReactionBubblePresentation;
   reaction: PlayerReaction;
 }) {
   const { state } = useClientContext();
@@ -70,6 +87,7 @@ function ReactionBubble({
     activePlayerIndex,
     board,
     layout,
+    presentation,
     reaction,
   });
 
@@ -111,11 +129,13 @@ function getBubbleAnchor({
   activePlayerIndex,
   board,
   layout,
+  presentation,
   reaction,
 }: {
   activePlayerIndex: number;
   board: BoardState;
   layout: BoardLayout;
+  presentation: ReactionBubblePresentation;
   reaction: PlayerReaction;
 }) {
   const player = board.players[reaction.playerIndex];
@@ -167,11 +187,18 @@ function getBubbleAnchor({
     plateY,
     xNudge,
   });
-  const fieldTarget = getNearestFieldEdgeTarget({
-    layout,
-    startX: x,
-    startY: y,
-  });
+  const fieldTarget =
+    presentation === "postgame"
+      ? getPostGameScoreboardTarget({
+          hash,
+          layout,
+          fallbackCenter: fieldCenter,
+        })
+      : getNearestFieldEdgeTarget({
+          layout,
+          startX: x,
+          startY: y,
+        });
   const travelX = fieldTarget.x - x;
   const travelY = fieldTarget.y - y;
   const travelLength = Math.hypot(travelX, travelY);
@@ -192,6 +219,41 @@ function getBubbleAnchor({
     travelY,
     x,
     y,
+  };
+}
+
+function getPostGameScoreboardTarget({
+  fallbackCenter,
+  hash,
+  layout,
+}: {
+  fallbackCenter: [number, number];
+  hash: number;
+  layout: BoardLayout;
+}) {
+  const { height, width } = layout.viewport;
+  const centerX = width > 0 ? width / 2 : fallbackCenter[0];
+  const centerY = height > 0 ? height / 2 : fallbackCenter[1];
+  const scoreboardWidth =
+    width > 0
+      ? clamp(
+          width - 48,
+          POSTGAME_SCOREBOARD_MIN_WIDTH,
+          POSTGAME_SCOREBOARD_MAX_WIDTH
+        )
+      : POSTGAME_SCOREBOARD_MAX_WIDTH;
+  const scoreboardHeight =
+    height > 0
+      ? clamp(
+          height * 0.5,
+          POSTGAME_SCOREBOARD_MIN_HEIGHT,
+          POSTGAME_SCOREBOARD_MAX_HEIGHT
+        )
+      : POSTGAME_SCOREBOARD_MAX_HEIGHT;
+
+  return {
+    x: centerX + getSignedHashUnit(hash, 7) * scoreboardWidth * 0.42,
+    y: centerY - 12 + getSignedHashUnit(hash, 17) * scoreboardHeight * 0.3,
   };
 }
 
@@ -271,6 +333,10 @@ function clamp(value: number, min: number, max: number) {
 
 function getDistanceSquared(a: [number, number], b: [number, number]) {
   return (a[0] - b[0]) ** 2 + (a[1] - b[1]) ** 2;
+}
+
+function getSignedHashUnit(hash: number, shift: number) {
+  return (((hash >>> shift) & 0xff) / 255) * 2 - 1;
 }
 
 function hashString(value: string): number {

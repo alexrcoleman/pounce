@@ -50,6 +50,7 @@ export type BoardLayout = {
   mode: BoardLayoutMode;
   focusedPlayerIndex: number | null;
   fullSizePlayerIndices: number[];
+  viewport: Viewport;
   mapPoint: (point: Point, area: BoardLayoutArea) => Point;
   getScale: (area: BoardLayoutArea) => number;
 };
@@ -69,6 +70,7 @@ const identityLayout: BoardLayout = {
   mode: "standard",
   focusedPlayerIndex: null,
   fullSizePlayerIndices: [],
+  viewport: { width: 0, height: 0 },
   mapPoint: (point) => point,
   getScale: () => 1,
 };
@@ -254,6 +256,7 @@ function createStandardLayout(
     focusedPlayerIndex: null,
     fullSizePlayerIndices:
       activePlayerIndex >= 0 ? [activePlayerIndex] : [],
+    viewport,
     mapPoint: ([x, y]) => [offsetX + x * scale, offsetY + y * scale],
     getScale: () => scale,
   };
@@ -410,6 +413,7 @@ function createCompactLayout(
       compactFocusPlayerIndex != null
         ? [activePlayerIndex, compactFocusPlayerIndex]
         : [activePlayerIndex],
+    viewport,
     mapPoint: ([x, y], area) => {
       if (area.type === "field") {
         return [
@@ -542,6 +546,7 @@ function createTouchLandscapeLayout(
     mode: "touchLandscape",
     focusedPlayerIndex: null,
     fullSizePlayerIndices: [activePlayerIndex],
+    viewport,
     mapPoint: ([x, y], area) => {
       if (area.type === "field") {
         return [
