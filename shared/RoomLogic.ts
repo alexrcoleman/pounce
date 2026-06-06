@@ -20,6 +20,12 @@ import {
 } from "./GameUtils";
 
 import {
+  DEFAULT_AI_LEVEL,
+  SIMULATION_AI_LEVEL,
+  getAISpeedMultiplier,
+  normalizeAILevel,
+} from "./AIDifficulty";
+import {
   normalizeAIMode,
   type AIPileKnowledge,
   type RoomState,
@@ -1097,12 +1103,14 @@ export function setRoomFairHandRotation(
 }
 
 export function setRoomAILevel(room: RoomState, speed: number): void {
-  const isSimulationMode = speed === 1000;
+  const isSimulationMode = speed === SIMULATION_AI_LEVEL;
   clearRoomStuckPlayers(room);
   if (isSimulationMode) {
+    const normalizedLevel = normalizeAILevel(room.settings.aiSpeed);
     room.autoStart = true;
     room.timescale = 100;
-    room.settings.aiSpeed = room.aiSpeed;
+    room.aiSpeed = getAISpeedMultiplier(normalizedLevel);
+    room.settings.aiSpeed = normalizedLevel;
     room.settings.simulationMode = true;
     room.board.players.forEach((p) => {
       if (p.socketId != null) {
@@ -1111,13 +1119,13 @@ export function setRoomAILevel(room: RoomState, speed: number): void {
       }
     });
   } else {
-    const normalizedSpeed = Number.isFinite(speed)
-      ? Math.max(1, Math.min(500, speed))
-      : 3;
+    const normalizedLevel = Number.isFinite(speed)
+      ? normalizeAILevel(speed)
+      : DEFAULT_AI_LEVEL;
     room.timescale = 1;
     room.autoStart = false;
-    room.aiSpeed = normalizedSpeed;
-    room.settings.aiSpeed = normalizedSpeed;
+    room.aiSpeed = getAISpeedMultiplier(normalizedLevel);
+    room.settings.aiSpeed = normalizedLevel;
     room.settings.simulationMode = false;
   }
   clearPlayersReadyForRound(room.board);

@@ -42,6 +42,7 @@ import {
   startRoomGame,
   updateRoomHand,
 } from "../shared/RoomLogic";
+import { DEFAULT_AI_LEVEL } from "../shared/AIDifficulty";
 
 import { createServer, IncomingMessage, ServerResponse } from "http";
 import { timingSafeEqual } from "crypto";
@@ -552,7 +553,10 @@ export default function createSocketIOServer() {
       const room = getRoom(user.currentRoom);
       const wasSimulationMode = room.settings.simulationMode;
       const now = Date.now();
-      setRoomAILevel(room, typeof args.speed === "number" ? args.speed : 3);
+      setRoomAILevel(
+        room,
+        typeof args.speed === "number" ? args.speed : DEFAULT_AI_LEVEL
+      );
       if (wasSimulationMode && !room.settings.simulationMode) {
         room.simulatedNow = now;
         realignRoomAICooldowns(room, now);

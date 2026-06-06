@@ -1,4 +1,5 @@
 import { BoardState, CursorState, isGameOver } from "../shared/GameUtils";
+import { DEFAULT_AI_LEVEL } from "../shared/AIDifficulty";
 import { makeAutoObservable } from "mobx";
 import deepClone from "../shared/deepClone";
 import { executeMove, type Move } from "../shared/MoveHandler";
@@ -26,7 +27,7 @@ function createDefaultRoomSettings(): RoomSettings {
     fairHandMode: "off",
     fairHandRotation: false,
     aiMode: "fixed",
-    aiSpeed: 3,
+    aiSpeed: DEFAULT_AI_LEVEL,
     simulationMode: false,
   };
 }

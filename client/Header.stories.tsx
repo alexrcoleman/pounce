@@ -6,6 +6,13 @@ import {
   AIDifficultyControl,
   type AIDifficultyMode,
 } from "./SettingsDialog";
+import {
+  AI_DIFFICULTY_PRESETS,
+  DEFAULT_AI_LEVEL,
+  MAX_AI_LEVEL,
+  MIN_AI_LEVEL,
+  normalizeAILevel,
+} from "../shared/AIDifficulty";
 import styles from "./Header.module.css";
 
 type AIDifficultyStoryArgs = {
@@ -23,7 +30,7 @@ const meta = {
   },
   argTypes: {
     initialCustomSpeed: {
-      control: { type: "range", min: 1, max: 10, step: 1 },
+      control: { type: "range", min: MIN_AI_LEVEL, max: MAX_AI_LEVEL, step: 1 },
     },
     initialMode: {
       control: "inline-radio",
@@ -110,7 +117,7 @@ function AIDifficultyStoryFrame({
 }
 
 function AIDifficultyStaticFrame({
-  customSpeed = 3,
+  customSpeed = DEFAULT_AI_LEVEL,
   mode,
   title,
 }: {
@@ -148,23 +155,13 @@ function AIDifficultyFrame({
 }
 
 function getPresetSpeed(mode: AIDifficultyMode): number | null {
-  switch (mode) {
-    case "easy":
-      return 3;
-    case "medium":
-      return 4;
-    case "hard":
-      return 5;
-    default:
-      return null;
-  }
+  return (
+    AI_DIFFICULTY_PRESETS.find((preset) => preset.key === mode)?.level ?? null
+  );
 }
 
 function clampCustomSpeed(speed: number): number {
-  if (!Number.isFinite(speed)) {
-    return 3;
-  }
-  return Math.max(1, Math.min(10, Math.round(speed)));
+  return normalizeAILevel(speed);
 }
 
 const gridStyle: CSSProperties = {

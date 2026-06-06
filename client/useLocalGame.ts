@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { DEFAULT_AI_LEVEL } from "../shared/AIDifficulty";
 import { GameSocket } from "./GameConnection";
 import SocketState from "./SocketState";
 import { useLocalObservable } from "mobx-react-lite";
@@ -465,9 +466,14 @@ export default function useLocalGame(name: string | null) {
           emitUpdate();
           emitHands();
         } else if (event === "set_ai_level") {
-          const setAIArgs = args[0] as { speed: number };
+          const setAIArgs = args[0] as { speed?: number } | undefined;
           const wasSimulationMode = room.settings.simulationMode;
-          setRoomAILevel(room, setAIArgs.speed);
+          setRoomAILevel(
+            room,
+            typeof setAIArgs?.speed === "number"
+              ? setAIArgs.speed
+              : DEFAULT_AI_LEVEL
+          );
           if (wasSimulationMode && !room.settings.simulationMode) {
             clearPendingSimulationUpdate();
             simulatedNow = Date.now();

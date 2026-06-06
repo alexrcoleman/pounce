@@ -33,6 +33,10 @@ import ActivePlayerStackTargets from "./ActivePlayerStackTargets";
 import MobileDragPreviewLayer from "./MobileDragPreviewLayer";
 import InfoTooltipIcon from "./InfoTooltipIcon";
 import ReactionBubbles from "./ReactionBubbles";
+import {
+  AI_DIFFICULTY_PRESETS,
+  DEFAULT_AI_LEVEL,
+} from "../shared/AIDifficulty";
 import RoomShare from "./RoomShare";
 import { useClientContext } from "./ClientContext";
 import { Button, Modal } from "antd";
@@ -562,7 +566,7 @@ const PileSection = observer(function PileSection({
     roomId != null && roomId.toLowerCase() !== "offline" ? roomId : "Offline";
   const roomLabel = roomCode === "Offline" ? "Table" : "Room code";
   const isOfflineRoom = roomCode === "Offline";
-  const aiSpeed = state.roomSettings.aiSpeed ?? 3;
+  const aiSpeed = state.roomSettings.aiSpeed ?? DEFAULT_AI_LEVEL;
   const selectAIDifficulty = (speed: number) => {
     socket?.emit("set_ai_level", { speed });
   };
@@ -665,27 +669,16 @@ const PileSection = observer(function PileSection({
               <>
                 {isOfflineRoom ? (
                   <div className={styles.aiDifficultyControl}>
-                    <button
-                      aria-pressed={aiSpeed === 3}
-                      onClick={() => selectAIDifficulty(3)}
-                      type="button"
-                    >
-                      Easy
-                    </button>
-                    <button
-                      aria-pressed={aiSpeed === 4}
-                      onClick={() => selectAIDifficulty(4)}
-                      type="button"
-                    >
-                      Medium
-                    </button>
-                    <button
-                      aria-pressed={aiSpeed === 5}
-                      onClick={() => selectAIDifficulty(5)}
-                      type="button"
-                    >
-                      Hard
-                    </button>
+                    {AI_DIFFICULTY_PRESETS.map((preset) => (
+                      <button
+                        aria-pressed={aiSpeed === preset.level}
+                        key={preset.key}
+                        onClick={() => selectAIDifficulty(preset.level)}
+                        type="button"
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
                   </div>
                 ) : null}
                 {!isOfflineRoom ? <RoomShare roomId={roomCode} /> : null}

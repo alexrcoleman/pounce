@@ -10,6 +10,15 @@ import RoomShare from "./RoomShare";
 import ChevronLeftIcon from "./icons/ChevronLeftIcon";
 import InfoTooltipIcon from "./InfoTooltipIcon";
 import {
+  AI_DIFFICULTY_PRESETS,
+  DEFAULT_AI_LEVEL,
+  MAX_AI_LEVEL,
+  MIN_AI_LEVEL,
+  SIMULATION_AI_LEVEL,
+  normalizeAILevel,
+  type AIDifficultyPresetKey,
+} from "../shared/AIDifficulty";
+import {
   getFairHandMode,
   type FairHandMode,
 } from "../shared/FairHands";
@@ -39,24 +48,13 @@ const FAIR_HAND_MODE_OPTIONS: { value: FairHandMode; label: string }[] = [
   { value: "fairest", label: "Best hand to least lucky" },
 ];
 
-const AI_DIFFICULTY_PRESETS = [
-  { key: "easy", label: "Easy", speed: 3 },
-  { key: "medium", label: "Medium", speed: 4 },
-  { key: "hard", label: "Hard", speed: 5 },
-] as const;
-
 const AI_MODE_OPTIONS = [
   { key: "fixed", label: "Fixed AIs" },
   { key: "trained", label: "Trained model" },
   { key: "hybrid", label: "Hybrid" },
 ] as const;
 
-export type AIDifficultyMode =
-  | (typeof AI_DIFFICULTY_PRESETS)[number]["key"]
-  | "custom";
-
-const CUSTOM_AI_MIN = 1;
-const CUSTOM_AI_MAX = 10;
+export type AIDifficultyMode = AIDifficultyPresetKey | "custom";
 
 export default observer(function SettingsDialog({
   ...props
@@ -74,7 +72,7 @@ export default observer(function SettingsDialog({
   const [isFairHandHelpOpen, setFairHandHelpOpen] = useState(false);
   const [localAICount, setLocalAICount] = useState(serverAICount);
   const fairHandMode = getFairHandMode(state.roomSettings);
-  const currentAISpeed = state.roomSettings.aiSpeed ?? 3;
+  const currentAISpeed = state.roomSettings.aiSpeed ?? DEFAULT_AI_LEVEL;
   const [aiDifficultyMode, setAIDifficultyMode] = useState<AIDifficultyMode>(
     () => getAIDifficultyMode(currentAISpeed)
   );
@@ -106,8 +104,8 @@ export default observer(function SettingsDialog({
     if (!preset) {
       return;
     }
-    setCustomAISpeed(preset.speed);
-    socket?.emit("set_ai_level", { speed: preset.speed });
+    setCustomAISpeed(preset.level);
+    socket?.emit("set_ai_level", { speed: preset.level });
   };
   const setCustomAIDifficulty = (speed: number) => {
     const normalizedSpeed = normalizeCustomAISpeed(speed);
@@ -350,7 +348,9 @@ export default observer(function SettingsDialog({
                   <Switch
                     checked={state.roomSettings.simulationMode ?? false}
                     onChange={(v) =>
-                      socket?.emit("set_ai_level", { speed: v ? 1000 : 3 })
+                      socket?.emit("set_ai_level", {
+                        speed: v ? SIMULATION_AI_LEVEL : currentAISpeed,
+                      })
                     }
                   />
                 }
@@ -570,7 +570,7 @@ export function AIDifficultyControl({
           <button
             type="button"
             className={styles.customAIButton}
-            disabled={customSpeed <= CUSTOM_AI_MIN}
+            disabled={customSpeed <= MIN_AI_LEVEL}
             aria-label="Decrease custom AI level"
             onClick={() => onSetCustomSpeed(customSpeed - 1)}
           >
@@ -580,8 +580,8 @@ export function AIDifficultyControl({
             <span>Speed</span>
             <input
               type="number"
-              min={CUSTOM_AI_MIN}
-              max={CUSTOM_AI_MAX}
+              min={MIN_AI_LEVEL}
+              max={MAX_AI_LEVEL}
               step={1}
               value={customSpeed}
               onChange={(event) => {
@@ -595,7 +595,7 @@ export function AIDifficultyControl({
           <button
             type="button"
             className={styles.customAIButton}
-            disabled={customSpeed >= CUSTOM_AI_MAX}
+            disabled={customSpeed >= MAX_AI_LEVEL}
             aria-label="Increase custom AI level"
             onClick={() => onSetCustomSpeed(customSpeed + 1)}
           >
@@ -824,16 +824,16 @@ function getPingDotClass(status: PingStatus) {
 
 function getAIDifficultyMode(speed: number): AIDifficultyMode {
   return (
-    AI_DIFFICULTY_PRESETS.find((preset) => preset.speed === speed)?.key ??
+    AI_DIFFICULTY_PRESETS.find((preset) => preset.level === speed)?.key ??
     "custom"
   );
 }
 
 function normalizeCustomAISpeed(speed: number): number {
   if (!Number.isFinite(speed)) {
-    return 3;
+    return DEFAULT_AI_LEVEL;
   }
-  return Math.max(CUSTOM_AI_MIN, Math.min(CUSTOM_AI_MAX, Math.round(speed)));
+  return normalizeAILevel(speed);
 }
 
 function normalizeAICount(count: number): number {

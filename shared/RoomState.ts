@@ -4,6 +4,10 @@ import {
   CursorState,
   createBoard,
 } from "./GameUtils";
+import {
+  DEFAULT_AI_LEVEL,
+  getAISpeedMultiplier,
+} from "./AIDifficulty";
 import type { FairHandMode } from "./FairHands";
 import type { RoundAnalysis, RoundSnapshot } from "./RoundAnalysis";
 
@@ -20,6 +24,7 @@ export type RoomSettings = {
   /** @deprecated Prefer fairHandMode. Kept for older clients. */
   fairHandRotation: boolean;
   aiMode: AIMode;
+  /** User-visible AI level. Fixed presets are 3, 5, and 7. */
   aiSpeed: number;
   simulationMode: boolean;
 };
@@ -27,6 +32,7 @@ export type RoomSettings = {
 export type RoomState = {
   board: BoardState;
   revision: number;
+  /** Effective delay divisor derived from settings.aiSpeed. */
   aiSpeed: number;
   timescale: number;
   aiCooldowns: number[];
@@ -54,7 +60,7 @@ export function createRoomState(playerCount: number): RoomState {
   return {
     board,
     revision: 0,
-    aiSpeed: 3,
+    aiSpeed: getAISpeedMultiplier(DEFAULT_AI_LEVEL),
     aiCooldowns: [],
     hands: [],
     handUpdateVersions: [],
@@ -69,7 +75,7 @@ export function createRoomState(playerCount: number): RoomState {
       fairHandMode: "off",
       fairHandRotation: false,
       aiMode: "fixed",
-      aiSpeed: 3,
+      aiSpeed: DEFAULT_AI_LEVEL,
       simulationMode: false,
     },
     timescale: 1,

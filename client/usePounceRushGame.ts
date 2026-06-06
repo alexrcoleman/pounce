@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { DEFAULT_AI_LEVEL } from "../shared/AIDifficulty";
 import type { ActionEnvelope } from "../shared/SocketTypes";
 import type { BoardState, CursorState } from "../shared/GameUtils";
 import { CardState, CursorLocation } from "../shared/GameUtils";
@@ -826,7 +827,7 @@ function applyBoardUpdate(
     state.onUpdate({
       board: deepClone(board),
       settings: {
-        aiSpeed: 3,
+        aiSpeed: DEFAULT_AI_LEVEL,
         aiMode: "fixed",
         fairHandMode: "off",
         fairHandRotation: false,
