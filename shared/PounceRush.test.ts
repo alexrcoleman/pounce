@@ -37,6 +37,7 @@ let deepStackCount = 0;
 let extraCenterPileCount = 0;
 let solitaireConnectorCount = 0;
 let stackShuttleCount = 0;
+let shuttleBackFreeSlotCount = 0;
 let tallStackMoveCount = 0;
 let wasteFirstCenterCount = 0;
 let wasteFirstDoubleCenterCount = 0;
@@ -145,6 +146,9 @@ for (const seed of seeds) {
     if (hasStackShuttleLine(puzzle.sequence)) {
       stackShuttleCount += 1;
     }
+    if (hasShuttleBackFreeSlotLine(puzzle.sequence)) {
+      shuttleBackFreeSlotCount += 1;
+    }
     if (puzzle.templateId === "shuttle-uncover-free-pounce") {
       shuttleUncoverFreeSlotCount += 1;
     }
@@ -217,6 +221,10 @@ assert.ok(
 assert.ok(
   stackShuttleCount > 0,
   "expected growing stack-shuttle pounce puzzles"
+);
+assert.ok(
+  shuttleBackFreeSlotCount > 0,
+  "expected shuttle-back free-slot puzzles"
 );
 assert.ok(
   shuttleUncoverFreeSlotCount > 0,
@@ -421,6 +429,27 @@ function hasStackShuttleLine(sequence: Move[]): boolean {
       (move, index) => index === 0 || move.count > stackMoves[index - 1].count
     )
   );
+}
+
+function hasShuttleBackFreeSlotLine(sequence: Move[]): boolean {
+  return sequence.some((move, index) => {
+    const centerMove = sequence[index + 1];
+    const returnMove = sequence[index + 2];
+    const finalMove = sequence[index + 3];
+    return (
+      move.type === "s2s" &&
+      centerMove?.type === "c2c" &&
+      centerMove.source.type === "solitaire" &&
+      centerMove.source.index === move.source &&
+      returnMove?.type === "s2s" &&
+      returnMove.source === move.dest &&
+      returnMove.dest === move.source &&
+      returnMove.count === move.count + 1 &&
+      finalMove?.type === "c2s" &&
+      finalMove.source === "pounce" &&
+      finalMove.dest === move.dest
+    );
+  });
 }
 
 function hasWasteFirstCenterLine(sequence: Move[]): boolean {

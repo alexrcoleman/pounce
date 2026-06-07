@@ -837,6 +837,24 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     build: ({ rng }) => createShuttleUncoverFreePounceSetup(rng),
   },
   {
+    id: "shuttle-back-free-pounce",
+    kind: "free_slot",
+    objective: "Unload a pounce card",
+    difficulty: "Combo",
+    difficultyScore: 9,
+    minPuzzleNumber: 18,
+    tags: [
+      "center",
+      "free-slot",
+      "pounce",
+      "shuttle",
+      "solitaire",
+      "stack-shift",
+      "uncover",
+    ],
+    build: ({ rng }) => createShuttleBackFreePounceSetup(rng),
+  },
+  {
     id: "stack-shuttle-free-slot",
     kind: "free_slot",
     objective: "Unload a pounce card",
@@ -2219,6 +2237,40 @@ function createShuttleUncoverFreePounceSetup(rng: () => number): PuzzleSetup {
       { type: "s2s", source: 0, dest: 1, count: 1 },
       { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
       { type: "c2s", source: "pounce", dest: 0 },
+    ],
+  };
+}
+
+function createShuttleBackFreePounceSetup(rng: () => number): PuzzleSetup {
+  const movedValue = pickValue(rng, [4, 5, 6, 7, 8, 9]);
+  const uncoveredValue = valuePlus(movedValue, 1);
+  const baseValue = valuePlus(movedValue, 2);
+
+  return {
+    deckCard: card("hearts", 1),
+    flippedDeck: [card("spades", 1)],
+    pounceDeck: [card("clubs", 1), card("diamonds", 13)],
+    stacks: [
+      [
+        card("spades", baseValue),
+        card("diamonds", uncoveredValue),
+        card("clubs", movedValue),
+      ],
+      [card("hearts", uncoveredValue)],
+      [card("hearts", 13)],
+      [card("clubs", 13)],
+    ],
+    piles: [
+      suitedPile("diamonds", previousValue(uncoveredValue)),
+      suitedPile("clubs", blockedPileTop(movedValue, rng)),
+      suitedPile("hearts", blockedPileTop(uncoveredValue, rng)),
+      suitedPile("spades", blockedPileTop(baseValue, rng)),
+    ],
+    sequence: [
+      { type: "s2s", source: 0, dest: 1, count: 1 },
+      { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
+      { type: "s2s", source: 1, dest: 0, count: 2 },
+      { type: "c2s", source: "pounce", dest: 1 },
     ],
   };
 }
