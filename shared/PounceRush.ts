@@ -77,6 +77,7 @@ type PuzzleTemplateTag =
   | "free-slot"
   | "mixed-source"
   | "pounce"
+  | "shuttle"
   | "solitaire"
   | "stack-shift"
   | "uncover"
@@ -851,6 +852,23 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     },
   },
   {
+    id: "stack-shuttle-free-slot",
+    kind: "free_slot",
+    objective: "Unload a pounce card",
+    difficulty: "Combo",
+    difficultyScore: 10,
+    minPuzzleNumber: 24,
+    tags: [
+      "center",
+      "free-slot",
+      "pounce",
+      "shuttle",
+      "solitaire",
+      "stack-shift",
+    ],
+    build: ({ rng }) => createStackShuttleFreeSlotSetup(rng),
+  },
+  {
     id: "uncover-free-pounce",
     kind: "combo",
     objective: "Unload a pounce card",
@@ -1237,7 +1255,7 @@ function createGeneratedPuzzleSetup(
     puzzleNumber
   );
   return transformPuzzleSetup(setup, {
-    pileMap: createIndexPermutation(rng, 4),
+    pileMap: createIndexPermutation(rng, setup.piles.length),
     stackMap: createIndexPermutation(rng, 4),
     suitMap: createSeededSuitMap(rng),
   });
@@ -1573,14 +1591,35 @@ function assignCenterPileOwners(
   setup: PuzzleSetup,
   centerOwners: number[]
 ): PuzzleSetup {
+  const usedCardKeys = new Set<string>();
+
   return {
     ...setup,
-    piles: setup.piles.map((pile, pileIndex) =>
-      pile.map((cardState) => ({
+    piles: setup.piles.map((pile, pileIndex) => {
+      const preferredOwnerIndex = pileIndex % centerOwners.length;
+      const orderedOwners = [
+        centerOwners[preferredOwnerIndex],
+        ...centerOwners.filter((_, index) => index !== preferredOwnerIndex),
+      ];
+      const owner =
+        orderedOwners.find((candidateOwner) =>
+          pile.every(
+            (cardState) =>
+              !usedCardKeys.has(
+                getCardKey({ ...cardState, player: candidateOwner })
+              )
+          )
+        ) ?? centerOwners[pileIndex % centerOwners.length];
+
+      const ownedPile = pile.map((cardState) => ({
         ...cardState,
-        player: centerOwners[pileIndex % centerOwners.length],
-      }))
-    ),
+        player: owner,
+      }));
+      ownedPile.forEach((cardState) => {
+        usedCardKeys.add(getCardKey(cardState));
+      });
+      return ownedPile;
+    }),
   };
 }
 
@@ -2075,4 +2114,227 @@ function singleStacks(
   fourth: CardState
 ): [CardState[], CardState[], CardState[], CardState[]] {
   return [[first], [second], [third], [fourth]];
+}
+
+function createStackShuttleFreeSlotSequence({
+  centerDestinations,
+  finalPounceDest,
+  firstStack,
+  initialShuttleCount,
+  secondStack,
+}: {
+  centerDestinations: number[];
+  finalPounceDest: number;
+  firstStack: number;
+  initialShuttleCount: number;
+  secondStack: number;
+}): Move[] {
+  if (centerDestinations.length < 2) {
+    throw new Error("Stack shuttle puzzles need at least two center plays");
+  }
+
+  const sequence: Move[] = [
+    {
+      type: "c2c",
+      source: { type: "solitaire", index: firstStack },
+      dest: centerDestinations[0],
+    },
+    {
+      type: "c2c",
+      source: { type: "solitaire", index: firstStack },
+      dest: centerDestinations[1],
+    },
+  ];
+  let shuttleSource = secondStack;
+  let shuttleDest = firstStack;
+  let movingCount = initialShuttleCount;
+
+  for (
+    let destinationIndex = 2;
+    destinationIndex < centerDestinations.length;
+    destinationIndex++
+  ) {
+    sequence.push({
+      type: "s2s",
+      source: shuttleSource,
+      dest: shuttleDest,
+      count: movingCount,
+    });
+    sequence.push({
+      type: "c2c",
+      source: { type: "solitaire", index: shuttleSource },
+      dest: centerDestinations[destinationIndex],
+    });
+
+    const previousSource = shuttleSource;
+    shuttleSource = shuttleDest;
+    shuttleDest = previousSource;
+    movingCount += 1;
+  }
+
+  sequence.push({ type: "c2s", source: "pounce", dest: finalPounceDest });
+  return sequence;
+}
+
+function createStackShuttleFreeSlotSetup(rng: () => number): PuzzleSetup {
+  const firstMinValue = pickValue(rng, [7, 8, 9]);
+  const secondMinValue = pickValue(
+    rng,
+    [Math.max(6, firstMinValue - 1), firstMinValue]
+  );
+  const maxCenterPlayCount = Math.min(7, 14 - firstMinValue);
+  const centerPlayCount = pickValue(
+    rng,
+    [5, 6, 7].filter((count) => count <= maxCenterPlayCount)
+  );
+  const finalCenterValue = (firstMinValue + centerPlayCount - 1) as Values;
+  const suitMaps = createStackShuttleSuitMaps({
+    centerPlayCount,
+    firstMaxValue: finalCenterValue,
+    firstMinValue,
+    secondMaxValue: finalCenterValue,
+    secondMinValue,
+  });
+  const firstStack = createSolitaireRunFromSuitMap({
+    maxValue: finalCenterValue,
+    minValue: firstMinValue,
+    suitsByValue: suitMaps.first,
+  });
+  const secondStack = createSolitaireRunFromSuitMap({
+    maxValue: finalCenterValue,
+    minValue: secondMinValue,
+    suitsByValue: suitMaps.second,
+  });
+  const centerCards = Array.from({ length: centerPlayCount }, (_, offset) =>
+    getStackShuttleCenterCard({
+      firstMinValue,
+      firstStack,
+      offset,
+      secondStack,
+    })
+  );
+
+  return {
+    deckCard: card("diamonds", 2),
+    flippedDeck: [card("clubs", 4)],
+    pounceDeck: [card("diamonds", 3), card("hearts", 5)],
+    stacks: [firstStack, secondStack, [card("clubs", 2)], [card("spades", 4)]],
+    piles: centerCards.map((centerCard) =>
+      suitedPile(centerCard.suit, previousValue(centerCard.value))
+    ),
+    sequence: createStackShuttleFreeSlotSequence({
+      centerDestinations: centerCards.map((_, index) => index),
+      finalPounceDest: getStackShuttleSourceIndex(centerPlayCount - 1),
+      firstStack: 0,
+      initialShuttleCount: firstMinValue - secondMinValue + 2,
+      secondStack: 1,
+    }),
+  };
+}
+
+function getStackShuttleCenterCard({
+  firstMinValue,
+  firstStack,
+  offset,
+  secondStack,
+}: {
+  firstMinValue: Values;
+  firstStack: CardState[];
+  offset: number;
+  secondStack: CardState[];
+}): CardState {
+  const value = (firstMinValue + offset) as Values;
+  const stack =
+    getStackShuttleSourceIndex(offset) === 0 ? firstStack : secondStack;
+  const cardState = stack.find((candidate) => candidate.value === value);
+  if (!cardState) {
+    throw new Error("Stack shuttle puzzle could not find a center card");
+  }
+  return cardState;
+}
+
+function getStackShuttleSourceIndex(offset: number): 0 | 1 {
+  return offset < 2 || offset % 2 === 1 ? 0 : 1;
+}
+
+function createStackShuttleSuitMaps({
+  centerPlayCount,
+  firstMaxValue,
+  firstMinValue,
+  secondMaxValue,
+  secondMinValue,
+}: {
+  centerPlayCount: number;
+  firstMaxValue: Values;
+  firstMinValue: Values;
+  secondMaxValue: Values;
+  secondMinValue: Values;
+}): { first: Map<number, Suits>; second: Map<number, Suits> } {
+  const first = new Map<number, Suits>();
+  const second = new Map<number, Suits>();
+  const centerSuitCounts = { black: 0, red: 0 };
+
+  for (let offset = 0; offset < centerPlayCount; offset++) {
+    const value = firstMinValue + offset;
+    const color = getCardColorForValue(value);
+    const suitOptions = getSuitOptionsForColor(color);
+    const suit = suitOptions[centerSuitCounts[color] % suitOptions.length];
+    centerSuitCounts[color] += 1;
+
+    const targetMap = getStackShuttleSourceIndex(offset) === 0 ? first : second;
+    targetMap.set(value, suit);
+  }
+
+  fillStackShuttleSuitMap(first, second, firstMinValue, firstMaxValue);
+  fillStackShuttleSuitMap(second, first, secondMinValue, secondMaxValue);
+
+  return { first, second };
+}
+
+function fillStackShuttleSuitMap(
+  target: Map<number, Suits>,
+  other: Map<number, Suits>,
+  minValue: Values,
+  maxValue: Values
+): void {
+  for (let value = minValue; value <= maxValue; value++) {
+    if (target.has(value)) {
+      continue;
+    }
+
+    const color = getCardColorForValue(value);
+    const otherSuit = other.get(value);
+    const suit =
+      getSuitOptionsForColor(color).find((candidate) => candidate !== otherSuit) ??
+      getSuitOptionsForColor(color)[0];
+    target.set(value, suit);
+  }
+}
+
+function getCardColorForValue(value: number): "black" | "red" {
+  return value % 2 === 0 ? "red" : "black";
+}
+
+function getSuitOptionsForColor(color: "black" | "red"): Suits[] {
+  return color === "red" ? ["hearts", "diamonds"] : ["spades", "clubs"];
+}
+
+function createSolitaireRunFromSuitMap({
+  maxValue,
+  minValue,
+  suitsByValue,
+}: {
+  maxValue: Values;
+  minValue: Values;
+  suitsByValue: Map<number, Suits>;
+}): CardState[] {
+  const run: CardState[] = [];
+  for (let value = maxValue; value >= minValue; value--) {
+    const suit = suitsByValue.get(value);
+    if (!suit) {
+      throw new Error("Stack shuttle puzzle could not assign a suit");
+    }
+    run.push(card(suit, value as Values));
+  }
+  return run;
 }

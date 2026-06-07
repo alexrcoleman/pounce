@@ -34,6 +34,7 @@ let uncoverTwoCenterCount = 0;
 let deepStackCount = 0;
 let extraCenterPileCount = 0;
 let solitaireConnectorCount = 0;
+let stackShuttleCount = 0;
 let tallStackMoveCount = 0;
 let wasteFirstCenterCount = 0;
 let wasteFirstDoubleCenterCount = 0;
@@ -111,6 +112,9 @@ for (const seed of seeds) {
     if (hasSolitaireConnectorLine(puzzle.sequence)) {
       solitaireConnectorCount += 1;
     }
+    if (hasStackShuttleLine(puzzle.sequence)) {
+      stackShuttleCount += 1;
+    }
     if (hasWasteFirstCenterLine(puzzle.sequence)) {
       wasteFirstCenterCount += 1;
     }
@@ -154,6 +158,10 @@ assert.ok(
 assert.ok(
   solitaireConnectorCount > 0,
   "expected solitaire-to-solitaire pounce puzzles"
+);
+assert.ok(
+  stackShuttleCount > 0,
+  "expected growing stack-shuttle pounce puzzles"
 );
 assert.ok(
   wasteFirstCenterCount > 0,
@@ -327,6 +335,21 @@ function hasSolitaireConnectorLine(sequence: Move[]): boolean {
       nextMove.source === "pounce"
     );
   });
+}
+
+function hasStackShuttleLine(sequence: Move[]): boolean {
+  const finalMove = sequence[sequence.length - 1];
+  const stackMoves = sequence.filter(
+    (move): move is Extract<Move, { type: "s2s" }> => move.type === "s2s"
+  );
+  return (
+    finalMove?.type === "c2s" &&
+    finalMove.source === "pounce" &&
+    stackMoves.length >= 3 &&
+    stackMoves.every(
+      (move, index) => index === 0 || move.count > stackMoves[index - 1].count
+    )
+  );
 }
 
 function hasWasteFirstCenterLine(sequence: Move[]): boolean {
