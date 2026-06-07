@@ -44,6 +44,10 @@ type DivergenceTrace = {
   modelB: ReturnType<typeof describePrediction>;
   topFeatureDeltas: ReturnType<typeof getCandidateFeatureDeltas>;
   focusedFeatureDeltas: ReturnType<typeof getFocusedFeatureDeltas>;
+  memory: {
+    modelA: ReturnType<typeof describeMemoryDiagnostics>;
+    modelB: ReturnType<typeof describeMemoryDiagnostics>;
+  };
   final: {
     modelA: RolloutMetrics;
     modelB: RolloutMetrics;
@@ -63,6 +67,8 @@ const modelA = readModel(modelAPath);
 const modelB = readModel(modelBPath);
 const policyA = new NeuralActionRankingPolicy(modelA);
 const policyB = new NeuralActionRankingPolicy(modelB);
+const traceModelA = policyA.getModel();
+const traceModelB = policyB.getModel();
 const playerCount = readIntegerEnv("PLAYERS", 4);
 const games = readIntegerEnv("TRACE_GAMES", readIntegerEnv("EVAL_GAMES", 48));
 const maxMovesPerGame = readIntegerEnv("MAX_MOVES", 1800);
@@ -185,6 +191,8 @@ function traceGame(traceSeed: string, gameIndex: number): DivergenceTrace | null
   const cooldownsB = createInitialCooldowns(boardB, activePlayerIndices, randomB);
   const moveTypeCountsA = boardA.players.map(() => createMoveTypeCounts());
   const moveTypeCountsB = boardB.players.map(() => createMoveTypeCounts());
+  const memoryStatesA = boardA.players.map(() => [] as number[]);
+  const memoryStatesB = boardB.players.map(() => [] as number[]);
   prepareBoardForSimulation(boardA, activePlayerIndices);
   prepareBoardForSimulation(boardB, activePlayerIndices);
 
@@ -208,8 +216,16 @@ function traceGame(traceSeed: string, gameIndex: number): DivergenceTrace | null
     }
 
     const candidates = enumerateActionRankingCandidates(boardA, playerIndex);
-    const rankingA = policyA.rankCandidates(candidates);
-    const rankingB = policyB.rankCandidates(candidates);
+    const memoryStateA = getPolicyMemoryState(
+      memoryStatesA[playerIndex],
+      policyA
+    );
+    const memoryStateB = getPolicyMemoryState(
+      memoryStatesB[playerIndex],
+      policyB
+    );
+    const rankingA = policyA.rankCandidates(candidates, 1, memoryStateA);
+    const rankingB = policyB.rankCandidates(candidates, 1, memoryStateB);
     const topA = rankingA[0];
     const topB = rankingB[0];
     if (!topA || !topB) {
@@ -221,6 +237,14 @@ function traceGame(traceSeed: string, gameIndex: number): DivergenceTrace | null
     if (topA.candidate.key === topB.candidate.key) {
       applyMove(boardA, playerIndex, topA.candidate.move, moveTypeCountsA);
       applyMove(boardB, playerIndex, topB.candidate.move, moveTypeCountsB);
+      memoryStatesA[playerIndex] = policyA.advanceMemoryState(
+        memoryStateA,
+        topA.candidate.features
+      );
+      memoryStatesB[playerIndex] = policyB.advanceMemoryState(
+        memoryStateB,
+        topB.candidate.features
+      );
       cooldownsA[playerIndex] += getMoveDelay(topA.candidate.move.type, randomA);
       cooldownsB[playerIndex] += getMoveDelay(topB.candidate.move.type, randomB);
       continue;
@@ -258,8 +282,32 @@ function traceGame(traceSeed: string, gameIndex: number): DivergenceTrace | null
         topB.candidate,
         focusedFeatures
       ),
+      memory: {
+        modelA: describeMemoryDiagnostics(
+          traceModelA,
+          policyA,
+          memoryStateA,
+          topA.candidate,
+          topB.candidate
+        ),
+        modelB: describeMemoryDiagnostics(
+          traceModelB,
+          policyB,
+          memoryStateB,
+          topB.candidate,
+          topA.candidate
+        ),
+      },
     };
 
+    const nextMemoryStateA = policyA.advanceMemoryState(
+      memoryStateA,
+      topA.candidate.features
+    );
+    const nextMemoryStateB = policyB.advanceMemoryState(
+      memoryStateB,
+      topB.candidate.features
+    );
     applyMove(boardA, playerIndex, topA.candidate.move, moveTypeCountsA);
     applyMove(boardB, playerIndex, topB.candidate.move, moveTypeCountsB);
     cooldownsA[playerIndex] += getMoveDelay(topA.candidate.move.type, randomA);
@@ -272,7 +320,8 @@ function traceGame(traceSeed: string, gameIndex: number): DivergenceTrace | null
       cooldownsA,
       randomA,
       moveTypeCountsA,
-      stepIndex + 1
+      stepIndex + 1,
+      nextMemoryStateA
     );
     const metricsB = finishRollout(
       boardB,
@@ -282,7 +331,8 @@ function traceGame(traceSeed: string, gameIndex: number): DivergenceTrace | null
       cooldownsB,
       randomB,
       moveTypeCountsB,
-      stepIndex + 1
+      stepIndex + 1,
+      nextMemoryStateB
     );
 
     return {
@@ -310,8 +360,10 @@ function finishRollout(
   cooldowns: number[],
   random: () => number,
   moveTypeCountsByPlayer: MoveTypeCounts[],
-  startingMoveCount: number
+  startingMoveCount: number,
+  initialMemoryState: readonly number[] = []
 ): RolloutMetrics {
+  let memoryState = getPolicyMemoryState(initialMemoryState, policy);
   for (
     let moveCount = startingMoveCount;
     !isGameOver(board) && moveCount < maxMovesPerGame;
@@ -321,16 +373,23 @@ function finishRollout(
     if (playerIndex < 0) {
       break;
     }
-    const move =
-      playerIndex === neuralPlayerIndex
-        ? policy.chooseCandidate(
-            enumerateActionRankingCandidates(board, playerIndex),
-            {
-              temperature: 1,
-              sample: false,
-            }
-          )?.move
-        : getBasicAIMove(board, playerIndex, {});
+    let move: Move | undefined;
+    if (playerIndex === neuralPlayerIndex) {
+      const selected = policy.chooseCandidate(
+        enumerateActionRankingCandidates(board, playerIndex),
+        {
+          temperature: 1,
+          sample: false,
+          memoryState,
+        }
+      );
+      move = selected?.move;
+      if (selected) {
+        memoryState = policy.advanceMemoryState(memoryState, selected.features);
+      }
+    } else {
+      move = getBasicAIMove(board, playerIndex, {});
+    }
     applyMove(board, playerIndex, move, moveTypeCountsByPlayer);
     cooldowns[playerIndex] += getMoveDelay(move?.type, random);
   }
@@ -471,6 +530,188 @@ function getRolloutPlayerMetrics(
   };
 }
 
+function describeMemoryDiagnostics(
+  model: NeuralActionRankingModel,
+  policy: NeuralActionRankingPolicy,
+  memoryState: readonly number[],
+  selectedCandidate: ActionRankingCandidate,
+  otherTopCandidate: ActionRankingCandidate
+) {
+  const normalizedMemoryState = normalizeTraceMemoryState(
+    memoryState,
+    policy.getRecurrentStateSize()
+  );
+  const selectedNextMemoryState = policy.advanceMemoryState(
+    normalizedMemoryState,
+    selectedCandidate.features
+  );
+  const otherTopNextMemoryState = policy.advanceMemoryState(
+    normalizedMemoryState,
+    otherTopCandidate.features
+  );
+  const selectedMemoryFeatureScore = getMemoryFeatureOutputScore(
+    model,
+    normalizedMemoryState,
+    selectedCandidate.features
+  );
+  const otherTopMemoryFeatureScore = getMemoryFeatureOutputScore(
+    model,
+    normalizedMemoryState,
+    otherTopCandidate.features
+  );
+
+  return {
+    stateSize: normalizedMemoryState.length,
+    topStateValues: getTopMemoryStateValues(
+      normalizedMemoryState,
+      topFeatureCount
+    ),
+    selectedMemoryFeatureScore,
+    otherTopMemoryFeatureScore,
+    selectedVsOtherTopMemoryFeatureMargin:
+      selectedMemoryFeatureScore - otherTopMemoryFeatureScore,
+    selectedNextTopStateValues: getTopMemoryStateValues(
+      selectedNextMemoryState,
+      topFeatureCount
+    ),
+    selectedNextTopStateDeltas: getTopMemoryStateDeltas(
+      normalizedMemoryState,
+      selectedNextMemoryState,
+      topFeatureCount
+    ),
+    otherTopNextTopStateDeltas: getTopMemoryStateDeltas(
+      normalizedMemoryState,
+      otherTopNextMemoryState,
+      topFeatureCount
+    ),
+    topSelectedMemoryFeatureContributions: getTopMemoryFeatureContributions(
+      model,
+      normalizedMemoryState,
+      selectedCandidate.features,
+      topFeatureCount
+    ),
+    topOtherMemoryFeatureContributions: getTopMemoryFeatureContributions(
+      model,
+      normalizedMemoryState,
+      otherTopCandidate.features,
+      topFeatureCount
+    ),
+  };
+}
+
+function normalizeTraceMemoryState(
+  memoryState: readonly number[],
+  stateSize: number
+): number[] {
+  return Array.from({ length: stateSize }, (_, stateIndex) => {
+    const value = memoryState[stateIndex] ?? 0;
+    return Number.isFinite(value) ? Math.max(-1, Math.min(1, value)) : 0;
+  });
+}
+
+function getTopMemoryStateValues(
+  memoryState: readonly number[],
+  limit: number
+) {
+  return memoryState
+    .map((value, stateIndex) => ({ stateIndex, value }))
+    .filter((item) => item.value !== 0)
+    .sort((left, right) => Math.abs(right.value) - Math.abs(left.value))
+    .slice(0, limit);
+}
+
+function getTopMemoryStateDeltas(
+  previousMemoryState: readonly number[],
+  nextMemoryState: readonly number[],
+  limit: number
+) {
+  const stateSize = Math.max(previousMemoryState.length, nextMemoryState.length);
+  return Array.from({ length: stateSize }, (_, stateIndex) => {
+    const previousValue = previousMemoryState[stateIndex] ?? 0;
+    const nextValue = nextMemoryState[stateIndex] ?? 0;
+    return {
+      stateIndex,
+      previousValue,
+      nextValue,
+      delta: nextValue - previousValue,
+    };
+  })
+    .filter((item) => item.delta !== 0)
+    .sort((left, right) => Math.abs(right.delta) - Math.abs(left.delta))
+    .slice(0, limit);
+}
+
+function getMemoryFeatureOutputScore(
+  model: NeuralActionRankingModel,
+  memoryState: readonly number[],
+  features: readonly number[]
+): number {
+  if (model.version !== 3) {
+    return 0;
+  }
+  return model.memoryFeatureOutputWeights.reduce(
+    (stateSum, weights, stateIndex) => {
+      const memoryValue = memoryState[stateIndex] ?? 0;
+      if (memoryValue === 0) {
+        return stateSum;
+      }
+      return (
+        stateSum +
+        weights.reduce((featureSum, weight, featureIndex) => {
+          return (
+            featureSum +
+            memoryValue * weight * (features[featureIndex] ?? 0)
+          );
+        }, 0)
+      );
+    },
+    0
+  );
+}
+
+function getTopMemoryFeatureContributions(
+  model: NeuralActionRankingModel,
+  memoryState: readonly number[],
+  features: readonly number[],
+  limit: number
+) {
+  if (model.version !== 3) {
+    return [];
+  }
+  return model.featureNames
+    .map((feature, featureIndex) => {
+      const featureValue = features[featureIndex] ?? 0;
+      let contribution = 0;
+      let topStateIndex = -1;
+      let topStateContribution = 0;
+      model.memoryFeatureOutputWeights.forEach((weights, stateIndex) => {
+        const stateContribution =
+          (memoryState[stateIndex] ?? 0) *
+          (weights[featureIndex] ?? 0) *
+          featureValue;
+        contribution += stateContribution;
+        if (Math.abs(stateContribution) > Math.abs(topStateContribution)) {
+          topStateIndex = stateIndex;
+          topStateContribution = stateContribution;
+        }
+      });
+      return {
+        feature,
+        featureIndex,
+        featureValue,
+        contribution,
+        topStateIndex,
+        topStateContribution,
+      };
+    })
+    .filter((item) => item.contribution !== 0)
+    .sort(
+      (left, right) =>
+        Math.abs(right.contribution) - Math.abs(left.contribution)
+    )
+    .slice(0, limit);
+}
+
 function describePrediction(
   prediction: ActionRankingPrediction,
   topScoreMargin: number,
@@ -557,6 +798,15 @@ function applyMove(
   }
   executeMove(board, playerIndex, move);
   moveTypeCountsByPlayer[playerIndex][move.type] += 1;
+}
+
+function getPolicyMemoryState(
+  memoryState: readonly number[],
+  policy: NeuralActionRankingPolicy
+): number[] {
+  return memoryState.length === policy.getRecurrentStateSize()
+    ? memoryState.slice()
+    : policy.createInitialMemoryState();
 }
 
 function createInitialCooldowns(

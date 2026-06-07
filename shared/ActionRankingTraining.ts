@@ -38,9 +38,13 @@ import {
   createSeededRandom,
   NeuralActionRankingPolicy,
   resizeNeuralActionRankingModel,
+  type ClippedPolicyGradientSequenceUpdate,
   type ImitationTrainingStats,
   type NeuralActionRankingModel,
   type PairwiseFeatureMode,
+  type RecurrentMemoryStep,
+  type RecurrentMemoryTransition,
+  type TrainableLayerMode,
 } from "./NeuralActionRankingPolicy";
 import { executeMove, type Move } from "./MoveHandler";
 import {
@@ -79,10 +83,14 @@ export type NeuralTrainingOptions = {
   rlPpoFlipDeckPenalty?: number;
   rlPpoScoreRewardWeight?: number;
   rlPpoPounceRewardWeight?: number;
+  rlPpoRecurrentBackpropSteps?: number;
   rlPpoMaxConsecutiveWaitMoves?: number;
   rlPpoAdvantageBaseline?: PpoAdvantageBaselineMode;
   rlPpoMiniBatchSize?: number;
   rlPpoGradientScale?: PpoGradientScaleMode;
+  rlPpoMemoryInputGradientScale?: number;
+  rlPpoRecurrentGradientScale?: number;
+  rlPpoSequenceLength?: number;
   rlOpponentMode?: "teacher" | "self" | "champion";
   rlBaselineMode?: "teacher" | "greedy";
   rlCommonRandom?: boolean;
@@ -150,7 +158,7 @@ export type NeuralTrainingOptions = {
   rlCounterfactualValueHuberDelta?: number;
   rlUpdateEpochs?: number;
   rlUpdateScope?: "all" | "exploratory";
-  rlTrainableLayers?: "all" | "output";
+  rlTrainableLayers?: TrainableLayerMode;
   rlNormalizeAdvantages?: boolean;
   rlAdvantageClip?: number;
   improvementStates?: number;
@@ -286,6 +294,7 @@ export type NeuralTrainingResult = {
     ppoAdvantageBaseline: PpoAdvantageBaselineMode;
     ppoMiniBatchSize: number;
     ppoGradientScale: PpoGradientScaleMode;
+    ppoSequenceLength: number;
     ppoGradientBatches: number;
     averagePolicyUpdates: number;
     averageGradientUpdates: number;
@@ -437,6 +446,7 @@ type RolloutTransition = {
   scoreBefore: number;
   pounceRemainingBefore: number;
   memoryState?: number[];
+  recurrentMemoryTransition?: RecurrentMemoryTransition;
   board?: BoardState;
   hands?: CursorState[];
   candidates: ActionRankingCandidate[];
@@ -468,7 +478,21 @@ export type PolicyGradientUpdate = {
   selectedCandidateIndex: number;
   oldProbability?: number;
   memoryState?: number[];
+  recurrentMemoryTransition?: RecurrentMemoryTransition;
   rawAdvantage: number;
+};
+
+export type PolicyGradientSequenceStep = {
+  candidates: Pick<ActionRankingCandidate, "features">[];
+  selectedCandidateIndex: number;
+  oldProbability?: number;
+  memoryState?: number[];
+  rawAdvantage: number;
+};
+
+export type PolicyGradientSequenceUpdate = {
+  initialMemoryState?: number[];
+  steps: PolicyGradientSequenceStep[];
 };
 
 type PpoAdvantageBaselineMode = "batch" | "trajectory";
@@ -476,6 +500,7 @@ type PpoGradientScaleMode = "sum" | "mean";
 
 export type PpoSelfPlayRolloutBatch = {
   updates: PolicyGradientUpdate[];
+  sequenceUpdates: PolicyGradientSequenceUpdate[];
   rawReturns: number[];
   trainingPlayerCountTotal: number;
   finalPointDifferentialTotal: number;
@@ -502,9 +527,11 @@ export type PpoSelfPlayRolloutOptions = {
   scoreRewardWeight: number;
   pounceRewardWeight: number;
   maxConsecutiveWaitMoves: number;
+  recurrentBackpropSteps?: number;
   advantageBaseline: PpoAdvantageBaselineMode;
   maxMovesPerGame: number;
   actionOptions?: ActionRankingOptions;
+  sequenceLength?: number;
 };
 
 export type PpoSelfPlayUpdateOptions = {
@@ -517,11 +544,14 @@ export type PpoSelfPlayUpdateOptions = {
   entropyBonus: number;
   updateEpochs: number;
   advantageBaseline: PpoAdvantageBaselineMode;
-  trainableLayers: "all" | "output";
+  trainableLayers: TrainableLayerMode;
   normalizeAdvantages: boolean;
   advantageClip: number;
   miniBatchSize: number;
   gradientScale: PpoGradientScaleMode;
+  memoryInputGradientScale: number;
+  recurrentGradientScale: number;
+  sequenceLength: number;
 };
 
 export type PpoSelfPlayTrainingOptions = PpoSelfPlayRolloutOptions &
@@ -776,11 +806,16 @@ export function trainNeuralActionRankingPolicy(
             options.rlPpoFlipDeckPenalty ?? options.rlPpoCyclePenalty ?? 0,
           scoreRewardWeight: options.rlPpoScoreRewardWeight ?? 0,
           pounceRewardWeight: options.rlPpoPounceRewardWeight ?? 0.5,
+          recurrentBackpropSteps: options.rlPpoRecurrentBackpropSteps ?? 8,
           maxConsecutiveWaitMoves:
             options.rlPpoMaxConsecutiveWaitMoves ?? 40,
           advantageBaseline: options.rlPpoAdvantageBaseline ?? "batch",
           miniBatchSize: options.rlPpoMiniBatchSize ?? 1,
           gradientScale: options.rlPpoGradientScale ?? "sum",
+          memoryInputGradientScale:
+            options.rlPpoMemoryInputGradientScale ?? 1,
+          recurrentGradientScale: options.rlPpoRecurrentGradientScale ?? 1,
+          sequenceLength: options.rlPpoSequenceLength ?? 1,
           trainableLayers: options.rlTrainableLayers ?? "all",
           normalizeAdvantages: options.rlNormalizeAdvantages ?? true,
           advantageClip: options.rlAdvantageClip ?? 3,
@@ -2100,7 +2135,7 @@ export function trainPolicyGradientFromRollouts(
     counterfactualValueHuberDelta: number;
     updateEpochs: number;
     updateScope: PolicyGradientUpdateScope;
-    trainableLayers: "all" | "output";
+    trainableLayers: TrainableLayerMode;
     normalizeAdvantages: boolean;
     advantageClip: number;
     maxMovesPerGame: number;
@@ -2909,6 +2944,7 @@ export function trainPolicyGradientFromRollouts(
     ppoAdvantageBaseline: "batch" as const,
     ppoMiniBatchSize: 0,
     ppoGradientScale: "sum" as const,
+    ppoSequenceLength: 1,
     ppoGradientBatches: 0,
     averagePolicyUpdates:
       options.episodes === 0 ? 0 : updates.length / options.episodes,
@@ -2981,6 +3017,7 @@ export function collectPpoSelfPlayRolloutBatch(
               : options.opponentPolicy
         : undefined,
       maxConsecutiveWaitMoves: options.maxConsecutiveWaitMoves,
+      recurrentBackpropSteps: options.recurrentBackpropSteps,
       actionOptions: options.actionOptions,
     });
     const returns = getPpoTransitionReturns(rollout, {
@@ -3008,9 +3045,13 @@ export function collectPpoSelfPlayRolloutBatch(
         selectedCandidateIndex: transition.selectedCandidateIndex,
         oldProbability: transition.selectedProbability,
         memoryState: transition.memoryState,
+        recurrentMemoryTransition: transition.recurrentMemoryTransition,
         rawAdvantage: advantages[transitionIndex] ?? 0,
       });
     });
+    batch.sequenceUpdates.push(
+      ...getPpoSequenceUpdates(rollout, advantages)
+    );
 
     batch.trainingPlayerCountTotal += learningPlayerIndices.length;
     batch.sampledDecisionCountTotal += rollout.transitions.length;
@@ -3032,19 +3073,27 @@ export function applyPpoSelfPlayRolloutBatch(
   rolloutBatch: PpoSelfPlayRolloutBatch,
   options: PpoSelfPlayUpdateOptions & { seed: string }
 ): NeuralTrainingResult["reinforcement"] {
-  const advantageStats = applyPpoBatch(policy, rolloutBatch.updates, {
-    learningRate: options.learningRate,
-    temperature: options.temperature,
-    clipRatio: options.clipRatio,
-    entropyBonus: options.entropyBonus,
-    updateEpochs: options.updateEpochs,
-    shuffleSeed: options.seed,
-    trainableLayers: options.trainableLayers,
-    normalizeAdvantages: options.normalizeAdvantages,
-    advantageClip: options.advantageClip,
-    miniBatchSize: options.miniBatchSize,
-    gradientScale: options.gradientScale,
-  });
+  const advantageStats = applyPpoBatch(
+    policy,
+    rolloutBatch.updates,
+    rolloutBatch.sequenceUpdates,
+    {
+      learningRate: options.learningRate,
+      temperature: options.temperature,
+      clipRatio: options.clipRatio,
+      entropyBonus: options.entropyBonus,
+      updateEpochs: options.updateEpochs,
+      shuffleSeed: options.seed,
+      trainableLayers: options.trainableLayers,
+      normalizeAdvantages: options.normalizeAdvantages,
+      advantageClip: options.advantageClip,
+      miniBatchSize: options.miniBatchSize,
+      gradientScale: options.gradientScale,
+      memoryInputGradientScale: options.memoryInputGradientScale,
+      recurrentGradientScale: options.recurrentGradientScale,
+      sequenceLength: options.sequenceLength,
+    }
+  );
   const returnStats = summarizeValues(rolloutBatch.rawReturns);
 
   const episodeCount = Math.max(1, options.episodes);
@@ -3124,6 +3173,7 @@ export function applyPpoSelfPlayRolloutBatch(
     ppoAdvantageBaseline: options.advantageBaseline,
     ppoMiniBatchSize: options.miniBatchSize,
     ppoGradientScale: options.gradientScale,
+    ppoSequenceLength: options.sequenceLength,
     ppoGradientBatches: advantageStats.gradientBatches,
     averagePolicyUpdates: rolloutBatch.updates.length / episodeCount,
     averageGradientUpdates: advantageStats.appliedUpdates / episodeCount,
@@ -3136,6 +3186,7 @@ export function applyPpoSelfPlayRolloutBatch(
 export function createEmptyPpoSelfPlayRolloutBatch(): PpoSelfPlayRolloutBatch {
   return {
     updates: [],
+    sequenceUpdates: [],
     rawReturns: [],
     trainingPlayerCountTotal: 0,
     finalPointDifferentialTotal: 0,
@@ -3151,6 +3202,7 @@ export function mergePpoSelfPlayRolloutBatches(
 ): PpoSelfPlayRolloutBatch {
   return batches.reduce((merged, batch) => {
     merged.updates.push(...batch.updates);
+    merged.sequenceUpdates.push(...batch.sequenceUpdates);
     merged.rawReturns.push(...batch.rawReturns);
     merged.trainingPlayerCountTotal += batch.trainingPlayerCountTotal;
     merged.finalPointDifferentialTotal += batch.finalPointDifferentialTotal;
@@ -3160,6 +3212,85 @@ export function mergePpoSelfPlayRolloutBatches(
     merged.flipDeckMoveRateTotal += batch.flipDeckMoveRateTotal;
     return merged;
   }, createEmptyPpoSelfPlayRolloutBatch());
+}
+
+export function createPpoSequenceGradientUpdates(
+  sequenceUpdates: readonly PolicyGradientSequenceUpdate[],
+  options: {
+    sequenceLength: number;
+    mean: number;
+    scale: number;
+    advantageClip: number;
+  }
+): ClippedPolicyGradientSequenceUpdate[] {
+  const sequenceLength = Math.max(1, Math.floor(options.sequenceLength));
+  const clip = Math.max(0, options.advantageClip);
+  const scale = Math.max(1e-6, options.scale);
+  const gradientSequences: ClippedPolicyGradientSequenceUpdate[] = [];
+
+  sequenceUpdates.forEach((sequence) => {
+    for (
+      let startIndex = 0;
+      startIndex < sequence.steps.length;
+      startIndex += sequenceLength
+    ) {
+      const chunk = sequence.steps.slice(startIndex, startIndex + sequenceLength);
+      const firstStep = chunk[0];
+      if (!firstStep) {
+        continue;
+      }
+      gradientSequences.push({
+        initialMemoryState:
+          firstStep.memoryState?.slice() ?? sequence.initialMemoryState?.slice(),
+        steps: chunk.map((step) => {
+          const normalized =
+            (step.rawAdvantage - options.mean) / scale;
+          const advantage =
+            clip > 0
+              ? Math.max(-clip, Math.min(clip, normalized))
+              : normalized;
+          return {
+            candidates: step.candidates,
+            selectedCandidateIndex: step.selectedCandidateIndex,
+            oldProbability: step.oldProbability,
+            advantage,
+          };
+        }),
+      });
+    }
+  });
+
+  return gradientSequences;
+}
+
+function getPpoSequenceUpdates(
+  rollout: RolloutResult,
+  advantages: readonly number[]
+): PolicyGradientSequenceUpdate[] {
+  const sequencesByPlayer = new Map<number, PolicyGradientSequenceUpdate>();
+
+  rollout.transitions.forEach((transition, transitionIndex) => {
+    const sequence =
+      sequencesByPlayer.get(transition.playerIndex) ??
+      {
+        initialMemoryState: transition.memoryState?.slice(),
+        steps: [],
+      };
+    sequence.steps.push({
+      candidates: transition.candidates.map((candidate) => ({
+        features: candidate.features,
+      })),
+      selectedCandidateIndex: transition.selectedCandidateIndex,
+      oldProbability: transition.selectedProbability,
+      memoryState: transition.memoryState?.slice(),
+      rawAdvantage: advantages[transitionIndex] ?? 0,
+    });
+    sequencesByPlayer.set(transition.playerIndex, sequence);
+  });
+
+  return Array.from(sequencesByPlayer.values()).filter(
+    (sequence) => sequence.steps.length > 0
+  );
 }
 
 export function collectCounterfactualRlLabelAudit(
@@ -3766,7 +3897,7 @@ function applyPolicyGradientBatch(
     temperature: number;
     updateEpochs: number;
     shuffleSeed: string;
-    trainableLayers: "all" | "output";
+    trainableLayers: TrainableLayerMode;
     normalizeAdvantages: boolean;
     advantageClip: number;
   }
@@ -3833,6 +3964,7 @@ function applyPolicyGradientBatch(
 function applyPpoBatch(
   policy: NeuralActionRankingPolicy,
   updates: PolicyGradientUpdate[],
+  sequenceUpdates: readonly PolicyGradientSequenceUpdate[],
   options: {
     learningRate: number;
     temperature: number;
@@ -3840,11 +3972,14 @@ function applyPpoBatch(
     entropyBonus: number;
     updateEpochs: number;
     shuffleSeed: string;
-    trainableLayers: "all" | "output";
+    trainableLayers: TrainableLayerMode;
     normalizeAdvantages: boolean;
     advantageClip: number;
     miniBatchSize: number;
     gradientScale: PpoGradientScaleMode;
+    memoryInputGradientScale: number;
+    recurrentGradientScale: number;
+    sequenceLength: number;
   }
 ) {
   const mean =
@@ -3873,8 +4008,44 @@ function applyPpoBatch(
   let entropyTotal = 0;
   let approximateKlTotal = 0;
   let measuredUpdates = 0;
+  const sequenceLength = Math.max(1, Math.floor(options.sequenceLength));
+  const useSequenceLoss = sequenceLength > 1 && sequenceUpdates.length > 0;
 
   for (let epoch = 0; epoch < updateEpochs; epoch++) {
+    if (useSequenceLoss) {
+      const sequenceGradientUpdates = shuffleCopy(
+        createPpoSequenceGradientUpdates(sequenceUpdates, {
+          sequenceLength,
+          mean: options.normalizeAdvantages ? mean : 0,
+          scale,
+          advantageClip: clip,
+        }),
+        random
+      );
+      const result = policy.trainClippedPolicyGradientSequenceBatch(
+        sequenceGradientUpdates,
+        options.learningRate,
+        {
+          temperature: options.temperature,
+          clipRatio: options.clipRatio,
+          entropyBonus: options.entropyBonus,
+          trainableLayers: options.trainableLayers,
+          miniBatchSize: options.miniBatchSize,
+          gradientScale: options.gradientScale,
+          memoryInputGradientScale: options.memoryInputGradientScale,
+          recurrentGradientScale: options.recurrentGradientScale,
+        }
+      );
+      appliedUpdates += result.appliedUpdates;
+      gradientBatches += result.gradientBatches;
+      clippedUpdates += result.clippedUpdates;
+      entropyTotal += result.averageEntropy * result.measuredUpdates;
+      approximateKlTotal +=
+        result.averageApproximateKl * result.measuredUpdates;
+      measuredUpdates += result.measuredUpdates;
+      continue;
+    }
+
     const batchUpdates = shuffleCopy(updates, random).map((update) => {
       const centered = options.normalizeAdvantages
         ? update.rawAdvantage - mean
@@ -3888,6 +4059,7 @@ function applyPpoBatch(
         advantage,
         oldProbability: update.oldProbability ?? 1,
         memoryState: update.memoryState,
+        recurrentMemoryTransition: update.recurrentMemoryTransition,
       };
     });
     const result = policy.trainClippedPolicyGradientBatch(
@@ -3900,6 +4072,8 @@ function applyPpoBatch(
         trainableLayers: options.trainableLayers,
         miniBatchSize: options.miniBatchSize,
         gradientScale: options.gradientScale,
+        memoryInputGradientScale: options.memoryInputGradientScale,
+        recurrentGradientScale: options.recurrentGradientScale,
       }
     );
     appliedUpdates += result.appliedUpdates;
@@ -3957,7 +4131,7 @@ function trainCounterfactualSupervisedBatch(
     valueCenterTargets: boolean;
     valueTargetMode: "absolute" | "residual";
     valueHuberDelta: number;
-    trainableLayers: "all" | "output";
+    trainableLayers: TrainableLayerMode;
     shuffleSeed: string;
   }
 ) {
@@ -6677,6 +6851,7 @@ function runPolicyRollout(
     actionOptions?: ActionRankingOptions;
     initialHands?: readonly CursorState[];
     maxConsecutiveWaitMoves?: number;
+    recurrentBackpropSteps?: number;
   }
 ): RolloutResult {
   const board = deepClone(startBoard);
@@ -6704,6 +6879,13 @@ function runPolicyRollout(
   const moveTypeCountsByPlayer = board.players.map(() => createMoveTypeCounts());
   const hands = createSimulationHands(board, options.initialHands);
   const memoryStates = board.players.map(() => [] as number[]);
+  const recurrentMemoryHistories = board.players.map(
+    () => [] as RecurrentMemoryStep[]
+  );
+  const recurrentBackpropSteps = Math.max(
+    1,
+    Math.floor(options.recurrentBackpropSteps ?? 1)
+  );
   const maxConsecutiveWaitMoves = Math.max(
     0,
     Math.floor(options.maxConsecutiveWaitMoves ?? 0)
@@ -6739,6 +6921,9 @@ function runPolicyRollout(
     const playerPolicy =
       options.policyByPlayer?.(playerIndex) ??
       (neuralPlayers.has(playerIndex) ? options.policy : undefined);
+    const playerMemoryState = playerPolicy
+      ? getRolloutMemoryState(memoryStates[playerIndex], playerPolicy)
+      : [];
     const shouldSample =
       options.sample && (samplePlayers == null || samplePlayers.has(playerIndex));
     const shouldCapture =
@@ -6755,15 +6940,29 @@ function runPolicyRollout(
               sample: shouldSample,
               captureTransition: shouldCapture,
               actionOptions,
-              memoryState: getRolloutMemoryState(
-                memoryStates[playerIndex],
-                playerPolicy
-              ),
+              memoryState: playerMemoryState,
+              recurrentMemoryTransition:
+                createRecurrentMemoryTransition(
+                  recurrentMemoryHistories[playerIndex]
+                ),
             },
             transitions
           );
     if (neuralChoice) {
       memoryStates[playerIndex] = neuralChoice.memoryState;
+      if (playerPolicy && playerPolicy.getRecurrentStateSize() > 0) {
+        recurrentMemoryHistories[playerIndex].push({
+          previousMemoryState: playerMemoryState.slice(),
+          selectedFeatures: neuralChoice.selectedFeatures.slice(),
+        });
+        while (
+          recurrentMemoryHistories[playerIndex].length > recurrentBackpropSteps
+        ) {
+          recurrentMemoryHistories[playerIndex].shift();
+        }
+      } else {
+        recurrentMemoryHistories[playerIndex] = [];
+      }
     }
     const move =
       currentDragMove ??
@@ -6819,9 +7018,10 @@ function chooseNeuralMove(
     captureTransition?: boolean;
     actionOptions?: ActionRankingOptions;
     memoryState?: readonly number[];
+    recurrentMemoryTransition?: RecurrentMemoryTransition;
   },
   transitions: RolloutTransition[]
-): { move: Move; memoryState: number[] } | undefined {
+): { move: Move; memoryState: number[]; selectedFeatures: number[] } | undefined {
   const candidates = enumerateActionRankingCandidates(
     board,
     playerIndex,
@@ -6878,6 +7078,9 @@ function chooseNeuralMove(
       selectedLogProbability: Math.log(selectedProbability),
       policyEntropy: getProbabilityEntropy(probabilities),
       localReward: selected.immediatePointDifferentialDelta,
+      recurrentMemoryTransition: cloneRecurrentMemoryTransition(
+        options.recurrentMemoryTransition
+      ),
     });
   }
   return {
@@ -6886,6 +7089,7 @@ function chooseNeuralMove(
       options.memoryState ?? [],
       selected.features
     ),
+    selectedFeatures: selected.features.slice(),
   };
 }
 
@@ -6896,6 +7100,39 @@ function getRolloutMemoryState(
   return memoryState.length === policy.getRecurrentStateSize()
     ? memoryState.slice()
     : policy.createInitialMemoryState();
+}
+
+function createRecurrentMemoryTransition(
+  history: readonly RecurrentMemoryStep[]
+): RecurrentMemoryTransition | undefined {
+  const last = history[history.length - 1];
+  if (!last) {
+    return;
+  }
+  return {
+    previousMemoryState: last.previousMemoryState.slice(),
+    selectedFeatures: last.selectedFeatures.slice(),
+    steps: history.map((step) => ({
+      previousMemoryState: step.previousMemoryState.slice(),
+      selectedFeatures: step.selectedFeatures.slice(),
+    })),
+  };
+}
+
+function cloneRecurrentMemoryTransition(
+  transition: RecurrentMemoryTransition | undefined
+): RecurrentMemoryTransition | undefined {
+  if (!transition) {
+    return;
+  }
+  return {
+    previousMemoryState: transition.previousMemoryState.slice(),
+    selectedFeatures: transition.selectedFeatures.slice(),
+    steps: transition.steps?.map((step) => ({
+      previousMemoryState: step.previousMemoryState.slice(),
+      selectedFeatures: step.selectedFeatures.slice(),
+    })),
+  };
 }
 
 function getRolloutPlayerMetrics(rollout: RolloutResult, playerIndex: number) {

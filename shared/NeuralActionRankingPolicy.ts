@@ -47,6 +47,7 @@ export type NeuralActionRankingModelV3 = {
   recurrentInputWeights: number[][];
   recurrentStateWeights: number[][];
   recurrentBiases: number[];
+  memoryFeatureOutputWeights: number[][];
 };
 
 export type NeuralActionRankingModel =
@@ -66,7 +67,7 @@ export type ImitationTrainingOptions = {
   l2?: number;
   shuffleSeed?: string;
   equivalentTargets?: boolean;
-  trainableLayers?: "all" | "output";
+  trainableLayers?: TrainableLayerMode;
 };
 
 export type ImitationTrainingStats = {
@@ -79,6 +80,8 @@ export type ImitationTrainingStats = {
   averagePairReturnGap?: number;
   averagePairWeight?: number;
 };
+
+export type TrainableLayerMode = "all" | "output" | "memory";
 
 export type RewardTargetTrainingOptions = ImitationTrainingOptions & {
   targetTemperature?: number;
@@ -118,12 +121,36 @@ type ScoreGradientInput = {
   dScore: number;
 };
 
+type RecurrentTrainingStep = {
+  previousMemoryState: number[];
+  selectedFeatureInputs: number[];
+  currentMemoryState: number[];
+};
+
+type RecurrentTrainingContext = {
+  currentMemoryState: number[];
+  steps: RecurrentTrainingStep[];
+};
+
 export type NeuralPolicyGradientAccumulator = {
   outputWeights: number[];
   outputBias: number;
+  memoryFeatureOutputWeights: number[][];
   layerWeights: number[][][];
   layerBiases: number[][];
+  recurrentInputWeights: number[][];
+  recurrentStateWeights: number[][];
+  recurrentBiases: number[];
   updateCount: number;
+};
+
+export type RecurrentMemoryStep = {
+  previousMemoryState: readonly number[];
+  selectedFeatures: readonly number[];
+};
+
+export type RecurrentMemoryTransition = RecurrentMemoryStep & {
+  steps?: readonly RecurrentMemoryStep[];
 };
 
 export type ClippedPolicyGradientBatchUpdate = {
@@ -132,6 +159,19 @@ export type ClippedPolicyGradientBatchUpdate = {
   advantage: number;
   oldProbability?: number;
   memoryState?: readonly number[];
+  recurrentMemoryTransition?: RecurrentMemoryTransition;
+};
+
+export type ClippedPolicyGradientSequenceStep = {
+  candidates: readonly Pick<ActionRankingCandidate, "features">[];
+  selectedCandidateIndex: number;
+  advantage: number;
+  oldProbability?: number;
+};
+
+export type ClippedPolicyGradientSequenceUpdate = {
+  initialMemoryState?: readonly number[];
+  steps: readonly ClippedPolicyGradientSequenceStep[];
 };
 
 export type ClippedPolicyGradientBatchStats = {
@@ -146,6 +186,11 @@ export type ClippedPolicyGradientBatchStats = {
 
 export type ClippedPolicyGradientBatchGradient = ClippedPolicyGradientBatchStats & {
   gradient: NeuralPolicyGradientAccumulator;
+};
+
+export type NeuralPolicyGradientApplyOptions = {
+  memoryInputGradientScale?: number;
+  recurrentGradientScale?: number;
 };
 
 const DEFAULT_HIDDEN_LAYER_SIZES = [48];
@@ -290,12 +335,22 @@ export class NeuralActionRankingPolicy {
     if (!isRecurrentModel(this.model)) {
       return [];
     }
-    const model = this.model;
     const featureInputs = this.prepareFeatureInputs(selectedFeatures);
     const previousState = normalizeMemoryState(
       memoryState,
-      model.recurrentStateSize
+      this.model.recurrentStateSize
     );
+    return this.computeRecurrentMemoryState(previousState, featureInputs);
+  }
+
+  private computeRecurrentMemoryState(
+    previousState: readonly number[],
+    featureInputs: readonly number[]
+  ): number[] {
+    if (!isRecurrentModel(this.model)) {
+      return [];
+    }
+    const model = this.model;
     return model.recurrentBiases.map((bias, stateIndex) => {
       const featureInput = model.recurrentInputWeights[stateIndex].reduce(
         (sum, weight, inputIndex) => sum + weight * featureInputs[inputIndex],
@@ -307,6 +362,48 @@ export class NeuralActionRankingPolicy {
       );
       return Math.tanh(bias + featureInput + stateInput);
     });
+  }
+
+  private getRecurrentTrainingContext(
+    update: ClippedPolicyGradientBatchUpdate
+  ): RecurrentTrainingContext | undefined {
+    if (!isRecurrentModel(this.model) || !update.recurrentMemoryTransition) {
+      return;
+    }
+    const rawSteps =
+      update.recurrentMemoryTransition.steps &&
+      update.recurrentMemoryTransition.steps.length > 0
+        ? update.recurrentMemoryTransition.steps
+        : [update.recurrentMemoryTransition];
+    const steps: RecurrentTrainingStep[] = [];
+    let previousMemoryState = normalizeMemoryState(
+      rawSteps[0]?.previousMemoryState,
+      this.model.recurrentStateSize
+    );
+
+    rawSteps.forEach((step) => {
+      const selectedFeatureInputs = this.prepareFeatureInputs(
+        step.selectedFeatures
+      );
+      const currentMemoryState = this.computeRecurrentMemoryState(
+        previousMemoryState,
+        selectedFeatureInputs
+      );
+      steps.push({
+        previousMemoryState,
+        selectedFeatureInputs,
+        currentMemoryState,
+      });
+      previousMemoryState = currentMemoryState;
+    });
+
+    if (steps.length === 0) {
+      return;
+    }
+    return {
+      currentMemoryState: steps[steps.length - 1].currentMemoryState,
+      steps,
+    };
   }
 
   trainImitation(
@@ -389,7 +486,7 @@ export class NeuralActionRankingPolicy {
     learningRate: number,
     temperature = 1,
     l2 = 0,
-    trainableLayers: "all" | "output" = "all"
+    trainableLayers: TrainableLayerMode = "all"
   ): void {
     if (
       candidates.length === 0 ||
@@ -426,7 +523,7 @@ export class NeuralActionRankingPolicy {
       clipRatio?: number;
       entropyBonus?: number;
       l2?: number;
-      trainableLayers?: "all" | "output";
+      trainableLayers?: TrainableLayerMode;
     } = {}
   ): {
     applied: boolean;
@@ -514,9 +611,11 @@ export class NeuralActionRankingPolicy {
       clipRatio?: number;
       entropyBonus?: number;
       l2?: number;
-      trainableLayers?: "all" | "output";
+      trainableLayers?: TrainableLayerMode;
       miniBatchSize?: number;
       gradientScale?: "sum" | "mean";
+      memoryInputGradientScale?: number;
+      recurrentGradientScale?: number;
     } = {}
   ): ClippedPolicyGradientBatchStats {
     const temperature = options.temperature ?? 1;
@@ -556,7 +655,11 @@ export class NeuralActionRankingPolicy {
         this.applyGradientAccumulator(
           gradientResult.gradient,
           learningRate,
-          gradientScale === "mean" ? gradientResult.gradient.updateCount : 1
+          gradientScale === "mean" ? gradientResult.gradient.updateCount : 1,
+          {
+            memoryInputGradientScale: options.memoryInputGradientScale,
+            recurrentGradientScale: options.recurrentGradientScale,
+          }
         );
         gradientBatches += 1;
       }
@@ -589,7 +692,7 @@ export class NeuralActionRankingPolicy {
       clipRatio?: number;
       entropyBonus?: number;
       l2?: number;
-      trainableLayers?: "all" | "output";
+      trainableLayers?: TrainableLayerMode;
     } = {}
   ): ClippedPolicyGradientBatchGradient {
     const temperature = options.temperature ?? 1;
@@ -616,10 +719,16 @@ export class NeuralActionRankingPolicy {
         return;
       }
 
+      const recurrentContext = this.getRecurrentTrainingContext(update);
+      const memoryState = recurrentContext?.currentMemoryState ?? update.memoryState;
+      const memoryGradient = Array.from(
+        { length: getModelRecurrentStateSize(this.model) },
+        () => 0
+      );
       const candidateForwards = update.candidates.map((candidate) => {
         const modelFeatures = this.prepareFeatures(
           candidate.features,
-          update.memoryState
+          memoryState
         );
         return {
           modelFeatures,
@@ -649,7 +758,7 @@ export class NeuralActionRankingPolicy {
           const target =
             candidateIndex === update.selectedCandidateIndex ? 1 : 0;
           const dScore = scale * (probabilities[candidateIndex] - target);
-          this.accumulateScoreGradient(
+          const inputGradients = this.accumulateScoreGradient(
             accumulator,
             candidateForward.modelFeatures,
             candidateForward.forward,
@@ -657,6 +766,7 @@ export class NeuralActionRankingPolicy {
             l2,
             trainableLayers
           );
+          addMemoryInputGradients(memoryGradient, inputGradients, this.model);
         });
         contributedGradient = true;
       }
@@ -669,7 +779,7 @@ export class NeuralActionRankingPolicy {
           );
           const dScore =
             entropyBonus * probability * (Math.log(probability) + entropy);
-          this.accumulateScoreGradient(
+          const inputGradients = this.accumulateScoreGradient(
             accumulator,
             candidateForward.modelFeatures,
             candidateForward.forward,
@@ -677,11 +787,19 @@ export class NeuralActionRankingPolicy {
             l2,
             trainableLayers
           );
+          addMemoryInputGradients(memoryGradient, inputGradients, this.model);
         });
         contributedGradient = true;
       }
 
       if (contributedGradient) {
+        this.accumulateRecurrentMemoryGradient(
+          accumulator,
+          recurrentContext,
+          memoryGradient,
+          l2,
+          trainableLayers
+        );
         appliedUpdates += 1;
         accumulator.updateCount += 1;
       }
@@ -707,12 +825,288 @@ export class NeuralActionRankingPolicy {
     };
   }
 
+  trainClippedPolicyGradientSequenceBatch(
+    sequences: readonly ClippedPolicyGradientSequenceUpdate[],
+    learningRate: number,
+    options: {
+      temperature?: number;
+      clipRatio?: number;
+      entropyBonus?: number;
+      l2?: number;
+      trainableLayers?: TrainableLayerMode;
+      miniBatchSize?: number;
+      gradientScale?: "sum" | "mean";
+      memoryInputGradientScale?: number;
+      recurrentGradientScale?: number;
+    } = {}
+  ): ClippedPolicyGradientBatchStats {
+    const miniBatchSize = Math.max(1, Math.floor(options.miniBatchSize ?? 1));
+    const gradientScale = options.gradientScale ?? "sum";
+    let appliedUpdates = 0;
+    let gradientBatches = 0;
+    let clippedUpdates = 0;
+    let entropyTotal = 0;
+    let approximateKlTotal = 0;
+    let measuredUpdates = 0;
+    let sequenceBatch: ClippedPolicyGradientSequenceUpdate[] = [];
+    let sequenceBatchSteps = 0;
+
+    const flushBatch = () => {
+      if (sequenceBatch.length === 0) {
+        return;
+      }
+      const gradientResult = this.computeClippedPolicyGradientSequenceBatchGradient(
+        sequenceBatch,
+        options
+      );
+      if (gradientResult.gradient.updateCount > 0) {
+        this.applyGradientAccumulator(
+          gradientResult.gradient,
+          learningRate,
+          gradientScale === "mean" ? gradientResult.gradient.updateCount : 1,
+          {
+            memoryInputGradientScale: options.memoryInputGradientScale,
+            recurrentGradientScale: options.recurrentGradientScale,
+          }
+        );
+        gradientBatches += 1;
+      }
+      appliedUpdates += gradientResult.appliedUpdates;
+      clippedUpdates += gradientResult.clippedUpdates;
+      entropyTotal +=
+        gradientResult.averageEntropy * gradientResult.measuredUpdates;
+      approximateKlTotal +=
+        gradientResult.averageApproximateKl * gradientResult.measuredUpdates;
+      measuredUpdates += gradientResult.measuredUpdates;
+      sequenceBatch = [];
+      sequenceBatchSteps = 0;
+    };
+
+    sequences.forEach((sequence) => {
+      sequenceBatch.push(sequence);
+      sequenceBatchSteps += sequence.steps.length;
+      if (sequenceBatchSteps >= miniBatchSize) {
+        flushBatch();
+      }
+    });
+    flushBatch();
+
+    return {
+      appliedUpdates,
+      gradientBatches,
+      clippedUpdates,
+      measuredUpdates,
+      averageEntropy: measuredUpdates === 0 ? 0 : entropyTotal / measuredUpdates,
+      averageApproximateKl:
+        measuredUpdates === 0 ? 0 : approximateKlTotal / measuredUpdates,
+      clippedUpdateRate:
+        measuredUpdates === 0 ? 0 : clippedUpdates / measuredUpdates,
+    };
+  }
+
+  computeClippedPolicyGradientSequenceBatchGradient(
+    sequences: readonly ClippedPolicyGradientSequenceUpdate[],
+    options: {
+      temperature?: number;
+      clipRatio?: number;
+      entropyBonus?: number;
+      l2?: number;
+      trainableLayers?: TrainableLayerMode;
+    } = {}
+  ): ClippedPolicyGradientBatchGradient {
+    const temperature = options.temperature ?? 1;
+    const clipRatio = Math.max(0, options.clipRatio ?? 0.2);
+    const upper = 1 + clipRatio;
+    const lower = 1 - clipRatio;
+    const entropyBonus = Math.max(0, options.entropyBonus ?? 0);
+    const l2 = options.l2 ?? 0;
+    const trainableLayers = options.trainableLayers ?? "all";
+    const recurrentStateSize = getModelRecurrentStateSize(this.model);
+    const accumulator = this.createGradientAccumulator();
+    let appliedUpdates = 0;
+    let clippedUpdates = 0;
+    let entropyTotal = 0;
+    let approximateKlTotal = 0;
+    let measuredUpdates = 0;
+
+    sequences.forEach((sequence) => {
+      let memoryState = normalizeMemoryState(
+        sequence.initialMemoryState,
+        recurrentStateSize
+      );
+      const forwardSteps: {
+        recurrentStep?: RecurrentTrainingStep;
+        memoryGradient: number[];
+      }[] = [];
+
+      sequence.steps.forEach((step) => {
+        const selectedCandidate = step.candidates[step.selectedCandidateIndex];
+        const memoryGradient = Array.from(
+          { length: recurrentStateSize },
+          () => 0
+        );
+        let recurrentStep: RecurrentTrainingStep | undefined;
+
+        if (selectedCandidate && isRecurrentModel(this.model)) {
+          const selectedFeatureInputs = this.prepareFeatureInputs(
+            selectedCandidate.features
+          );
+          recurrentStep = {
+            previousMemoryState: memoryState.slice(),
+            selectedFeatureInputs,
+            currentMemoryState: this.computeRecurrentMemoryState(
+              memoryState,
+              selectedFeatureInputs
+            ),
+          };
+        }
+
+        if (
+          step.candidates.length > 0 &&
+          step.selectedCandidateIndex >= 0 &&
+          step.selectedCandidateIndex < step.candidates.length &&
+          step.advantage !== 0
+        ) {
+          const candidateForwards = step.candidates.map((candidate) => {
+            const modelFeatures = this.prepareFeatures(
+              candidate.features,
+              memoryState
+            );
+            return {
+              modelFeatures,
+              forward: this.forward(modelFeatures),
+            };
+          });
+          const scores = candidateForwards.map(({ forward }) => forward.score);
+          const probabilities = softmax(scores, temperature);
+          const currentProbability = Math.max(
+            1e-12,
+            probabilities[step.selectedCandidateIndex]
+          );
+          const safeOldProbability = Math.max(1e-12, step.oldProbability ?? 1);
+          const ratio = currentProbability / safeOldProbability;
+          const clipped =
+            clipRatio > 0 &&
+            ((step.advantage > 0 && ratio > upper) ||
+              (step.advantage < 0 && ratio < lower));
+          const entropy = getEntropy(probabilities);
+          const approximateKl =
+            Math.log(safeOldProbability) - Math.log(currentProbability);
+          let contributedGradient = false;
+
+          if (!clipped) {
+            const scale = step.advantage * ratio;
+            candidateForwards.forEach((candidateForward, candidateIndex) => {
+              const target =
+                candidateIndex === step.selectedCandidateIndex ? 1 : 0;
+              const dScore = scale * (probabilities[candidateIndex] - target);
+              const inputGradients = this.accumulateScoreGradient(
+                accumulator,
+                candidateForward.modelFeatures,
+                candidateForward.forward,
+                dScore,
+                l2,
+                trainableLayers
+              );
+              addMemoryInputGradients(
+                memoryGradient,
+                inputGradients,
+                this.model
+              );
+            });
+            contributedGradient = true;
+          }
+
+          if (entropyBonus > 0) {
+            candidateForwards.forEach((candidateForward, candidateIndex) => {
+              const probability = Math.max(
+                1e-12,
+                probabilities[candidateIndex] ?? 0
+              );
+              const dScore =
+                entropyBonus * probability * (Math.log(probability) + entropy);
+              const inputGradients = this.accumulateScoreGradient(
+                accumulator,
+                candidateForward.modelFeatures,
+                candidateForward.forward,
+                dScore,
+                l2,
+                trainableLayers
+              );
+              addMemoryInputGradients(
+                memoryGradient,
+                inputGradients,
+                this.model
+              );
+            });
+            contributedGradient = true;
+          }
+
+          if (contributedGradient) {
+            appliedUpdates += 1;
+            accumulator.updateCount += 1;
+          }
+          if (clipped) {
+            clippedUpdates += 1;
+          }
+          entropyTotal += entropy;
+          approximateKlTotal += approximateKl;
+          measuredUpdates += 1;
+        }
+
+        forwardSteps.push({ recurrentStep, memoryGradient });
+        memoryState = recurrentStep?.currentMemoryState ?? memoryState;
+      });
+
+      if (trainableLayers === "output" || !isRecurrentModel(this.model)) {
+        return;
+      }
+
+      let stateGradient = Array.from(
+        { length: recurrentStateSize },
+        () => 0
+      );
+      for (
+        let stepIndex = forwardSteps.length - 1;
+        stepIndex >= 0;
+        stepIndex--
+      ) {
+        const step = forwardSteps[stepIndex];
+        if (step.recurrentStep) {
+          stateGradient = this.accumulateRecurrentStepGradient(
+            accumulator,
+            step.recurrentStep,
+            stateGradient,
+            l2
+          );
+        }
+        step.memoryGradient.forEach((gradient, stateIndex) => {
+          stateGradient[stateIndex] += gradient;
+        });
+      }
+    });
+
+    return {
+      gradient: accumulator,
+      appliedUpdates,
+      gradientBatches: accumulator.updateCount > 0 ? 1 : 0,
+      clippedUpdates,
+      measuredUpdates,
+      averageEntropy: measuredUpdates === 0 ? 0 : entropyTotal / measuredUpdates,
+      averageApproximateKl:
+        measuredUpdates === 0 ? 0 : approximateKlTotal / measuredUpdates,
+      clippedUpdateRate:
+        measuredUpdates === 0 ? 0 : clippedUpdates / measuredUpdates,
+    };
+  }
+
   applyPolicyGradientAccumulator(
     accumulator: NeuralPolicyGradientAccumulator,
     learningRate: number,
-    divisor: number
+    divisor: number,
+    options: NeuralPolicyGradientApplyOptions = {}
   ): void {
-    this.applyGradientAccumulator(accumulator, learningRate, divisor);
+    this.applyGradientAccumulator(accumulator, learningRate, divisor, options);
   }
 
   trainRewardTargets(
@@ -989,7 +1383,7 @@ export class NeuralActionRankingPolicy {
     learningRate: number,
     scale: number,
     l2: number,
-    trainableLayers: "all" | "output"
+    trainableLayers: TrainableLayerMode
   ): void {
     candidates.forEach((candidate, candidateIndex) => {
       const target = candidateIndex === selectedCandidateIndex ? 1 : 0;
@@ -1011,7 +1405,7 @@ export class NeuralActionRankingPolicy {
     learningRate: number,
     scale: number,
     l2: number,
-    trainableLayers: "all" | "output"
+    trainableLayers: TrainableLayerMode
   ): void {
     candidates.forEach((candidate, candidateIndex) => {
       const dScore =
@@ -1033,7 +1427,7 @@ export class NeuralActionRankingPolicy {
     learningRate: number,
     entropyBonus: number,
     l2: number,
-    trainableLayers: "all" | "output"
+    trainableLayers: TrainableLayerMode
   ): void {
     candidates.forEach((candidate, candidateIndex) => {
       const probability = Math.max(1e-12, probabilities[candidateIndex] ?? 0);
@@ -1049,18 +1443,30 @@ export class NeuralActionRankingPolicy {
   }
 
   private createGradientAccumulator(): NeuralPolicyGradientAccumulator {
+    const recurrentStateSize = getModelRecurrentStateSize(this.model);
     return {
       outputWeights: Array.from(
         { length: this.model.outputWeights.length },
         () => 0
       ),
       outputBias: 0,
+      memoryFeatureOutputWeights: Array.from(
+        { length: recurrentStateSize },
+        () => Array.from({ length: this.model.featureNames.length }, () => 0)
+      ),
       layerWeights: this.model.layerWeights.map((layer) =>
         layer.map((weights) => Array.from({ length: weights.length }, () => 0))
       ),
       layerBiases: this.model.layerBiases.map((biases) =>
         Array.from({ length: biases.length }, () => 0)
       ),
+      recurrentInputWeights: Array.from({ length: recurrentStateSize }, () =>
+        Array.from({ length: this.model.featureNames.length }, () => 0)
+      ),
+      recurrentStateWeights: Array.from({ length: recurrentStateSize }, () =>
+        Array.from({ length: recurrentStateSize }, () => 0)
+      ),
+      recurrentBiases: Array.from({ length: recurrentStateSize }, () => 0),
       updateCount: 0,
     };
   }
@@ -1071,23 +1477,58 @@ export class NeuralActionRankingPolicy {
     forward: ForwardPass,
     dScore: number,
     l2: number,
-    trainableLayers: "all" | "output" = "all"
-  ): void {
+    trainableLayers: TrainableLayerMode = "all"
+  ): number[] {
     const lastActivation = forward.activations[forward.activations.length - 1];
+    const trainOutputLayer = trainableLayers !== "memory";
 
-    for (
-      let outputIndex = 0;
-      outputIndex < this.model.outputWeights.length;
-      outputIndex++
-    ) {
-      accumulator.outputWeights[outputIndex] +=
-        dScore * lastActivation[outputIndex] +
-        l2 * this.model.outputWeights[outputIndex];
+    if (trainOutputLayer) {
+      for (
+        let outputIndex = 0;
+        outputIndex < this.model.outputWeights.length;
+        outputIndex++
+      ) {
+        accumulator.outputWeights[outputIndex] +=
+          dScore * lastActivation[outputIndex] +
+          l2 * this.model.outputWeights[outputIndex];
+      }
+      accumulator.outputBias += dScore;
     }
-    accumulator.outputBias += dScore;
+
+    if (isRecurrentModel(this.model)) {
+      const model = this.model;
+      const memoryOffset = model.featureNames.length;
+      const featureValues = modelFeatures.slice(0, model.featureNames.length);
+      for (
+        let stateIndex = 0;
+        stateIndex < model.recurrentStateSize;
+        stateIndex++
+      ) {
+        const memoryValue = modelFeatures[memoryOffset + stateIndex] ?? 0;
+        featureValues.forEach((featureValue, featureIndex) => {
+          accumulator.memoryFeatureOutputWeights[stateIndex][featureIndex] +=
+            dScore * memoryValue * featureValue +
+            l2 * model.memoryFeatureOutputWeights[stateIndex][featureIndex];
+        });
+      }
+    }
 
     if (trainableLayers === "output") {
-      return;
+      return Array.from({ length: modelFeatures.length }, () => 0);
+    }
+
+    if (trainableLayers === "memory") {
+      const inputGradients = Array.from(
+        { length: modelFeatures.length },
+        () => 0
+      );
+      addMemoryFeatureOutputInputGradients(
+        inputGradients,
+        modelFeatures,
+        dScore,
+        this.model
+      );
+      return inputGradients;
     }
 
     const scoreGradient: ScoreGradientInput = {
@@ -1096,6 +1537,22 @@ export class NeuralActionRankingPolicy {
       dScore,
     };
     const deltas = this.getHiddenLayerDeltas(scoreGradient);
+    const inputGradients = Array.from(
+      { length: scoreGradient.modelFeatures.length },
+      () => 0
+    );
+    const firstLayerWeights = this.model.layerWeights[0] ?? [];
+    (deltas[0] ?? []).forEach((delta, hiddenIndex) => {
+      firstLayerWeights[hiddenIndex]?.forEach((weight, inputIndex) => {
+        inputGradients[inputIndex] += delta * weight;
+      });
+    });
+    addMemoryFeatureOutputInputGradients(
+      inputGradients,
+      modelFeatures,
+      dScore,
+      this.model
+    );
 
     for (
       let layerIndex = 0;
@@ -1124,14 +1581,92 @@ export class NeuralActionRankingPolicy {
         accumulator.layerBiases[layerIndex][hiddenIndex] += delta;
       }
     }
+
+    return inputGradients;
+  }
+
+  private accumulateRecurrentMemoryGradient(
+    accumulator: NeuralPolicyGradientAccumulator,
+    context: RecurrentTrainingContext | undefined,
+    memoryGradient: readonly number[],
+    l2: number,
+    trainableLayers: TrainableLayerMode
+  ): void {
+    const model = this.model;
+    if (trainableLayers === "output" || !context || !isRecurrentModel(model)) {
+      return;
+    }
+
+    let stateGradient = Array.from(
+      { length: model.recurrentStateSize },
+      (_, stateIndex) => memoryGradient[stateIndex] ?? 0
+    );
+
+    for (let stepIndex = context.steps.length - 1; stepIndex >= 0; stepIndex--) {
+      stateGradient = this.accumulateRecurrentStepGradient(
+        accumulator,
+        context.steps[stepIndex],
+        stateGradient,
+        l2
+      );
+    }
+  }
+
+  private accumulateRecurrentStepGradient(
+    accumulator: NeuralPolicyGradientAccumulator,
+    step: RecurrentTrainingStep,
+    stateGradient: readonly number[],
+    l2: number
+  ): number[] {
+    const model = this.model;
+    if (!isRecurrentModel(model)) {
+      return [];
+    }
+    const previousStateGradient = Array.from(
+      { length: model.recurrentStateSize },
+      () => 0
+    );
+
+    step.currentMemoryState.forEach((memoryValue, stateIndex) => {
+      const dMemory = stateGradient[stateIndex] ?? 0;
+      if (dMemory === 0) {
+        return;
+      }
+      const dPreActivation = dMemory * (1 - memoryValue * memoryValue);
+      accumulator.recurrentBiases[stateIndex] += dPreActivation;
+
+      step.selectedFeatureInputs.forEach((featureValue, inputIndex) => {
+        accumulator.recurrentInputWeights[stateIndex][inputIndex] +=
+          dPreActivation * featureValue +
+          l2 * model.recurrentInputWeights[stateIndex][inputIndex];
+      });
+      step.previousMemoryState.forEach((stateValue, inputIndex) => {
+        accumulator.recurrentStateWeights[stateIndex][inputIndex] +=
+          dPreActivation * stateValue +
+          l2 * model.recurrentStateWeights[stateIndex][inputIndex];
+        previousStateGradient[inputIndex] +=
+          dPreActivation * model.recurrentStateWeights[stateIndex][inputIndex];
+      });
+    });
+
+    return previousStateGradient;
   }
 
   private applyGradientAccumulator(
     accumulator: NeuralPolicyGradientAccumulator,
     learningRate: number,
-    divisor: number
+    divisor: number,
+    options: NeuralPolicyGradientApplyOptions = {}
   ): void {
     const scale = learningRate / Math.max(1, divisor);
+    const memoryInputGradientScale = getNonNegativeFiniteNumber(
+      options.memoryInputGradientScale,
+      1
+    );
+    const recurrentGradientScale = getNonNegativeFiniteNumber(
+      options.recurrentGradientScale,
+      1
+    );
 
     for (
       let outputIndex = 0;
@@ -1142,6 +1677,27 @@ export class NeuralActionRankingPolicy {
         scale * accumulator.outputWeights[outputIndex];
     }
     this.model.outputBias -= scale * accumulator.outputBias;
+
+    if (isRecurrentModel(this.model)) {
+      for (
+        let stateIndex = 0;
+        stateIndex < this.model.recurrentStateSize;
+        stateIndex++
+      ) {
+        for (
+          let featureIndex = 0;
+          featureIndex < this.model.featureNames.length;
+          featureIndex++
+        ) {
+          this.model.memoryFeatureOutputWeights[stateIndex][featureIndex] -=
+            scale *
+            memoryInputGradientScale *
+            (accumulator.memoryFeatureOutputWeights[stateIndex]?.[
+              featureIndex
+            ] ?? 0);
+        }
+      }
+    }
 
     for (
       let layerIndex = 0;
@@ -1159,11 +1715,50 @@ export class NeuralActionRankingPolicy {
           this.model.layerWeights[layerIndex][hiddenIndex].length;
           inputIndex++
         ) {
+          const inputGradientScale =
+            layerIndex === 0 && inputIndex >= this.model.featureNames.length
+              ? memoryInputGradientScale
+              : 1;
           this.model.layerWeights[layerIndex][hiddenIndex][inputIndex] -=
-            scale * accumulator.layerWeights[layerIndex][hiddenIndex][inputIndex];
+            scale *
+            inputGradientScale *
+            accumulator.layerWeights[layerIndex][hiddenIndex][inputIndex];
         }
         this.model.layerBiases[layerIndex][hiddenIndex] -=
           scale * accumulator.layerBiases[layerIndex][hiddenIndex];
+      }
+    }
+
+    if (isRecurrentModel(this.model)) {
+      for (
+        let stateIndex = 0;
+        stateIndex < this.model.recurrentStateSize;
+        stateIndex++
+      ) {
+        for (
+          let inputIndex = 0;
+          inputIndex < this.model.recurrentInputWeights[stateIndex].length;
+          inputIndex++
+        ) {
+          this.model.recurrentInputWeights[stateIndex][inputIndex] -=
+            scale *
+            recurrentGradientScale *
+            (accumulator.recurrentInputWeights[stateIndex]?.[inputIndex] ?? 0);
+        }
+        for (
+          let inputIndex = 0;
+          inputIndex < this.model.recurrentStateWeights[stateIndex].length;
+          inputIndex++
+        ) {
+          this.model.recurrentStateWeights[stateIndex][inputIndex] -=
+            scale *
+            recurrentGradientScale *
+            (accumulator.recurrentStateWeights[stateIndex]?.[inputIndex] ?? 0);
+        }
+        this.model.recurrentBiases[stateIndex] -=
+          scale *
+          recurrentGradientScale *
+          (accumulator.recurrentBiases[stateIndex] ?? 0);
       }
     }
   }
@@ -1173,26 +1768,29 @@ export class NeuralActionRankingPolicy {
     dScore: number,
     learningRate: number,
     l2: number,
-    trainableLayers: "all" | "output" = "all"
+    trainableLayers: TrainableLayerMode = "all"
   ): void {
     const modelFeatures = this.prepareFeatures(features);
     const forward = this.forward(modelFeatures);
     const lastActivation = forward.activations[forward.activations.length - 1];
     const oldOutputWeights = this.model.outputWeights.slice();
+    const trainOutputLayer = trainableLayers !== "memory";
 
-    for (
-      let outputIndex = 0;
-      outputIndex < this.model.outputWeights.length;
-      outputIndex++
-    ) {
-      const outputGrad =
-        dScore * lastActivation[outputIndex] +
-        l2 * this.model.outputWeights[outputIndex];
-      this.model.outputWeights[outputIndex] -= learningRate * outputGrad;
+    if (trainOutputLayer) {
+      for (
+        let outputIndex = 0;
+        outputIndex < this.model.outputWeights.length;
+        outputIndex++
+      ) {
+        const outputGrad =
+          dScore * lastActivation[outputIndex] +
+          l2 * this.model.outputWeights[outputIndex];
+        this.model.outputWeights[outputIndex] -= learningRate * outputGrad;
+      }
+      this.model.outputBias -= learningRate * dScore;
     }
-    this.model.outputBias -= learningRate * dScore;
 
-    if (trainableLayers === "output") {
+    if (trainableLayers === "output" || trainableLayers === "memory") {
       return;
     }
 
@@ -1313,7 +1911,8 @@ export class NeuralActionRankingPolicy {
       this.model.outputBias +
       lastActivation.reduce((sum, value, hiddenIndex) => {
         return sum + value * this.model.outputWeights[hiddenIndex];
-      }, 0);
+      }, 0) +
+      getMemoryFeatureOutputScore(this.model, features);
 
     return { layerInputs, activations, score };
   }
@@ -1711,6 +2310,9 @@ export function createNeuralActionRankingModel(
       )
     ),
     recurrentBiases: Array.from({ length: recurrentStateSize }, () => 0),
+    memoryFeatureOutputWeights: Array.from({ length: recurrentStateSize }, () =>
+      Array.from({ length: ACTION_RANKING_FEATURE_NAMES.length }, () => 0)
+    ),
   };
 }
 
@@ -1725,11 +2327,24 @@ export function mergeNeuralPolicyGradientAccumulators(
   const merged: NeuralPolicyGradientAccumulator = {
     outputWeights: Array.from({ length: first.outputWeights.length }, () => 0),
     outputBias: 0,
+    memoryFeatureOutputWeights: first.memoryFeatureOutputWeights.map(
+      (weights) => Array.from({ length: weights.length }, () => 0)
+    ),
     layerWeights: first.layerWeights.map((layer) =>
       layer.map((weights) => Array.from({ length: weights.length }, () => 0))
     ),
     layerBiases: first.layerBiases.map((biases) =>
       Array.from({ length: biases.length }, () => 0)
+    ),
+    recurrentInputWeights: first.recurrentInputWeights.map((weights) =>
+      Array.from({ length: weights.length }, () => 0)
+    ),
+    recurrentStateWeights: first.recurrentStateWeights.map((weights) =>
+      Array.from({ length: weights.length }, () => 0)
+    ),
+    recurrentBiases: Array.from(
+      { length: first.recurrentBiases.length },
+      () => 0
     ),
     updateCount: 0,
   };
@@ -1739,6 +2354,11 @@ export function mergeNeuralPolicyGradientAccumulators(
       merged.outputWeights[index] += value;
     });
     merged.outputBias += accumulator.outputBias;
+    accumulator.memoryFeatureOutputWeights.forEach((weights, stateIndex) => {
+      weights.forEach((value, featureIndex) => {
+        merged.memoryFeatureOutputWeights[stateIndex][featureIndex] += value;
+      });
+    });
     accumulator.layerWeights.forEach((layer, layerIndex) => {
       layer.forEach((weights, hiddenIndex) => {
         weights.forEach((value, inputIndex) => {
@@ -1750,6 +2370,19 @@ export function mergeNeuralPolicyGradientAccumulators(
       biases.forEach((value, hiddenIndex) => {
         merged.layerBiases[layerIndex][hiddenIndex] += value;
       });
+    });
+    accumulator.recurrentInputWeights.forEach((weights, stateIndex) => {
+      weights.forEach((value, inputIndex) => {
+        merged.recurrentInputWeights[stateIndex][inputIndex] += value;
+      });
+    });
+    accumulator.recurrentStateWeights.forEach((weights, stateIndex) => {
+      weights.forEach((value, inputIndex) => {
+        merged.recurrentStateWeights[stateIndex][inputIndex] += value;
+      });
+    });
+    accumulator.recurrentBiases.forEach((value, stateIndex) => {
+      merged.recurrentBiases[stateIndex] += value;
     });
     merged.updateCount += accumulator.updateCount;
   });
@@ -1893,7 +2526,8 @@ function assertModelShape(
       model.recurrentStateSize <= 0 ||
       model.recurrentInputWeights.length !== model.recurrentStateSize ||
       model.recurrentStateWeights.length !== model.recurrentStateSize ||
-      model.recurrentBiases.length !== model.recurrentStateSize
+      model.recurrentBiases.length !== model.recurrentStateSize ||
+      model.memoryFeatureOutputWeights.length !== model.recurrentStateSize
     ) {
       throw new Error("Model recurrent weight matrix shape is invalid.");
     }
@@ -1904,6 +2538,11 @@ function assertModelShape(
     });
     model.recurrentStateWeights.forEach((weights) => {
       if (weights.length !== model.recurrentStateSize) {
+        throw new Error("Model recurrent weight matrix shape is invalid.");
+      }
+    });
+    model.memoryFeatureOutputWeights.forEach((weights) => {
+      if (weights.length !== model.featureNames.length) {
         throw new Error("Model recurrent weight matrix shape is invalid.");
       }
     });
@@ -1959,6 +2598,7 @@ function cloneModel(model: NeuralActionRankingModel): NeuralActionRankingModel {
         weights.slice()
       ),
       recurrentBiases: model.recurrentBiases.slice(),
+      memoryFeatureOutputWeights: getModelMemoryFeatureOutputWeights(model),
     };
   }
   return {
@@ -2038,6 +2678,7 @@ function alignModelToCurrentFeatures(
       weights.slice()
     ),
     recurrentBiases: model.recurrentBiases.slice(),
+    memoryFeatureOutputWeights: getModelMemoryFeatureOutputWeights(model),
   };
 }
 
@@ -2072,6 +2713,46 @@ function getModelRecurrentStateSize(
   return isRecurrentModel(model) ? model.recurrentStateSize : 0;
 }
 
+function getModelMemoryFeatureOutputWeights(
+  model: NeuralActionRankingModelV3
+): number[][] {
+  const weights = (
+    model as { memoryFeatureOutputWeights?: readonly (readonly number[])[] }
+  ).memoryFeatureOutputWeights;
+  return Array.from({ length: model.recurrentStateSize }, (_, stateIndex) =>
+    Array.from({ length: model.featureNames.length }, (_, featureIndex) => {
+      const value = weights?.[stateIndex]?.[featureIndex] ?? 0;
+      return Number.isFinite(value) ? value : 0;
+    })
+  );
+}
+
+function getMemoryFeatureOutputScore(
+  model: NeuralActionRankingModelV2 | NeuralActionRankingModelV3,
+  modelFeatures: readonly number[]
+): number {
+  if (!isRecurrentModel(model)) {
+    return 0;
+  }
+  const memoryOffset = model.featureNames.length;
+  return model.memoryFeatureOutputWeights.reduce(
+    (stateSum, weights, stateIndex) => {
+      const memoryValue = modelFeatures[memoryOffset + stateIndex] ?? 0;
+      if (memoryValue === 0) {
+        return stateSum;
+      }
+      return (
+        stateSum +
+        memoryValue *
+          weights.reduce((featureSum, weight, featureIndex) => {
+            return featureSum + weight * (modelFeatures[featureIndex] ?? 0);
+          }, 0)
+      );
+    },
+    0
+  );
+}
+
 function normalizeMemoryState(
   memoryState: readonly number[] | undefined,
   recurrentStateSize: number
@@ -2082,6 +2763,51 @@ function normalizeMemoryState(
   });
 }
 
+function getNonNegativeFiniteNumber(
+  value: number | undefined,
+  fallback: number
+): number {
+  return value == null || !Number.isFinite(value) ? fallback : Math.max(0, value);
+}
+
+function addMemoryInputGradients(
+  memoryGradient: number[],
+  inputGradients: readonly number[],
+  model: NeuralActionRankingModelV2 | NeuralActionRankingModelV3
+): void {
+  const recurrentStateSize = getModelRecurrentStateSize(model);
+  if (recurrentStateSize === 0) {
+    return;
+  }
+  const memoryOffset = model.featureNames.length;
+  for (let stateIndex = 0; stateIndex < recurrentStateSize; stateIndex++) {
+    memoryGradient[stateIndex] +=
+      inputGradients[memoryOffset + stateIndex] ?? 0;
+  }
+}
+
+function addMemoryFeatureOutputInputGradients(
+  inputGradients: number[],
+  modelFeatures: readonly number[],
+  dScore: number,
+  model: NeuralActionRankingModelV2 | NeuralActionRankingModelV3
+): void {
+  if (!isRecurrentModel(model)) {
+    return;
+  }
+  const memoryOffset = model.featureNames.length;
+  for (let stateIndex = 0; stateIndex < model.recurrentStateSize; stateIndex++) {
+    inputGradients[memoryOffset + stateIndex] +=
+      dScore *
+      model.memoryFeatureOutputWeights[stateIndex].reduce(
+        (sum, weight, featureIndex) => {
+          return sum + weight * (modelFeatures[featureIndex] ?? 0);
+        },
+        0
+      );
+  }
+}
+
 function copyRecurrentWeights(
   source: NeuralActionRankingModelV3,
   target: NeuralActionRankingModelV3
@@ -2090,6 +2816,8 @@ function copyRecurrentWeights(
     source.recurrentStateSize,
     target.recurrentStateSize
   );
+  const sourceMemoryFeatureOutputWeights =
+    getModelMemoryFeatureOutputWeights(source);
   for (let stateIndex = 0; stateIndex < stateCount; stateIndex++) {
     for (
       let featureIndex = 0;
@@ -2105,6 +2833,14 @@ function copyRecurrentWeights(
     }
     target.recurrentBiases[stateIndex] =
       source.recurrentBiases[stateIndex] ?? 0;
+    for (
+      let featureIndex = 0;
+      featureIndex < target.memoryFeatureOutputWeights[stateIndex].length;
+      featureIndex++
+    ) {
+      target.memoryFeatureOutputWeights[stateIndex][featureIndex] =
+        sourceMemoryFeatureOutputWeights[stateIndex]?.[featureIndex] ?? 0;
+    }
   }
 }
 

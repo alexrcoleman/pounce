@@ -7,7 +7,7 @@ import {
   mergePpoSelfPlayRolloutBatches,
   type PpoSelfPlayRolloutBatch,
   type PpoSelfPlayRolloutOptions,
-type PpoSelfPlayUpdateOptions,
+  type PpoSelfPlayUpdateOptions,
 } from "../shared/ActionRankingTraining";
 import {
   NeuralActionRankingPolicy,
@@ -16,6 +16,7 @@ import {
   type ClippedPolicyGradientBatchStats,
   type NeuralActionRankingModel,
   type NeuralPolicyGradientAccumulator,
+  type TrainableLayerMode,
 } from "../shared/NeuralActionRankingPolicy";
 
 type RolloutShardResult = {
@@ -125,6 +126,8 @@ const rolloutOptions: Omit<PpoSelfPlayRolloutOptions, "episodeStart" | "episodes
     ),
     scoreRewardWeight: readNumberEnv("RL_PPO_SCORE_WEIGHT", 0),
     pounceRewardWeight: readNumberEnv("RL_PPO_POUNCE_WEIGHT", 0.5),
+    recurrentBackpropSteps: readIntegerEnv("RL_PPO_RECURRENT_STEPS", 8),
+    sequenceLength: readIntegerEnv("RL_PPO_SEQUENCE_LENGTH", 1),
     maxConsecutiveWaitMoves: readIntegerEnv(
       "RL_PPO_MAX_CONSECUTIVE_WAITS",
       40
@@ -152,6 +155,9 @@ const updateOptions: PpoSelfPlayUpdateOptions = {
   advantageClip: readNumberEnv("RL_ADVANTAGE_CLIP", 3),
   miniBatchSize: readIntegerEnv("RL_PPO_MINIBATCH_SIZE", 128),
   gradientScale: readPpoGradientScaleEnv("RL_PPO_GRADIENT_SCALE", "sum"),
+  memoryInputGradientScale: readNumberEnv("RL_PPO_MEMORY_INPUT_SCALE", 1),
+  recurrentGradientScale: readNumberEnv("RL_PPO_RECURRENT_SCALE", 1),
+  sequenceLength: rolloutOptions.sequenceLength ?? 1,
 };
 
 run().catch((error) => {
@@ -310,6 +316,7 @@ async function runWithGradientWorkers(
           clipRatio: updateOptions.clipRatio,
           entropyBonus: updateOptions.entropyBonus,
           trainableLayers: updateOptions.trainableLayers,
+          sequenceLength: updateOptions.sequenceLength,
         })
       )
     );
@@ -325,7 +332,11 @@ async function runWithGradientWorkers(
     policy.applyPolicyGradientAccumulator(
       mergedGradient,
       updateOptions.learningRate,
-      divisor
+      divisor,
+      {
+        memoryInputGradientScale: updateOptions.memoryInputGradientScale,
+        recurrentGradientScale: updateOptions.recurrentGradientScale,
+      }
     );
     const applyMs = Date.now() - applyStartMs;
 
@@ -462,6 +473,7 @@ async function runWithGradientWorkers(
     ppoAdvantageBaseline: updateOptions.advantageBaseline,
     ppoMiniBatchSize: updateOptions.miniBatchSize,
     ppoGradientScale: updateOptions.gradientScale,
+    ppoSequenceLength: updateOptions.sequenceLength,
     ppoGradientBatches: gradientBatches,
     averagePolicyUpdates: advantageStats.count / episodeCount,
     averageGradientUpdates: appliedUpdates / episodeCount,
@@ -832,11 +844,10 @@ function readPpoGradientScaleEnv(
 
 function readTrainableLayersEnv(
   name: string,
-  fallback: "all" | "output"
-): "all" | "output" {
-  return process.env[name]?.trim().toLowerCase() === "output"
-    ? "output"
-    : fallback;
+  fallback: TrainableLayerMode
+): TrainableLayerMode {
+  const value = process.env[name]?.trim().toLowerCase();
+  return value === "output" || value === "memory" ? value : fallback;
 }
 
 function getModelHiddenLayerSizes(model: NeuralActionRankingModel): number[] {

@@ -1,7 +1,10 @@
 import fs from "fs";
 import { getBasicAIStyleNames } from "../shared/ComputerV1";
 import { trainNeuralActionRankingPolicy } from "../shared/ActionRankingTraining";
-import type { NeuralActionRankingModel } from "../shared/NeuralActionRankingPolicy";
+import type {
+  NeuralActionRankingModel,
+  TrainableLayerMode,
+} from "../shared/NeuralActionRankingPolicy";
 import type { Move } from "../shared/MoveHandler";
 
 const seed = process.env.SEED ?? "action-ranking-training";
@@ -126,6 +129,7 @@ const options = {
   ),
   rlPpoScoreRewardWeight: readNumberEnv("RL_PPO_SCORE_WEIGHT", 0),
   rlPpoPounceRewardWeight: readNumberEnv("RL_PPO_POUNCE_WEIGHT", 0.5),
+  rlPpoRecurrentBackpropSteps: readIntegerEnv("RL_PPO_RECURRENT_STEPS", 8),
   rlPpoMaxConsecutiveWaitMoves: readIntegerEnv(
     "RL_PPO_MAX_CONSECUTIVE_WAITS",
     40
@@ -136,6 +140,9 @@ const options = {
   ),
   rlPpoMiniBatchSize: readIntegerEnv("RL_PPO_MINIBATCH_SIZE", 1),
   rlPpoGradientScale: readPpoGradientScaleEnv("RL_PPO_GRADIENT_SCALE", "sum"),
+  rlPpoMemoryInputGradientScale: readNumberEnv("RL_PPO_MEMORY_INPUT_SCALE", 1),
+  rlPpoRecurrentGradientScale: readNumberEnv("RL_PPO_RECURRENT_SCALE", 1),
+  rlPpoSequenceLength: readIntegerEnv("RL_PPO_SEQUENCE_LENGTH", 1),
   rlOpponentMode: readRlOpponentModeEnv(
     "RL_OPPONENT_MODE",
     rlAlgorithm === "ppo" ? "self" : "teacher"
@@ -779,13 +786,16 @@ function readPairwiseFeatureModeEnv(
 
 function readTrainableLayersEnv(
   name: string,
-  fallback: "all" | "output"
-): "all" | "output" {
+  fallback: TrainableLayerMode
+): TrainableLayerMode {
   const value = process.env[name];
   if (value == null || value.trim() === "") {
     return fallback;
   }
-  return value.toLowerCase() === "output" ? "output" : fallback;
+  const normalized = value.toLowerCase();
+  return normalized === "output" || normalized === "memory"
+    ? normalized
+    : fallback;
 }
 
 function getModelHiddenLayerSizes(model: NeuralActionRankingModel): number[] {

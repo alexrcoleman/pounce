@@ -1,11 +1,14 @@
 import { parentPort, workerData } from "worker_threads";
 import {
   collectPpoSelfPlayRolloutBatch,
+  createPpoSequenceGradientUpdates,
   type PpoSelfPlayRolloutOptions,
 } from "../shared/ActionRankingTraining";
 import {
   NeuralActionRankingPolicy,
+  type ClippedPolicyGradientSequenceUpdate,
   type NeuralActionRankingModel,
+  type TrainableLayerMode,
 } from "../shared/NeuralActionRankingPolicy";
 
 type PpoGradientWorkerData = {
@@ -24,7 +27,8 @@ type ComputeGradientMessage = {
   temperature: number;
   clipRatio: number;
   entropyBonus: number;
-  trainableLayers: "all" | "output";
+  trainableLayers: TrainableLayerMode;
+  sequenceLength: number;
 };
 
 const data = workerData as PpoGradientWorkerData;
@@ -61,22 +65,34 @@ parentPort?.on("message", (message) => {
 
   const startMs = Date.now();
   const policy = new NeuralActionRankingPolicy(request.model);
-  const gradientUpdates = batch.updates.map((update) => ({
-    candidates: update.candidates,
-    selectedCandidateIndex: update.selectedCandidateIndex,
-    oldProbability: update.oldProbability,
-    memoryState: update.memoryState,
-    advantage: getNormalizedAdvantage(update.rawAdvantage, request),
-  }));
-  const result = policy.computeClippedPolicyGradientBatchGradient(
-    gradientUpdates,
-    {
-      temperature: request.temperature,
-      clipRatio: request.clipRatio,
-      entropyBonus: request.entropyBonus,
-      trainableLayers: request.trainableLayers,
-    }
-  );
+  const sequenceLength = Math.max(1, Math.floor(request.sequenceLength));
+  const result =
+    sequenceLength > 1 && batch.sequenceUpdates.length > 0
+      ? policy.computeClippedPolicyGradientSequenceBatchGradient(
+          getNormalizedSequenceUpdates(request, sequenceLength),
+          {
+            temperature: request.temperature,
+            clipRatio: request.clipRatio,
+            entropyBonus: request.entropyBonus,
+            trainableLayers: request.trainableLayers,
+          }
+        )
+      : policy.computeClippedPolicyGradientBatchGradient(
+          batch.updates.map((update) => ({
+            candidates: update.candidates,
+            selectedCandidateIndex: update.selectedCandidateIndex,
+            oldProbability: update.oldProbability,
+            memoryState: update.memoryState,
+            recurrentMemoryTransition: update.recurrentMemoryTransition,
+            advantage: getNormalizedAdvantage(update.rawAdvantage, request),
+          })),
+          {
+            temperature: request.temperature,
+            clipRatio: request.clipRatio,
+            entropyBonus: request.entropyBonus,
+            trainableLayers: request.trainableLayers,
+          }
+        );
 
   parentPort?.postMessage({
     type: "gradient",
@@ -97,6 +113,18 @@ parentPort?.on("message", (message) => {
     },
   });
 });
+
+function getNormalizedSequenceUpdates(
+  request: ComputeGradientMessage,
+  sequenceLength: number
+): ClippedPolicyGradientSequenceUpdate[] {
+  return createPpoSequenceGradientUpdates(batch.sequenceUpdates, {
+    sequenceLength,
+    mean: request.mean,
+    scale: request.scale,
+    advantageClip: request.advantageClip,
+  });
+}
 
 function getNormalizedAdvantage(
   rawAdvantage: number,
