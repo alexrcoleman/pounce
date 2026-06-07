@@ -168,6 +168,9 @@ for (const seed of seeds) {
     if (hasDeckConnectorLine(puzzle.sequence)) {
       deckConnectorCount += 1;
     }
+    if (puzzle.templateId === "deck-connector-pounce") {
+      assertNoDeckConnectorSolitaireSideMoves(puzzle);
+    }
     if (hasDeckShiftConnectorLine(puzzle.sequence)) {
       deckShiftConnectorCount += 1;
     }
@@ -781,4 +784,51 @@ function assertValidSolitaireStacks(stacks: CardState[][]): void {
 
 function isBlackSuit(card: CardState): boolean {
   return card.suit === "clubs" || card.suit === "spades";
+}
+
+function assertNoDeckConnectorSolitaireSideMoves(
+  puzzle: ReturnType<typeof createPounceRushPuzzle>
+): void {
+  assert.equal(
+    countLegalSolitaireToSolitaireMoves(puzzle.board),
+    0,
+    `${puzzle.reportCode} should not start with solitaire side moves`
+  );
+
+  const afterConnector = deepClone(puzzle.board);
+  assert.notEqual(executeMove(afterConnector, 0, puzzle.sequence[0]), null);
+  assert.equal(
+    countLegalSolitaireToSolitaireMoves(afterConnector),
+    0,
+    `${puzzle.reportCode} should not expose solitaire side moves after connector`
+  );
+}
+
+function countLegalSolitaireToSolitaireMoves(
+  board: ReturnType<typeof createPounceRushPuzzle>["board"]
+): number {
+  const player = board.players[0];
+  let count = 0;
+
+  player.stacks.forEach((sourceStack, source) => {
+    for (let movingCount = 1; movingCount <= sourceStack.length; movingCount++) {
+      player.stacks.forEach((_destStack, dest) => {
+        if (source === dest) {
+          return;
+        }
+        const boardCopy = deepClone(board);
+        const move: Move = {
+          type: "s2s",
+          source,
+          dest,
+          count: movingCount,
+        };
+        if (executeMove(boardCopy, 0, move) != null) {
+          count += 1;
+        }
+      });
+    }
+  });
+
+  return count;
 }

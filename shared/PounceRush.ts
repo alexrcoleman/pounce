@@ -301,8 +301,8 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
         stacks: singleStacks(
           card("spades", nextValue(deckValue)),
           card("spades", 12),
-          card("hearts", 13),
-          card("diamonds", 11)
+          card("clubs", 12),
+          card("spades", 13)
         ),
         piles: [
           suitedPile("hearts", 2),
@@ -987,6 +987,11 @@ export function createPounceRushPuzzle({
       assertSolitaireStacksAreValid(board, template.id);
       assertSolutionClearsPounce(board, setup.sequence, template.id);
       assertSequenceIsLegal(board, setup.sequence, template.id);
+      assertNoDeckConnectorSolitaireSideMoves(
+        board,
+        setup.sequence,
+        template.id
+      );
       assertNoUnexpectedLegalMoves(board, setup.sequence, template.id);
 
       return {
@@ -1710,6 +1715,42 @@ function assertNoUnexpectedLegalMoves(
       );
     }
   });
+}
+
+function assertNoDeckConnectorSolitaireSideMoves(
+  board: BoardState,
+  sequence: Move[],
+  templateId: string
+): void {
+  if (templateId !== "deck-connector-pounce") {
+    return;
+  }
+
+  assertNoLegalSolitaireSideMove(board, templateId, "at start");
+
+  const boardCopy = deepClone(board);
+  const firstMove = sequence[0];
+  if (firstMove) {
+    executeMove(boardCopy, PLAYER_INDEX, firstMove);
+    assertNoLegalSolitaireSideMove(boardCopy, templateId, "after connector");
+  }
+}
+
+function assertNoLegalSolitaireSideMove(
+  board: BoardState,
+  templateId: string,
+  label: string
+): void {
+  const sideMove = getLegalPounceRushMoves(board).find(
+    (move) => move.type === "s2s"
+  );
+  if (sideMove) {
+    throw new Error(
+      `Pounce Rush puzzle ${templateId} has a solitaire side move ${label}: ${getMoveKey(
+        sideMove
+      )}`
+    );
+  }
 }
 
 function getTemplateObjective(templateId: string): PounceRushObjective {
