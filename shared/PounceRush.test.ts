@@ -27,6 +27,23 @@ const reportedPuzzles = [
 const puzzlesPerSeed = getPounceRushTemplateCount() * 36;
 const templateOptions = getPounceRushTemplateOptions();
 const observedTemplateIds = new Set<string>();
+const valueVarietyTemplateIds = [
+  "pounce-center-scan",
+  "solitaire-center-scan",
+  "waste-center-pounce",
+  "free-slot-pounce",
+  "deck-connector-pounce",
+  "uncover-connector-pounce",
+  "tall-free-slot-pounce",
+  "uncover-center",
+  "waste-solitaire-center-pounce",
+  "waste-double-solitaire-center-pounce",
+  "waste-center-uncover-pounce",
+  "uncover-free-pounce",
+];
+const firstMoveValuesByTemplate = new Map<string, Set<number>>(
+  valueVarietyTemplateIds.map((templateId) => [templateId, new Set<number>()])
+);
 let deckConnectorCount = 0;
 let deckShiftConnectorCount = 0;
 let deckRevealCenterCount = 0;
@@ -78,6 +95,22 @@ assert.equal(
   new Set(templateOptions.map((option) => option.id)).size,
   templateOptions.length
 );
+assert.equal(getTemplateOption("pounce-center-scan")?.difficultyScore, 1);
+assert.equal(getTemplateOption("solitaire-center-scan")?.difficultyScore, 3);
+assert.equal(getTemplateOption("free-slot-pounce")?.difficultyScore, 4);
+[
+  "advance-center-for-pounce",
+  "free-slot-pounce-generated",
+  "pounce-center-generated",
+  "solitaire-center-generated",
+  "waste-center-generated",
+].forEach((templateId) => {
+  assert.equal(
+    getTemplateOption(templateId),
+    undefined,
+    `${templateId} should be folded into its non-generated archetype`
+  );
+});
 
 for (const option of templateOptions) {
   const puzzle = createPounceRushPuzzle({
@@ -121,6 +154,11 @@ for (const seed of seeds) {
       puzzle.sequence,
       observedSequenceValues
     );
+    const firstMoveValueSet = firstMoveValuesByTemplate.get(puzzle.templateId);
+    const firstSourceCard = sequenceSourceCards[0];
+    if (firstMoveValueSet && firstSourceCard) {
+      firstMoveValueSet.add(firstSourceCard.value);
+    }
 
     if (hasDeckConnectorLine(puzzle.sequence)) {
       deckConnectorCount += 1;
@@ -271,6 +309,12 @@ assert.ok(
   uncoverTwoCenterValues.size > 2,
   "expected uncover-two-center card values to vary"
 );
+valueVarietyTemplateIds.forEach((templateId) => {
+  assert.ok(
+    (firstMoveValuesByTemplate.get(templateId)?.size ?? 0) > 1,
+    `expected ${templateId} first move values to vary`
+  );
+});
 const sequenceValues = Array.from(observedSequenceValues);
 assert.ok(Math.min(...sequenceValues) <= 4);
 assert.ok(Math.max(...sequenceValues) >= 12);
@@ -318,6 +362,10 @@ function assertDifficultyRange(
       puzzle.difficultyScore <= maxScore,
     `${puzzle.reportCode} expected D${minScore}-D${maxScore}, saw D${puzzle.difficultyScore}`
   );
+}
+
+function getTemplateOption(templateId: string) {
+  return templateOptions.find((option) => option.id === templateId);
 }
 
 function hasDeckConnectorLine(sequence: Move[]): boolean {

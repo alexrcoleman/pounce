@@ -131,63 +131,8 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     difficulty: "Warmup",
     difficultyScore: 1,
     tags: ["pounce", "center", "direct"],
-    build: () => ({
-      deckCard: card("hearts", 13),
-      flippedDeck: [card("clubs", 12)],
-      pounceDeck: [card("diamonds", 9), card("hearts", 4)],
-      stacks: singleStacks(
-        card("clubs", 13),
-        card("hearts", 10),
-        card("spades", 8),
-        card("diamonds", 6)
-      ),
-      piles: [
-        suitedPile("hearts", 3),
-        suitedPile("spades", 5),
-        suitedPile("diamonds", 3),
-        suitedPile("clubs", 3),
-      ],
-      sequence: [{ type: "c2c", source: { type: "pounce" }, dest: 0 }],
-    }),
-  },
-  {
-    id: "solitaire-center-scan",
-    kind: "solitaire_center",
-    objective: "Unload a pounce card",
-    difficulty: "Warmup",
-    difficultyScore: 3,
-    tags: ["solitaire", "center"],
-    build: () => ({
-      deckCard: card("spades", 13),
-      flippedDeck: [card("diamonds", 4)],
-      pounceDeck: [card("clubs", 5), card("spades", 7)],
-      stacks: singleStacks(
-        card("diamonds", 9),
-        card("clubs", 12),
-        card("spades", 6),
-        card("hearts", 10)
-      ),
-      piles: [
-        suitedPile("hearts", 3),
-        suitedPile("spades", 5),
-        suitedPile("diamonds", 2),
-        suitedPile("clubs", 4),
-      ],
-      sequence: [
-        { type: "c2c", source: { type: "solitaire", index: 2 }, dest: 1 },
-        { type: "c2c", source: { type: "pounce" }, dest: 1 },
-      ],
-    }),
-  },
-  {
-    id: "pounce-center-generated",
-    kind: "pounce_center",
-    objective: "Unload a pounce card",
-    difficulty: "Warmup",
-    difficultyScore: 2,
-    tags: ["pounce", "center", "direct"],
     build: ({ rng }) => {
-      const targetValue = pickValue(rng, [3, 4, 5, 7, 8, 9, 10, 11]);
+      const targetValue = pickValue(rng, [2, 3, 4, 5, 7, 8, 9, 10, 11, 12]);
       return {
         deckCard: card("spades", 13),
         flippedDeck: [card("diamonds", 2)],
@@ -209,7 +154,7 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     },
   },
   {
-    id: "solitaire-center-generated",
+    id: "solitaire-center-scan",
     kind: "solitaire_center",
     objective: "Unload a pounce card",
     difficulty: "Warmup",
@@ -270,7 +215,7 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     }),
   },
   {
-    id: "waste-center-generated",
+    id: "waste-center-pounce",
     kind: "waste_center",
     objective: "Unload a pounce card",
     difficulty: "Warmup",
@@ -308,41 +253,12 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     difficulty: "Sharp",
     difficultyScore: 4,
     tags: ["free-slot", "pounce", "stack-shift"],
-    build: () => ({
-      deckCard: card("clubs", 13),
-      flippedDeck: [card("hearts", 8)],
-      pounceDeck: [card("clubs", 9), card("hearts", 12)],
-      stacks: singleStacks(
-        card("clubs", 7),
-        card("diamonds", 8),
-        card("diamonds", 13),
-        card("spades", 10)
-      ),
-      piles: [
-        suitedPile("hearts", 4),
-        suitedPile("spades", 5),
-        suitedPile("diamonds", 6),
-        suitedPile("clubs", 4),
-      ],
-      sequence: [
-        { type: "s2s", source: 0, dest: 1, count: 1 },
-        { type: "c2s", source: "pounce", dest: 0 },
-      ],
-    }),
-  },
-  {
-    id: "free-slot-pounce-generated",
-    kind: "free_slot",
-    objective: "Unload a pounce card",
-    difficulty: "Sharp",
-    difficultyScore: 4,
-    tags: ["free-slot", "pounce", "stack-shift"],
     build: ({ rng }) => {
       const movingValue = pickValue(rng, [3, 4, 5, 6, 7, 8, 9, 10]);
       return {
-        deckCard: card("clubs", 13),
+        deckCard: card("hearts", 13),
         flippedDeck: [card("hearts", 12)],
-        pounceDeck: [card("diamonds", 12), card("clubs", 10)],
+        pounceDeck: [card("diamonds", 12), card("clubs", 13)],
         stacks: singleStacks(
           card("clubs", movingValue),
           card("diamonds", nextValue(movingValue)),
@@ -369,27 +285,33 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     difficulty: "Sharp",
     difficultyScore: 5,
     tags: ["deck", "solitaire", "pounce", "mixed-source"],
-    build: () => ({
-      deckCard: card("diamonds", 13),
-      flippedDeck: [card("hearts", 6)],
-      pounceDeck: [card("diamonds", 12), card("clubs", 5)],
-      stacks: singleStacks(
-        card("spades", 7),
-        card("spades", 10),
-        card("spades", 12),
-        card("spades", 13)
-      ),
-      piles: [
-        suitedPile("hearts", 4),
-        suitedPile("spades", 5),
-        suitedPile("diamonds", 3),
-        suitedPile("clubs", 3),
-      ],
-      sequence: [
-        { type: "c2s", source: "deck", dest: 0 },
-        { type: "c2s", source: "pounce", dest: 0 },
-      ],
-    }),
+    build: ({ rng }) => {
+      const deckValue = pickValue(rng, [4, 5, 6, 7, 8, 9, 10]);
+      return {
+        deckCard: card("clubs", 13),
+        flippedDeck: [card("hearts", deckValue)],
+        pounceDeck: [
+          card("diamonds", 12),
+          card("clubs", previousValue(deckValue)),
+        ],
+        stacks: singleStacks(
+          card("spades", nextValue(deckValue)),
+          card("spades", 12),
+          card("hearts", 13),
+          card("diamonds", 11)
+        ),
+        piles: [
+          suitedPile("hearts", 2),
+          suitedPile("spades", 5),
+          suitedPile("diamonds", 3),
+          suitedPile("clubs", 3),
+        ],
+        sequence: [
+          { type: "c2s", source: "deck", dest: 0 },
+          { type: "c2s", source: "pounce", dest: 0 },
+        ],
+      };
+    },
   },
   {
     id: "uncover-connector-pounce",
@@ -399,28 +321,33 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     difficultyScore: 6,
     minPuzzleNumber: 8,
     tags: ["uncover", "stack-shift", "solitaire", "center", "pounce"],
-    build: () => ({
-      deckCard: card("clubs", 13),
-      flippedDeck: [card("hearts", 8)],
-      pounceDeck: [card("clubs", 11), card("hearts", 7)],
-      stacks: [
-        [card("hearts", 6), card("clubs", 5)],
-        [card("diamonds", 6)],
-        [card("spades", 12)],
-        [card("spades", 13)],
-      ],
-      piles: [
-        suitedPile("hearts", 5),
-        suitedPile("spades", 4),
-        suitedPile("diamonds", 3),
-        suitedPile("clubs", 3),
-      ],
-      sequence: [
-        { type: "s2s", source: 0, dest: 1, count: 1 },
-        { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
-        { type: "c2c", source: { type: "pounce" }, dest: 0 },
-      ],
-    }),
+    build: ({ rng }) => {
+      const topValue = pickValue(rng, [4, 5, 6, 7, 8, 9]);
+      const uncoveredValue = nextValue(topValue);
+      const pounceValue = nextValue(uncoveredValue);
+      return {
+        deckCard: card("clubs", 13),
+        flippedDeck: [card("spades", 2)],
+        pounceDeck: [card("clubs", 11), card("hearts", pounceValue)],
+        stacks: [
+          [card("hearts", uncoveredValue), card("clubs", topValue)],
+          [card("diamonds", uncoveredValue)],
+          [card("spades", 12)],
+          [card("spades", 13)],
+        ],
+        piles: [
+          suitedPile("hearts", topValue),
+          suitedPile("spades", 4),
+          suitedPile("diamonds", 3),
+          suitedPile("clubs", 3),
+        ],
+        sequence: [
+          { type: "s2s", source: 0, dest: 1, count: 1 },
+          { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
+          { type: "c2c", source: { type: "pounce" }, dest: 0 },
+        ],
+      };
+    },
   },
   {
     id: "tall-free-slot-pounce",
@@ -430,27 +357,30 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     difficultyScore: 5,
     minPuzzleNumber: 6,
     tags: ["free-slot", "pounce", "stack-shift"],
-    build: () => ({
-      deckCard: card("clubs", 13),
-      flippedDeck: [card("hearts", 8)],
-      pounceDeck: [card("hearts", 11), card("clubs", 10)],
-      stacks: [
-        [card("hearts", 6), card("clubs", 5)],
-        [card("spades", 7)],
-        [card("spades", 12)],
-        [card("spades", 13)],
-      ],
-      piles: [
-        suitedPile("hearts", 4),
-        suitedPile("spades", 5),
-        suitedPile("diamonds", 3),
-        suitedPile("clubs", 3),
-      ],
-      sequence: [
-        { type: "s2s", source: 0, dest: 1, count: 2 },
-        { type: "c2s", source: "pounce", dest: 0 },
-      ],
-    }),
+    build: ({ rng }) => {
+      const topValue = pickValue(rng, [4, 5, 6, 7, 8, 9]);
+      return {
+        deckCard: card("hearts", 13),
+        flippedDeck: [card("hearts", 2)],
+        pounceDeck: [card("hearts", 11), card("clubs", 13)],
+        stacks: [
+          [card("hearts", nextValue(topValue)), card("clubs", topValue)],
+          [card("spades", valuePlus(topValue, 2))],
+          [card("spades", 12)],
+          [card("diamonds", 13)],
+        ],
+        piles: [
+          suitedPile("hearts", 3),
+          suitedPile("spades", 5),
+          suitedPile("diamonds", 3),
+          suitedPile("clubs", 3),
+        ],
+        sequence: [
+          { type: "s2s", source: 0, dest: 1, count: 2 },
+          { type: "c2s", source: "pounce", dest: 0 },
+        ],
+      };
+    },
   },
   {
     id: "uncover-center",
@@ -460,58 +390,33 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     difficultyScore: 6,
     minPuzzleNumber: 8,
     tags: ["uncover", "center", "stack-shift", "pounce"],
-    build: () => ({
-      deckCard: card("hearts", 13),
-      flippedDeck: [card("hearts", 12)],
-      pounceDeck: [card("clubs", 11), card("hearts", 7)],
-      stacks: [
-        [card("hearts", 6), card("clubs", 5)],
-        [card("diamonds", 6)],
-        [card("spades", 12)],
-        [card("diamonds", 9)],
-      ],
-      piles: [
-        suitedPile("hearts", 5),
-        suitedPile("spades", 4),
-        suitedPile("diamonds", 3),
-        suitedPile("clubs", 2),
-      ],
-      sequence: [
-        { type: "s2s", source: 0, dest: 1, count: 1 },
-        { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
-        { type: "c2c", source: { type: "pounce" }, dest: 0 },
-      ],
-    }),
-  },
-  {
-    id: "advance-center-for-pounce",
-    kind: "combo",
-    objective: "Unload a pounce card",
-    difficulty: "Combo",
-    difficultyScore: 3,
-    minPuzzleNumber: 4,
-    tags: ["solitaire", "center", "pounce"],
-    build: () => ({
-      deckCard: card("diamonds", 13),
-      flippedDeck: [card("clubs", 12)],
-      pounceDeck: [card("clubs", 9), card("hearts", 7)],
-      stacks: singleStacks(
-        card("clubs", 13),
-        card("diamonds", 9),
-        card("hearts", 6),
-        card("spades", 12)
-      ),
-      piles: [
-        suitedPile("hearts", 5),
-        suitedPile("spades", 4),
-        suitedPile("diamonds", 6),
-        suitedPile("clubs", 2),
-      ],
-      sequence: [
-        { type: "c2c", source: { type: "solitaire", index: 2 }, dest: 0 },
-        { type: "c2c", source: { type: "pounce" }, dest: 0 },
-      ],
-    }),
+    build: ({ rng }) => {
+      const topValue = pickValue(rng, [4, 5, 6, 7, 8, 9]);
+      const uncoveredValue = nextValue(topValue);
+      const pounceValue = nextValue(uncoveredValue);
+      return {
+        deckCard: card("hearts", 13),
+        flippedDeck: [card("spades", 2)],
+        pounceDeck: [card("clubs", 11), card("hearts", pounceValue)],
+        stacks: [
+          [card("hearts", uncoveredValue), card("clubs", topValue)],
+          [card("diamonds", uncoveredValue)],
+          [card("spades", 12)],
+          [card("diamonds", 13)],
+        ],
+        piles: [
+          suitedPile("hearts", topValue),
+          suitedPile("spades", 4),
+          suitedPile("diamonds", 3),
+          suitedPile("clubs", 2),
+        ],
+        sequence: [
+          { type: "s2s", source: 0, dest: 1, count: 1 },
+          { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
+          { type: "c2c", source: { type: "pounce" }, dest: 0 },
+        ],
+      };
+    },
   },
   {
     id: "solitaire-waste-center-pounce",
@@ -557,28 +462,33 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     difficultyScore: 6,
     minPuzzleNumber: 8,
     tags: ["waste", "solitaire", "center", "mixed-source", "pounce"],
-    build: () => ({
-      deckCard: card("spades", 13),
-      flippedDeck: [card("hearts", 9)],
-      pounceDeck: [card("clubs", 12), card("hearts", 11)],
-      stacks: [
-        [card("diamonds", 13)],
-        [card("clubs", 13)],
-        [card("hearts", 10)],
-        [card("diamonds", 12)],
-      ],
-      piles: [
-        suitedPile("hearts", 8),
-        suitedPile("spades", 4),
-        suitedPile("diamonds", 3),
-        suitedPile("clubs", 3),
-      ],
-      sequence: [
-        { type: "c2c", source: { type: "deck" }, dest: 0 },
-        { type: "c2c", source: { type: "solitaire", index: 2 }, dest: 0 },
-        { type: "c2c", source: { type: "pounce" }, dest: 0 },
-      ],
-    }),
+    build: ({ rng }) => {
+      const wasteValue = pickValue(rng, [4, 5, 6, 7, 8, 9]);
+      const solitaireValue = nextValue(wasteValue);
+      const pounceValue = nextValue(solitaireValue);
+      return {
+        deckCard: card("spades", 13),
+        flippedDeck: [card("hearts", wasteValue)],
+        pounceDeck: [card("clubs", 12), card("hearts", pounceValue)],
+        stacks: [
+          [card("diamonds", 13)],
+          [card("clubs", 13)],
+          [card("hearts", solitaireValue)],
+          [card("diamonds", 12)],
+        ],
+        piles: [
+          suitedPile("hearts", previousValue(wasteValue)),
+          suitedPile("spades", 4),
+          suitedPile("diamonds", 3),
+          suitedPile("clubs", 3),
+        ],
+        sequence: [
+          { type: "c2c", source: { type: "deck" }, dest: 0 },
+          { type: "c2c", source: { type: "solitaire", index: 2 }, dest: 0 },
+          { type: "c2c", source: { type: "pounce" }, dest: 0 },
+        ],
+      };
+    },
   },
   {
     id: "waste-double-solitaire-center-pounce",
@@ -595,29 +505,35 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
       "mixed-source",
       "pounce",
     ],
-    build: () => ({
-      deckCard: card("spades", 13),
-      flippedDeck: [card("diamonds", 8)],
-      pounceDeck: [card("spades", 12), card("diamonds", 11)],
-      stacks: [
-        [card("clubs", 10), card("diamonds", 9)],
-        [card("clubs", 11), card("diamonds", 10)],
-        [card("hearts", 13)],
-        [card("clubs", 8)],
-      ],
-      piles: [
-        suitedPile("diamonds", 7),
-        suitedPile("hearts", 4),
-        suitedPile("spades", 5),
-        suitedPile("clubs", 3),
-      ],
-      sequence: [
-        { type: "c2c", source: { type: "deck" }, dest: 0 },
-        { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
-        { type: "c2c", source: { type: "solitaire", index: 1 }, dest: 0 },
-        { type: "c2c", source: { type: "pounce" }, dest: 0 },
-      ],
-    }),
+    build: ({ rng }) => {
+      const wasteValue = pickValue(rng, [4, 5, 6, 7, 8, 9]);
+      const firstValue = nextValue(wasteValue);
+      const secondValue = nextValue(firstValue);
+      const pounceValue = nextValue(secondValue);
+      return {
+        deckCard: card("spades", 13),
+        flippedDeck: [card("diamonds", wasteValue)],
+        pounceDeck: [card("spades", 12), card("diamonds", pounceValue)],
+        stacks: [
+          [card("clubs", secondValue), card("diamonds", firstValue)],
+          [card("clubs", pounceValue), card("diamonds", secondValue)],
+          [card("hearts", 13)],
+          [card("clubs", 3)],
+        ],
+        piles: [
+          suitedPile("diamonds", previousValue(wasteValue)),
+          [],
+          [],
+          [],
+        ],
+        sequence: [
+          { type: "c2c", source: { type: "deck" }, dest: 0 },
+          { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
+          { type: "c2c", source: { type: "solitaire", index: 1 }, dest: 0 },
+          { type: "c2c", source: { type: "pounce" }, dest: 0 },
+        ],
+      };
+    },
   },
   {
     id: "waste-center-uncover-pounce",
@@ -635,29 +551,34 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
       "mixed-source",
       "pounce",
     ],
-    build: () => ({
-      deckCard: card("spades", 13),
-      flippedDeck: [card("hearts", 6)],
-      pounceDeck: [card("spades", 12), card("hearts", 8)],
-      stacks: [
-        [card("hearts", 7), card("clubs", 6)],
-        [card("diamonds", 7)],
-        [card("hearts", 13)],
-        [card("clubs", 13)],
-      ],
-      piles: [
-        suitedPile("hearts", 5),
-        suitedPile("spades", 4),
-        suitedPile("diamonds", 3),
-        suitedPile("clubs", 3),
-      ],
-      sequence: [
-        { type: "c2c", source: { type: "deck" }, dest: 0 },
-        { type: "s2s", source: 0, dest: 1, count: 1 },
-        { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
-        { type: "c2c", source: { type: "pounce" }, dest: 0 },
-      ],
-    }),
+    build: ({ rng }) => {
+      const wasteValue = pickValue(rng, [4, 5, 6, 7, 8, 9]);
+      const uncoveredValue = nextValue(wasteValue);
+      const pounceValue = nextValue(uncoveredValue);
+      return {
+        deckCard: card("spades", 13),
+        flippedDeck: [card("hearts", wasteValue)],
+        pounceDeck: [card("spades", 12), card("hearts", pounceValue)],
+        stacks: [
+          [card("hearts", uncoveredValue), card("clubs", wasteValue)],
+          [card("diamonds", uncoveredValue)],
+          [card("hearts", 13)],
+          [card("clubs", 13)],
+        ],
+        piles: [
+          suitedPile("hearts", previousValue(wasteValue)),
+          suitedPile("spades", 4),
+          suitedPile("diamonds", 3),
+          suitedPile("clubs", 3),
+        ],
+        sequence: [
+          { type: "c2c", source: { type: "deck" }, dest: 0 },
+          { type: "s2s", source: 0, dest: 1, count: 1 },
+          { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
+          { type: "c2c", source: { type: "pounce" }, dest: 0 },
+        ],
+      };
+    },
   },
   {
     id: "deck-shift-open-slot-pounce",
@@ -879,28 +800,32 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     difficultyScore: 7,
     minPuzzleNumber: 12,
     tags: ["uncover", "free-slot", "center", "pounce"],
-    build: () => ({
-      deckCard: card("spades", 13),
-      flippedDeck: [card("hearts", 12)],
-      pounceDeck: [card("diamonds", 11), card("clubs", 12)],
-      stacks: [
-        [card("hearts", 6), card("clubs", 5)],
-        [card("diamonds", 6)],
-        [card("spades", 11)],
-        [card("hearts", 9)],
-      ],
-      piles: [
-        suitedPile("hearts", 5),
-        suitedPile("spades", 4),
-        suitedPile("diamonds", 3),
-        suitedPile("clubs", 4),
-      ],
-      sequence: [
-        { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 3 },
-        { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
-        { type: "c2s", source: "pounce", dest: 0 },
-      ],
-    }),
+    build: ({ rng }) => {
+      const topValue = pickValue(rng, [4, 5, 6, 7, 8, 9]);
+      const uncoveredValue = nextValue(topValue);
+      return {
+        deckCard: card("spades", 13),
+        flippedDeck: [card("hearts", 2)],
+        pounceDeck: [card("diamonds", 11), card("clubs", 13)],
+        stacks: [
+          [card("hearts", uncoveredValue), card("clubs", topValue)],
+          [card("diamonds", uncoveredValue)],
+          [card("spades", 11)],
+          [card("hearts", 13)],
+        ],
+        piles: [
+          suitedPile("hearts", topValue),
+          suitedPile("spades", 4),
+          suitedPile("diamonds", 3),
+          suitedPile("clubs", previousValue(topValue)),
+        ],
+        sequence: [
+          { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 3 },
+          { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
+          { type: "c2s", source: "pounce", dest: 0 },
+        ],
+      };
+    },
   },
 ];
 
