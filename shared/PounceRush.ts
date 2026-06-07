@@ -2218,8 +2218,8 @@ function createShuttleUncoverFreePounceSetup(rng: () => number): PuzzleSetup {
   const uncoveredValue = valuePlus(movedValue, 1);
 
   return {
-    deckCard: card("hearts", 1),
-    flippedDeck: [card("spades", 1)],
+    deckCard: card("hearts", 2),
+    flippedDeck: [card("spades", 2)],
     pounceDeck: [card("clubs", 1), card("diamonds", 13)],
     stacks: [
       [card("diamonds", uncoveredValue), card("clubs", movedValue)],
@@ -2247,8 +2247,8 @@ function createShuttleBackFreePounceSetup(rng: () => number): PuzzleSetup {
   const baseValue = valuePlus(movedValue, 2);
 
   return {
-    deckCard: card("hearts", 1),
-    flippedDeck: [card("spades", 1)],
+    deckCard: card("hearts", 2),
+    flippedDeck: [card("spades", 2)],
     pounceDeck: [card("clubs", 1), card("diamonds", 13)],
     stacks: [
       [

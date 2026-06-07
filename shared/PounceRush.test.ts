@@ -152,6 +152,16 @@ for (const seed of seeds) {
     if (puzzle.templateId === "shuttle-uncover-free-pounce") {
       shuttleUncoverFreeSlotCount += 1;
     }
+    if (
+      puzzle.templateId === "shuttle-back-free-pounce" ||
+      puzzle.templateId === "shuttle-uncover-free-pounce"
+    ) {
+      assert.notEqual(
+        puzzle.board.players[0].flippedDeck.at(-1)?.value,
+        1,
+        `${puzzle.templateId} should not show a playable-looking waste ace`
+      );
+    }
     if (puzzle.templateId === "deck-stack-reveal-center-pounce") {
       const firstMove = puzzle.sequence[0];
       if (firstMove?.type === "c2s" && firstMove.source === "deck") {
