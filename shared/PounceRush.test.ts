@@ -42,6 +42,10 @@ let wasteFirstCenterCount = 0;
 let wasteFirstDoubleCenterCount = 0;
 let wasteUncoverCenterCount = 0;
 const observedSequenceValues = new Set<number>();
+const deckStackRevealDestDepths = new Set<number>();
+const deckStackRevealWasteValues = new Set<number>();
+const uncoverTwoCenterValues = new Set<number>();
+let shuttleUncoverFreeSlotCount = 0;
 
 const firstRushPuzzle = createPounceRushPuzzle({
   playerName: "Player",
@@ -111,7 +115,11 @@ for (const seed of seeds) {
     assertUniqueCards(getAllCards(puzzle.board));
     assertValidSolitaireStacks(puzzle.board.players[0].stacks);
     assertPounceClearingSequence(puzzle.sequence);
-    recordSequenceValues(puzzle.board, puzzle.sequence, observedSequenceValues);
+    const sequenceSourceCards = recordSequenceValues(
+      puzzle.board,
+      puzzle.sequence,
+      observedSequenceValues
+    );
 
     if (hasDeckConnectorLine(puzzle.sequence)) {
       deckConnectorCount += 1;
@@ -136,6 +144,31 @@ for (const seed of seeds) {
     }
     if (hasStackShuttleLine(puzzle.sequence)) {
       stackShuttleCount += 1;
+    }
+    if (puzzle.templateId === "shuttle-uncover-free-pounce") {
+      shuttleUncoverFreeSlotCount += 1;
+    }
+    if (puzzle.templateId === "deck-stack-reveal-center-pounce") {
+      const firstMove = puzzle.sequence[0];
+      if (firstMove?.type === "c2s" && firstMove.source === "deck") {
+        deckStackRevealDestDepths.add(
+          puzzle.board.players[0].stacks[firstMove.dest].length
+        );
+        const wasteCard = sequenceSourceCards[0];
+        if (wasteCard) {
+          deckStackRevealWasteValues.add(wasteCard.value);
+        }
+      }
+    }
+    if (puzzle.templateId === "uncover-two-center-pounce") {
+      puzzle.sequence.forEach((move, index) => {
+        if (move.type === "c2c" && move.source.type === "solitaire") {
+          const sourceCard = sequenceSourceCards[index];
+          if (sourceCard) {
+            uncoverTwoCenterValues.add(sourceCard.value);
+          }
+        }
+      });
     }
     if (hasWasteFirstCenterLine(puzzle.sequence)) {
       wasteFirstCenterCount += 1;
@@ -186,6 +219,10 @@ assert.ok(
   "expected growing stack-shuttle pounce puzzles"
 );
 assert.ok(
+  shuttleUncoverFreeSlotCount > 0,
+  "expected simpler shuttle uncover free-slot puzzles"
+);
+assert.ok(
   wasteFirstCenterCount > 0,
   "expected waste-first center pounce puzzles"
 );
@@ -203,6 +240,18 @@ assert.ok(extraCenterPileCount > 0, "expected later puzzles with extra piles");
 assert.ok(
   observedSequenceValues.size >= 10,
   "expected broader sequence card values"
+);
+assert.ok(
+  deckStackRevealWasteValues.size > 1,
+  "expected deck stack reveal waste values to vary"
+);
+assert.ok(
+  deckStackRevealDestDepths.size > 1,
+  "expected deck stack reveal destination stack depth to vary"
+);
+assert.ok(
+  uncoverTwoCenterValues.size > 2,
+  "expected uncover-two-center card values to vary"
 );
 const sequenceValues = Array.from(observedSequenceValues);
 assert.ok(Math.min(...sequenceValues) <= 4);
@@ -428,15 +477,18 @@ function recordSequenceValues(
   board: ReturnType<typeof createPounceRushPuzzle>["board"],
   sequence: Move[],
   values: Set<number>
-): void {
+): (CardState | null)[] {
   const boardCopy = deepClone(board);
+  const sourceCards: (CardState | null)[] = [];
   sequence.forEach((move) => {
     const sourceCard = getMoveSourceCard(boardCopy, move);
+    sourceCards.push(sourceCard);
     if (sourceCard) {
       values.add(sourceCard.value);
     }
     assert.notEqual(executeMove(boardCopy, 0, move), null);
   });
+  return sourceCards;
 }
 
 function getMoveSourceCard(

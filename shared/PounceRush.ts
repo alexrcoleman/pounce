@@ -717,29 +717,7 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
       "center",
       "pounce",
     ],
-    build: () => ({
-      deckCard: card("spades", 13),
-      flippedDeck: [card("diamonds", 12)],
-      pounceDeck: [card("clubs", 12), card("hearts", 7)],
-      stacks: [
-        [card("hearts", 6), card("clubs", 5), card("diamonds", 4)],
-        [card("spades", 5)],
-        [card("hearts", 13)],
-        [card("diamonds", 10)],
-      ],
-      piles: [
-        suitedPile("clubs", 4),
-        suitedPile("hearts", 5),
-        suitedPile("diamonds", 6),
-        suitedPile("spades", 3),
-      ],
-      sequence: [
-        { type: "s2s", source: 0, dest: 1, count: 1 },
-        { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
-        { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 1 },
-        { type: "c2c", source: { type: "pounce" }, dest: 1 },
-      ],
-    }),
+    build: ({ rng }) => createUncoverTwoCenterPounceSetup(rng),
   },
   {
     id: "deck-stack-reveal-center-pounce",
@@ -757,29 +735,7 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
       "mixed-source",
       "pounce",
     ],
-    build: () => ({
-      deckCard: card("clubs", 13),
-      flippedDeck: [card("hearts", 6)],
-      pounceDeck: [card("clubs", 12), card("diamonds", 7)],
-      stacks: [
-        [card("diamonds", 6), card("clubs", 5)],
-        [card("spades", 7)],
-        [card("hearts", 13)],
-        [card("spades", 9)],
-      ],
-      piles: [
-        suitedPile("diamonds", 5),
-        suitedPile("hearts", 4),
-        suitedPile("spades", 3),
-        suitedPile("clubs", 7),
-      ],
-      sequence: [
-        { type: "c2s", source: "deck", dest: 1 },
-        { type: "s2s", source: 0, dest: 1, count: 1 },
-        { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
-        { type: "c2c", source: { type: "pounce" }, dest: 0 },
-      ],
-    }),
+    build: ({ rng }) => createDeckStackRevealCenterPounceSetup(rng),
   },
   {
     id: "double-solitaire-waste-center-pounce",
@@ -861,6 +817,24 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
         ],
       };
     },
+  },
+  {
+    id: "shuttle-uncover-free-pounce",
+    kind: "free_slot",
+    objective: "Unload a pounce card",
+    difficulty: "Combo",
+    difficultyScore: 8,
+    minPuzzleNumber: 16,
+    tags: [
+      "center",
+      "free-slot",
+      "pounce",
+      "shuttle",
+      "solitaire",
+      "stack-shift",
+      "uncover",
+    ],
+    build: ({ rng }) => createShuttleUncoverFreePounceSetup(rng),
   },
   {
     id: "stack-shuttle-free-slot",
@@ -2150,6 +2124,143 @@ function singleStacks(
   fourth: CardState
 ): [CardState[], CardState[], CardState[], CardState[]] {
   return [[first], [second], [third], [fourth]];
+}
+
+function createUncoverTwoCenterPounceSetup(rng: () => number): PuzzleSetup {
+  const movedValue = pickValue(rng, [3, 4, 5, 6, 7, 8, 9]);
+  const firstCenterValue = valuePlus(movedValue, 1);
+  const secondCenterValue = valuePlus(movedValue, 2);
+  const pounceValue = valuePlus(movedValue, 3);
+  const destinationDepth = pickNumber(rng, [1, 2, 3]);
+
+  return {
+    deckCard: card("spades", 1),
+    flippedDeck: [card("hearts", 1)],
+    pounceDeck: [card("clubs", 1), card("diamonds", pounceValue)],
+    stacks: [
+      [
+        card("diamonds", secondCenterValue),
+        card("clubs", firstCenterValue),
+        card("hearts", movedValue),
+      ],
+      createUncoverTwoDestinationStack(movedValue, destinationDepth),
+      [card("hearts", 13)],
+      [card("diamonds", 13)],
+    ],
+    piles: [
+      suitedPile("clubs", previousValue(firstCenterValue)),
+      suitedPile("diamonds", previousValue(secondCenterValue)),
+      suitedPile("hearts", blockedPileTop(movedValue, rng)),
+      suitedPile("spades", blockedPileTop(firstCenterValue, rng)),
+    ],
+    sequence: [
+      { type: "s2s", source: 0, dest: 1, count: 1 },
+      { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
+      { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 1 },
+      { type: "c2c", source: { type: "pounce" }, dest: 1 },
+    ],
+  };
+}
+
+function createDeckStackRevealCenterPounceSetup(
+  rng: () => number
+): PuzzleSetup {
+  const movedValue = pickValue(rng, [4, 5, 6, 7, 8, 9]);
+  const uncoveredValue = valuePlus(movedValue, 1);
+  const pounceValue = valuePlus(movedValue, 2);
+  const destinationDepth = pickNumber(rng, [1, 2, 3]);
+
+  return {
+    deckCard: card("spades", 1),
+    flippedDeck: [card("hearts", uncoveredValue)],
+    pounceDeck: [card("clubs", 1), card("diamonds", pounceValue)],
+    stacks: [
+      [card("diamonds", uncoveredValue), card("clubs", movedValue)],
+      createDeckRevealDestinationStack(movedValue, destinationDepth),
+      [card("hearts", 13)],
+      [card("diamonds", 13)],
+    ],
+    piles: [
+      suitedPile("diamonds", previousValue(uncoveredValue)),
+      suitedPile("hearts", blockedPileTop(uncoveredValue, rng)),
+      suitedPile("spades", blockedPileTop(pounceValue, rng)),
+      suitedPile("clubs", blockedPileTop(movedValue, rng)),
+    ],
+    sequence: [
+      { type: "c2s", source: "deck", dest: 1 },
+      { type: "s2s", source: 0, dest: 1, count: 1 },
+      { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
+      { type: "c2c", source: { type: "pounce" }, dest: 0 },
+    ],
+  };
+}
+
+function createShuttleUncoverFreePounceSetup(rng: () => number): PuzzleSetup {
+  const movedValue = pickValue(rng, [4, 5, 6, 7, 8, 9]);
+  const uncoveredValue = valuePlus(movedValue, 1);
+
+  return {
+    deckCard: card("hearts", 1),
+    flippedDeck: [card("spades", 1)],
+    pounceDeck: [card("clubs", 1), card("diamonds", 13)],
+    stacks: [
+      [card("diamonds", uncoveredValue), card("clubs", movedValue)],
+      [card("hearts", uncoveredValue)],
+      [card("hearts", 13)],
+      [card("clubs", 13)],
+    ],
+    piles: [
+      suitedPile("diamonds", previousValue(uncoveredValue)),
+      suitedPile("clubs", blockedPileTop(movedValue, rng)),
+      suitedPile("hearts", blockedPileTop(uncoveredValue, rng)),
+      suitedPile("spades", 12),
+    ],
+    sequence: [
+      { type: "s2s", source: 0, dest: 1, count: 1 },
+      { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
+      { type: "c2s", source: "pounce", dest: 0 },
+    ],
+  };
+}
+
+function createUncoverTwoDestinationStack(
+  movedValue: Values,
+  depth: number
+): CardState[] {
+  const stack = [card("spades", valuePlus(movedValue, 1))];
+  if (depth >= 2) {
+    stack.unshift(card("hearts", valuePlus(movedValue, 2)));
+  }
+  if (depth >= 3) {
+    stack.unshift(card("clubs", valuePlus(movedValue, 3)));
+  }
+  return stack;
+}
+
+function createDeckRevealDestinationStack(
+  movedValue: Values,
+  depth: number
+): CardState[] {
+  const stack = [card("spades", valuePlus(movedValue, 2))];
+  if (depth >= 2) {
+    stack.unshift(card("hearts", valuePlus(movedValue, 3)));
+  }
+  if (depth >= 3) {
+    stack.unshift(card("clubs", valuePlus(movedValue, 4)));
+  }
+  return stack;
+}
+
+function pickNumber(rng: () => number, values: number[]): number {
+  return values[Math.floor(rng() * values.length)];
+}
+
+function valuePlus(value: Values, offset: number): Values {
+  return (value + offset) as Values;
+}
+
+function blockedPileTop(value: Values, rng: () => number): Values {
+  return Math.min(13, value + pickNumber(rng, [2, 3, 4])) as Values;
 }
 
 function createStackShuttleFreeSlotSequence({
