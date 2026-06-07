@@ -38,6 +38,7 @@ export type CreatePounceRushPuzzleOptions = {
   puzzleNumber: number;
   seed?: string;
   socketId: string;
+  templateId?: string;
 };
 
 export type PounceRushPuzzleSummary = {
@@ -58,6 +59,16 @@ export type PounceRushMoveRejection = {
   title: string;
 };
 
+export type PounceRushTemplateOption = {
+  difficulty: PounceRushPuzzle["difficulty"];
+  difficultyScore: number;
+  id: string;
+  kind: PounceRushPuzzleKind;
+  minPuzzleNumber?: number;
+  objective: PounceRushObjective;
+  tags: PounceRushTemplateTag[];
+};
+
 type PuzzleTemplate = {
   build: (context: PuzzleBuildContext) => PuzzleSetup;
   difficulty: PounceRushPuzzle["difficulty"];
@@ -66,10 +77,10 @@ type PuzzleTemplate = {
   kind: PounceRushPuzzleKind;
   minPuzzleNumber?: number;
   objective: PounceRushObjective;
-  tags: PuzzleTemplateTag[];
+  tags: PounceRushTemplateTag[];
 };
 
-type PuzzleTemplateTag =
+export type PounceRushTemplateTag =
   | "center"
   | "daily-hard"
   | "deck"
@@ -905,6 +916,18 @@ export function getPounceRushTemplateCount(): number {
   return POUNCE_RUSH_TEMPLATES.length;
 }
 
+export function getPounceRushTemplateOptions(): PounceRushTemplateOption[] {
+  return POUNCE_RUSH_TEMPLATES.map((template) => ({
+    difficulty: template.difficulty,
+    difficultyScore: template.difficultyScore,
+    id: template.id,
+    kind: template.kind,
+    minPuzzleNumber: template.minPuzzleNumber,
+    objective: template.objective,
+    tags: template.tags.slice(),
+  }));
+}
+
 export function createPounceRushRunSeed(now = Date.now()): string {
   const randomPart = Math.random().toString(36).slice(2, 8);
   return `rush-${now.toString(36)}-${randomPart}`;
@@ -988,9 +1011,12 @@ export function createPounceRushPuzzle({
   puzzleNumber,
   seed,
   socketId,
+  templateId,
 }: CreatePounceRushPuzzleOptions): PounceRushPuzzle {
   const normalizedSeed = normalizePounceRushSeed(seed);
-  const template = getSeededTemplate(normalizedSeed, puzzleNumber);
+  const template = templateId
+    ? getTemplateById(templateId)
+    : getSeededTemplate(normalizedSeed, puzzleNumber);
   let lastError: unknown = null;
 
   for (
@@ -1053,6 +1079,16 @@ export function createPounceRushPuzzle({
   throw lastError instanceof Error
     ? lastError
     : new Error(`Pounce Rush puzzle ${template.id} could not be generated`);
+}
+
+function getTemplateById(templateId: string): PuzzleTemplate {
+  const template = POUNCE_RUSH_TEMPLATES.find(
+    (candidate) => candidate.id === templateId
+  );
+  if (!template) {
+    throw new Error(`Unknown Pounce Rush puzzle template ${templateId}`);
+  }
+  return template;
 }
 
 export function isExpectedPounceRushMove(

@@ -13,6 +13,7 @@ import { observer } from "mobx-react-lite";
 import styles from "../client/PounceRush.module.css";
 import usePounceRushGame from "../client/usePounceRushGame";
 import { useRouter } from "next/router";
+import type { PounceRushTemplateOption } from "../shared/PounceRush";
 
 const PounceRushPage: NextPage<{
   name: string;
@@ -44,10 +45,12 @@ const PounceRushPage: NextPage<{
     reviewPuzzleNumber,
     runKind,
     score,
+    selectedTemplateId,
     seed,
     state,
     status,
     stepIndex,
+    templateOptions,
     socket,
   } = usePounceRushGame(playerName);
 
@@ -89,9 +92,14 @@ const PounceRushPage: NextPage<{
   const isDailyPuzzle = runKind === "daily_puzzle";
   const isDailyRush = runKind === "daily_rush";
   const isEndless = runKind === "endless";
+  const isTemplateMode = runKind === "template";
   const isInteractionDisabled = isIdle || isComplete || isAdvancingPuzzle;
   const sequenceLength = currentPuzzle.sequence.length;
   const displayedStep = Math.min(stepIndex + 1, sequenceLength);
+  const selectedTemplate =
+    templateOptions.find((option) => option.id === selectedTemplateId) ??
+    templateOptions[0] ??
+    null;
   const isDailyPuzzleComplete = dailyOutcome?.dateKey === dailyDateKey;
   const isDailyRushComplete = dailyRushOutcome?.dateKey === dailyDateKey;
   const dailyLabel = formatDailyLabel(dailyDateKey);
@@ -101,8 +109,10 @@ const PounceRushPage: NextPage<{
     : isDailyRush
     ? dailyRushOutcome?.shareText
     : null;
-  const timeLabel = isDailyPuzzle || isEndless ? "Elapsed" : "Time";
-  const timeValue = isDailyPuzzle || isEndless
+  const timeLabel = isDailyPuzzle || isEndless || isTemplateMode
+    ? "Elapsed"
+    : "Time";
+  const timeValue = isDailyPuzzle || isEndless || isTemplateMode
     ? formatDuration(elapsedMs)
     : formatDuration(remainingMs);
   const completionTitle = isDailyPuzzle
@@ -265,6 +275,19 @@ const PounceRushPage: NextPage<{
                   <span>Endless</span>
                   <small>No timer</small>
                 </button>
+                <button
+                  aria-pressed={isTemplateMode}
+                  className={styles.modeTab}
+                  onClick={() => actions.selectRunKind("template")}
+                  type="button"
+                >
+                  <span>Puzzle Type</span>
+                  <small>
+                    {selectedTemplate
+                      ? formatTemplateName(selectedTemplate.id)
+                      : "Choose one"}
+                  </small>
+                </button>
               </div>
               <div className={styles.modeSummary}>
                 {isDailyPuzzle ? (
@@ -296,6 +319,15 @@ const PounceRushPage: NextPage<{
                     <strong>Endless puzzles</strong>
                     <span>Keep solving generated boards without a timer.</span>
                   </>
+                ) : isTemplateMode && selectedTemplate ? (
+                  <>
+                    <strong>{formatTemplateName(selectedTemplate.id)}</strong>
+                    <span>
+                      {selectedTemplate.difficulty} / D
+                      {selectedTemplate.difficultyScore} /{" "}
+                      {formatTemplateKind(selectedTemplate.kind)}
+                    </span>
+                  </>
                 ) : (
                   <>
                     <strong>Unlimited practice</strong>
@@ -303,6 +335,24 @@ const PounceRushPage: NextPage<{
                   </>
                 )}
               </div>
+              {isTemplateMode ? (
+                <label className={styles.templatePicker}>
+                  <span>Type</span>
+                  <select
+                    aria-label="Puzzle type"
+                    onChange={(event) =>
+                      actions.selectTemplate(event.currentTarget.value)
+                    }
+                    value={selectedTemplateId}
+                  >
+                    {templateOptions.map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {formatTemplateOption(option)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
               <div className={styles.startActions}>
                 <Button
                   className={`${styles.primaryButton} ${styles.startButton}`}
@@ -311,6 +361,8 @@ const PounceRushPage: NextPage<{
                       ? actions.startDailyPuzzle
                       : isDailyRush
                       ? actions.startDailyRush
+                      : isTemplateMode
+                      ? actions.startTemplate
                       : isEndless
                       ? actions.startEndless
                       : actions.startRandom
@@ -325,6 +377,8 @@ const PounceRushPage: NextPage<{
                     ? isDailyRushComplete
                       ? "View results"
                       : "Start Daily Rush"
+                    : isTemplateMode
+                    ? "Start Selected Type"
                     : isEndless
                     ? "Start Endless"
                     : "Start Random Rush"}
@@ -560,6 +614,26 @@ function formatDailyLabel(dateKey: string): string {
 
 function formatMoveCount(moveCount: number): string {
   return moveCount === 1 ? "1 move" : `${moveCount} moves`;
+}
+
+function formatTemplateOption(option: PounceRushTemplateOption): string {
+  return `${formatTemplateName(option.id)} / D${option.difficultyScore}`;
+}
+
+function formatTemplateName(templateId: string): string {
+  return templateId
+    .split("-")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function formatTemplateKind(kind: PounceRushTemplateOption["kind"]): string {
+  return kind
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function isPuzzleSolved(puzzleNumber: number, score: number): boolean {

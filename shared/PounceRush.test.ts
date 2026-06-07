@@ -8,6 +8,7 @@ import {
   createPounceRushDailySeed,
   createPounceRushPuzzle,
   getPounceRushTemplateCount,
+  getPounceRushTemplateOptions,
   isAcceptedPounceRushMove,
 } from "./PounceRush";
 
@@ -24,6 +25,7 @@ const reportedPuzzles = [
   ["rush-mptdcnd8-rugesw", 9],
 ] as const;
 const puzzlesPerSeed = getPounceRushTemplateCount() * 36;
+const templateOptions = getPounceRushTemplateOptions();
 const observedTemplateIds = new Set<string>();
 let deckConnectorCount = 0;
 let deckShiftConnectorCount = 0;
@@ -66,6 +68,26 @@ assertDifficultyRange("difficulty-ramp", 5, 3, 6);
 assertDifficultyRange("difficulty-ramp", 12, 4, 8);
 assertDifficultyRange("difficulty-ramp", 20, 5, 8);
 assertDifficultyRange("difficulty-ramp", 28, 6, 10);
+assert.equal(templateOptions.length, getPounceRushTemplateCount());
+assert.equal(
+  new Set(templateOptions.map((option) => option.id)).size,
+  templateOptions.length
+);
+
+for (const option of templateOptions) {
+  const puzzle = createPounceRushPuzzle({
+    playerName: "Player",
+    playerSessionId: "session",
+    puzzleNumber: 0,
+    seed: "template-picker",
+    socketId: "socket",
+    templateId: option.id,
+  });
+  assert.equal(puzzle.templateId, option.id);
+  assert.equal(puzzle.kind, option.kind);
+  assert.equal(puzzle.difficultyScore, option.difficultyScore);
+  assertPounceClearingSequence(puzzle.sequence);
+}
 
 for (const seed of seeds) {
   for (let puzzleNumber = 0; puzzleNumber < puzzlesPerSeed; puzzleNumber++) {

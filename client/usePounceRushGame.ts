@@ -21,6 +21,7 @@ import {
   getPounceRushDailyKey,
   getPounceRushMoveRejection,
   getPounceRushPuzzleSummary,
+  getPounceRushTemplateOptions,
   isAcceptedPounceRushMove,
 } from "../shared/PounceRush";
 
@@ -35,7 +36,8 @@ type PounceRushRunKind =
   | "daily_puzzle"
   | "daily_rush"
   | "random"
-  | "endless";
+  | "endless"
+  | "template";
 type RushFeedback = PounceRushMoveRejection & {
   id: number;
   tone: "blocked" | "success";
@@ -62,6 +64,13 @@ export type PounceRushDailyRushOutcome = {
 const DAILY_OUTCOME_STORAGE_KEY = "pounce::rush-daily-outcome";
 const DAILY_HISTORY_STORAGE_KEY = "pounce::rush-daily-history";
 const DAILY_RUSH_OUTCOME_STORAGE_KEY = "pounce::rush-daily-rush-outcome";
+const POUNCE_RUSH_TEMPLATE_OPTIONS = getPounceRushTemplateOptions();
+const DEFAULT_TEMPLATE_ID =
+  POUNCE_RUSH_TEMPLATE_OPTIONS.find(
+    (option) => option.id === "stack-shuttle-free-slot"
+  )?.id ??
+  POUNCE_RUSH_TEMPLATE_OPTIONS[0]?.id ??
+  "";
 
 export default function usePounceRushGame(playerName: string) {
   const initialDailyDateKeyRef = useRef(getPounceRushDailyKey());
@@ -116,6 +125,8 @@ export default function usePounceRushGame(playerName: string) {
   const [reviewPuzzleNumber, setReviewPuzzleNumber] = useState<number | null>(0);
   const [runKind, setRunKind] = useState<PounceRushRunKind>("daily_puzzle");
   const [score, setScore] = useState(0);
+  const [selectedTemplateId, setSelectedTemplateId] =
+    useState(DEFAULT_TEMPLATE_ID);
   const [seed, setSeedState] = useState(initialSeedRef.current);
   const [status, setStatus] = useState<RushStatus>("idle");
   const [stepIndex, setStepIndex] = useState(0);
@@ -135,6 +146,7 @@ export default function usePounceRushGame(playerName: string) {
   const puzzleNumberRef = useRef(0);
   const runKindRef = useRef<PounceRushRunKind>("daily_puzzle");
   const scoreRef = useRef(0);
+  const selectedTemplateIdRef = useRef(DEFAULT_TEMPLATE_ID);
   const seedRef = useRef(initialSeedRef.current);
   const startTimeRef = useRef(Date.now());
   const statusRef = useRef<RushStatus>("idle");
@@ -179,15 +191,22 @@ export default function usePounceRushGame(playerName: string) {
       options: {
         record: boolean;
         seed?: string;
+        templateId?: string;
       }
     ) => {
       const nextSeed = options.seed ?? seedRef.current;
+      const nextTemplateId =
+        options.templateId ??
+        (runKindRef.current === "template"
+          ? selectedTemplateIdRef.current
+          : undefined);
       const puzzle = createPounceRushPuzzle({
         playerName: playerNameRef.current || "Player",
         playerSessionId: POUNCE_RUSH_PLAYER_SESSION_ID,
         puzzleNumber: nextPuzzleNumber,
         seed: nextSeed,
         socketId: POUNCE_RUSH_SOCKET_ID,
+        templateId: nextTemplateId || undefined,
       });
 
       suppressBoardAnimations();
@@ -264,6 +283,10 @@ export default function usePounceRushGame(playerName: string) {
 
   const startEndless = useCallback(() => {
     start(createPounceRushRunSeed(), "endless");
+  }, [start]);
+
+  const startTemplate = useCallback(() => {
+    start(createPounceRushRunSeed(), "template");
   }, [start]);
 
   const showModePicker = useCallback(() => {
@@ -398,6 +421,30 @@ export default function usePounceRushGame(playerName: string) {
     [installPuzzle]
   );
 
+  const selectTemplate = useCallback(
+    (templateId: string) => {
+      if (
+        statusRef.current === "running" ||
+        !POUNCE_RUSH_TEMPLATE_OPTIONS.some((option) => option.id === templateId)
+      ) {
+        return;
+      }
+
+      selectedTemplateIdRef.current = templateId;
+      setSelectedTemplateId(templateId);
+      if (runKindRef.current !== "template") {
+        return;
+      }
+
+      installPuzzle(0, {
+        record: false,
+        seed: getPreviewSeedForRunKind("template", dailyDateKeyRef.current),
+        templateId,
+      });
+    },
+    [installPuzzle]
+  );
+
   const peekPuzzle = useCallback(
     (nextPuzzleNumber: number) => {
       if (statusRef.current !== "complete") {
@@ -486,7 +533,8 @@ export default function usePounceRushGame(playerName: string) {
     const elapsed = Date.now() - startTimeRef.current;
     const completedDuration =
       runKindRef.current === "daily_puzzle" ||
-      runKindRef.current === "endless"
+      runKindRef.current === "endless" ||
+      runKindRef.current === "template"
         ? elapsed
         : Math.min(elapsed, POUNCE_RUSH_DURATION_MS);
     statusRef.current = "complete";
@@ -745,7 +793,8 @@ export default function usePounceRushGame(playerName: string) {
       setElapsedMs(elapsed);
       if (
         runKindRef.current === "daily_puzzle" ||
-        runKindRef.current === "endless"
+        runKindRef.current === "endless" ||
+        runKindRef.current === "template"
       ) {
         return;
       }
@@ -776,12 +825,14 @@ export default function usePounceRushGame(playerName: string) {
       },
       peekPuzzle,
       selectRunKind,
+      selectTemplate,
       showHint,
       showModePicker,
       restart,
       startDailyPuzzle,
       startDailyRush,
       startEndless,
+      startTemplate,
       startRandom,
     },
     currentPuzzle,
@@ -801,10 +852,12 @@ export default function usePounceRushGame(playerName: string) {
     reviewPuzzleNumber,
     runKind,
     score,
+    selectedTemplateId,
     seed,
     state,
     status,
     stepIndex,
+    templateOptions: POUNCE_RUSH_TEMPLATE_OPTIONS,
     socket,
   };
 }
