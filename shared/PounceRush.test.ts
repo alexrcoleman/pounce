@@ -33,12 +33,12 @@ const valueVarietyTemplateIds = [
   "waste-center-pounce",
   "free-slot-pounce",
   "deck-connector-pounce",
-  "uncover-connector-pounce",
   "tall-free-slot-pounce",
   "uncover-center",
   "waste-solitaire-center-pounce",
   "waste-double-solitaire-center-pounce",
   "waste-center-uncover-pounce",
+  "waste-center-uncover-free-pounce",
   "uncover-free-pounce",
 ];
 const firstMoveValuesByTemplate = new Map<string, Set<number>>(
@@ -59,10 +59,14 @@ let tallStackMoveCount = 0;
 let wasteFirstCenterCount = 0;
 let wasteFirstDoubleCenterCount = 0;
 let wasteUncoverCenterCount = 0;
+let wasteUncoverFreeSlotCount = 0;
 const observedSequenceValues = new Set<number>();
 const deckStackRevealDestDepths = new Set<number>();
 const deckStackRevealWasteValues = new Set<number>();
+const freeSlotPounceValues = new Set<number>();
+const tallFreeSlotDestDepths = new Set<number>();
 const uncoverTwoCenterValues = new Set<number>();
+const wasteDoubleNonEmptyPileCounts = new Set<number>();
 let shuttleUncoverFreeSlotCount = 0;
 
 const firstRushPuzzle = createPounceRushPuzzle({
@@ -103,6 +107,7 @@ assert.equal(getTemplateOption("free-slot-pounce")?.difficultyScore, 4);
   "free-slot-pounce-generated",
   "pounce-center-generated",
   "solitaire-center-generated",
+  "uncover-connector-pounce",
   "waste-center-generated",
 ].forEach((templateId) => {
   assert.equal(
@@ -192,13 +197,31 @@ for (const seed of seeds) {
     }
     if (
       puzzle.templateId === "shuttle-back-free-pounce" ||
-      puzzle.templateId === "shuttle-uncover-free-pounce"
+      puzzle.templateId === "shuttle-uncover-free-pounce" ||
+      puzzle.templateId === "uncover-two-center-pounce"
     ) {
       assert.notEqual(
         puzzle.board.players[0].flippedDeck.at(-1)?.value,
         1,
         `${puzzle.templateId} should not show a playable-looking waste ace`
       );
+    }
+    if (puzzle.templateId === "free-slot-pounce") {
+      const pounceMoveIndex = puzzle.sequence.findIndex(
+        (move) => move.type === "c2s" && move.source === "pounce"
+      );
+      const pounceCard = sequenceSourceCards[pounceMoveIndex];
+      if (pounceCard) {
+        freeSlotPounceValues.add(pounceCard.value);
+      }
+    }
+    if (puzzle.templateId === "tall-free-slot-pounce") {
+      const firstMove = puzzle.sequence[0];
+      if (firstMove?.type === "s2s") {
+        tallFreeSlotDestDepths.add(
+          puzzle.board.players[0].stacks[firstMove.dest].length
+        );
+      }
     }
     if (puzzle.templateId === "deck-stack-reveal-center-pounce") {
       const firstMove = puzzle.sequence[0];
@@ -222,6 +245,11 @@ for (const seed of seeds) {
         }
       });
     }
+    if (puzzle.templateId === "waste-double-solitaire-center-pounce") {
+      wasteDoubleNonEmptyPileCounts.add(
+        puzzle.board.piles.filter((pile) => pile.length > 0).length
+      );
+    }
     if (hasWasteFirstCenterLine(puzzle.sequence)) {
       wasteFirstCenterCount += 1;
     }
@@ -230,6 +258,9 @@ for (const seed of seeds) {
     }
     if (hasWasteUncoverCenterLine(puzzle.sequence)) {
       wasteUncoverCenterCount += 1;
+    }
+    if (hasWasteUncoverFreeSlotLine(puzzle.sequence)) {
+      wasteUncoverFreeSlotCount += 1;
     }
     if (puzzle.sequence.some((move) => move.type === "s2s" && move.count > 1)) {
       tallStackMoveCount += 1;
@@ -290,6 +321,10 @@ assert.ok(
   wasteUncoverCenterCount > 0,
   "expected waste-first uncover-center pounce puzzles"
 );
+assert.ok(
+  wasteUncoverFreeSlotCount > 0,
+  "expected waste-first uncover-center free-slot pounce puzzles"
+);
 assert.ok(tallStackMoveCount > 0, "expected taller moving-stack puzzles");
 assert.ok(deepStackCount > 0, "expected deeper solitaire stacks");
 assert.ok(extraCenterPileCount > 0, "expected later puzzles with extra piles");
@@ -308,6 +343,18 @@ assert.ok(
 assert.ok(
   uncoverTwoCenterValues.size > 2,
   "expected uncover-two-center card values to vary"
+);
+assert.ok(
+  freeSlotPounceValues.size > 1,
+  "expected free-slot pounce card values to vary"
+);
+assert.ok(
+  tallFreeSlotDestDepths.size > 1,
+  "expected tall free-slot destination depths to vary"
+);
+assert.ok(
+  Math.min(...Array.from(wasteDoubleNonEmptyPileCounts)) > 1,
+  "expected waste-double center puzzles to show multiple center piles"
 );
 valueVarietyTemplateIds.forEach((templateId) => {
   assert.ok(
@@ -556,6 +603,23 @@ function hasWasteUncoverCenterLine(sequence: Move[]): boolean {
       centerMove.source.type === "solitaire" &&
       finalMove?.type === "c2c" &&
       finalMove.source.type === "pounce"
+    );
+  });
+}
+
+function hasWasteUncoverFreeSlotLine(sequence: Move[]): boolean {
+  return sequence.some((move, index) => {
+    const shiftMove = sequence[index + 1];
+    const centerMove = sequence[index + 2];
+    const finalMove = sequence[index + 3];
+    return (
+      move.type === "c2c" &&
+      move.source.type === "deck" &&
+      shiftMove?.type === "s2s" &&
+      centerMove?.type === "c2c" &&
+      centerMove.source.type === "solitaire" &&
+      finalMove?.type === "c2s" &&
+      finalMove.source === "pounce"
     );
   });
 }

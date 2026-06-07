@@ -255,10 +255,14 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     tags: ["free-slot", "pounce", "stack-shift"],
     build: ({ rng }) => {
       const movingValue = pickValue(rng, [3, 4, 5, 6, 7, 8, 9, 10]);
+      const pounceValue = pickValue(
+        rng,
+        [7, 8, 9, 10, 11].filter((value) => value !== movingValue)
+      );
       return {
         deckCard: card("hearts", 13),
         flippedDeck: [card("hearts", 12)],
-        pounceDeck: [card("diamonds", 12), card("clubs", 13)],
+        pounceDeck: [card("diamonds", 12), card("clubs", pounceValue)],
         stacks: singleStacks(
           card("clubs", movingValue),
           card("diamonds", nextValue(movingValue)),
@@ -314,42 +318,6 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     },
   },
   {
-    id: "uncover-connector-pounce",
-    kind: "combo",
-    objective: "Unload a pounce card",
-    difficulty: "Combo",
-    difficultyScore: 6,
-    minPuzzleNumber: 8,
-    tags: ["uncover", "stack-shift", "solitaire", "center", "pounce"],
-    build: ({ rng }) => {
-      const topValue = pickValue(rng, [4, 5, 6, 7, 8, 9]);
-      const uncoveredValue = nextValue(topValue);
-      const pounceValue = nextValue(uncoveredValue);
-      return {
-        deckCard: card("clubs", 13),
-        flippedDeck: [card("spades", 2)],
-        pounceDeck: [card("clubs", 11), card("hearts", pounceValue)],
-        stacks: [
-          [card("hearts", uncoveredValue), card("clubs", topValue)],
-          [card("diamonds", uncoveredValue)],
-          [card("spades", 12)],
-          [card("spades", 13)],
-        ],
-        piles: [
-          suitedPile("hearts", topValue),
-          suitedPile("spades", 4),
-          suitedPile("diamonds", 3),
-          suitedPile("clubs", 3),
-        ],
-        sequence: [
-          { type: "s2s", source: 0, dest: 1, count: 1 },
-          { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
-          { type: "c2c", source: { type: "pounce" }, dest: 0 },
-        ],
-      };
-    },
-  },
-  {
     id: "tall-free-slot-pounce",
     kind: "free_slot",
     objective: "Unload a pounce card",
@@ -359,15 +327,16 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
     tags: ["free-slot", "pounce", "stack-shift"],
     build: ({ rng }) => {
       const topValue = pickValue(rng, [4, 5, 6, 7, 8, 9]);
+      const destinationDepth = pickNumber(rng, [1, 2, 3]);
       return {
-        deckCard: card("hearts", 13),
-        flippedDeck: [card("hearts", 2)],
-        pounceDeck: [card("hearts", 11), card("clubs", 13)],
+        deckCard: card("spades", 13),
+        flippedDeck: [card("hearts", 12)],
+        pounceDeck: [card("diamonds", 2), card("diamonds", 13)],
         stacks: [
           [card("hearts", nextValue(topValue)), card("clubs", topValue)],
-          [card("spades", valuePlus(topValue, 2))],
-          [card("spades", 12)],
-          [card("diamonds", 13)],
+          createTallFreeSlotDestinationStack(topValue, destinationDepth),
+          [card("clubs", 3)],
+          [card("hearts", 13)],
         ],
         piles: [
           suitedPile("hearts", 3),
@@ -435,10 +404,10 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
         flippedDeck: [card("hearts", wasteValue)],
         pounceDeck: [card("clubs", 11), card("hearts", pounceValue)],
         stacks: [
-          [card("diamonds", 13)],
-          [card("clubs", 12)],
+          [card("hearts", 13)],
+          [card("diamonds", 12)],
           [card("spades", nextValue(targetValue)), card("hearts", targetValue)],
-          [card("spades", 11)],
+          [card("spades", 3)],
         ],
         piles: [
           suitedPile("hearts", previousValue(targetValue)),
@@ -522,9 +491,9 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
         ],
         piles: [
           suitedPile("diamonds", previousValue(wasteValue)),
-          [],
-          [],
-          [],
+          suitedPile("hearts", 13),
+          suitedPile("spades", 13),
+          suitedPile("clubs", 13),
         ],
         sequence: [
           { type: "c2c", source: { type: "deck" }, dest: 0 },
@@ -576,6 +545,51 @@ const POUNCE_RUSH_TEMPLATES: PuzzleTemplate[] = [
           { type: "s2s", source: 0, dest: 1, count: 1 },
           { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
           { type: "c2c", source: { type: "pounce" }, dest: 0 },
+        ],
+      };
+    },
+  },
+  {
+    id: "waste-center-uncover-free-pounce",
+    kind: "free_slot",
+    objective: "Unload a pounce card",
+    difficulty: "Combo",
+    difficultyScore: 8,
+    minPuzzleNumber: 14,
+    tags: [
+      "daily-hard",
+      "waste",
+      "uncover",
+      "stack-shift",
+      "center",
+      "free-slot",
+      "mixed-source",
+      "pounce",
+    ],
+    build: ({ rng }) => {
+      const wasteValue = pickValue(rng, [4, 5, 6, 7, 8, 9]);
+      const uncoveredValue = nextValue(wasteValue);
+      return {
+        deckCard: card("spades", 13),
+        flippedDeck: [card("hearts", wasteValue)],
+        pounceDeck: [card("spades", 12), card("clubs", 13)],
+        stacks: [
+          [card("hearts", uncoveredValue), card("clubs", wasteValue)],
+          [card("diamonds", uncoveredValue)],
+          [card("hearts", 13)],
+          [card("diamonds", 13)],
+        ],
+        piles: [
+          suitedPile("hearts", previousValue(wasteValue)),
+          suitedPile("spades", 13),
+          suitedPile("diamonds", 13),
+          suitedPile("clubs", 13),
+        ],
+        sequence: [
+          { type: "c2c", source: { type: "deck" }, dest: 0 },
+          { type: "s2s", source: 0, dest: 1, count: 1 },
+          { type: "c2c", source: { type: "solitaire", index: 0 }, dest: 0 },
+          { type: "c2s", source: "pounce", dest: 0 },
         ],
       };
     },
@@ -2069,6 +2083,20 @@ function singleStacks(
   return [[first], [second], [third], [fourth]];
 }
 
+function createTallFreeSlotDestinationStack(
+  topValue: Values,
+  depth: number
+): CardState[] {
+  const stack = [card("spades", valuePlus(topValue, 2))];
+  if (depth >= 2) {
+    stack.unshift(card("hearts", valuePlus(topValue, 3)));
+  }
+  if (depth >= 3) {
+    stack.unshift(card("clubs", valuePlus(topValue, 4)));
+  }
+  return stack;
+}
+
 function createUncoverTwoCenterPounceSetup(rng: () => number): PuzzleSetup {
   const movedValue = pickValue(rng, [3, 4, 5, 6, 7, 8, 9]);
   const firstCenterValue = valuePlus(movedValue, 1);
@@ -2077,8 +2105,8 @@ function createUncoverTwoCenterPounceSetup(rng: () => number): PuzzleSetup {
   const destinationDepth = pickNumber(rng, [1, 2, 3]);
 
   return {
-    deckCard: card("spades", 1),
-    flippedDeck: [card("hearts", 1)],
+    deckCard: card("spades", 2),
+    flippedDeck: [card("hearts", 2)],
     pounceDeck: [card("clubs", 1), card("diamonds", pounceValue)],
     stacks: [
       [
