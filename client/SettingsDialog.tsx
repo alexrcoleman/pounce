@@ -601,7 +601,7 @@ function DragInputModeTooltip({
         <strong>{mode === "auto" ? "Auto" : "Override"}</strong>
         <span>
           {mode === "auto"
-            ? "Follows detection"
+            ? getAutoDragInputModeDescription(capabilities)
             : `${getDragInputModeSummary(mode)} is selected manually.`}
         </span>
       </p>
@@ -1014,12 +1014,21 @@ function getDragInputModeSummary(mode: DragInputModePreference): string {
   );
 }
 
+function getAutoDragInputModeDescription(
+  capabilities: DragInputCapabilities
+): string {
+  const hasMouse = capabilities.hasFinePointer || capabilities.hasHover;
+  if (capabilities.hasTouch && hasMouse) {
+    return "Touch is used in Auto. Select Mouse for mouse dragging.";
+  }
+  return capabilities.hasTouch
+    ? "Touch is used in Auto."
+    : "Mouse is used in Auto.";
+}
+
 function getResolvedDragInputModeSummary(
   mode: ResolvedDragInputMode
 ): string {
-  if (mode === "hybrid") {
-    return "Touch + mouse";
-  }
   return getDragInputModeSummary(mode);
 }
 

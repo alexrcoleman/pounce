@@ -1,5 +1,5 @@
 export type DragInputModePreference = "auto" | "touch" | "mouse";
-export type ResolvedDragInputMode = "touch" | "mouse" | "hybrid";
+export type ResolvedDragInputMode = "touch" | "mouse";
 
 export type DragInputCapabilities = {
   hasFinePointer: boolean;
@@ -40,44 +40,6 @@ export function getDragInputCapabilities(): DragInputCapabilities {
     hasHover,
     hasTouch,
   };
-}
-
-export function getDragInputCapabilitiesFromActivity(
-  event: Event
-): DragInputCapabilities {
-  const capabilities = getDragInputCapabilities();
-  if (event.type === "mousedown") {
-    return {
-      ...capabilities,
-      hasFinePointer: true,
-      hasHover: true,
-    };
-  }
-  if (event.type === "touchstart") {
-    return {
-      ...capabilities,
-      hasTouch: true,
-    };
-  }
-  if (!("pointerType" in event)) {
-    return capabilities;
-  }
-
-  const pointerType = event.pointerType;
-  if (pointerType === "mouse") {
-    return {
-      ...capabilities,
-      hasFinePointer: true,
-      hasHover: true,
-    };
-  }
-  if (pointerType === "touch") {
-    return {
-      ...capabilities,
-      hasTouch: true,
-    };
-  }
-  return capabilities;
 }
 
 export function areDragInputCapabilitiesEqual(
@@ -123,12 +85,6 @@ export function resolveDragInputMode(
   if (preference === "touch") {
     return "touch";
   }
-  if (
-    capabilities.hasTouch &&
-    (capabilities.hasFinePointer || capabilities.hasHover)
-  ) {
-    return "hybrid";
-  }
   return capabilities.hasTouch ? "touch" : "mouse";
 }
 
@@ -139,9 +95,7 @@ export function subscribeToDragInputCapabilityChanges(
     return () => undefined;
   }
 
-  const handleMediaQueryChange = () => onChange(getDragInputCapabilities());
-  const handleActivity = (event: Event) =>
-    onChange(getDragInputCapabilitiesFromActivity(event));
+  const refreshCapabilities = () => onChange(getDragInputCapabilities());
 
   const mediaQueries =
     typeof window.matchMedia === "function"
@@ -150,35 +104,25 @@ export function subscribeToDragInputCapabilityChanges(
 
   mediaQueries.forEach((mediaQuery) => {
     if (typeof mediaQuery.addEventListener === "function") {
-      mediaQuery.addEventListener("change", handleMediaQueryChange);
+      mediaQuery.addEventListener("change", refreshCapabilities);
       return;
     }
-    mediaQuery.addListener(handleMediaQueryChange);
+    mediaQuery.addListener(refreshCapabilities);
   });
 
-  const activityEvents: (keyof WindowEventMap)[] = [
-    "focus",
-    "mousedown",
-    "pointerdown",
-    "touchstart",
-  ];
-  activityEvents.forEach((eventName) => {
-    window.addEventListener(eventName, handleActivity, { passive: true });
-  });
-  document.addEventListener("visibilitychange", handleMediaQueryChange);
+  window.addEventListener("focus", refreshCapabilities);
+  document.addEventListener("visibilitychange", refreshCapabilities);
 
   return () => {
     mediaQueries.forEach((mediaQuery) => {
       if (typeof mediaQuery.removeEventListener === "function") {
-        mediaQuery.removeEventListener("change", handleMediaQueryChange);
+        mediaQuery.removeEventListener("change", refreshCapabilities);
         return;
       }
-      mediaQuery.removeListener(handleMediaQueryChange);
+      mediaQuery.removeListener(refreshCapabilities);
     });
-    activityEvents.forEach((eventName) => {
-      window.removeEventListener(eventName, handleActivity);
-    });
-    document.removeEventListener("visibilitychange", handleMediaQueryChange);
+    window.removeEventListener("focus", refreshCapabilities);
+    document.removeEventListener("visibilitychange", refreshCapabilities);
   };
 }
 

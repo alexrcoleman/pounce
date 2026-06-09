@@ -78,12 +78,6 @@ const DESKTOP_DND_BACKEND_OPTIONS = {
   getDropTargetElementsAtPoint,
 };
 
-const HYBRID_DND_BACKEND_OPTIONS = {
-  enableMouseEvents: true,
-  enableTouchEvents: true,
-  getDropTargetElementsAtPoint,
-};
-
 const TOUCH_DND_BACKEND_OPTIONS = {
   enableMouseEvents: false,
   enableTouchEvents: true,
@@ -351,9 +345,6 @@ export default observer(function Board({
 function getDndBackendOptions(inputMode: ResolvedDragInputMode) {
   if (inputMode === "mouse") {
     return DESKTOP_DND_BACKEND_OPTIONS;
-  }
-  if (inputMode === "hybrid") {
-    return HYBRID_DND_BACKEND_OPTIONS;
   }
   return TOUCH_DND_BACKEND_OPTIONS;
 }
