@@ -5,10 +5,15 @@ import {
   DEFAULT_SOUND_EFFECT_VOLUME_PERCENT,
   setSoundEffectVolumePercent,
 } from "./soundEffects";
+import {
+  normalizeDragInputModePreference,
+  type DragInputModePreference,
+} from "./dragInputMode";
 
 export type SettingsPage = "main" | "room" | "appearance";
 
 export type ClientSettingsStoreOptions = {
+  dragInputMode?: DragInputModePreference;
   easyReadCards?: boolean;
   leftHandedMode?: boolean;
   scale?: number;
@@ -18,12 +23,14 @@ export type ClientSettingsStoreOptions = {
   useAnimations?: boolean;
 };
 
+const DRAG_INPUT_MODE_STORAGE_KEY = "pounce::drag-input-mode";
 const EASY_READ_CARDS_STORAGE_KEY = "pounce::easy-read-cards";
 const SHOW_FRAMERATE_STORAGE_KEY = "pounce::show-framerate";
 const SHOW_NETWORK_STATS_STORAGE_KEY = "pounce::show-network-stats";
 const SOUND_EFFECT_VOLUME_STORAGE_KEY = "pounce::sound-effect-volume";
 
 export default class ClientSettingsStore {
+  dragInputMode: DragInputModePreference = "auto";
   easyReadCards = true;
   isSettingsOpen = false;
   leftHandedMode = false;
@@ -37,6 +44,7 @@ export default class ClientSettingsStore {
   private previousSoundEffectVolume = DEFAULT_SOUND_EFFECT_VOLUME_PERCENT || 100;
 
   constructor(options: ClientSettingsStoreOptions = {}) {
+    this.dragInputMode = options.dragInputMode ?? this.dragInputMode;
     this.easyReadCards = options.easyReadCards ?? this.easyReadCards;
     this.leftHandedMode = options.leftHandedMode ?? this.leftHandedMode;
     this.scale = normalizeStoredNumber(
@@ -61,6 +69,10 @@ export default class ClientSettingsStore {
   }
 
   hydrateFromLocalStorage() {
+    this.dragInputMode = readStoredDragInputMode(
+      DRAG_INPUT_MODE_STORAGE_KEY,
+      this.dragInputMode
+    );
     this.easyReadCards = readStoredBoolean(
       EASY_READ_CARDS_STORAGE_KEY,
       this.easyReadCards
@@ -101,6 +113,11 @@ export default class ClientSettingsStore {
 
   setUseAnimations(useAnimations: boolean) {
     this.useAnimations = useAnimations;
+  }
+
+  setDragInputMode(dragInputMode: DragInputModePreference) {
+    this.dragInputMode = dragInputMode;
+    writeStoredValue(DRAG_INPUT_MODE_STORAGE_KEY, dragInputMode);
   }
 
   setLeftHandedMode(leftHandedMode: boolean) {
@@ -170,6 +187,20 @@ function readStoredBoolean(storageKey: string, fallback: boolean): boolean {
 
   const storedValue = window.localStorage.getItem(storageKey);
   return storedValue == null ? fallback : storedValue === "true";
+}
+
+function readStoredDragInputMode(
+  storageKey: string,
+  fallback: DragInputModePreference
+): DragInputModePreference {
+  if (typeof window === "undefined") {
+    return fallback;
+  }
+
+  return normalizeDragInputModePreference(
+    window.localStorage.getItem(storageKey),
+    fallback
+  );
 }
 
 function readStoredNumber(

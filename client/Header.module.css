@@ -1044,14 +1044,29 @@
   max-width: 64%;
 }
 
+.dragInputModeSelect {
+  width: 150px;
+  max-width: 64%;
+}
+
 .fairHandTooltipOverlay {
   max-width: min(320px, calc(100vw - 32px));
+}
+
+.dragInputTooltipOverlay {
+  max-width: min(260px, calc(100vw - 32px));
 }
 
 .fairHandTooltip {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.dragInputTooltip {
+  min-width: 196px;
+  display: grid;
+  gap: 6px;
 }
 
 .fairHandTooltipModes {
@@ -1061,6 +1076,7 @@
 }
 
 .fairHandTooltipModes p,
+.dragInputTooltip p,
 .fairHandLuck p {
   margin: 0;
 }
@@ -1071,12 +1087,21 @@
   gap: 2px;
 }
 
+.dragInputTooltip p {
+  display: grid;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 10px;
+  align-items: baseline;
+}
+
 .fairHandTooltipModes strong,
+.dragInputTooltip strong,
 .fairHandLuck strong {
   font-weight: 900;
 }
 
 .fairHandTooltipModes span,
+.dragInputTooltip span,
 .fairHandLuck p,
 .fairHandLuckNote {
   color: rgba(255, 255, 255, 0.84);

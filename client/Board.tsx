@@ -7,7 +7,7 @@ import {
   type PlayerState,
 } from "../shared/GameUtils";
 import type SocketState from "./SocketState";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties } from "react";
 
 import { DndProvider } from "react-dnd";
@@ -18,7 +18,6 @@ import PauseOverlay from "./PauseOverlay";
 import ScoresTable from "./ScoresTable";
 import { TouchBackend } from "react-dnd-touch-backend";
 import VictoryOverlay from "./VictoryOverlay";
-import isTouchDevice from "./isTouchDevice";
 import styles from "./Board.module.css";
 import BorderOutlined from "@ant-design/icons/BorderOutlined";
 import CheckSquareOutlined from "@ant-design/icons/CheckSquareOutlined";
@@ -41,6 +40,15 @@ import RoomShare from "./RoomShare";
 import { useClientContext } from "./ClientContext";
 import { Button, Modal } from "antd";
 import useIsomorphicLayoutEffect from "./useIsomorphicLayoutEffect";
+import {
+  areDragInputCapabilitiesEqual,
+  getDragInputCapabilities,
+  isTouchLayoutPreferred,
+  resolveDragInputMode,
+  subscribeToDragInputCapabilityChanges,
+  type DragInputCapabilities,
+  type ResolvedDragInputMode,
+} from "./dragInputMode";
 import {
   BoardLayoutProvider,
   FIELD_LEFT,
@@ -68,6 +76,17 @@ const DESKTOP_DND_BACKEND_OPTIONS = {
   enableMouseEvents: true,
   enableTouchEvents: false,
   getDropTargetElementsAtPoint,
+};
+
+const HYBRID_DND_BACKEND_OPTIONS = {
+  enableMouseEvents: true,
+  enableTouchEvents: true,
+  getDropTargetElementsAtPoint,
+};
+
+const TOUCH_DND_BACKEND_OPTIONS = {
+  enableMouseEvents: false,
+  enableTouchEvents: true,
 };
 
 function getDropTargetElementsAtPoint(
@@ -150,7 +169,7 @@ export default observer(function Board({
   onUpdateHand,
   roomId,
   visiblePlayerIndices,
-}: Props): JSX.Element | null {
+}: Props): JSX.Element {
   const { settings, state, socket } = useClientContext();
   const board = state.board!;
   const activePlayerIndex = state.getActivePlayerIndex();
@@ -165,7 +184,17 @@ export default observer(function Board({
   const [focusedPlayerIndex, setFocusedPlayerIndex] = useState<number | null>(
     null
   );
-  const [useTouch, setUseTouch] = useState<boolean | null>(null);
+  const [dragInputCapabilities, setDragInputCapabilities] =
+    useState<DragInputCapabilities>(getDragInputCapabilities);
+  const resolvedDragInputMode = resolveDragInputMode(
+    settings.dragInputMode,
+    dragInputCapabilities
+  );
+  const useTouchLayout = isTouchLayoutPreferred(
+    settings.dragInputMode,
+    dragInputCapabilities
+  );
+  const dndContext = useMemo(() => ({}), [resolvedDragInputMode]);
   const [allowLayoutTransitions, setAllowLayoutTransitions] = useState(false);
   const boardRootRef = useRef<HTMLDivElement | null>(null);
   const {
@@ -177,12 +206,21 @@ export default observer(function Board({
     board,
     focusedPlayerIndex,
     isLeftHanded: settings.leftHandedMode,
-    isTouchDevice: useTouch === true,
+    isTouchDevice: useTouchLayout,
     zoom: settings.scale,
   });
 
   useIsomorphicLayoutEffect(() => {
-    setUseTouch(isTouchDevice());
+    const updateDragInputCapabilities = (
+      next = getDragInputCapabilities()
+    ) => {
+      setDragInputCapabilities((current) => {
+        return areDragInputCapabilitiesEqual(current, next) ? current : next;
+      });
+    };
+
+    updateDragInputCapabilities();
+    return subscribeToDragInputCapabilityChanges(updateDragInputCapabilities);
   }, []);
   useEffect(() => {
     if (!isLayoutReady) {
@@ -235,16 +273,12 @@ export default observer(function Board({
     },
     [canInteractWithCards, socket]
   );
-  if (useTouch == null) {
-    // Loading touch type still. Ideally we'd render still here, but
-    // DnDProvider seems to struggle with backend changing
-    return null;
-  }
   return (
     <DndProvider
       backend={TouchBackend}
-      options={useTouch ? undefined : DESKTOP_DND_BACKEND_OPTIONS}
-      key={useTouch ? "touch" : "mouse"}
+      context={dndContext}
+      options={getDndBackendOptions(resolvedDragInputMode)}
+      key={resolvedDragInputMode}
     >
       <DragReporter
         boardRootRef={boardRootRef}
@@ -313,6 +347,16 @@ export default observer(function Board({
     </DndProvider>
   );
 });
+
+function getDndBackendOptions(inputMode: ResolvedDragInputMode) {
+  if (inputMode === "mouse") {
+    return DESKTOP_DND_BACKEND_OPTIONS;
+  }
+  if (inputMode === "hybrid") {
+    return HYBRID_DND_BACKEND_OPTIONS;
+  }
+  return TOUCH_DND_BACKEND_OPTIONS;
+}
 
 function isPlayerVisible(
   playerIndex: number,

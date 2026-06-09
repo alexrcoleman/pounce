@@ -29,6 +29,16 @@ import useNetworkInformation, {
   getNetworkSummary,
   type NetworkInformationSnapshot,
 } from "./useNetworkInformation";
+import {
+  areDragInputCapabilitiesEqual,
+  getDragInputCapabilities,
+  isTouchLayoutPreferred,
+  resolveDragInputMode,
+  subscribeToDragInputCapabilityChanges,
+  type DragInputCapabilities,
+  type DragInputModePreference,
+  type ResolvedDragInputMode,
+} from "./dragInputMode";
 
 export type SettingsPage = "main" | "room" | "appearance";
 
@@ -54,6 +64,15 @@ const AI_MODE_OPTIONS = [
   { key: "hybrid", label: "Hybrid" },
 ] as const;
 
+const DRAG_INPUT_MODE_OPTIONS: {
+  value: DragInputModePreference;
+  label: string;
+}[] = [
+  { value: "auto", label: "Auto" },
+  { value: "touch", label: "Touch" },
+  { value: "mouse", label: "Mouse" },
+];
+
 export type AIDifficultyMode = AIDifficultyPresetKey | "custom";
 
 export default observer(function SettingsDialog({
@@ -68,6 +87,8 @@ export default observer(function SettingsDialog({
   const disconnectedCount =
     state.board?.players.filter((p) => p.disconnected).length ?? 0;
   const buildDate = useLocalBuildDate(process.env.NEXT_PUBLIC_BUILD_DATE);
+  const [dragInputCapabilities, setDragInputCapabilities] =
+    useState<DragInputCapabilities>(getDragInputCapabilities);
   const networkInformation = useNetworkInformation();
   const [isFairHandHelpOpen, setFairHandHelpOpen] = useState(false);
   const [localAICount, setLocalAICount] = useState(serverAICount);
@@ -80,6 +101,14 @@ export default observer(function SettingsDialog({
     normalizeCustomAISpeed(currentAISpeed)
   );
   const currentAIMode = state.roomSettings.aiMode ?? "fixed";
+  const resolvedDragInputMode = resolveDragInputMode(
+    settings.dragInputMode,
+    dragInputCapabilities
+  );
+  const usesTouchLayout = isTouchLayoutPreferred(
+    settings.dragInputMode,
+    dragInputCapabilities
+  );
   const page = settings.settingsPage;
   const canChangeAI = isHost && !isStarted;
   const roomLabel = props.roomId ?? "Unknown";
@@ -122,6 +151,18 @@ export default observer(function SettingsDialog({
       setFairHandHelpOpen(false);
     }
   }, [settings.isSettingsOpen]);
+  useEffect(() => {
+    const updateDragInputCapabilities = (
+      next = getDragInputCapabilities()
+    ) => {
+      setDragInputCapabilities((current) =>
+        areDragInputCapabilitiesEqual(current, next) ? current : next
+      );
+    };
+
+    updateDragInputCapabilities();
+    return subscribeToDragInputCapabilityChanges(updateDragInputCapabilities);
+  }, []);
 
   return (
     <Modal
@@ -362,6 +403,15 @@ export default observer(function SettingsDialog({
 
       {page === "appearance" ? (
         <div className={styles.settingsPage}>
+          <SettingsSection title="Controls">
+            <DragInputModeControl
+              capabilities={dragInputCapabilities}
+              mode={settings.dragInputMode}
+              onSelectMode={settings.setDragInputMode}
+              resolvedMode={resolvedDragInputMode}
+              usesTouchLayout={usesTouchLayout}
+            />
+          </SettingsSection>
           <SettingsSection title="Display">
             <SettingRow
               title="Animations"
@@ -476,6 +526,88 @@ export default observer(function SettingsDialog({
     </Modal>
   );
 });
+
+function DragInputModeControl({
+  capabilities,
+  mode,
+  onSelectMode,
+  resolvedMode,
+  usesTouchLayout,
+}: {
+  capabilities: DragInputCapabilities;
+  mode: DragInputModePreference;
+  onSelectMode: (mode: DragInputModePreference) => void;
+  resolvedMode: ResolvedDragInputMode;
+  usesTouchLayout: boolean;
+}) {
+  return (
+    <SettingRow
+      title={
+        <Flex align="center" gap={6}>
+          <span>Drag input</span>
+          <InfoTooltipIcon
+            aria-label="Current drag input mode"
+            placement="bottomLeft"
+            tooltipClassName={styles.dragInputTooltipOverlay}
+          >
+            <DragInputModeTooltip
+              capabilities={capabilities}
+              mode={mode}
+              resolvedMode={resolvedMode}
+              usesTouchLayout={usesTouchLayout}
+            />
+          </InfoTooltipIcon>
+        </Flex>
+      }
+      control={
+        <Select
+          className={styles.dragInputModeSelect}
+          options={DRAG_INPUT_MODE_OPTIONS}
+          popupMatchSelectWidth={false}
+          value={mode}
+          onChange={(value: DragInputModePreference) => onSelectMode(value)}
+        />
+      }
+    />
+  );
+}
+
+function DragInputModeTooltip({
+  capabilities,
+  mode,
+  resolvedMode,
+  usesTouchLayout,
+}: {
+  capabilities: DragInputCapabilities;
+  mode: DragInputModePreference;
+  resolvedMode: ResolvedDragInputMode;
+  usesTouchLayout: boolean;
+}) {
+  return (
+    <div className={styles.dragInputTooltip}>
+      <p>
+        <strong>Detected</strong>
+        <span>{getDetectedDragInputSummary(capabilities)}</span>
+      </p>
+      <p>
+        <strong>Using</strong>
+        <span>{getResolvedDragInputModeSummary(resolvedMode)}</span>
+      </p>
+      <p>
+        <strong>Layout</strong>
+        <span>{usesTouchLayout ? "Touch" : "Mouse"}</span>
+      </p>
+      <p>
+        <strong>{mode === "auto" ? "Auto" : "Override"}</strong>
+        <span>
+          {mode === "auto"
+            ? "Follows detection"
+            : `${getDragInputModeSummary(mode)} is selected manually.`}
+        </span>
+      </p>
+    </div>
+  );
+}
 
 function FairHandModeTooltip({ board }: { board: BoardState | null }) {
   const luckRows = getFairHandLuckRows(board);
@@ -857,6 +989,38 @@ function getAIDifficultySummary(
 
 function getAIModeSummary(mode: AIMode): string {
   return AI_MODE_OPTIONS.find((option) => option.key === mode)?.label ?? "Fixed AIs";
+}
+
+function getDetectedDragInputSummary(
+  capabilities: DragInputCapabilities
+): string {
+  const hasMouse = capabilities.hasFinePointer || capabilities.hasHover;
+  if (capabilities.hasTouch && hasMouse) {
+    return "Touch + mouse";
+  }
+  if (capabilities.hasTouch) {
+    return "Touch";
+  }
+  if (hasMouse) {
+    return "Mouse";
+  }
+  return "Mouse";
+}
+
+function getDragInputModeSummary(mode: DragInputModePreference): string {
+  return (
+    DRAG_INPUT_MODE_OPTIONS.find((option) => option.value === mode)?.label ??
+    "Auto"
+  );
+}
+
+function getResolvedDragInputModeSummary(
+  mode: ResolvedDragInputMode
+): string {
+  if (mode === "hybrid") {
+    return "Touch + mouse";
+  }
+  return getDragInputModeSummary(mode);
 }
 
 function useLocalBuildDate(buildDate: string | undefined) {
