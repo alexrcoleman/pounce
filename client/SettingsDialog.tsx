@@ -32,6 +32,7 @@ import useNetworkInformation, {
 import {
   areDragInputCapabilitiesEqual,
   getDragInputCapabilities,
+  hasHybridDragInputCapability,
   isTouchLayoutPreferred,
   resolveDragInputMode,
   subscribeToDragInputCapabilityChanges,
@@ -994,14 +995,13 @@ function getAIModeSummary(mode: AIMode): string {
 function getDetectedDragInputSummary(
   capabilities: DragInputCapabilities
 ): string {
-  const hasMouse = capabilities.hasFinePointer || capabilities.hasHover;
-  if (capabilities.hasTouch && hasMouse) {
+  if (hasHybridDragInputCapability(capabilities)) {
     return "Touch + mouse";
   }
   if (capabilities.hasTouch) {
     return "Touch";
   }
-  if (hasMouse) {
+  if (capabilities.hasFinePointer || capabilities.hasHover) {
     return "Mouse";
   }
   return "Mouse";
@@ -1017,8 +1017,7 @@ function getDragInputModeSummary(mode: DragInputModePreference): string {
 function getAutoDragInputModeDescription(
   capabilities: DragInputCapabilities
 ): string {
-  const hasMouse = capabilities.hasFinePointer || capabilities.hasHover;
-  if (capabilities.hasTouch && hasMouse) {
+  if (hasHybridDragInputCapability(capabilities)) {
     return "Touch is used in Auto. Select Mouse for mouse dragging.";
   }
   return capabilities.hasTouch

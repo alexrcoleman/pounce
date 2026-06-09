@@ -32,6 +32,7 @@ const SOUND_EFFECT_VOLUME_STORAGE_KEY = "pounce::sound-effect-volume";
 export default class ClientSettingsStore {
   dragInputMode: DragInputModePreference = "auto";
   easyReadCards = true;
+  hasHydrated = false;
   isSettingsOpen = false;
   leftHandedMode = false;
   scale = 1;
@@ -95,6 +96,7 @@ export default class ClientSettingsStore {
       this.previousSoundEffectVolume = this.soundEffectVolume;
     }
     setSoundEffectVolumePercent(this.soundEffectVolume);
+    this.hasHydrated = true;
   }
 
   openSettings(page: SettingsPage = "main") {

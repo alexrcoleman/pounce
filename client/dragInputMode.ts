@@ -53,6 +53,15 @@ export function areDragInputCapabilitiesEqual(
   );
 }
 
+export function hasHybridDragInputCapability(
+  capabilities: DragInputCapabilities
+): boolean {
+  return (
+    capabilities.hasTouch &&
+    (capabilities.hasFinePointer || capabilities.hasHover)
+  );
+}
+
 export function isTouchLayoutPreferred(
   preference: DragInputModePreference,
   capabilities: DragInputCapabilities

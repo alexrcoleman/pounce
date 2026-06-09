@@ -39,10 +39,12 @@ import {
 import RoomShare from "./RoomShare";
 import { useClientContext } from "./ClientContext";
 import { Button, Modal } from "antd";
+import { toast } from "sonner";
 import useIsomorphicLayoutEffect from "./useIsomorphicLayoutEffect";
 import {
   areDragInputCapabilitiesEqual,
   getDragInputCapabilities,
+  hasHybridDragInputCapability,
   isTouchLayoutPreferred,
   resolveDragInputMode,
   subscribeToDragInputCapabilityChanges,
@@ -82,6 +84,12 @@ const TOUCH_DND_BACKEND_OPTIONS = {
   enableMouseEvents: false,
   enableTouchEvents: true,
 };
+
+const HYBRID_DRAG_INPUT_TOAST_ID = "hybrid-drag-input-detected";
+const HYBRID_DRAG_INPUT_TOAST_STORAGE_KEY =
+  "pounce::hybrid-drag-input-toast-shown";
+
+let hasShownHybridDragInputToastThisSession = false;
 
 function getDropTargetElementsAtPoint(
   _x: number,
@@ -217,6 +225,36 @@ export default observer(function Board({
     return subscribeToDragInputCapabilityChanges(updateDragInputCapabilities);
   }, []);
   useEffect(() => {
+    if (
+      !settings.hasHydrated ||
+      settings.dragInputMode !== "auto" ||
+      !hasHybridDragInputCapability(dragInputCapabilities) ||
+      hasShownHybridDragInputToast()
+    ) {
+      return;
+    }
+
+    rememberHybridDragInputToastShown();
+    toast.info("Touch and mouse detected", {
+      action: {
+        label: "Configure",
+        onClick: () => {
+          settings.openSettings("appearance");
+          toast.dismiss(HYBRID_DRAG_INPUT_TOAST_ID);
+        },
+      },
+      description: "Auto is defaulting to touch-based drags.",
+      duration: 10000,
+      id: HYBRID_DRAG_INPUT_TOAST_ID,
+      testId: "hybrid-drag-input-toast",
+    });
+  }, [
+    dragInputCapabilities,
+    settings,
+    settings.dragInputMode,
+    settings.hasHydrated,
+  ]);
+  useEffect(() => {
     if (!isLayoutReady) {
       setAllowLayoutTransitions(false);
       return;
@@ -347,6 +385,35 @@ function getDndBackendOptions(inputMode: ResolvedDragInputMode) {
     return DESKTOP_DND_BACKEND_OPTIONS;
   }
   return TOUCH_DND_BACKEND_OPTIONS;
+}
+
+function hasShownHybridDragInputToast(): boolean {
+  if (hasShownHybridDragInputToastThisSession) {
+    return true;
+  }
+  if (typeof window === "undefined") {
+    return true;
+  }
+  try {
+    return (
+      window.localStorage.getItem(HYBRID_DRAG_INPUT_TOAST_STORAGE_KEY) ===
+      "true"
+    );
+  } catch {
+    return false;
+  }
+}
+
+function rememberHybridDragInputToastShown(): void {
+  hasShownHybridDragInputToastThisSession = true;
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    window.localStorage.setItem(HYBRID_DRAG_INPUT_TOAST_STORAGE_KEY, "true");
+  } catch {
+    // The in-session flag still prevents repeated prompts if storage is blocked.
+  }
 }
 
 function isPlayerVisible(
