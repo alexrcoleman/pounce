@@ -3,6 +3,7 @@ import { createRoomState, RoomState } from "../shared/RoomState";
 import {
   completeRoundAnalysis,
   getNextRoomSimulationTickTime,
+  getRoomHandDelta,
   getRoomHands,
   getRoomStuckPlayerIndices,
   scheduleAIReactionBoard,
@@ -12,7 +13,11 @@ import {
 } from "../shared/RoomLogic";
 import type { RoundSnapshot } from "../shared/RoundAnalysis";
 import type { RoomToast } from "../shared/RoomToast";
-import type { PendingRoomAction, RoomAction } from "../shared/SocketTypes";
+import type {
+  BoardUpdate,
+  PendingRoomAction,
+  RoomAction,
+} from "../shared/SocketTypes";
 
 export type ServerRoomState = RoomState & {
   io: Server;
@@ -122,6 +127,7 @@ function broadcastServerRoomTickResult(
   {
     hasUpdate,
     hasHandUpdate,
+    handUpdatePlayerIndices,
     actions,
     roomToast,
     roundAnalysisSnapshots,
@@ -130,12 +136,13 @@ function broadcastServerRoomTickResult(
   if (hasUpdate) {
     markRoomUpdated(roomId);
     broadcastUpdate(roomId);
-  }
-  if (actions.length > 0) {
+  } else if (actions.length > 0) {
     broadcastRoomActions(roomId, actions);
   }
-  if (hasHandUpdate) {
+  if (hasHandUpdate && hasUpdate) {
     broadcastHands(roomId);
+  } else if (handUpdatePlayerIndices.length > 0) {
+    broadcastHandDeltas(roomId, handUpdatePlayerIndices);
   }
   if (roomToast) {
     broadcastRoomToast(roomId, roomToast);
@@ -150,6 +157,7 @@ function queueServerSimulationTickResult(
   {
     hasUpdate,
     hasHandUpdate,
+    handUpdatePlayerIndices,
     actions,
     roomToast,
     roundAnalysisSnapshots,
@@ -163,12 +171,13 @@ function queueServerSimulationTickResult(
   if (hasUpdate) {
     markRoomUpdated(roomId);
     room.pendingSimulationHasUpdate = true;
-  }
-  if (actions.length > 0) {
+  } else if (actions.length > 0) {
     broadcastRoomActions(roomId, actions);
   }
-  if (hasHandUpdate) {
+  if (hasHandUpdate && hasUpdate) {
     room.pendingSimulationHasHandUpdate = true;
+  } else if (handUpdatePlayerIndices.length > 0) {
+    broadcastHandDeltas(roomId, handUpdatePlayerIndices);
   }
   if (roomToast) {
     room.pendingSimulationRoomToast = roomToast;
@@ -230,15 +239,20 @@ function clearServerSimulationBroadcast(room: ServerRoomState): void {
 
 export function broadcastUpdate(roomId: string) {
   const room = rooms[roomId];
-  room.io.to(roomId).emit("update", {
+  room.io.to(roomId).emit("update", createRoomUpdate(roomId));
+  scheduleAIReactionBoard(room);
+}
+
+export function createRoomUpdate(roomId: string): BoardUpdate {
+  const room = rooms[roomId];
+  return {
     board: room.board,
     settings: room.settings,
     stuckPlayerIndices: getRoomStuckPlayerIndices(room),
     time: Date.now(),
     revision: room.revision,
     roundAnalysis: room.lastRoundAnalysis,
-  });
-  scheduleAIReactionBoard(room);
+  };
 }
 
 export function markRoomUpdated(roomId: string) {
@@ -249,7 +263,27 @@ export function broadcastHands(roomId: string) {
   const room = getRoom(roomId);
   room.io.to(roomId).emit("update_hands", {
     hands: getRoomHands(room),
+    versions: room.handUpdateVersions,
   });
+}
+
+export function broadcastHandDelta(roomId: string, playerIndex: number) {
+  const room = getRoom(roomId);
+  const delta = getRoomHandDelta(room, playerIndex);
+  if (!delta) {
+    return;
+  }
+
+  room.io.to(roomId).emit("update_hand_delta", delta);
+}
+
+export function broadcastHandDeltas(
+  roomId: string,
+  playerIndices: readonly number[]
+) {
+  playerIndices.forEach((playerIndex) =>
+    broadcastHandDelta(roomId, playerIndex)
+  );
 }
 
 export function broadcastRoomToast(roomId: string, roomToast: RoomToast) {
@@ -265,13 +299,17 @@ export function broadcastRoomAction(
     ...action,
     revision: room.revision,
   });
+  scheduleAIReactionBoard(room);
 }
 
 export function broadcastRoomActions(
   roomId: string,
   actions: readonly (PendingRoomAction | RoomAction)[]
 ) {
-  actions.forEach((action) => broadcastRoomAction(roomId, action));
+  actions.forEach((action) => {
+    markRoomUpdated(roomId);
+    broadcastRoomAction(roomId, action);
+  });
 }
 
 export function getRoom(roomId: string) {

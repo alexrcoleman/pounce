@@ -84,6 +84,40 @@ export function isProductiveMove(move: Move): boolean {
   );
 }
 
+export function resolveMoveForBoard(
+  boardState: BoardState,
+  playerIndex: number,
+  move: Move
+): Move {
+  if (move.type !== "c2c") {
+    return move;
+  }
+
+  const player = boardState.players[playerIndex];
+  const topCard = player ? getSourceCard(boardState, player, move) : null;
+  if (topCard?.value !== 1 || boardState.piles[move.dest]?.length === 0) {
+    return move;
+  }
+
+  const emptyPileIndex = boardState.piles.findIndex((pile) => pile.length === 0);
+  return emptyPileIndex >= 0 ? { ...move, dest: emptyPileIndex } : move;
+}
+
+export function getMovePileLocsDelta(
+  boardState: BoardState,
+  move: Move
+): BoardState["pileLocs"] | undefined {
+  if (move.type === "move_field_stack") {
+    return boardState.pileLocs;
+  }
+
+  if (move.type === "c2c" && move.position) {
+    return boardState.pileLocs;
+  }
+
+  return undefined;
+}
+
 function getSourceCard(
   boardState: BoardState,
   player: PlayerState,
@@ -232,6 +266,9 @@ export function executeMove(
     }
     if (moveResult.boardChanged && isDeckCardPlay(move)) {
       player.playedDeckCardThisCycle = true;
+    }
+    if (!moveResult.boardChanged) {
+      return moveResult;
     }
 
     player.currentPoints =

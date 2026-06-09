@@ -9,9 +9,11 @@ import {
 } from "../shared/GameUtils";
 import {
   broadcastHands,
+  broadcastHandDelta,
   broadcastRoomAction,
   broadcastRoomToast,
   broadcastUpdate,
+  createRoomUpdate,
   createRoom,
   getRoom,
   markRoomUpdated,
@@ -23,6 +25,7 @@ import {
   completeRoundStartCountdown,
   dealRemainingRoomPlayers,
   dealRoomHands,
+  getRoomHands,
   getRoomHandUpdateVersion,
   PLAYER_CENTER_CURSOR_RESET_DELAY_MS,
   recordRoundSnapshot,
@@ -49,7 +52,9 @@ import { timingSafeEqual } from "crypto";
 import { Server } from "socket.io";
 import {
   executeMove,
+  getMovePileLocsDelta,
   isProductiveMove,
+  resolveMoveForBoard,
   type Move,
 } from "../shared/MoveHandler";
 import {
@@ -84,6 +89,14 @@ const DRAIN_WINDOW_ENV_VAR = "GAME_SERVER_DRAIN_WINDOW_MS";
 const NEXT_STARTUP_HEALTH_URL_ENV_VAR = "NEXT_STARTUP_HEALTH_URL";
 const DEFAULT_NEXT_STARTUP_HEALTH_URL = "http://127.0.0.1:3000/";
 const STARTUP_READY_CHECK_TIMEOUT_MS = 1000;
+const DEFAULT_WEB_APP_ORIGINS = [
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
+  "http://localhost:3010",
+  "http://127.0.0.1:3010",
+  "http://[::1]:3000",
+  "http://[::1]:3010",
+];
 
 let drainingUntil = 0;
 let drainStarted = false;
@@ -111,7 +124,7 @@ export default function createSocketIOServer() {
     cors: {
       origin: process.env.WEB_APP_ORIGIN
         ? process.env.WEB_APP_ORIGIN.split(",").map((origin) => origin.trim())
-        : ["http://localhost:3000", "http://localhost:3010"],
+        : DEFAULT_WEB_APP_ORIGINS,
       methods: ["GET", "POST"],
     },
   });
@@ -250,7 +263,8 @@ export default function createSocketIOServer() {
         });
         return;
       }
-      const result = executeMove(board, pid, args.payload);
+      const actionMove = resolveMoveForBoard(board, pid, args.payload);
+      const result = executeMove(board, pid, actionMove);
       if (result == null) {
         if (didCompleteCountdown) {
           markRoomUpdated(user.currentRoom);
@@ -266,39 +280,42 @@ export default function createSocketIOServer() {
         return;
       }
       const acceptedAt = Date.now();
-      recordRoundSnapshot(room, "move", acceptedAt, pid, args.payload);
-      if (result.boardChanged && isProductiveMove(args.payload)) {
+      recordRoundSnapshot(room, "move", acceptedAt, pid, actionMove);
+      if (result.boardChanged && isProductiveMove(actionMove)) {
         clearRoomStuckPlayers(room);
       }
       const didReleaseHand = releaseRoomHandAfterCenterPlay(
         room,
         pid,
-        args.payload,
+        actionMove,
         result.clearCursorLocation
       );
       const didResetHand =
-        didReleaseHand || resetRoomHandAfterDeckAdvance(room, pid, args.payload);
+        didReleaseHand || resetRoomHandAfterDeckAdvance(room, pid, actionMove);
       const handUpdateVersion = didReleaseHand
         ? getRoomHandUpdateVersion(room, pid)
         : null;
       markRoomUpdated(user.currentRoom);
       ack?.({ actionId: args.actionId, ok: true, revision: room.revision });
-      broadcastUpdate(user.currentRoom);
+      if (didCompleteCountdown) {
+        broadcastUpdate(user.currentRoom);
+      }
       broadcastRoomAction(user.currentRoom, {
         type: "move",
         actionId: args.actionId,
         playerIndex: pid,
-        move: args.payload,
+        move: actionMove,
+        pileLocs: getMovePileLocsDelta(board, actionMove),
         time: acceptedAt,
       });
       if (didResetHand) {
-        broadcastHands(user.currentRoom);
+        broadcastHandDelta(user.currentRoom, pid);
       }
       if (handUpdateVersion != null) {
         schedulePlayerCenterCursorReset(
           user.currentRoom,
           pid,
-          args.payload,
+          actionMove,
           handUpdateVersion
         );
       }
@@ -594,6 +611,22 @@ export default function createSocketIOServer() {
     socket.on("room_ping", (_args, ack) => {
       ack?.({ serverTime: Date.now() });
     });
+    socket.on("request_update", () => {
+      if (user.currentRoom == null) {
+        return;
+      }
+
+      const room = getRoom(user.currentRoom);
+      if (!room) {
+        return;
+      }
+
+      socket.emit("update", createRoomUpdate(user.currentRoom));
+      socket.emit("update_hands", {
+        hands: getRoomHands(room),
+        versions: room.handUpdateVersions,
+      });
+    });
     socket.on("send_reaction", (args) => {
       if (user.currentRoom == null) {
         return;
@@ -635,8 +668,9 @@ export default function createSocketIOServer() {
       const player = room.board.players.findIndex(
         (p) => p.socketId === socket.id
       );
-      updateRoomHand(room, player, { item, items, location });
-      broadcastHands(user.currentRoom);
+      if (updateRoomHand(room, player, { item, items, location })) {
+        broadcastHandDelta(user.currentRoom, player);
+      }
     });
   });
 }
@@ -923,7 +957,7 @@ function schedulePlayerCenterCursorReset(
     }
 
     if (resetRoomHandAfterCenterPlay(room, playerIndex, move)) {
-      broadcastHands(roomId);
+      broadcastHandDelta(roomId, playerIndex);
     }
   }, PLAYER_CENTER_CURSOR_RESET_DELAY_MS);
 }

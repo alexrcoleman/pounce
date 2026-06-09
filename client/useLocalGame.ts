@@ -15,8 +15,10 @@ import {
 import {
   Move,
   executeMove,
+  getMovePileLocsDelta,
   isBoardAcceptingMoves,
   isProductiveMove,
+  resolveMoveForBoard,
 } from "../shared/MoveHandler";
 import { createRoomState, RoomState } from "../shared/RoomState";
 import {
@@ -25,6 +27,7 @@ import {
   completeRoundStartCountdown,
   dealRemainingRoomPlayers,
   dealRoomHands,
+  getRoomHandDelta,
   getRoomHandUpdateVersion,
   getRoomHands,
   getRoomStuckPlayerIndices,
@@ -127,24 +130,48 @@ export default function useLocalGame(name: string | null) {
     };
     const emitHands = () => {
       runInAction(() => {
-        state.updateHands(deepClone(getRoomHands(room)));
+        state.updateHands(
+          deepClone(getRoomHands(room)),
+          room.handUpdateVersions.slice()
+        );
       });
+    };
+    const emitHandDelta = (playerIndex: number) => {
+      const delta = getRoomHandDelta(room, playerIndex);
+      if (!delta) {
+        return;
+      }
+
+      runInAction(() => {
+        state.updateHandDelta(deepClone(delta));
+      });
+    };
+    const emitHandDeltas = (playerIndices: readonly number[]) => {
+      playerIndices.forEach(emitHandDelta);
     };
     const emitRoomToast = (roomToast: RoomToast) => {
       showRoomToast(roomToast);
     };
     const emitRoomAction = (action: PendingRoomAction) => {
-      if (optimisticallyPlayedMoveActionIds.current.delete(action.actionId)) {
-        return;
+      const roomAction: RoomAction = { ...action, revision: room.revision };
+      const applyResult = runInAction(() => state.onRoomAction(roomAction));
+      if (applyResult === "needs_sync") {
+        emitUpdate(action.time);
+        emitHands();
       }
 
-      playRoomActionSound(
-        { ...action, revision: room.revision },
-        { activePlayerIndex: state.getActivePlayerIndex() }
-      );
+      if (!optimisticallyPlayedMoveActionIds.current.delete(action.actionId)) {
+        playRoomActionSound(roomAction, {
+          activePlayerIndex: state.getActivePlayerIndex(),
+        });
+      }
+      scheduleAIReactionBoard(room);
     };
     const emitRoomActions = (actions: readonly PendingRoomAction[]) => {
-      actions.forEach(emitRoomAction);
+      actions.forEach((action) => {
+        markRoomUpdated();
+        emitRoomAction(action);
+      });
     };
     const clearPendingSimulationUpdate = () => {
       pendingSimulationHasUpdate = false;
@@ -195,14 +222,18 @@ export default function useLocalGame(name: string | null) {
       {
         hasUpdate,
         hasHandUpdate,
+        handUpdatePlayerIndices,
+        actions,
         roomToast,
       }: {
         hasUpdate: boolean;
         hasHandUpdate: boolean;
+        handUpdatePlayerIndices: readonly number[];
+        actions: readonly PendingRoomAction[];
         roomToast?: RoomToast | null;
       }
     ) => {
-      if (!hasUpdate && !hasHandUpdate && !roomToast) {
+      if (!hasUpdate && actions.length === 0 && !hasHandUpdate && !roomToast) {
         return;
       }
 
@@ -210,14 +241,20 @@ export default function useLocalGame(name: string | null) {
         room.revision += 1;
         pendingSimulationHasUpdate = true;
         pendingSimulationUpdateTime = now;
+      } else if (actions.length > 0) {
+        emitRoomActions(actions);
       }
       if (hasHandUpdate) {
         pendingSimulationHasHandUpdate = true;
+      } else if (handUpdatePlayerIndices.length > 0) {
+        emitHandDeltas(handUpdatePlayerIndices);
       }
       if (roomToast) {
         pendingSimulationRoomToast = roomToast;
       }
-      scheduleSimulationUpdateFlush();
+      if (hasUpdate || hasHandUpdate || roomToast) {
+        scheduleSimulationUpdateFlush();
+      }
     };
     const schedulePlayerCenterCursorReset = (
       playerIndex: number,
@@ -235,7 +272,7 @@ export default function useLocalGame(name: string | null) {
         }
 
         if (resetRoomHandAfterCenterPlay(room, playerIndex, move)) {
-          emitHands();
+          emitHandDelta(playerIndex);
         }
       }, PLAYER_CENTER_CURSOR_RESET_DELAY_MS);
       centerCursorResetTimeouts.add(timeout);
@@ -320,7 +357,12 @@ export default function useLocalGame(name: string | null) {
           const envelope = args[0] as ActionEnvelope<Move>;
           const ack = args[1] as ((args: ActionAck) => void) | undefined;
           const didCompleteCountdown = completeRoundStartCountdown(room);
-          const result = executeMove(room.board, playerIndex, envelope.payload);
+          const actionMove = resolveMoveForBoard(
+            room.board,
+            playerIndex,
+            envelope.payload
+          );
+          const result = executeMove(room.board, playerIndex, actionMove);
           if (result == null) {
             if (didCompleteCountdown) {
               markRoomUpdated();
@@ -341,20 +383,20 @@ export default function useLocalGame(name: string | null) {
             "move",
             acceptedAt,
             playerIndex,
-            envelope.payload
+            actionMove
           );
-          if (result.boardChanged && isProductiveMove(envelope.payload)) {
+          if (result.boardChanged && isProductiveMove(actionMove)) {
             clearRoomStuckPlayers(room);
           }
           const didReleaseHand = releaseRoomHandAfterCenterPlay(
             room,
             playerIndex,
-            envelope.payload,
+            actionMove,
             result.clearCursorLocation
           );
           const didResetHand =
             didReleaseHand ||
-            resetRoomHandAfterDeckAdvance(room, playerIndex, envelope.payload);
+            resetRoomHandAfterDeckAdvance(room, playerIndex, actionMove);
           const handUpdateVersion = didReleaseHand
             ? getRoomHandUpdateVersion(room, playerIndex)
             : null;
@@ -364,21 +406,24 @@ export default function useLocalGame(name: string | null) {
             ok: true,
             revision: room.revision,
           });
-          emitUpdate();
+          if (didCompleteCountdown) {
+            emitUpdate();
+          }
           emitRoomAction({
             type: "move",
             actionId: envelope.actionId,
             playerIndex,
-            move: envelope.payload,
+            move: actionMove,
+            pileLocs: getMovePileLocsDelta(room.board, actionMove),
             time: acceptedAt,
           });
           if (didResetHand) {
-            emitHands();
+            emitHandDelta(playerIndex);
           }
           if (handUpdateVersion != null) {
             schedulePlayerCenterCursorReset(
               playerIndex,
-              envelope.payload,
+              actionMove,
               handUpdateVersion
             );
           }
@@ -505,7 +550,7 @@ export default function useLocalGame(name: string | null) {
             emitUpdate();
           }
         } else if (event === "update_hand") {
-          updateRoomHand(
+          if (updateRoomHand(
             room,
             playerIndex,
             args[0] as {
@@ -513,8 +558,9 @@ export default function useLocalGame(name: string | null) {
               items?: CardState[] | null;
               location?: CursorLocation | null;
             }
-          );
-          emitHands();
+          )) {
+            emitHandDelta(playerIndex);
+          }
         }
       },
       close() {
@@ -547,6 +593,7 @@ export default function useLocalGame(name: string | null) {
       const {
         hasUpdate,
         hasHandUpdate,
+        handUpdatePlayerIndices,
         actions,
         roomToast,
         roundAnalysisSnapshots,
@@ -555,6 +602,8 @@ export default function useLocalGame(name: string | null) {
         queueSimulationTickUpdate(tickTiming.now, {
           hasUpdate,
           hasHandUpdate,
+          handUpdatePlayerIndices,
+          actions,
           roomToast,
         });
         if (roundAnalysisSnapshots) {
@@ -567,12 +616,13 @@ export default function useLocalGame(name: string | null) {
       if (hasUpdate) {
         room.revision += 1;
         emitUpdate(tickTiming.now);
-      }
-      if (actions.length > 0) {
+      } else if (actions.length > 0) {
         emitRoomActions(actions);
       }
-      if (hasHandUpdate) {
+      if (hasHandUpdate && hasUpdate) {
         emitHands();
+      } else if (handUpdatePlayerIndices.length > 0) {
+        emitHandDeltas(handUpdatePlayerIndices);
       }
       if (roomToast) {
         emitRoomToast(roomToast);

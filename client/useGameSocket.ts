@@ -432,18 +432,24 @@ export default function useGameSocket(
       runInAction(() => state.addReaction(reaction));
     });
     socket.on("room_action", (action) => {
-      if (optimisticallyPlayedMoveActionIds.current.delete(action.actionId)) {
-        return;
+      const applyResult = runInAction(() => state.onRoomAction(action));
+      if (applyResult === "needs_sync") {
+        socket.emit("request_update");
       }
 
-      playRoomActionSound(action, {
-        activePlayerIndex: state.getActivePlayerIndex(),
-      });
+      if (!optimisticallyPlayedMoveActionIds.current.delete(action.actionId)) {
+        playRoomActionSound(action, {
+          activePlayerIndex: state.getActivePlayerIndex(),
+        });
+      }
     });
     socket.on("server_notice", showServerNotice);
     socket.on("stuck_update", showStuckUpdate);
-    socket.on("update_hands", ({ hands }) => {
-      runInAction(() => state.updateHands(hands));
+    socket.on("update_hand_delta", (delta) => {
+      runInAction(() => state.updateHandDelta(delta));
+    });
+    socket.on("update_hands", ({ hands, versions }) => {
+      runInAction(() => state.updateHands(hands, versions));
     });
     socket.on("update", (data) => {
       const pendingJoinKey = pendingJoinRoomRef.current;
