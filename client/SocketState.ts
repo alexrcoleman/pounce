@@ -25,6 +25,7 @@ type PendingMoveAction = {
   createdAt: number;
   move: Move;
   isAppliedToClientBoard: boolean;
+  canReplayOnServerBoard: boolean;
   acceptedRevision?: number;
 };
 
@@ -88,6 +89,15 @@ export default class SocketState {
       data.stuckPlayerIndices
     );
     this.serverRevision = data.revision;
+    this.pendingMoves.forEach((action) => {
+      if (
+        action.acceptedRevision == null &&
+        action.baseRevision < data.revision
+      ) {
+        action.canReplayOnServerBoard = false;
+        action.isAppliedToClientBoard = false;
+      }
+    });
     this.pendingMoves = this.pendingMoves.filter(
       (action) =>
         action.acceptedRevision == null ||
@@ -222,15 +232,17 @@ export default class SocketState {
       createdAt: Date.now(),
       move,
       isAppliedToClientBoard: false,
+      canReplayOnServerBoard: true,
     };
     this.pendingMoves.push(action);
-    if (!this.tryApplyPendingMoveToClientBoard(action)) {
+    const pendingAction = this.pendingMoves[this.pendingMoves.length - 1];
+    if (!this.tryApplyPendingMoveToClientBoard(pendingAction)) {
       this.rebaseClientBoardFromServer();
     }
     return {
-      actionId: action.actionId,
-      baseRevision: action.baseRevision,
-      payload: move,
+      actionId: pendingAction.actionId,
+      baseRevision: pendingAction.baseRevision,
+      payload: pendingAction.move,
     };
   }
   onMoveAck(ack: ActionAck) {
@@ -386,6 +398,10 @@ export default class SocketState {
     }
 
     this.pendingMoves.forEach((action) => {
+      if (!action.canReplayOnServerBoard) {
+        return;
+      }
+
       const result = executeMove(
         nextBoard,
         playerIndex,
