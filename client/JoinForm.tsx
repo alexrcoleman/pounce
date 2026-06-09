@@ -10,7 +10,7 @@ import { markPendingRoomEntry } from "./analytics";
 import useIsomorphicLayoutEffect from "./useIsomorphicLayoutEffect";
 
 const ROOM_CODE_LENGTH = 4;
-const ROOM_CODE_PREFETCH_MIN_LENGTH = ROOM_CODE_LENGTH;
+const ROOM_CODE_PREFETCH_MIN_LENGTH = 1;
 
 type Props = {
   placeholderName: string;
