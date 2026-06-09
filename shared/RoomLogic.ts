@@ -37,8 +37,11 @@ import {
 import {
   executeMove,
   getDistance,
+  getMovePileLocsDelta,
   isProductiveMove,
+  resolveMoveForBoard,
   type Move,
+  type MoveResult,
 } from "./MoveHandler";
 import {
   FIELD_PILE_AREA_SIZE,
@@ -58,7 +61,7 @@ import {
   createDeckRotationToast,
   type RoomToast,
 } from "./RoomToast";
-import type { PendingRoomAction } from "./SocketTypes";
+import type { HandUpdateDelta, PendingRoomAction } from "./SocketTypes";
 import {
   getStuckVoteStatus,
   getStuckVotingPlayerIndices,
@@ -68,6 +71,7 @@ import { simulateBalancedDealScores } from "./DealSimulation";
 export type RoomTickResult = {
   hasUpdate: boolean;
   hasHandUpdate: boolean;
+  handUpdatePlayerIndices: number[];
   actions: PendingRoomAction[];
   roomToast?: RoomToast | null;
   roundAnalysisSnapshots?: RoundSnapshot[] | null;
@@ -103,6 +107,7 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
   const actions: PendingRoomAction[] = [];
   let roomToast: RoomToast | null = null;
   let roundAnalysisSnapshots: RoundSnapshot[] | null = null;
+  const handUpdateVersionsBefore = room.handUpdateVersions.slice();
 
   if (shouldAutoRotateDecks(board)) {
     rotateDecks(board);
@@ -135,7 +140,6 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       if (aiCooldowns[index] > now || player.socketId != null) {
         continue;
       }
-      hasUpdate = true;
       const usesDelayedAIVisibility = !room.settings.simulationMode;
       const hand = (room.hands[index] = room.hands[index] ?? {});
       if (usesDelayedAIVisibility) {
@@ -165,26 +169,45 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
         aiCooldowns[index] = now + getAIRetargetDelay(room);
         continue;
       }
+      const actionMove = move ? resolveMoveForBoard(board, index, move) : null;
       const moveResult = move
-        ? executeMove(board, index, move, hand, now)
+        ? executeMove(board, index, actionMove ?? move, hand, now)
         : null;
+      const canSendMoveDelta =
+        !room.settings.simulationMode &&
+        move != null &&
+        moveResult != null &&
+        canApplyAIMoveResultAsRoomDelta(move, moveResult);
       // AI cursor movement is an intention, not a completed board move.
-      if (move && moveResult?.boardChanged) {
-        if (usesDelayedAIVisibility) {
-          rememberAIMoveFocus(room, index, move, now);
-          recordRoundSnapshot(room, "move", now, index, move);
+      if (move && moveResult != null) {
+        if (canSendMoveDelta) {
+          const deltaMove = actionMove ?? move;
+          if (usesDelayedAIVisibility && moveResult.boardChanged) {
+            rememberAIMoveFocus(room, index, deltaMove, now);
+            recordRoundSnapshot(room, "move", now, index, deltaMove);
+          }
           actions.push({
             type: "move",
             actionId: `ai:${room.revision}:${index}:${now}:${
               actions.length + 1
             }`,
             playerIndex: index,
-            move,
+            move: deltaMove,
+            pileLocs: getMovePileLocsDelta(board, deltaMove),
             time: now,
           });
+        } else if (moveResult.boardChanged) {
+          hasUpdate = true;
         }
-        if (isProductiveMove(move)) {
+        if (moveResult.boardChanged && isProductiveMove(actionMove ?? move)) {
           clearRoomStuckPlayers(room);
+        }
+      }
+
+      if (move && moveResult?.boardChanged && !canSendMoveDelta) {
+        if (usesDelayedAIVisibility) {
+          rememberAIMoveFocus(room, index, actionMove ?? move, now);
+          recordRoundSnapshot(room, "move", now, index, actionMove ?? move);
         }
       }
 
@@ -223,11 +246,11 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
         };
       } else if (moveResult?.clearCursor) {
         hasHandUpdate = true;
-        if (move?.type === "c2c") {
+        if (actionMove?.type === "c2c") {
           resetRoomHandAfterCenterPlay(
             room,
             index,
-            move,
+            actionMove,
             moveResult.clearCursorLocation
           );
         } else {
@@ -242,8 +265,8 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
         }
       } else if (
         moveResult?.boardChanged &&
-        move &&
-        resetRoomHandAfterDeckAdvance(room, index, move)
+        actionMove &&
+        resetRoomHandAfterDeckAdvance(room, index, actionMove)
       ) {
         hasHandUpdate = true;
       }
@@ -263,6 +286,10 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
   return {
     hasUpdate,
     hasHandUpdate,
+    handUpdatePlayerIndices: getChangedRoomHandPlayerIndices(
+      room,
+      handUpdateVersionsBefore
+    ),
     actions,
     roomToast,
     roundAnalysisSnapshots,
@@ -336,6 +363,13 @@ function shouldAutoRotateDecks(board: BoardState): boolean {
   );
 }
 
+function canApplyAIMoveResultAsRoomDelta(
+  move: Move,
+  moveResult: MoveResult
+): boolean {
+  return moveResult.boardChanged === true || move.type === "wait";
+}
+
 function getVisibleBoard(
   room: RoomState,
   playerIndex: number,
@@ -398,6 +432,49 @@ function getApproximateCursorLocation(
 
 export function getRoomHands(room: RoomState): CursorState[] {
   return room.board.players.map((_, index) => room.hands[index] ?? {});
+}
+
+export function getRoomHandDelta(
+  room: RoomState,
+  playerIndex: number
+): HandUpdateDelta | null {
+  if (playerIndex < 0 || playerIndex >= room.board.players.length) {
+    return null;
+  }
+
+  return {
+    playerIndex,
+    hand: normalizeRoomHandForUpdate(room.hands[playerIndex]),
+    version: getRoomHandUpdateVersion(room, playerIndex),
+  };
+}
+
+function normalizeRoomHandForUpdate(hand: CursorState | undefined): CursorState {
+  return {
+    location: hand?.location ?? null,
+    item: hand?.item ?? null,
+    items: hand?.items ?? null,
+  };
+}
+
+function getChangedRoomHandPlayerIndices(
+  room: RoomState,
+  previousVersions: readonly number[]
+): number[] {
+  const indices: number[] = [];
+  const count = Math.max(
+    room.board.players.length,
+    room.handUpdateVersions.length,
+    previousVersions.length
+  );
+  for (let index = 0; index < count; index++) {
+    const previousVersion = previousVersions[index] ?? 0;
+    const nextVersion = room.handUpdateVersions[index] ?? 0;
+    if (nextVersion !== previousVersion) {
+      indices.push(index);
+    }
+  }
+  return indices;
 }
 
 export function getRoomStuckPlayerIndices(room: RoomState): number[] {

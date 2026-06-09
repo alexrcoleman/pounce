@@ -27,6 +27,7 @@ export type RoomMoveAction = {
   actionId: string;
   playerIndex: number;
   move: Move;
+  pileLocs?: BoardState["pileLocs"];
   time: number;
   revision: number;
 };
@@ -41,6 +42,12 @@ export type BoardUpdate = {
   time: number;
   revision: number;
   roundAnalysis?: RoundAnalysis | null;
+};
+
+export type HandUpdateDelta = {
+  playerIndex: number;
+  hand: CursorState;
+  version: number;
 };
 
 export type RoomPingAck = {
@@ -84,7 +91,8 @@ export type ServerToClientEvents = {
   server_notice: (args: ServerNotice) => void;
   stuck_update: (args: StuckUpdate) => void;
   room_action: (args: RoomAction) => void;
-  update_hands: (args: { hands: CursorState[] }) => void;
+  update_hand_delta: (args: HandUpdateDelta) => void;
+  update_hands: (args: { hands: CursorState[]; versions?: number[] }) => void;
   update: (args: BoardUpdate) => void;
 };
 export type ClientToServerEvents = {
@@ -126,4 +134,5 @@ export type ClientToServerEvents = {
     args: { clientTime: number },
     ack?: (args: RoomPingAck) => void
   ) => void;
+  request_update: () => void;
 };
