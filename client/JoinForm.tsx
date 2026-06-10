@@ -338,9 +338,7 @@ export default function JoinForm({
                         autoComplete="off"
                         autoCapitalize="characters"
                         autoCorrect="off"
-                        enterKeyHint={
-                          isTypedRoomCodeComplete ? "go" : undefined
-                        }
+                        enterKeyHint="go"
                         maxLength={ROOM_CODE_LENGTH}
                         spellCheck={false}
                       />
