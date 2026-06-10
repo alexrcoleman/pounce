@@ -9,6 +9,7 @@ import { canUseClientInitialValue } from "./clientHydration";
 import { markPendingRoomEntry } from "./analytics";
 import useIsomorphicLayoutEffect from "./useIsomorphicLayoutEffect";
 
+const ROOM_CODE_LENGTH = 4;
 const ROOM_CODE_PREFETCH_MIN_LENGTH = 1;
 
 type Props = {
@@ -22,7 +23,7 @@ type PendingAction = "create" | "join" | "offline" | null;
 
 function randomCode() {
   let code = "";
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < ROOM_CODE_LENGTH; i++) {
     code += String.fromCharCode(65 + Math.floor(Math.random() * 26));
   }
   return code;
@@ -132,8 +133,12 @@ export default function JoinForm({
   };
 
   const joinRoom = () => {
-    const room = currentRoom.trim().toUpperCase();
-    if (!room || (isInviteMode && !currentName.trim())) {
+    const room = normalizeRoomCode(currentRoom);
+    if (
+      !room ||
+      (!isInviteMode && room.length !== ROOM_CODE_LENGTH) ||
+      (isInviteMode && !currentName.trim())
+    ) {
       return;
     }
 
@@ -162,9 +167,14 @@ export default function JoinForm({
 
   const isNavigating = pendingAction != null;
   const isInviteMode = inviteRoomCode.length > 0;
+  const normalizedCurrentRoom = normalizeRoomCode(currentRoom);
+  const isTypedRoomCodeComplete =
+    normalizedCurrentRoom.length === ROOM_CODE_LENGTH;
   const canCreateRoom = currentName.trim().length > 0;
   const canJoinRoom =
-    currentRoom.trim().length > 0 && (!isInviteMode || canCreateRoom);
+    (isInviteMode
+      ? normalizedCurrentRoom.length > 0
+      : isTypedRoomCodeComplete) && (!isInviteMode || canCreateRoom);
   const showMobileOfflinePrompt =
     installContext.isMobile || installContext.isStandalone;
   const isInstalledApp = installContext.isStandalone;
@@ -319,9 +329,20 @@ export default function JoinForm({
                         onChange={(e) => {
                           setCurrentRoom(normalizeRoomCode(e.target.value));
                         }}
+                        onPressEnter={(e) => {
+                          e.preventDefault();
+                          joinRoom();
+                        }}
                         value={currentRoom}
                         disabled={isNavigating}
                         autoComplete="off"
+                        autoCapitalize="characters"
+                        autoCorrect="off"
+                        enterKeyHint={
+                          isTypedRoomCodeComplete ? "go" : undefined
+                        }
+                        maxLength={ROOM_CODE_LENGTH}
+                        spellCheck={false}
                       />
                     </label>
                     <Button
