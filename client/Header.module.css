@@ -1054,7 +1054,7 @@
 }
 
 .dragInputTooltipOverlay {
-  max-width: min(260px, calc(100vw - 32px));
+  max-width: min(300px, calc(100vw - 32px));
 }
 
 .fairHandTooltip {
@@ -1064,7 +1064,7 @@
 }
 
 .dragInputTooltip {
-  min-width: 196px;
+  min-width: 224px;
   display: grid;
   gap: 6px;
 }
@@ -1089,7 +1089,7 @@
 
 .dragInputTooltip p {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
+  grid-template-columns: 74px minmax(0, 1fr);
   gap: 10px;
   align-items: baseline;
 }

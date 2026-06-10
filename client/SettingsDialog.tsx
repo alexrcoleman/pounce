@@ -33,7 +33,6 @@ import {
   areDragInputCapabilitiesEqual,
   getDragInputCapabilities,
   hasHybridDragInputCapability,
-  isTouchLayoutPreferred,
   resolveDragInputMode,
   subscribeToDragInputCapabilityChanges,
   type DragInputCapabilities,
@@ -103,10 +102,6 @@ export default observer(function SettingsDialog({
   );
   const currentAIMode = state.roomSettings.aiMode ?? "fixed";
   const resolvedDragInputMode = resolveDragInputMode(
-    settings.dragInputMode,
-    dragInputCapabilities
-  );
-  const usesTouchLayout = isTouchLayoutPreferred(
     settings.dragInputMode,
     dragInputCapabilities
   );
@@ -410,7 +405,6 @@ export default observer(function SettingsDialog({
               mode={settings.dragInputMode}
               onSelectMode={settings.setDragInputMode}
               resolvedMode={resolvedDragInputMode}
-              usesTouchLayout={usesTouchLayout}
             />
           </SettingsSection>
           <SettingsSection title="Display">
@@ -533,13 +527,11 @@ function DragInputModeControl({
   mode,
   onSelectMode,
   resolvedMode,
-  usesTouchLayout,
 }: {
   capabilities: DragInputCapabilities;
   mode: DragInputModePreference;
   onSelectMode: (mode: DragInputModePreference) => void;
   resolvedMode: ResolvedDragInputMode;
-  usesTouchLayout: boolean;
 }) {
   return (
     <SettingRow
@@ -555,7 +547,6 @@ function DragInputModeControl({
               capabilities={capabilities}
               mode={mode}
               resolvedMode={resolvedMode}
-              usesTouchLayout={usesTouchLayout}
             />
           </InfoTooltipIcon>
         </Flex>
@@ -577,12 +568,10 @@ function DragInputModeTooltip({
   capabilities,
   mode,
   resolvedMode,
-  usesTouchLayout,
 }: {
   capabilities: DragInputCapabilities;
   mode: DragInputModePreference;
   resolvedMode: ResolvedDragInputMode;
-  usesTouchLayout: boolean;
 }) {
   return (
     <div className={styles.dragInputTooltip}>
@@ -593,10 +582,6 @@ function DragInputModeTooltip({
       <p>
         <strong>Using</strong>
         <span>{getResolvedDragInputModeSummary(resolvedMode)}</span>
-      </p>
-      <p>
-        <strong>Layout</strong>
-        <span>{usesTouchLayout ? "Touch" : "Mouse"}</span>
       </p>
       <p>
         <strong>{mode === "auto" ? "Auto" : "Override"}</strong>
