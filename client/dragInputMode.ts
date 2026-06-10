@@ -4,6 +4,8 @@ export type ResolvedDragInputMode = "touch" | "mouse";
 export type DragInputCapabilities = {
   hasFinePointer: boolean;
   hasHover: boolean;
+  hasPrimaryFinePointer: boolean;
+  hasPrimaryHover: boolean;
   hasTouch: boolean;
 };
 
@@ -21,14 +23,18 @@ export function getDragInputCapabilities(): DragInputCapabilities {
     return {
       hasFinePointer: false,
       hasHover: false,
+      hasPrimaryFinePointer: false,
+      hasPrimaryHover: false,
       hasTouch: false,
     };
   }
 
+  const hasPrimaryFinePointer = matchesMedia("(pointer: fine)");
+  const hasPrimaryHover = matchesMedia("(hover: hover)");
   const hasFinePointer =
-    matchesMedia("(any-pointer: fine)") || matchesMedia("(pointer: fine)");
+    matchesMedia("(any-pointer: fine)") || hasPrimaryFinePointer;
   const hasHover =
-    matchesMedia("(any-hover: hover)") || matchesMedia("(hover: hover)");
+    matchesMedia("(any-hover: hover)") || hasPrimaryHover;
   const hasTouch =
     "ontouchstart" in window ||
     navigator.maxTouchPoints > 0 ||
@@ -38,6 +44,8 @@ export function getDragInputCapabilities(): DragInputCapabilities {
   return {
     hasFinePointer,
     hasHover,
+    hasPrimaryFinePointer,
+    hasPrimaryHover,
     hasTouch,
   };
 }
@@ -49,6 +57,8 @@ export function areDragInputCapabilitiesEqual(
   return (
     a.hasFinePointer === b.hasFinePointer &&
     a.hasHover === b.hasHover &&
+    a.hasPrimaryFinePointer === b.hasPrimaryFinePointer &&
+    a.hasPrimaryHover === b.hasPrimaryHover &&
     a.hasTouch === b.hasTouch
   );
 }
@@ -58,8 +68,15 @@ export function hasHybridDragInputCapability(
 ): boolean {
   return (
     capabilities.hasTouch &&
-    (capabilities.hasFinePointer || capabilities.hasHover)
+    capabilities.hasFinePointer &&
+    capabilities.hasHover
   );
+}
+
+export function hasPrimaryMouseDragInputCapability(
+  capabilities: DragInputCapabilities
+): boolean {
+  return capabilities.hasPrimaryFinePointer && capabilities.hasPrimaryHover;
 }
 
 export function isTouchLayoutPreferred(
@@ -72,7 +89,10 @@ export function isTouchLayoutPreferred(
   if (preference === "touch") {
     return true;
   }
-  return capabilities.hasTouch;
+  return (
+    capabilities.hasTouch &&
+    !hasPrimaryMouseDragInputCapability(capabilities)
+  );
 }
 
 export function normalizeDragInputModePreference(
@@ -93,6 +113,9 @@ export function resolveDragInputMode(
   }
   if (preference === "touch") {
     return "touch";
+  }
+  if (hasPrimaryMouseDragInputCapability(capabilities)) {
+    return "mouse";
   }
   return capabilities.hasTouch ? "touch" : "mouse";
 }

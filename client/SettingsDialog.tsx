@@ -602,7 +602,7 @@ function DragInputModeTooltip({
         <strong>{mode === "auto" ? "Auto" : "Override"}</strong>
         <span>
           {mode === "auto"
-            ? getAutoDragInputModeDescription(capabilities)
+            ? getAutoDragInputModeDescription(capabilities, resolvedMode)
             : `${getDragInputModeSummary(mode)} is selected manually.`}
         </span>
       </p>
@@ -996,7 +996,7 @@ function getDetectedDragInputSummary(
   capabilities: DragInputCapabilities
 ): string {
   if (hasHybridDragInputCapability(capabilities)) {
-    return "Touch + mouse";
+    return "Touchscreen + mouse";
   }
   if (capabilities.hasTouch) {
     return "Touch";
@@ -1015,10 +1015,13 @@ function getDragInputModeSummary(mode: DragInputModePreference): string {
 }
 
 function getAutoDragInputModeDescription(
-  capabilities: DragInputCapabilities
+  capabilities: DragInputCapabilities,
+  resolvedMode: ResolvedDragInputMode
 ): string {
   if (hasHybridDragInputCapability(capabilities)) {
-    return "Touch is used in Auto. Select Mouse for mouse dragging.";
+    return resolvedMode === "mouse"
+      ? "Mouse is used in Auto. Select Touch for touchscreen dragging."
+      : "Touch is used in Auto. Select Mouse for mouse dragging.";
   }
   return capabilities.hasTouch
     ? "Touch is used in Auto."

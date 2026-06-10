@@ -235,7 +235,7 @@ export default observer(function Board({
     }
 
     rememberHybridDragInputToastShown();
-    toast.info("Touch and mouse detected", {
+    toast.info("Touchscreen and mouse detected", {
       action: {
         label: "Configure",
         onClick: () => {
@@ -243,13 +243,17 @@ export default observer(function Board({
           toast.dismiss(HYBRID_DRAG_INPUT_TOAST_ID);
         },
       },
-      description: "Auto is defaulting to touch-based drags.",
+      description:
+        resolvedDragInputMode === "mouse"
+          ? "Defaulting to mouse-based drags."
+          : "Defaulting to touch-based drags.",
       duration: 10000,
       id: HYBRID_DRAG_INPUT_TOAST_ID,
       testId: "hybrid-drag-input-toast",
     });
   }, [
     dragInputCapabilities,
+    resolvedDragInputMode,
     settings,
     settings.dragInputMode,
     settings.hasHydrated,
