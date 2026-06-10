@@ -33,6 +33,11 @@ import MobileDragPreviewLayer from "./MobileDragPreviewLayer";
 import InfoTooltipIcon from "./InfoTooltipIcon";
 import ReactionBubbles from "./ReactionBubbles";
 import {
+  RoundEndSequenceOverlay,
+  RoundEndSequenceProvider,
+  type RoundEndAnimationMode,
+} from "./RoundEndSequence";
+import {
   AI_DIFFICULTY_PRESETS,
   DEFAULT_AI_LEVEL,
 } from "../shared/AIDifficulty";
@@ -71,6 +76,7 @@ type Props = {
   isInteractionDisabled?: boolean;
   onBlockedMove?: () => void;
   roomId?: string | null;
+  roundEndAnimationMode?: RoundEndAnimationMode;
   visiblePlayerIndices?: readonly number[];
 };
 
@@ -170,6 +176,7 @@ export default observer(function Board({
   onBlockedMove,
   onUpdateHand,
   roomId,
+  roundEndAnimationMode = "auto",
   visiblePlayerIndices,
 }: Props): JSX.Element {
   const { settings, state, socket } = useClientContext();
@@ -333,50 +340,60 @@ export default observer(function Board({
       >
         <BoardLayoutProvider value={layout}>
           <div className={styles.rootInside} ref={ref}>
-            <PileSection roomId={roomId} />
-            <ScoresTableTabOverlay
-              aiMode={state.roomSettings.aiMode}
+            <RoundEndSequenceProvider
               board={board}
-            />
-            <HandPlatesLayer visiblePlayerIndices={visiblePlayerIndices} />
-            {canInteractWithCards ? (
-              <>
-                <ActivePlayerStackTargets
-                  executeMove={executeMove}
-                  onUpdateDragHover={onUpdateDragHover}
-                />
-                <FieldStackDragTargets
-                  state={state}
-                  grabbedItem={grabbedItem}
-                  onUpdateDragHover={onUpdateDragHover}
-                  executeMove={executeMove}
-                />
-              </>
-            ) : null}
-            <CardsLayer
-              canInteract={canInteractWithCards}
-              executeMove={executeMove}
-              hintCard={hintCard}
-              isDeckCyclingBlocked={isDeckCyclingBlocked}
-              onBlockedMove={onBlockedMove}
-              visiblePlayerIndices={visiblePlayerIndices}
-            />
-            <RoundStartOverlay board={board} state={state} />
-            {board.players.map((p, i) =>
-              isPlayerVisible(i, visiblePlayerIndices) ? (
-                <PlayerArea player={p} playerIndex={i} key={p.socketId ?? i} />
-              ) : null
-            )}
-            <PlayerZoomTargets
-              onTogglePlayer={togglePlayerFocus}
-              visiblePlayerIndices={visiblePlayerIndices}
-            />
-            <HandsLayer />
-            <ReactionBubbles
-              presentation={board.pouncer != null ? "postgame" : "board"}
-            />
-            <PauseOverlay />
-            <VictoryOverlay />
+              mode={roundEndAnimationMode}
+            >
+              <PileSection roomId={roomId} />
+              <ScoresTableTabOverlay
+                aiMode={state.roomSettings.aiMode}
+                board={board}
+              />
+              <HandPlatesLayer visiblePlayerIndices={visiblePlayerIndices} />
+              {canInteractWithCards ? (
+                <>
+                  <ActivePlayerStackTargets
+                    executeMove={executeMove}
+                    onUpdateDragHover={onUpdateDragHover}
+                  />
+                  <FieldStackDragTargets
+                    state={state}
+                    grabbedItem={grabbedItem}
+                    onUpdateDragHover={onUpdateDragHover}
+                    executeMove={executeMove}
+                  />
+                </>
+              ) : null}
+              <CardsLayer
+                canInteract={canInteractWithCards}
+                executeMove={executeMove}
+                hintCard={hintCard}
+                isDeckCyclingBlocked={isDeckCyclingBlocked}
+                onBlockedMove={onBlockedMove}
+                visiblePlayerIndices={visiblePlayerIndices}
+              />
+              <RoundStartOverlay board={board} state={state} />
+              {board.players.map((p, i) =>
+                isPlayerVisible(i, visiblePlayerIndices) ? (
+                  <PlayerArea
+                    player={p}
+                    playerIndex={i}
+                    key={p.socketId ?? i}
+                  />
+                ) : null
+              )}
+              <PlayerZoomTargets
+                onTogglePlayer={togglePlayerFocus}
+                visiblePlayerIndices={visiblePlayerIndices}
+              />
+              <HandsLayer />
+              <RoundEndSequenceOverlay />
+              <ReactionBubbles
+                presentation={board.pouncer != null ? "postgame" : "board"}
+              />
+              <PauseOverlay />
+              <VictoryOverlay />
+            </RoundEndSequenceProvider>
           </div>
         </BoardLayoutProvider>
       </div>

@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import Board from "./Board";
 import ClientSettingsStore from "./ClientSettingsStore";
 import { ClientProvider } from "./ClientContext";
+import type { RoundEndAnimationMode } from "./RoundEndSequence";
 import SocketState from "./SocketState";
 import type { CardState, Suits, Values } from "../shared/GameUtils";
 import { scoreBoard } from "../shared/GameUtils";
@@ -91,6 +92,20 @@ export const PostRoundAnalysis: Story = {
   render: (args) => <BoardStoryFrame {...args} postRound />,
 };
 
+export const RoundEndCeremony: Story = {
+  args: {
+    height: 760,
+    width: 1120,
+  },
+  render: (args) => (
+    <BoardStoryFrame
+      {...args}
+      postRound
+      roundEndAnimationMode="play"
+    />
+  ),
+};
+
 function BoardStoryFrame({
   easyReadCards,
   fullSolitairePile = false,
@@ -98,12 +113,14 @@ function BoardStoryFrame({
   postRound = false,
   playerCount,
   readyRole,
+  roundEndAnimationMode,
   width,
   zoom,
 }: BoardStoryArgs & {
   fullSolitairePile?: boolean;
   postRound?: boolean;
   readyRole?: ReadyStoryRole;
+  roundEndAnimationMode?: RoundEndAnimationMode;
 }) {
   const state = useMemo(
     () =>
@@ -158,6 +175,7 @@ function BoardStoryFrame({
           <Board
             executeMove={() => undefined}
             onUpdateHand={() => undefined}
+            roundEndAnimationMode={roundEndAnimationMode}
             roomId="storybook"
           />
         </div>
@@ -264,11 +282,53 @@ function tuneStoryRoundReady(
 }
 
 function finishStoryRound(board: ReturnType<typeof createRoomState>["board"]) {
+  const centerCounts = [20, 14, 12, 9, 8, 7];
+  const pounceCounts = [0, 4, 6, 7, 8, 9];
+
   board.players.forEach((player, index) => {
-    player.currentPoints = index === 0 ? 18 : index === 1 ? 7 : -3 - index;
+    player.pounceDeck = player.pounceDeck.slice(
+      0,
+      pounceCounts[index] ?? 5
+    );
   });
-  board.players[0].pounceDeck = [];
+
+  let pileIndex = 0;
+  board.players.forEach((player, playerIndex) => {
+    const centerCount = centerCounts[playerIndex] ?? 6;
+    for (let index = 0; index < centerCount; index++) {
+      const card = takeStoryCenterCard(player);
+      if (!card) {
+        break;
+      }
+      board.piles[pileIndex % board.piles.length].push(card);
+      pileIndex += 1;
+    }
+  });
+
+  board.players.forEach((player, index) => {
+    const centerCount = board.piles.reduce(
+      (count, pile) =>
+        count + pile.filter((card) => card.player === index).length,
+      0
+    );
+    player.currentPoints = centerCount - player.pounceDeck.length * 2;
+  });
   scoreBoard(board);
+}
+
+function takeStoryCenterCard(player: {
+  deck: CardState[];
+  flippedDeck: CardState[];
+  pounceDeck: CardState[];
+  stacks: [CardState[], CardState[], CardState[], CardState[]];
+}): CardState | undefined {
+  for (const stack of player.stacks) {
+    const card = stack.pop();
+    if (card) {
+      return card;
+    }
+  }
+  return player.flippedDeck.pop() ?? player.deck.pop();
 }
 
 function createStoryRoundAnalysis(

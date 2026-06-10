@@ -10,7 +10,6 @@ import { useDrag } from "react-dnd";
 import { getEmptyImage } from "react-dnd-html5-backend";
 import { observer } from "mobx-react-lite";
 import SocketState from "./SocketState";
-import { getPlayerLocation } from "../shared/CardLocations";
 import { computed, toJS } from "mobx";
 import { useClientContext } from "./ClientContext";
 import { type BoardLayoutArea, useBoardLayout } from "./BoardLayout";
@@ -21,6 +20,7 @@ import {
   getCardScreenGeometry,
   getPosition,
 } from "./cardGeometry";
+import { useRoundEndCardPresentation } from "./RoundEndSequence";
 
 const CLICK_DRAG_SUPPRESSION_DISTANCE_PX = 8;
 
@@ -38,7 +38,6 @@ type Props = {
   isHinted?: boolean;
   isRemoteCursorDragged?: boolean;
   isStockLocked?: boolean;
-  postGameStage?: number;
 };
 
 /**
@@ -53,7 +52,6 @@ const CardContentMemo = observer(function CardContent({
   isRemoteCursorDragged = false,
   isStockLocked = false,
   onClick,
-  postGameStage,
 }: Props) {
   const { state, socket } = useClientContext();
   const layout = useBoardLayout();
@@ -119,7 +117,7 @@ const CardContentMemo = observer(function CardContent({
     layout.mode !== "standard"
       ? layout.fullSizePlayerIndices
       : [activePlayerIndex];
-  let scaleDown =
+  const scaleDown =
     location.type !== "field_stack" &&
     !fullSizePlayerIndices.includes(card.player);
 
@@ -128,53 +126,19 @@ const CardContentMemo = observer(function CardContent({
   const source = useMemo(() => nextSource, [sourceKey]);
   const isDraggable = canInteract && canDragSource(source);
 
-  let [positionX, positionY] = getPosition(card, state, location);
-  let layoutArea: BoardLayoutArea = getCardLayoutArea(card, location);
+  const [positionX, positionY] = getPosition(card, state, location);
+  const layoutArea: BoardLayoutArea = getCardLayoutArea(card, location);
 
-  // Post-game animation:
-  if (postGameStage) {
-    const [px, py] = getPlayerLocation(
-      card.player,
-      activePlayerIndex
-    );
-    if (
-      (postGameStage === 1 || postGameStage === 2) &&
-      location.type === "field_stack"
-    ) {
-      faceUp = false;
-      if (postGameStage === 2) {
-        [positionX, positionY] = [px + 400, py + 100];
-        layoutArea = { type: "player", playerIndex: card.player };
-      }
-    }
-    if (postGameStage === 3) {
-      faceUp = false;
-      [positionX, positionY] = [px + 400, py + 100];
-      layoutArea = { type: "player", playerIndex: card.player };
-      scaleDown = false;
-    }
-  }
   const color = board.players[card.player].color;
   const { suit, value } = card;
   const [isAnimating, setIsAnimating] = useState(false);
   const rotationOffset = useRef(Math.random() * 2 - 1);
-  let cardRotation = getCardRotationDegrees(
+  const cardRotation = getCardRotationDegrees(
     board,
     card,
     location,
     rotationOffset.current * 2
   );
-  if (postGameStage === 3) {
-    cardRotation = 0;
-  }
-  const shouldAnimateFlip = getShouldAnimateFlip({
-    activePlayerIndex,
-    card,
-    location,
-    pileLength: pile.length,
-    postGameStage,
-    zIndex,
-  });
 
   const geometry = getCardScreenGeometry({
     area: layoutArea,
@@ -190,6 +154,24 @@ const CardContentMemo = observer(function CardContent({
     layout.fullSizePlayerIndices.includes(card.player)
       ? 5000
       : 0;
+  const roundEndPresentation = useRoundEndCardPresentation({
+    card,
+    location,
+    naturalGeometry: geometry,
+  });
+  const visualGeometry = roundEndPresentation?.geometry ?? geometry;
+  const visualFaceUp = roundEndPresentation?.faceUp ?? faceUp;
+  const visualZIndex =
+    roundEndPresentation?.zIndex ??
+    zIndexBase + zIndex + (isAnimating ? 1000 : 0);
+  const shouldAnimateFlip = getShouldAnimateFlip({
+    activePlayerIndex,
+    card,
+    isRoundEndPresented: roundEndPresentation != null,
+    location,
+    pileLength: pile.length,
+    zIndex,
+  });
 
   const item = useMemo(
     () =>
@@ -200,7 +182,7 @@ const CardContentMemo = observer(function CardContent({
               board.pileLocs[source.index][0],
               board.pileLocs[source.index][1],
             ] as [number, number],
-            initialClientPosition: [geometry.x, geometry.y] as [
+            initialClientPosition: [visualGeometry.x, visualGeometry.y] as [
               number,
               number
             ],
@@ -208,7 +190,7 @@ const CardContentMemo = observer(function CardContent({
         : {
             source,
             card: toJS(card),
-            initialClientPosition: [geometry.x, geometry.y] as [
+            initialClientPosition: [visualGeometry.x, visualGeometry.y] as [
               number,
               number
             ],
@@ -217,8 +199,8 @@ const CardContentMemo = observer(function CardContent({
       source,
       JSON.stringify(toJS(card)),
       getFieldStackInitialPositionKey(board, source),
-      geometry.x,
-      geometry.y,
+      visualGeometry.x,
+      visualGeometry.y,
     ]
   );
   const [{ isDragging }, drag, preview] = useDrag(
@@ -268,19 +250,34 @@ const CardContentMemo = observer(function CardContent({
           },
     [isDraggable, sourceKey, item]
   );
+  const visualOpacity =
+    roundEndPresentation?.opacity ??
+    (isDragging || isRemoteCursorDragged ? 0.25 : 1);
   useEffect(() => {
     // React DnD clears the preview connection when the source handler changes,
     // which happens when a card becomes a draggable center field stack.
     preview(getEmptyImage(), { captureDraggingState: true });
   }, [preview, source.type]);
   // So moving cards are "lifted" while moving
+  const animationResetDelayMs =
+    120 +
+    (roundEndPresentation?.transitionDelayMs ?? 0) +
+    (roundEndPresentation?.transitionDurationMs ?? 500);
   useEffect(() => {
     setIsAnimating(true);
     const t = setTimeout(() => {
       setIsAnimating(false);
-    }, 1000 + zIndex);
+    }, animationResetDelayMs);
     return () => clearTimeout(t);
-  }, [positionX, positionY, zIndex]);
+  }, [
+    animationResetDelayMs,
+    roundEndPresentation?.transitionDelayMs,
+    roundEndPresentation?.transitionDurationMs,
+    visualGeometry.rotationDegrees,
+    visualGeometry.screenScale,
+    visualGeometry.x,
+    visualGeometry.y,
+  ]);
 
   const canClick = canInteract && onClick != null;
   return (
@@ -296,13 +293,21 @@ const CardContentMemo = observer(function CardContent({
       data-stock-locked={isStockLocked ? "true" : undefined}
       style={
         {
-          zIndex: zIndexBase + zIndex + (isAnimating ? 1000 : 0),
+          zIndex: visualZIndex,
           "--c": color,
-          "--r": geometry.rotationDegrees + "deg",
-          "--x": geometry.x + "px",
-          "--y": geometry.y + "px",
-          "--s": geometry.screenScale,
-          opacity: isDragging || isRemoteCursorDragged ? 0.25 : 1,
+          "--card-transition-delay": `${
+            roundEndPresentation?.transitionDelayMs ?? 0
+          }ms`,
+          "--card-transition-duration": `${
+            roundEndPresentation?.transitionDurationMs ?? 500
+          }ms`,
+          "--card-transition-easing":
+            roundEndPresentation?.transitionEasing ?? "ease-in-out",
+          "--r": visualGeometry.rotationDegrees + "deg",
+          "--x": visualGeometry.x + "px",
+          "--y": visualGeometry.y + "px",
+          "--s": visualGeometry.screenScale,
+          opacity: visualOpacity,
         } as any
       }
       onMouseEnter={updateCursorTarget}
@@ -329,10 +334,10 @@ const CardContentMemo = observer(function CardContent({
         className={joinClasses(
           styles.body,
           shouldAnimateFlip && styles.bodyAnimatedFlip,
-          faceUp && styles.bodyFaceUp
+          visualFaceUp && styles.bodyFaceUp
         )}
       >
-        {shouldAnimateFlip || !faceUp ? (
+        {shouldAnimateFlip || !visualFaceUp ? (
           <div
             className={styles.back}
             style={
@@ -342,7 +347,7 @@ const CardContentMemo = observer(function CardContent({
             }
           />
         ) : null}
-        {shouldAnimateFlip || faceUp ? (
+        {shouldAnimateFlip || visualFaceUp ? (
           <div className={styles.front}>
             <CardFace suit={suit} value={value} />
           </div>
@@ -366,19 +371,19 @@ export default CardContentMemo;
 function getShouldAnimateFlip({
   activePlayerIndex,
   card,
+  isRoundEndPresented,
   location,
   pileLength,
-  postGameStage,
   zIndex,
 }: {
   activePlayerIndex: number;
   card: CardState;
+  isRoundEndPresented: boolean;
   location: CardLocation;
   pileLength: number;
-  postGameStage: number | undefined;
   zIndex: number;
 }): boolean {
-  if (postGameStage || card.player !== activePlayerIndex) {
+  if (isRoundEndPresented || card.player !== activePlayerIndex) {
     return false;
   }
   if (location.type === "deck" || location.type === "flippedDeck") {

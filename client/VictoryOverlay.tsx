@@ -8,12 +8,14 @@ import Link from "next/link";
 import styles from "./VictoryOverlay.module.css";
 import RoundAnalysisPanel from "./RoundAnalysisPanel";
 import { useEffect, useState } from "react";
+import { useRoundEndSequence } from "./RoundEndSequence";
 
 const CONFETTI_DURATION_MS = 10_000;
 const POST_GAME_ACTION_DELAY_MS = 1_000;
 
 export default observer(function VictoryOverlay() {
   const { state, socket } = useClientContext();
+  const { isScoreboardVisible, wasScoreboardDelayed } = useRoundEndSequence();
   const board = state.board!;
   const isHost = state.getIsHost();
   const pouncer = board.pouncer != null ? board.players[board.pouncer] : null;
@@ -41,9 +43,12 @@ export default observer(function VictoryOverlay() {
     }
 
     setConfettiActive(true);
-    const actionDelayTimeoutId = window.setTimeout(() => {
-      setUnlockedPostGameRoundKey(postGameRoundKey);
-    }, POST_GAME_ACTION_DELAY_MS);
+    const actionDelayTimeoutId = window.setTimeout(
+      () => {
+        setUnlockedPostGameRoundKey(postGameRoundKey);
+      },
+      wasScoreboardDelayed ? 0 : POST_GAME_ACTION_DELAY_MS
+    );
     const confettiTimeoutId = window.setTimeout(() => {
       setConfettiActive(false);
     }, CONFETTI_DURATION_MS);
@@ -52,9 +57,9 @@ export default observer(function VictoryOverlay() {
       window.clearTimeout(actionDelayTimeoutId);
       window.clearTimeout(confettiTimeoutId);
     };
-  }, [postGameRoundKey]);
+  }, [postGameRoundKey, wasScoreboardDelayed]);
 
-  if (pouncer == null) {
+  if (pouncer == null || !isScoreboardVisible) {
     return null;
   }
 

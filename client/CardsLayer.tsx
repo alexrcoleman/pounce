@@ -1,6 +1,6 @@
 import { observer } from "mobx-react-lite";
 import Card from "./Card";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback } from "react";
 import { Move } from "../shared/MoveHandler";
 import {
   CardState,
@@ -42,25 +42,6 @@ export default observer(function CardsLayer({
   );
   const hintCardKey = hintCard ? getCardKey(hintCard) : null;
 
-  const [postGameStage, setPostGameStage] = useState(0);
-  const shouldRunPostGameCleanup = !board.isActive && board.pouncer != null;
-  useEffect(() => {
-    let timeouts: NodeJS.Timeout[] = [];
-    if (shouldRunPostGameCleanup) {
-      for (let i = 1; i <= 3; i++) {
-        timeouts.push(
-          setTimeout(() => {
-            setPostGameStage(i);
-          }, i * 2000)
-        );
-      }
-    } else {
-      setPostGameStage(0);
-    }
-    return () => {
-      timeouts.forEach(clearTimeout);
-    };
-  }, [shouldRunPostGameCleanup]);
   const cards = board.piles
     .flatMap((pile, pileIndex) =>
       pile.map((card, index) => {
@@ -75,7 +56,6 @@ export default observer(function CardsLayer({
               isTopCard: index === pile.length - 1,
               cardIndex: index,
             })}
-            postGameStage={postGameStage}
             isHandTarget={canInteract}
             isHinted={hintCardKey === getCardKey(card)}
             isRemoteCursorDragged={remoteDraggedCardKeys.has(
@@ -119,7 +99,6 @@ export default observer(function CardsLayer({
                 isRemoteCursorDragged={remoteDraggedCardKeys.has(
                   getCardKey(card)
                 )}
-                postGameStage={postGameStage}
               />
             );
           }),
@@ -146,7 +125,6 @@ export default observer(function CardsLayer({
                 isRemoteCursorDragged={remoteDraggedCardKeys.has(
                   getCardKey(card)
                 )}
-                postGameStage={postGameStage}
               />
             );
           }),
@@ -167,7 +145,6 @@ export default observer(function CardsLayer({
                 isRemoteCursorDragged={remoteDraggedCardKeys.has(
                   getCardKey(card)
                 )}
-                postGameStage={postGameStage}
               />
             );
           }),
@@ -188,7 +165,6 @@ export default observer(function CardsLayer({
                   isRemoteCursorDragged={remoteDraggedCardKeys.has(
                     getCardKey(card)
                   )}
-                  postGameStage={postGameStage}
                 />
               );
             })
