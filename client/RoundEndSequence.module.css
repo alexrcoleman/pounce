@@ -17,7 +17,8 @@
   color: #ffffff;
   text-align: center;
   transform: translate(-50%, -50%);
-  animation: roundEndAnnouncement 1000ms ease-out both;
+  animation: roundEndAnnouncement
+    var(--round-end-announcement-duration, 1000ms) ease-out both;
 }
 
 .announcementText {

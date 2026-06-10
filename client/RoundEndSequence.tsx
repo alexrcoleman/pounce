@@ -112,11 +112,12 @@ type RoundEndPlan = {
   roundKey: string;
 };
 
-const ANNOUNCE_MS = 1000;
-const POUNCE_PENALTY_MS = 800;
-const GATHER_CENTER_MS = 850;
-const SORT_CENTER_MS = 1300;
-const SETTLE_MS = 600;
+const ROUND_END_SEQUENCE_TIME_SCALE = 1.5;
+const ANNOUNCE_MS = scaleSequenceMs(1000);
+const POUNCE_PENALTY_MS = scaleSequenceMs(800);
+const GATHER_CENTER_MS = scaleSequenceMs(850);
+const SORT_CENTER_MS = scaleSequenceMs(1300);
+const SETTLE_MS = scaleSequenceMs(600);
 const TOTAL_SEQUENCE_MS =
   ANNOUNCE_MS +
   POUNCE_PENALTY_MS +
@@ -246,7 +247,7 @@ export function RoundEndSequenceProvider({
         return elapsedMs >= POUNCE_START_MS
           ? {
               opacity: 0.24,
-              transitionDurationMs: 260,
+              transitionDurationMs: scaleSequenceMs(260),
             }
           : null;
       }
@@ -259,7 +260,7 @@ export function RoundEndSequenceProvider({
           faceUp: false,
           geometry: cardPlan.finalTarget,
           transitionDelayMs: getPounceDelayMs(cardPlan.sortOrder),
-          transitionDurationMs: 620,
+          transitionDurationMs: scaleSequenceMs(620),
           transitionEasing: "cubic-bezier(0.18, 0.82, 0.25, 1)",
           zIndex: cardPlan.zIndex,
         };
@@ -279,7 +280,9 @@ export function RoundEndSequenceProvider({
         transitionDelayMs: isSorting
           ? getSortDelayMs(cardPlan.sortOrder, cardPlan.playerIndex)
           : getGatherDelayMs(cardPlan.sortOrder),
-        transitionDurationMs: isSorting ? 760 : 640,
+        transitionDurationMs: isSorting
+          ? scaleSequenceMs(760)
+          : scaleSequenceMs(640),
         transitionEasing: isSorting
           ? "cubic-bezier(0.22, 0.76, 0.25, 1)"
           : "cubic-bezier(0.18, 0.84, 0.22, 1)",
@@ -330,7 +333,15 @@ export function RoundEndSequenceOverlay() {
   return (
     <div className={styles.layer} data-phase={overlay.phase}>
       {overlay.phase === "announce" ? (
-        <div className={styles.announcement} role="status">
+        <div
+          className={styles.announcement}
+          role="status"
+          style={
+            {
+              "--round-end-announcement-duration": `${ANNOUNCE_MS}ms`,
+            } as CSSProperties
+          }
+        >
           <span className={styles.announcementText}>Pounce!</span>
           <span className={styles.announcementName}>
             {overlay.pouncerName}
@@ -565,7 +576,9 @@ function getTallyViews(
         : playerPlan.pounceCardKeys.filter((cardKey, index) => {
             return (
               elapsedMs >=
-              POUNCE_START_MS + getPounceDelayMs(index) + 360
+              POUNCE_START_MS +
+                getPounceDelayMs(index) +
+                scaleSequenceMs(360)
             );
           }).length;
     const centerCardsTallied =
@@ -578,7 +591,7 @@ function getTallyViews(
               elapsedMs >=
                 SORT_START_MS +
                   getSortDelayMs(cardPlan.sortOrder, cardPlan.playerIndex) +
-                  560
+                  scaleSequenceMs(560)
             );
           }).length;
     const displayedScore =
@@ -644,15 +657,19 @@ function getTallyAngle(order: number, playerCount: number): number {
 }
 
 function getPounceDelayMs(order: number): number {
-  return Math.min(320, order * 34);
+  return scaleSequenceMs(Math.min(320, order * 34));
 }
 
 function getGatherDelayMs(order: number): number {
-  return Math.min(380, order * 5);
+  return scaleSequenceMs(Math.min(380, order * 5));
 }
 
 function getSortDelayMs(order: number, playerIndex: number): number {
-  return Math.min(560, order * 16 + playerIndex * 22);
+  return scaleSequenceMs(Math.min(560, order * 16 + playerIndex * 22));
+}
+
+function scaleSequenceMs(durationMs: number): number {
+  return Math.round(durationMs * ROUND_END_SEQUENCE_TIME_SCALE);
 }
 
 function getCardKey(card: CardState): string {
