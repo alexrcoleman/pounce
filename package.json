@@ -32,6 +32,7 @@
     "start": "PORT=3000 next start -p 3000",
     "build-socketio": "echo 'no build needed for socketio server'",
     "start-socketio": "PORT=3001 ts-node --transpile-only server/socketioMain.ts",
+    "test:fair-hands": "node ./node_modules/ts-node/dist/bin.js --transpile-only shared/FairHands.test.ts",
     "test:action-ranking-policy": "ts-node --transpile-only shared/ActionRankingPolicy.test.ts",
     "test:room-delta": "node ./node_modules/ts-node/dist/bin.js --transpile-only shared/RoomDelta.test.ts",
     "test:socket-state": "node ./node_modules/ts-node/dist/bin.js --transpile-only client/SocketState.test.ts",

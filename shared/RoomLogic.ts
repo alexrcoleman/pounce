@@ -31,8 +31,10 @@ import {
   type RoomState,
 } from "./RoomState";
 import {
+  chooseFairHandAssignments,
   getFairHandMode,
   normalizeFairHandMode,
+  type FairHandScore,
 } from "./FairHands";
 import {
   executeMove,
@@ -892,28 +894,23 @@ function dealFairestRoomHands(room: RoomState): boolean {
   dealActivePlayerHands(board);
 
   const activePlayerIndices = getActiveDealPlayerIndices(board);
-  const rankedHands = getRankedFairestDealHands(board, activePlayerIndices);
-  if (rankedHands.length > 0) {
+  const handScores = getFairestDealHandScores(board, activePlayerIndices);
+  if (handScores.length > 0) {
     normalizeFairHandExpectedScores(board, activePlayerIndices);
-    const rankedPlayers = activePlayerIndices
-      .slice()
-      .sort(
-        (a, b) =>
-          getFairHandExpectedScore(board.players[a]) -
-            getFairHandExpectedScore(board.players[b]) ||
-          a - b
-      );
+    const assignments = chooseFairHandAssignments(
+      activePlayerIndices.map((playerIndex) => ({
+        playerIndex,
+        expectedScoreTotal: getFairHandExpectedScore(board.players[playerIndex]),
+      })),
+      handScores
+    );
     const assignedDecks = shuffledDecks.slice();
-    rankedPlayers.forEach((playerIndex, rankIndex) => {
-      const hand = rankedHands[rankIndex];
-      if (!hand) {
-        return;
-      }
-
-      assignedDecks[playerIndex] = shuffledDecks[hand.playerIndex];
+    assignments.forEach((assignment) => {
+      const playerIndex = assignment.playerIndex;
+      assignedDecks[playerIndex] = shuffledDecks[assignment.handPlayerIndex];
       board.players[playerIndex].fairHandExpectedScoreTotal =
         getFairHandExpectedScore(board.players[playerIndex]) +
-        hand.expectedScore;
+        assignment.expectedScore;
     });
     resetBoard(board, assignedDecks);
     dealActivePlayerHands(board);
@@ -924,10 +921,10 @@ function dealFairestRoomHands(room: RoomState): boolean {
   return true;
 }
 
-function getRankedFairestDealHands(
+function getFairestDealHandScores(
   board: BoardState,
   activePlayerIndices: number[]
-): { playerIndex: number; expectedScore: number }[] {
+): FairHandScore[] {
   if (activePlayerIndices.length <= 1) {
     return [];
   }
@@ -937,17 +934,18 @@ function getRankedFairestDealHands(
       simulateBalancedDealScores(board, {
         maxTrials: FAIREST_DEAL_SIMULATION_TRIALS,
         maxMovesPerTrial: FAIREST_DEAL_MAX_MOVES_PER_TRIAL,
-      }).map((result) => [result.playerIndex, result.predictedScore])
+      }).map((result) => [result.playerIndex, result])
     );
     return activePlayerIndices
-      .map((playerIndex) => ({
-        playerIndex,
-        expectedScore: scoreByPlayerIndex.get(playerIndex) ?? 0,
-      }))
-      .sort(
-        (a, b) =>
-          b.expectedScore - a.expectedScore || a.playerIndex - b.playerIndex
-      );
+      .map((playerIndex) => {
+        const result = scoreByPlayerIndex.get(playerIndex);
+        return {
+          playerIndex,
+          expectedScore: result?.predictedScore ?? 0,
+          predictedScoreConfidenceInterval95:
+            result?.predictedScoreConfidenceInterval95,
+        };
+      });
   } catch (error) {
     console.warn("Unable to rank fairest deal hands", error);
     return [];

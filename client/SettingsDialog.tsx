@@ -615,7 +615,7 @@ function FairHandModeTooltip({ board }: { board: BoardState | null }) {
           <strong>Best hand to least lucky</strong>
           <span>
             Shuffles fresh hands, predicts each hand with the same balanced
-            strategy, then gives stronger hands to lower luck totals.
+            strategy, then balances stronger hands against lower luck totals.
           </span>
         </p>
       </div>
