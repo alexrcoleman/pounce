@@ -1,29 +1,40 @@
-name: Deploy to Cloud Run
+name: Deploy Production to Cloud Run
 
 on:
-  push:
-    branches:
-      - main
-      - master
+  schedule:
+    # GitHub schedules are UTC. This is midnight Pacific Standard Time.
+    - cron: "0 8 * * *"
   workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag, or SHA to deploy
+        required: false
+        default: main
+      force:
+        description: Deploy even if production already has this SHA
+        required: false
+        type: boolean
+        default: false
 
 concurrency:
-  group: cloud-run-${{ github.ref }}
+  group: cloud-run-production
   cancel-in-progress: false
 
 env:
   PROJECT_ID: pounce-409615
   SERVICE: pounce
+  STAGING_SERVICE: pounce-staging
   REGION: us-east4
   ARTIFACT_REPOSITORY: cloud-run-source-deploy
   NODE_VERSION: 18.x
+  PRODUCTION_SITE_URL: https://pounce.live
   DRAIN_WAIT_SECONDS: 300
   DRAIN_MAX_ATTEMPTS: 6
   DRAIN_RETRY_SECONDS: 10
 
 jobs:
   deploy:
-    name: Type check and deploy
+    name: Promote checked staging SHA to production
     runs-on: ubuntu-latest
 
     permissions:
@@ -33,18 +44,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
-      - name: Set up Node
-        uses: actions/setup-node@v6
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: npm
+          ref: ${{ inputs.ref || github.sha }}
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Type check
-        run: npx tsc --noEmit
+      - name: Record target SHA
+        id: target
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Check deploy configuration
         env:
@@ -66,7 +71,59 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
 
+      - name: Check staging and production SHAs
+        id: deploy_state
+        env:
+          FORCE_DEPLOY: ${{ inputs.force || false }}
+          TARGET_SHA: ${{ steps.target.outputs.sha }}
+        run: |
+          set -euo pipefail
+
+          staging_sha="$(gcloud run services describe "$STAGING_SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format='value(metadata.labels.source-sha)' 2>/dev/null || true)"
+
+          production_sha="$(gcloud run services describe "$SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format='value(metadata.labels.source-sha)' 2>/dev/null || true)"
+
+          echo "target_sha=$TARGET_SHA" >> "$GITHUB_OUTPUT"
+          echo "staging_sha=$staging_sha" >> "$GITHUB_OUTPUT"
+          echo "production_sha=$production_sha" >> "$GITHUB_OUTPUT"
+
+          if [ "$staging_sha" != "$TARGET_SHA" ]; then
+            echo "::warning::Staging has source SHA '$staging_sha', not target '$TARGET_SHA'. Deploy staging first."
+            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "$production_sha" = "$TARGET_SHA" ] && [ "$FORCE_DEPLOY" != "true" ]; then
+            echo "Production already has source SHA $TARGET_SHA."
+            echo "should_deploy=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "should_deploy=true" >> "$GITHUB_OUTPUT"
+
+      - name: Set up Node
+        if: steps.deploy_state.outputs.should_deploy == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.deploy_state.outputs.should_deploy == 'true'
+        run: npm ci
+
+      - name: Type check
+        if: steps.deploy_state.outputs.should_deploy == 'true'
+        run: npx tsc --noEmit
+
       - name: Apply Artifact Registry cleanup policy
+        if: steps.deploy_state.outputs.should_deploy == 'true'
         run: |
           gcloud artifacts repositories set-cleanup-policies "$ARTIFACT_REPOSITORY" \
             --project "$PROJECT_ID" \
@@ -75,7 +132,17 @@ jobs:
             --no-dry-run \
             --quiet
 
+      - name: Enable production Docker build features
+        if: steps.deploy_state.outputs.should_deploy == 'true'
+        run: |
+          printf '%s\n' \
+            "NEXT_PUBLIC_SITE_URL=$PRODUCTION_SITE_URL" \
+            "POUNCE_DEPLOY_ENV=production" \
+            "POUNCE_BUILD_STORYBOOK=false" \
+            > .pounce-build-env
+
       - name: Begin game server drain
+        if: steps.deploy_state.outputs.should_deploy == 'true'
         env:
           GAME_SERVER_DRAIN_SECRET: ${{ secrets.GAME_SERVER_DRAIN_SECRET }}
         run: |
@@ -151,7 +218,8 @@ jobs:
             exit 1
           done
 
-      - name: Deploy to Cloud Run
+      - name: Deploy to Cloud Run production
+        if: steps.deploy_state.outputs.should_deploy == 'true'
         id: deploy
         uses: google-github-actions/deploy-cloudrun@v3
         with:
@@ -162,9 +230,22 @@ jobs:
           env_vars: |
             GAME_SERVER_DRAIN_SECRET=${{ secrets.GAME_SERVER_DRAIN_SECRET }}
             GAME_SERVER_DRAIN_WINDOW_MS=300000
+            NEXT_PUBLIC_SITE_URL=${{ env.PRODUCTION_SITE_URL }}
+            POUNCE_DEPLOY_ENV=production
+            POUNCE_SOURCE_SHA=${{ steps.target.outputs.sha }}
           env_vars_update_strategy: merge
+          labels: |
+            environment=production
+            source-sha=${{ steps.target.outputs.sha }}
           flags: >-
             --startup-probe=httpGet.path=/api/startup/ready,httpGet.port=8080,initialDelaySeconds=0,periodSeconds=2,timeoutSeconds=1,failureThreshold=60
 
-      - name: Show deployed URL
-        run: echo "${{ steps.deploy.outputs.url }}"
+      - name: Show deployment result
+        run: |
+          echo "target=${{ steps.target.outputs.sha }}"
+          echo "staging=${{ steps.deploy_state.outputs.staging_sha }}"
+          echo "production_before=${{ steps.deploy_state.outputs.production_sha }}"
+          echo "deployed=${{ steps.deploy_state.outputs.should_deploy }}"
+          if [ "${{ steps.deploy_state.outputs.should_deploy }}" = "true" ]; then
+            echo "${{ steps.deploy.outputs.url }}"
+          fi

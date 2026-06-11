@@ -1722,13 +1722,21 @@ staging CNAME ghs.googlehosted.com.
 
 ### Automated deploys
 
-GitHub Actions deploys the app automatically through `.github/workflows/deploy-cloud-run.yml` whenever a commit is pushed to `main` or `master`. The workflow also supports manual runs from the Actions tab.
+GitHub Actions deploys production through
+`.github/workflows/deploy-cloud-run.yml`. Production deploys run on a daily
+schedule at midnight Pacific Standard Time and can also be run manually from the
+Actions tab. The workflow checks the target commit against the
+`pounce-staging` service first; if staging has not successfully deployed that
+commit yet, production is skipped. If production already has the same source SHA,
+the workflow exits without deploying unless the manual `force` input is enabled.
 
 GitHub Actions can deploy staging manually through
 `.github/workflows/deploy-staging-cloud-run.yml`, and deploys staging
 automatically whenever `main` or `master` changes. That workflow deploys to
 `pounce-staging`, sets the staging public URL at build time, and includes the
-Storybook dump.
+Storybook dump. Staging and production both write the deployed commit into the
+Cloud Run service label `source-sha`, which is how the production workflow
+decides whether a commit has already reached staging and production.
 
 The workflow uses GitHub OIDC with Google Workload Identity Federation, so it does not need a long-lived Google service account key. Before the first run, add these repository secrets in GitHub under Settings > Secrets and variables > Actions > Secrets:
 
