@@ -10,11 +10,17 @@ import {
 import type { CSSProperties } from "react";
 
 import type { BoardState, CardState, PlayerState } from "../shared/GameUtils";
-import { CARD_HEIGHT, CARD_WIDTH } from "../shared/CardLocations";
+import {
+  CARD_HEIGHT,
+  CARD_WIDTH,
+  getPlayerLocation,
+} from "../shared/CardLocations";
 import {
   FIELD_LEFT,
   FIELD_SIZE,
   FIELD_TOP,
+  PLAYER_HEIGHT,
+  PLAYER_WIDTH,
   type BoardLayout,
   useBoardLayout,
 } from "./BoardLayout";
@@ -112,22 +118,35 @@ type RoundEndPlan = {
   roundKey: string;
 };
 
+type RoundEndStageDefinition = {
+  durationMs: number;
+  stage: RoundEndPhase;
+};
+
 const ROUND_END_SEQUENCE_TIME_SCALE = 1.5;
-const ANNOUNCE_MS = scaleSequenceMs(1000);
-const POUNCE_PENALTY_MS = scaleSequenceMs(800);
-const GATHER_CENTER_MS = scaleSequenceMs(850);
-const SORT_CENTER_MS = scaleSequenceMs(1300);
-const SETTLE_MS = scaleSequenceMs(600);
-const TOTAL_SEQUENCE_MS =
-  ANNOUNCE_MS +
-  POUNCE_PENALTY_MS +
-  GATHER_CENTER_MS +
-  SORT_CENTER_MS +
-  SETTLE_MS;
-const POUNCE_START_MS = ANNOUNCE_MS;
-const GATHER_START_MS = POUNCE_START_MS + POUNCE_PENALTY_MS;
-const SORT_START_MS = GATHER_START_MS + GATHER_CENTER_MS;
-const SETTLE_START_MS = SORT_START_MS + SORT_CENTER_MS;
+const ROUND_END_MOTION_SPEED = 2;
+const ROUND_END_STAGES = [
+  { stage: "announce", durationMs: scaleSequenceMs(1000) },
+  { stage: "pouncePenalty", durationMs: scaleSequenceMs(800) },
+  { stage: "gatherCenter", durationMs: scaleSequenceMs(850) },
+  { stage: "sortCenter", durationMs: scaleSequenceMs(1300) },
+  { stage: "settled", durationMs: scaleSequenceMs(600) },
+] as const satisfies readonly RoundEndStageDefinition[];
+const TOTAL_SEQUENCE_MS = ROUND_END_STAGES.reduce(
+  (total, stage) => total + stage.durationMs,
+  0
+);
+const ANNOUNCE_MS = getStageDuration("announce");
+const POUNCE_START_MS = getStartTime("pouncePenalty");
+const GATHER_START_MS = getStartTime("gatherCenter");
+const SORT_START_MS = getStartTime("sortCenter");
+const SETTLE_START_MS = getStartTime("settled");
+const NON_CEREMONY_FADE_MS = scaleMotionMs(260);
+const POUNCE_MOVE_MS = scaleMotionMs(620);
+const GATHER_MOVE_MS = scaleMotionMs(640);
+const SORT_MOVE_MS = scaleMotionMs(760);
+const POUNCE_TALLY_OFFSET_MS = Math.round(POUNCE_MOVE_MS * 0.7);
+const CENTER_TALLY_OFFSET_MS = Math.round(SORT_MOVE_MS * 0.68);
 const CEREMONY_CARD_Z_INDEX = 70000;
 const FIELD_AREA = { type: "field" } as const;
 
@@ -247,7 +266,7 @@ export function RoundEndSequenceProvider({
         return elapsedMs >= POUNCE_START_MS
           ? {
               opacity: 0.24,
-              transitionDurationMs: scaleSequenceMs(260),
+              transitionDurationMs: NON_CEREMONY_FADE_MS,
             }
           : null;
       }
@@ -260,7 +279,7 @@ export function RoundEndSequenceProvider({
           faceUp: false,
           geometry: cardPlan.finalTarget,
           transitionDelayMs: getPounceDelayMs(cardPlan.sortOrder),
-          transitionDurationMs: scaleSequenceMs(620),
+          transitionDurationMs: POUNCE_MOVE_MS,
           transitionEasing: "cubic-bezier(0.18, 0.82, 0.25, 1)",
           zIndex: cardPlan.zIndex,
         };
@@ -280,9 +299,7 @@ export function RoundEndSequenceProvider({
         transitionDelayMs: isSorting
           ? getSortDelayMs(cardPlan.sortOrder, cardPlan.playerIndex)
           : getGatherDelayMs(cardPlan.sortOrder),
-        transitionDurationMs: isSorting
-          ? scaleSequenceMs(760)
-          : scaleSequenceMs(640),
+        transitionDurationMs: isSorting ? SORT_MOVE_MS : GATHER_MOVE_MS,
         transitionEasing: isSorting
           ? "cubic-bezier(0.22, 0.76, 0.25, 1)"
           : "cubic-bezier(0.18, 0.84, 0.22, 1)",
@@ -391,7 +408,7 @@ function createRoundEndPlan({
         name: player.name,
         playerIndex,
         pounceCardKeys: player.pounceDeck.map(getCardKey),
-        target: getPlayerTallyTarget(layout, order, activePlayers.length),
+        target: getPlayerTallyTarget(layout, playerIndex),
       };
     }
   );
@@ -404,7 +421,6 @@ function createRoundEndPlan({
     playerPlan.pounceCardKeys.forEach((cardKey, cardIndex) => {
       cardPlans[cardKey] = {
         finalTarget: getStackedTarget(
-          layout,
           playerPlan.target,
           cardIndex,
           cardKey,
@@ -431,7 +447,6 @@ function createRoundEndPlan({
       playerPlan.centerCardKeys.push(cardKey);
       cardPlans[cardKey] = {
         finalTarget: getStackedTarget(
-          layout,
           playerPlan.target,
           playerPlan.pounceCardKeys.length + sortOrder,
           cardKey,
@@ -463,27 +478,27 @@ function createRoundEndPlan({
 
 function getPlayerTallyTarget(
   layout: BoardLayout,
-  order: number,
-  playerCount: number
+  playerIndex: number
 ): ScreenTarget {
-  const centerX = FIELD_LEFT + FIELD_SIZE / 2;
-  const centerY = FIELD_TOP + FIELD_SIZE / 2;
-  const angle = getTallyAngle(order, playerCount);
-  const radiusX = FIELD_SIZE * (playerCount <= 3 ? 0.31 : 0.35);
-  const radiusY = FIELD_SIZE * (playerCount <= 3 ? 0.25 : 0.3);
-  const fieldX = centerX + Math.cos(angle) * radiusX - CARD_WIDTH / 2;
-  const fieldY = centerY + Math.sin(angle) * radiusY - CARD_HEIGHT / 2;
-  const [x, y] = layout.mapPoint([fieldX, fieldY], FIELD_AREA);
+  const activePlayerIndex = layout.fullSizePlayerIndices[0] ?? playerIndex;
+  const playerArea = { type: "player", playerIndex } as const;
+  const [playerLeft, playerTop] = getPlayerLocation(
+    playerIndex,
+    activePlayerIndex
+  );
+  const localX = playerLeft + PLAYER_WIDTH / 2 - CARD_WIDTH / 2;
+  const localY = playerTop + PLAYER_HEIGHT / 2 - CARD_HEIGHT / 2;
+  const [x, y] = layout.mapPoint([localX, localY], playerArea);
   const [labelX, labelY] = layout.mapPoint(
-    [fieldX + CARD_WIDTH / 2, fieldY - 14],
-    FIELD_AREA
+    [localX + CARD_WIDTH / 2, localY - 14],
+    playerArea
   );
 
   return {
     labelX,
     labelY,
     rotationDegrees: 0,
-    screenScale: layout.getScale(FIELD_AREA),
+    screenScale: layout.getScale(playerArea),
     x,
     y,
   };
@@ -518,47 +533,22 @@ function getGatherTarget(
 }
 
 function getStackedTarget(
-  layout: BoardLayout,
   target: ScreenTarget,
   stackIndex: number,
   cardKey: string,
   baseRotationDegrees: number
 ): CardVisualGeometry {
   const hash = hashString(`${cardKey}:${stackIndex}`);
-  const fieldTarget = unmapApproximateFieldPoint(layout, target.x, target.y);
   const cappedIndex = Math.min(stackIndex, 54);
   const offsetX = getSignedHashUnit(hash, 0) * 7 + cappedIndex * 0.05;
   const offsetY = getSignedHashUnit(hash, 8) * 5 + cappedIndex * 0.18;
-  const [x, y] = layout.mapPoint(
-    [fieldTarget[0] + offsetX, fieldTarget[1] + offsetY],
-    FIELD_AREA
-  );
 
   return {
     rotationDegrees: baseRotationDegrees + getSignedHashUnit(hash, 16) * 9,
-    screenScale: layout.getScale(FIELD_AREA),
-    x,
-    y,
+    screenScale: target.screenScale,
+    x: target.x + offsetX * target.screenScale,
+    y: target.y + offsetY * target.screenScale,
   };
-}
-
-function unmapApproximateFieldPoint(
-  layout: BoardLayout,
-  screenX: number,
-  screenY: number
-): [number, number] {
-  const scale = layout.getScale(FIELD_AREA);
-  if (scale <= 0) {
-    return [FIELD_LEFT + FIELD_SIZE / 2, FIELD_TOP + FIELD_SIZE / 2];
-  }
-  const [fieldLeft, fieldTop] = layout.mapPoint(
-    [FIELD_LEFT, FIELD_TOP],
-    FIELD_AREA
-  );
-  return [
-    FIELD_LEFT + (screenX - fieldLeft) / scale,
-    FIELD_TOP + (screenY - fieldTop) / scale,
-  ];
 }
 
 function getTallyViews(
@@ -576,9 +566,9 @@ function getTallyViews(
         : playerPlan.pounceCardKeys.filter((cardKey, index) => {
             return (
               elapsedMs >=
-              POUNCE_START_MS +
+                POUNCE_START_MS +
                 getPounceDelayMs(index) +
-                scaleSequenceMs(360)
+                POUNCE_TALLY_OFFSET_MS
             );
           }).length;
     const centerCardsTallied =
@@ -591,7 +581,7 @@ function getTallyViews(
               elapsedMs >=
                 SORT_START_MS +
                   getSortDelayMs(cardPlan.sortOrder, cardPlan.playerIndex) +
-                  scaleSequenceMs(560)
+                  CENTER_TALLY_OFFSET_MS
             );
           }).length;
     const displayedScore =
@@ -630,46 +620,52 @@ function getRoundKey(board: BoardState): string | null {
   ].join(":");
 }
 
+function getStageDuration(stageName: RoundEndPhase): number {
+  return (
+    ROUND_END_STAGES.find((stage) => stage.stage === stageName)?.durationMs ?? 0
+  );
+}
+
+function getStartTime(stageName: RoundEndPhase): number {
+  let elapsedMs = 0;
+  for (const stage of ROUND_END_STAGES) {
+    if (stage.stage === stageName) {
+      return elapsedMs;
+    }
+    elapsedMs += stage.durationMs;
+  }
+  return elapsedMs;
+}
+
 function getPhase(elapsedMs: number): RoundEndPhase {
-  if (elapsedMs < POUNCE_START_MS) {
-    return "announce";
-  }
-  if (elapsedMs < GATHER_START_MS) {
-    return "pouncePenalty";
-  }
-  if (elapsedMs < SORT_START_MS) {
-    return "gatherCenter";
-  }
-  if (elapsedMs < SETTLE_START_MS) {
-    return "sortCenter";
+  let elapsedBeforeStage = 0;
+  for (const stage of ROUND_END_STAGES) {
+    if (elapsedMs < elapsedBeforeStage + stage.durationMs) {
+      return stage.stage;
+    }
+    elapsedBeforeStage += stage.durationMs;
   }
   return "settled";
 }
 
-function getTallyAngle(order: number, playerCount: number): number {
-  if (playerCount <= 1) {
-    return -Math.PI / 2;
-  }
-  if (playerCount === 2) {
-    return Math.PI + order * Math.PI;
-  }
-  return -Math.PI / 2 + (order / playerCount) * Math.PI * 2;
-}
-
 function getPounceDelayMs(order: number): number {
-  return scaleSequenceMs(Math.min(320, order * 34));
+  return scaleMotionMs(Math.min(320, order * 34));
 }
 
 function getGatherDelayMs(order: number): number {
-  return scaleSequenceMs(Math.min(380, order * 5));
+  return scaleMotionMs(Math.min(380, order * 5));
 }
 
 function getSortDelayMs(order: number, playerIndex: number): number {
-  return scaleSequenceMs(Math.min(560, order * 16 + playerIndex * 22));
+  return scaleMotionMs(Math.min(560, order * 16 + playerIndex * 22));
 }
 
 function scaleSequenceMs(durationMs: number): number {
   return Math.round(durationMs * ROUND_END_SEQUENCE_TIME_SCALE);
+}
+
+function scaleMotionMs(durationMs: number): number {
+  return Math.round(durationMs / ROUND_END_MOTION_SPEED);
 }
 
 function getCardKey(card: CardState): string {
