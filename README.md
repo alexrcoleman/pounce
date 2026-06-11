@@ -1669,6 +1669,13 @@ The production app runs on Google Cloud Run:
 - Service: `pounce`
 - Region: `us-east4`
 
+The staging app uses a separate Cloud Run service in the same project and
+region:
+
+- Service: `pounce-staging`
+- URL: `https://staging.pounce.live`
+- Storybook: `https://staging.pounce.live/stories`
+
 Deploy from the repo root with:
 
 ```powershell
@@ -1680,9 +1687,47 @@ gcloud run deploy pounce `
 
 Cloud Run builds the included `Dockerfile` from source and updates the existing service. The existing service settings should be preserved by default, including port `8080`, `maxScale=1`, memory, CPU, concurrency, timeout, startup probe, and public access. The startup probe should hit `/api/startup/ready`, which verifies nginx can reach the Socket.IO server and that Socket.IO can reach Next. Run `git status --short` first because `--source .` uploads the current working tree, including uncommitted files that are not ignored.
 
+To bootstrap staging manually from a clean checkout or worktree:
+
+```powershell
+@"
+NEXT_PUBLIC_SITE_URL=https://staging.pounce.live
+POUNCE_DEPLOY_ENV=staging
+POUNCE_BUILD_STORYBOOK=true
+"@ | Set-Content -LiteralPath .pounce-build-env -NoNewline
+
+gcloud run deploy pounce-staging `
+  --source . `
+  --project pounce-409615 `
+  --region us-east4 `
+  --allow-unauthenticated `
+  --update-env-vars NEXT_PUBLIC_SITE_URL=https://staging.pounce.live,POUNCE_DEPLOY_ENV=staging,GAME_SERVER_DRAIN_WINDOW_MS=30000 `
+  --startup-probe=httpGet.path=/api/startup/ready,httpGet.port=8080,initialDelaySeconds=0,periodSeconds=2,timeoutSeconds=1,failureThreshold=60
+
+Remove-Item -LiteralPath .pounce-build-env
+```
+
+Staging builds include a static Storybook dump at `/stories`. Production builds
+do not include that dump unless `.pounce-build-env` sets
+`POUNCE_BUILD_STORYBOOK=true` before the source deploy. Staging builds also send
+`X-Robots-Tag: noindex, nofollow`.
+
+The Cloud Run custom domain mapping for `staging.pounce.live` should route to
+`pounce-staging`. After creating the mapping, configure this DNS record with the
+domain host:
+
+```text
+staging CNAME ghs.googlehosted.com.
+```
+
 ### Automated deploys
 
 GitHub Actions deploys the app automatically through `.github/workflows/deploy-cloud-run.yml` whenever a commit is pushed to `main` or `master`. The workflow also supports manual runs from the Actions tab.
+
+GitHub Actions can deploy staging manually through
+`.github/workflows/deploy-staging-cloud-run.yml`. That workflow deploys to
+`pounce-staging`, sets the staging public URL at build time, and includes the
+Storybook dump.
 
 The workflow uses GitHub OIDC with Google Workload Identity Federation, so it does not need a long-lived Google service account key. Before the first run, add these repository secrets in GitHub under Settings > Secrets and variables > Actions > Secrets:
 

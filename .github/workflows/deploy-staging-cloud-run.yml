@@ -1,0 +1,189 @@
+name: Deploy Staging to Cloud Run
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag, or SHA to deploy
+        required: false
+        default: main
+
+concurrency:
+  group: cloud-run-staging
+  cancel-in-progress: false
+
+env:
+  PROJECT_ID: pounce-409615
+  SERVICE: pounce-staging
+  REGION: us-east4
+  ARTIFACT_REPOSITORY: cloud-run-source-deploy
+  NODE_VERSION: 18.x
+  STAGING_SITE_URL: https://staging.pounce.live
+  DRAIN_WAIT_SECONDS: 30
+  DRAIN_MAX_ATTEMPTS: 3
+  DRAIN_RETRY_SECONDS: 10
+
+jobs:
+  deploy:
+    name: Type check and deploy staging
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npx tsc --noEmit
+
+      - name: Check deploy configuration
+        env:
+          GAME_SERVER_DRAIN_SECRET: ${{ secrets.STAGING_GAME_SERVER_DRAIN_SECRET || secrets.GAME_SERVER_DRAIN_SECRET }}
+          GCP_SERVICE_ACCOUNT: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+        run: |
+          test -n "$GAME_SERVER_DRAIN_SECRET" || { echo "::error::Set repository secret STAGING_GAME_SERVER_DRAIN_SECRET or GAME_SERVER_DRAIN_SECRET."; exit 1; }
+          test -n "$GCP_WORKLOAD_IDENTITY_PROVIDER" || { echo "::error::Set repository secret GCP_WORKLOAD_IDENTITY_PROVIDER."; exit 1; }
+          test -n "$GCP_SERVICE_ACCOUNT" || { echo "::error::Set repository secret GCP_SERVICE_ACCOUNT."; exit 1; }
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Apply Artifact Registry cleanup policy
+        run: |
+          gcloud artifacts repositories set-cleanup-policies "$ARTIFACT_REPOSITORY" \
+            --project "$PROJECT_ID" \
+            --location "$REGION" \
+            --policy deploy/artifact-registry-cleanup-policy.json \
+            --no-dry-run \
+            --quiet
+
+      - name: Enable staging Docker build features
+        run: |
+          printf '%s\n' \
+            "NEXT_PUBLIC_SITE_URL=$STAGING_SITE_URL" \
+            "POUNCE_DEPLOY_ENV=staging" \
+            "POUNCE_BUILD_STORYBOOK=true" \
+            > .pounce-build-env
+
+      - name: Begin staging game server drain
+        env:
+          GAME_SERVER_DRAIN_SECRET: ${{ secrets.STAGING_GAME_SERVER_DRAIN_SECRET || secrets.GAME_SERVER_DRAIN_SECRET }}
+        run: |
+          set -euo pipefail
+
+          service_url="$(gcloud run services describe "$SERVICE" \
+            --project "$PROJECT_ID" \
+            --region "$REGION" \
+            --format='value(status.url)' 2>/dev/null || true)"
+
+          if [ -z "$service_url" ]; then
+            echo "::warning::Cloud Run staging service URL was not found; skipping drain for this deploy."
+            exit 0
+          fi
+
+          response_file="$(mktemp)"
+          error_file="$(mktemp)"
+          attempt=1
+
+          while [ "$attempt" -le "$DRAIN_MAX_ATTEMPTS" ]; do
+            : > "$response_file"
+            : > "$error_file"
+            status="000"
+
+            if status="$(curl -sS --connect-timeout 10 --max-time 30 \
+              -o "$response_file" \
+              -w "%{http_code}" \
+              -X POST "$service_url/api/admin/drain" \
+              -H "Authorization: Bearer $GAME_SERVER_DRAIN_SECRET" \
+              2> "$error_file")"; then
+              true
+            else
+              status="000"
+            fi
+
+            if [ "$status" -ge 200 ] && [ "$status" -lt 300 ]; then
+              cat "$response_file"
+              echo "Waiting $DRAIN_WAIT_SECONDS seconds before deploying staging..."
+              sleep "$DRAIN_WAIT_SECONDS"
+              exit 0
+            fi
+
+            if [ "$status" = "404" ]; then
+              echo "::warning::Drain endpoint is not live yet; proceeding with bootstrap deploy."
+              exit 0
+            fi
+
+            if [ "$status" = "401" ] || [ "$status" = "403" ]; then
+              cat "$response_file"
+              echo "::error::Staging game server drain request was unauthorized with HTTP $status."
+              exit 1
+            fi
+
+            if [ "$status" = "000" ] ||
+              [ "$status" = "408" ] ||
+              [ "$status" = "429" ] ||
+              { [ "$status" -ge 500 ] && [ "$status" -lt 600 ]; }; then
+              if [ "$attempt" -eq "$DRAIN_MAX_ATTEMPTS" ]; then
+                cat "$response_file"
+                cat "$error_file"
+                echo "::warning::Staging drain stayed unavailable after $DRAIN_MAX_ATTEMPTS attempts; proceeding with deploy."
+                exit 0
+              fi
+
+              echo "Drain attempt $attempt/$DRAIN_MAX_ATTEMPTS failed with HTTP $status; retrying in $DRAIN_RETRY_SECONDS seconds..."
+              sleep "$DRAIN_RETRY_SECONDS"
+              attempt=$((attempt + 1))
+              continue
+            fi
+
+            cat "$response_file"
+            echo "::error::Staging game server drain request failed with HTTP $status."
+            exit 1
+          done
+
+      - name: Deploy to Cloud Run staging
+        id: deploy
+        uses: google-github-actions/deploy-cloudrun@v3
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          service: ${{ env.SERVICE }}
+          region: ${{ env.REGION }}
+          source: .
+          env_vars: |
+            GAME_SERVER_DRAIN_SECRET=${{ secrets.STAGING_GAME_SERVER_DRAIN_SECRET || secrets.GAME_SERVER_DRAIN_SECRET }}
+            GAME_SERVER_DRAIN_WINDOW_MS=30000
+            NEXT_PUBLIC_SITE_URL=${{ env.STAGING_SITE_URL }}
+            POUNCE_DEPLOY_ENV=staging
+          env_vars_update_strategy: merge
+          labels: |
+            environment=staging
+          flags: >-
+            --allow-unauthenticated
+            --startup-probe=httpGet.path=/api/startup/ready,httpGet.port=8080,initialDelaySeconds=0,periodSeconds=2,timeoutSeconds=1,failureThreshold=60
+
+      - name: Show deployed URLs
+        run: |
+          echo "${{ steps.deploy.outputs.url }}"
+          echo "${{ env.STAGING_SITE_URL }}"

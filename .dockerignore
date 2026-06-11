@@ -3,5 +3,7 @@ Dockerfile
 .dockerignore
 tsconfig.tsbuildinfo
 .next
+public/stories
+storybook-static
 .git
 .gitignore

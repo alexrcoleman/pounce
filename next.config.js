@@ -1,4 +1,6 @@
 const DEFAULT_PRODUCTION_SITE_URL = "https://pounce.live";
+const isStagingBuild = process.env.POUNCE_DEPLOY_ENV === "staging";
+const includeStorybook = process.env.POUNCE_BUILD_STORYBOOK === "true";
 const siteUrl =
   process.env.NEXT_PUBLIC_SITE_URL ||
   (process.env.NODE_ENV === "production"
@@ -35,6 +37,32 @@ module.exports = {
   env: {
     NEXT_PUBLIC_BUILD_DATE: new Date().toISOString(),
     NEXT_PUBLIC_SITE_URL: siteUrl,
+  },
+  async headers() {
+    return isStagingBuild
+      ? [
+          {
+            source: "/:path*",
+            headers: [
+              {
+                key: "X-Robots-Tag",
+                value: "noindex, nofollow",
+              },
+            ],
+          },
+        ]
+      : [];
+  },
+  async redirects() {
+    return includeStorybook
+      ? [
+          {
+            source: "/stories",
+            destination: "/stories/index.html",
+            permanent: false,
+          },
+        ]
+      : [];
   },
   webpack(config) {
     config.module.rules.push({

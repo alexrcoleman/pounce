@@ -9,6 +9,7 @@
 /coverage
 /storybook-screenshots
 /storybook-static
+/public/stories
 /training-runs/
 
 # next.js
