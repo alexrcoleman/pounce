@@ -1725,7 +1725,8 @@ staging CNAME ghs.googlehosted.com.
 GitHub Actions deploys the app automatically through `.github/workflows/deploy-cloud-run.yml` whenever a commit is pushed to `main` or `master`. The workflow also supports manual runs from the Actions tab.
 
 GitHub Actions can deploy staging manually through
-`.github/workflows/deploy-staging-cloud-run.yml`. That workflow deploys to
+`.github/workflows/deploy-staging-cloud-run.yml`, and deploys staging
+automatically whenever `main` or `master` changes. That workflow deploys to
 `pounce-staging`, sets the staging public URL at build time, and includes the
 Storybook dump.
 
