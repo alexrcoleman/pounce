@@ -79,6 +79,7 @@ type RoundEndSequenceContextValue = {
   isScoreboardVisible: boolean;
   overlay: RoundEndOverlayState | null;
   wasScoreboardDelayed: boolean;
+  isAnimating?: boolean;
 };
 
 type RoundEndSequenceState = {
@@ -124,12 +125,12 @@ type RoundEndStageDefinition = {
 };
 
 const ROUND_END_SEQUENCE_TIME_SCALE = 1.5;
-const ROUND_END_MOTION_SPEED = 2;
+const ROUND_END_MOTION_SPEED = 1;
 const ROUND_END_STAGES = [
   { stage: "announce", durationMs: scaleSequenceMs(1000) },
-  { stage: "pouncePenalty", durationMs: scaleSequenceMs(800) },
-  { stage: "gatherCenter", durationMs: scaleSequenceMs(850) },
-  { stage: "sortCenter", durationMs: scaleSequenceMs(1300) },
+  { stage: "pouncePenalty", durationMs: scaleSequenceMs(500) },
+  { stage: "gatherCenter", durationMs: scaleSequenceMs(750) },
+  { stage: "sortCenter", durationMs: scaleSequenceMs(2000) },
   { stage: "settled", durationMs: scaleSequenceMs(600) },
 ] as const satisfies readonly RoundEndStageDefinition[];
 const TOTAL_SEQUENCE_MS = ROUND_END_STAGES.reduce(
@@ -137,16 +138,18 @@ const TOTAL_SEQUENCE_MS = ROUND_END_STAGES.reduce(
   0
 );
 const ANNOUNCE_MS = getStageDuration("announce");
+const SORT_STAGE_DURATION = getStageDuration("sortCenter");
+const POUNCE_STAGE_DURATION = getStageDuration("pouncePenalty");
 const POUNCE_START_MS = getStartTime("pouncePenalty");
 const GATHER_START_MS = getStartTime("gatherCenter");
 const SORT_START_MS = getStartTime("sortCenter");
 const SETTLE_START_MS = getStartTime("settled");
 const NON_CEREMONY_FADE_MS = scaleMotionMs(260);
-const POUNCE_MOVE_MS = scaleMotionMs(620);
+const POUNCE_MOVE_MS = scaleMotionMs(350);
 const GATHER_MOVE_MS = scaleMotionMs(640);
 const SORT_MOVE_MS = scaleMotionMs(760);
-const POUNCE_TALLY_OFFSET_MS = Math.round(POUNCE_MOVE_MS * 0.7);
-const CENTER_TALLY_OFFSET_MS = Math.round(SORT_MOVE_MS * 0.68);
+const POUNCE_TALLY_OFFSET_MS = Math.round(POUNCE_MOVE_MS * 0.8);
+const CENTER_TALLY_OFFSET_MS = Math.round(SORT_MOVE_MS * 0.8);
 const CEREMONY_CARD_Z_INDEX = 70000;
 const FIELD_AREA = { type: "field" } as const;
 
@@ -251,6 +254,7 @@ export function RoundEndSequenceProvider({
   );
 
   const value = useMemo<RoundEndSequenceContextValue>(() => {
+    const isSorting = elapsedMs >= SORT_START_MS;
     const getCardPresentation = ({
       card,
       location,
@@ -280,7 +284,7 @@ export function RoundEndSequenceProvider({
           geometry: cardPlan.finalTarget,
           transitionDelayMs: getPounceDelayMs(cardPlan.sortOrder),
           transitionDurationMs: POUNCE_MOVE_MS,
-          transitionEasing: "cubic-bezier(0.18, 0.82, 0.25, 1)",
+          transitionEasing: "ease-in-out",
           zIndex: cardPlan.zIndex,
         };
       }
@@ -289,7 +293,8 @@ export function RoundEndSequenceProvider({
         return null;
       }
 
-      const isSorting = elapsedMs >= SORT_START_MS;
+      const isSortingThisCard = elapsedMs >= SORT_START_MS +
+                getSortDelayMs(cardPlan.sortOrder, cardPlan.playerIndex) + SORT_MOVE_MS * .2
       return {
         faceUp: false,
         geometry:
@@ -300,15 +305,14 @@ export function RoundEndSequenceProvider({
           ? getSortDelayMs(cardPlan.sortOrder, cardPlan.playerIndex)
           : getGatherDelayMs(cardPlan.sortOrder),
         transitionDurationMs: isSorting ? SORT_MOVE_MS : GATHER_MOVE_MS,
-        transitionEasing: isSorting
-          ? "cubic-bezier(0.22, 0.76, 0.25, 1)"
-          : "cubic-bezier(0.18, 0.84, 0.22, 1)",
-        zIndex: cardPlan.zIndex + (isSorting ? 450 : 0),
+        transitionEasing: "ease-in-out",
+        zIndex: cardPlan.zIndex + (isSorting ? 450 : 0) + (isSortingThisCard ? cardPlan.sortOrder * 2 : 0),
       };
     };
 
     return {
       getCardPresentation,
+      isAnimating,
       isScoreboardVisible: !shouldRunAnimation || elapsedMs >= TOTAL_SEQUENCE_MS,
       overlay:
         isAnimating && plan != null
@@ -460,7 +464,7 @@ function createRoundEndPlan({
         kind: "center",
         playerIndex: card.player,
         sortOrder: centerOrder,
-        zIndex: CEREMONY_CARD_Z_INDEX + 600 + centerOrder,
+        zIndex: CEREMONY_CARD_Z_INDEX + 600 + -centerOrder,
       };
       centerOrder += 1;
     });
@@ -511,7 +515,7 @@ function getGatherTarget(
 ): CardVisualGeometry {
   const hash = hashString(cardKey);
   const angle = getHashUnit(hash, 0) * Math.PI * 2;
-  const radius = 10 + getHashUnit(hash, 8) * 48;
+  const radius = 10 + getHashUnit(hash, 8) * 100;
   const fieldX =
     FIELD_LEFT +
     FIELD_SIZE / 2 -
@@ -649,7 +653,7 @@ function getPhase(elapsedMs: number): RoundEndPhase {
 }
 
 function getPounceDelayMs(order: number): number {
-  return scaleMotionMs(Math.min(320, order * 34));
+  return scaleMotionMs(Math.min(POUNCE_STAGE_DURATION * .9, order * 50));
 }
 
 function getGatherDelayMs(order: number): number {
@@ -657,7 +661,7 @@ function getGatherDelayMs(order: number): number {
 }
 
 function getSortDelayMs(order: number, playerIndex: number): number {
-  return scaleMotionMs(Math.min(560, order * 16 + playerIndex * 22));
+  return scaleMotionMs(Math.min(SORT_STAGE_DURATION * .9, order * 50 + playerIndex * 0));
 }
 
 function scaleSequenceMs(durationMs: number): number {

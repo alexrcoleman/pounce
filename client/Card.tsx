@@ -20,7 +20,7 @@ import {
   getCardScreenGeometry,
   getPosition,
 } from "./cardGeometry";
-import { useRoundEndCardPresentation } from "./RoundEndSequence";
+import { useRoundEndCardPresentation, useRoundEndSequence } from "./RoundEndSequence";
 
 const CLICK_DRAG_SUPPRESSION_DISTANCE_PX = 8;
 
@@ -154,6 +154,7 @@ const CardContentMemo = observer(function CardContent({
     layout.fullSizePlayerIndices.includes(card.player)
       ? 5000
       : 0;
+  const isAnimatingRoundEnd = useRoundEndSequence().isAnimating;
   const roundEndPresentation = useRoundEndCardPresentation({
     card,
     location,
@@ -168,6 +169,7 @@ const CardContentMemo = observer(function CardContent({
     activePlayerIndex,
     card,
     isRoundEndPresented: roundEndPresentation != null,
+    isAnimatingRoundEnd,
     location,
     pileLength: pile.length,
     zIndex,
@@ -369,6 +371,7 @@ const colors: Record<string, string | undefined> = {
 export default CardContentMemo;
 
 function getShouldAnimateFlip({
+  isAnimatingRoundEnd,
   activePlayerIndex,
   card,
   isRoundEndPresented,
@@ -378,11 +381,15 @@ function getShouldAnimateFlip({
 }: {
   activePlayerIndex: number;
   card: CardState;
+  isAnimatingRoundEnd: boolean | undefined;
   isRoundEndPresented: boolean;
   location: CardLocation;
   pileLength: number;
   zIndex: number;
 }): boolean {
+  if (isAnimatingRoundEnd) {
+    return true;
+  }
   if (isRoundEndPresented || card.player !== activePlayerIndex) {
     return false;
   }
