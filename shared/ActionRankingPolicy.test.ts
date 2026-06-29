@@ -5,8 +5,14 @@ import {
   enumerateLegalMoves,
   getMoveImmediatePointDelta,
 } from "./ActionRankingPolicy";
+import { getBasicAIMove } from "./ComputerV1";
 import { createBoard, type BoardState, type CardState } from "./GameUtils";
-import { executeMove, type Move } from "./MoveHandler";
+import {
+  executeMove,
+  resolveAIMoveForBoard,
+  resolveMoveForBoard,
+  type Move,
+} from "./MoveHandler";
 
 const expectedMovesByType = {
   c2c: [
@@ -111,6 +117,47 @@ assert.notStrictEqual(deckCycleFeatureIndex, -1);
   assert.strictEqual(player.playedDeckCardThisCycle, false);
 }
 
+{
+  const board = createActiveBoard();
+  const player = board.players[0];
+  board.pileLocs = createCenterPreferencePileLocs();
+  player.pounceDeck = [card("hearts", 1)];
+
+  const basicMove = getBasicAIMove(board, 0, {});
+  assert.strictEqual(
+    basicMove?.type === "c2c" ? basicMove.dest : -1,
+    2,
+    "basic AI should choose the most central empty pile for Aces"
+  );
+
+  const offCenterAceMove: Move = {
+    type: "c2c",
+    source: { type: "pounce" },
+    dest: 0,
+  };
+  const genericResolvedMove = resolveMoveForBoard(board, 0, offCenterAceMove);
+  assert.strictEqual(
+    genericResolvedMove.type === "c2c" ? genericResolvedMove.dest : -1,
+    0,
+    "generic move resolution should not override an available Ace pile choice"
+  );
+
+  const resolvedAIMove = resolveAIMoveForBoard(board, 0, offCenterAceMove);
+  assert.strictEqual(
+    resolvedAIMove.type === "c2c" ? resolvedAIMove.dest : -1,
+    2,
+    "AI move resolution should retarget Aces to the most central empty pile"
+  );
+
+  board.piles[0] = [card("spades", 1, 1)];
+  const resolvedStaleAIMove = resolveAIMoveForBoard(board, 0, offCenterAceMove);
+  assert.strictEqual(
+    resolvedStaleAIMove.type === "c2c" ? resolvedStaleAIMove.dest : -1,
+    2,
+    "stale AI Ace moves should retarget to the most central empty pile"
+  );
+}
+
 console.log("Validated action-ranking policy helpers.");
 
 function createActiveBoard(): BoardState {
@@ -135,4 +182,17 @@ function card(
   player = 0
 ): CardState {
   return { suit, value, player };
+}
+
+function createCenterPreferencePileLocs(): BoardState["pileLocs"] {
+  return [
+    [0.05, 0.05, 0],
+    [0.95, 0.95, 0],
+    [0.5, 0.48, 0],
+    [0.12, 0.8, 0],
+    [0.8, 0.12, 0],
+    [0.5, 0.78, 0],
+    [0.78, 0.5, 0],
+    [0.25, 0.25, 0],
+  ];
 }

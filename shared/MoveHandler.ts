@@ -16,6 +16,7 @@ import {
   couldMatch,
   peek,
 } from "./CardUtils";
+import { getNearestEmptyCenterPileToBoardCenter } from "./CenterPileUtils";
 
 export type Move =
   | {
@@ -100,6 +101,25 @@ export function resolveMoveForBoard(
   }
 
   const emptyPileIndex = boardState.piles.findIndex((pile) => pile.length === 0);
+  return emptyPileIndex >= 0 ? { ...move, dest: emptyPileIndex } : move;
+}
+
+export function resolveAIMoveForBoard(
+  boardState: BoardState,
+  playerIndex: number,
+  move: Move
+): Move {
+  if (move.type !== "c2c") {
+    return resolveMoveForBoard(boardState, playerIndex, move);
+  }
+
+  const player = boardState.players[playerIndex];
+  const topCard = player ? getSourceCard(boardState, player, move) : null;
+  if (topCard?.value !== 1) {
+    return resolveMoveForBoard(boardState, playerIndex, move);
+  }
+
+  const emptyPileIndex = getNearestEmptyCenterPileToBoardCenter(boardState);
   return emptyPileIndex >= 0 ? { ...move, dest: emptyPileIndex } : move;
 }
 
