@@ -27,6 +27,7 @@ import {
 } from "./AIDifficulty";
 import {
   normalizeAIMode,
+  type AICenterRetargetPause,
   type AIPileKnowledge,
   type RoomState,
 } from "./RoomState";
@@ -146,6 +147,10 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       const hand = (room.hands[index] = room.hands[index] ?? {});
       if (usesDelayedAIVisibility) {
         rememberAIActiveCenterPile(room, index, now);
+        if (pauseObsoleteAICenterDrag(room, index)) {
+          aiCooldowns[index] = now + getAIRetargetDelay(room);
+          continue;
+        }
       }
       const currentDragMove = getCurrentAIDragMove(board, index, hand);
       const visibleBoard = getVisibleBoard(room, index, now);
@@ -597,6 +602,88 @@ function rememberAIActiveCenterPile(
   rememberAICenterPileTop(room, playerIndex, pileIndex, now);
 }
 
+function pauseObsoleteAICenterDrag(
+  room: RoomState,
+  playerIndex: number
+): boolean {
+  const pause = getObsoleteAICenterDragPause(room, playerIndex);
+  if (!pause) {
+    clearAICenterRetargetPause(room, playerIndex);
+    return false;
+  }
+
+  const pauses = getAICenterRetargetPauses(room);
+  if (aiCenterRetargetPausesEqual(pauses[playerIndex], pause)) {
+    return false;
+  }
+
+  pauses[playerIndex] = pause;
+  return true;
+}
+
+function getObsoleteAICenterDragPause(
+  room: RoomState,
+  playerIndex: number
+): AICenterRetargetPause | null {
+  const hand = room.hands[playerIndex];
+  if (!hand?.item || !hand.location || !isCardCursorLocation(hand.location)) {
+    return null;
+  }
+
+  const pileIndex = getCenterPileIndexContainingCard(room.board, hand.location);
+  if (pileIndex < 0) {
+    return null;
+  }
+
+  const targetTopCard = peek(room.board.piles[pileIndex]);
+  if (
+    !targetTopCard ||
+    targetTopCard.suit !== hand.item.suit ||
+    targetTopCard.value < hand.item.value
+  ) {
+    return null;
+  }
+
+  return {
+    heldCard: { ...hand.item },
+    targetCard: { ...hand.location },
+    blockingCard: { ...targetTopCard },
+  };
+}
+
+function clearAICenterRetargetPause(
+  room: RoomState,
+  playerIndex: number
+): void {
+  const pauses = getAICenterRetargetPauses(room);
+  pauses[playerIndex] = null;
+}
+
+function getAICenterRetargetPauses(
+  room: RoomState
+): (AICenterRetargetPause | null)[] {
+  const pauses =
+    room.aiCenterRetargetPauses ?? (room.aiCenterRetargetPauses = []);
+  pauses.length = room.board.players.length;
+  for (let index = 0; index < pauses.length; index++) {
+    pauses[index] = pauses[index] ?? null;
+  }
+  return pauses;
+}
+
+function aiCenterRetargetPausesEqual(
+  first: AICenterRetargetPause | null | undefined,
+  second: AICenterRetargetPause | null | undefined
+): boolean {
+  return (
+    first != null &&
+    second != null &&
+    cardEquals(first.heldCard, second.heldCard) &&
+    cardEquals(first.targetCard, second.targetCard) &&
+    cardEquals(first.blockingCard, second.blockingCard)
+  );
+}
+
 function pauseObsoleteAICenterMove(
   room: RoomState,
   playerIndex: number,
@@ -783,6 +870,7 @@ function resetAIVisibilityMemory(room: RoomState): void {
   room.aiPileKnowledge = room.board.players.map(() =>
     Array(room.board.piles.length).fill(null)
   );
+  room.aiCenterRetargetPauses = room.board.players.map(() => null);
 }
 
 export function scheduleAIReactionBoard(room: RoomState): void {
