@@ -16,6 +16,12 @@ export type AIPileKnowledge = {
   expiresAt: number;
 };
 
+export type AICenterRetargetPause = {
+  heldCard: CardState;
+  targetCard: CardState;
+  blockingCard: CardState;
+};
+
 export type AIMode = "fixed" | "trained" | "hybrid";
 export type ResolvedAIPlayerMode = "fixed" | "trained";
 
@@ -47,6 +53,11 @@ export type RoomState = {
    * This blocks stale delayed-board retries without making the pile fully live.
    */
   aiPileKnowledge: (AIPileKnowledge | null)[][];
+  /**
+   * Last stale center drag each AI has already paused for, so a held card can
+   * hesitate once and then retarget without mutating the visible cursor state.
+   */
+  aiCenterRetargetPauses: (AICenterRetargetPause | null)[];
   queuedHands: CardState[][][];
   stuckPlayerIndices: number[];
   autoStart: boolean;
@@ -68,6 +79,7 @@ export function createRoomState(playerCount: number): RoomState {
     aiPileKnowledge: board.players.map(() =>
       Array(board.piles.length).fill(null)
     ),
+    aiCenterRetargetPauses: board.players.map(() => null),
     queuedHands: [],
     stuckPlayerIndices: [],
     autoStart: false,

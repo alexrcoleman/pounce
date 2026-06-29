@@ -14,6 +14,21 @@ const aceOfHearts: CardState = {
   suit: "hearts",
   value: 1,
 };
+const twoOfHearts: CardState = {
+  player: 0,
+  suit: "hearts",
+  value: 2,
+};
+const otherAceOfHearts: CardState = {
+  player: 1,
+  suit: "hearts",
+  value: 1,
+};
+const otherTwoOfHearts: CardState = {
+  player: 1,
+  suit: "hearts",
+  value: 2,
+};
 
 {
   const board = createOnePlayerBoardWithPounceCard(aceOfHearts);
@@ -63,6 +78,58 @@ const aceOfHearts: CardState = {
   assert.deepEqual(room.board.piles[0], []);
   assert.equal(room.board.ticksSinceMove, 0);
   assert.equal(room.board.ticksSinceNonWaitMove, 0);
+}
+
+{
+  const room = createRoomState(1);
+  room.board = createOnePlayerBoardWithPounceCard(twoOfHearts);
+  room.board.piles[0] = [aceOfHearts, otherTwoOfHearts];
+  room.board.piles[1] = [otherAceOfHearts];
+  room.aiBoard = deepClone(room.board);
+  room.hands = [
+    {
+      location: aceOfHearts,
+      item: twoOfHearts,
+      items: [twoOfHearts],
+    },
+  ];
+  room.handUpdateVersions = [];
+  room.aiCooldowns = [0];
+  room.aiSpeed = 1;
+  room.timescale = 1;
+  room.settings.aiMode = "fixed";
+  room.settings.simulationMode = false;
+
+  const result = tickRoom(room, 1000);
+  const delta = getRoomHandDelta(room, 0);
+
+  assert.equal(result.hasUpdate, false);
+  assert.equal(result.actions.length, 0);
+  assert.equal(result.hasHandUpdate, false);
+  assert.deepEqual(result.handUpdatePlayerIndices, []);
+  assert.deepEqual(delta?.hand.location, aceOfHearts);
+  assert.deepEqual(delta?.hand.item, twoOfHearts);
+  assert.deepEqual(delta?.hand.items, [twoOfHearts]);
+  assert.equal(delta?.version, 0);
+  assert.deepEqual(room.board.players[0].pounceDeck, [twoOfHearts]);
+  assert.deepEqual(room.board.piles[0], [aceOfHearts, otherTwoOfHearts]);
+  assert.deepEqual(room.board.piles[1], [otherAceOfHearts]);
+  assert.equal(room.aiCooldowns[0], 1650);
+
+  const retargetResult = tickRoom(room, 1650);
+  const retargetDelta = getRoomHandDelta(room, 0);
+
+  assert.equal(retargetResult.hasUpdate, false);
+  assert.equal(retargetResult.actions.length, 0);
+  assert.equal(retargetResult.hasHandUpdate, true);
+  assert.deepEqual(retargetResult.handUpdatePlayerIndices, [0]);
+  assert.deepEqual(retargetDelta?.hand.location, otherAceOfHearts);
+  assert.deepEqual(retargetDelta?.hand.item, twoOfHearts);
+  assert.deepEqual(retargetDelta?.hand.items, [twoOfHearts]);
+  assert.equal(retargetDelta?.version, 1);
+  assert.deepEqual(room.board.players[0].pounceDeck, [twoOfHearts]);
+  assert.deepEqual(room.board.piles[0], [aceOfHearts, otherTwoOfHearts]);
+  assert.deepEqual(room.board.piles[1], [otherAceOfHearts]);
 }
 
 function createOnePlayerBoardWithPounceCard(card: CardState): BoardState {
