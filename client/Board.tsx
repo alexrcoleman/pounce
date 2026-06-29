@@ -36,6 +36,7 @@ import {
   RoundEndSequenceOverlay,
   RoundEndSequenceProvider,
   type RoundEndAnimationMode,
+  useRoundEndSequence,
 } from "./RoundEndSequence";
 import {
   AI_DIFFICULTY_PRESETS,
@@ -1029,6 +1030,7 @@ function ScoresTableTabOverlay({
   board: BoardState;
 }) {
   const [showScores, setShowScores] = useState(false);
+  const { isScoreboardVisible } = useRoundEndSequence();
   useEffect(() => {
     const keydown = (e: KeyboardEvent) => {
       if (e.key === "Tab") {
@@ -1048,7 +1050,7 @@ function ScoresTableTabOverlay({
       window.removeEventListener("keyup", keyup);
     };
   }, []);
-  if (!showScores) {
+  if (!showScores || !isScoreboardVisible) {
     return null;
   }
   return (

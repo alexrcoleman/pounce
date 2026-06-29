@@ -25,6 +25,7 @@ import {
   useBoardLayout,
 } from "./BoardLayout";
 import type { CardLocation, CardScreenGeometry } from "./cardGeometry";
+import useIsomorphicLayoutEffect from "./useIsomorphicLayoutEffect";
 import styles from "./RoundEndSequence.module.css";
 
 export type RoundEndAnimationMode = "auto" | "play" | "skip";
@@ -189,7 +190,7 @@ export function RoundEndSequenceProvider({
   });
   const [now, setNow] = useState(getAnimationNow);
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     const previousBoardWasActive = previousBoardWasActiveRef.current;
     previousBoardWasActiveRef.current = board.isActive;
 
