@@ -35,6 +35,7 @@ import ReactionBubbles from "./ReactionBubbles";
 import {
   RoundEndSequenceOverlay,
   RoundEndSequenceProvider,
+  useRoundEndSequence,
   type RoundEndAnimationMode,
 } from "./RoundEndSequence";
 import {
@@ -75,6 +76,7 @@ type Props = {
   isDeckCyclingBlocked?: boolean;
   isInteractionDisabled?: boolean;
   onBlockedMove?: () => void;
+  onRoundEndAnimationChange?: (isAnimating: boolean) => void;
   roomId?: string | null;
   roundEndAnimationMode?: RoundEndAnimationMode;
   visiblePlayerIndices?: readonly number[];
@@ -174,6 +176,7 @@ export default observer(function Board({
   isDeckCyclingBlocked = false,
   isInteractionDisabled = false,
   onBlockedMove,
+  onRoundEndAnimationChange,
   onUpdateHand,
   roomId,
   roundEndAnimationMode = "auto",
@@ -344,6 +347,9 @@ export default observer(function Board({
               board={board}
               mode={roundEndAnimationMode}
             >
+              <RoundEndAnimationReporter
+                onChange={onRoundEndAnimationChange}
+              />
               <PileSection roomId={roomId} />
               <ScoresTableTabOverlay
                 aiMode={state.roomSettings.aiMode}
@@ -400,6 +406,24 @@ export default observer(function Board({
     </DndProvider>
   );
 });
+
+function RoundEndAnimationReporter({
+  onChange,
+}: {
+  onChange?: (isAnimating: boolean) => void;
+}) {
+  const { isAnimating = false } = useRoundEndSequence();
+
+  useIsomorphicLayoutEffect(() => {
+    onChange?.(isAnimating);
+  }, [isAnimating, onChange]);
+
+  useIsomorphicLayoutEffect(() => {
+    return () => onChange?.(false);
+  }, [onChange]);
+
+  return null;
+}
 
 function getDndBackendOptions(inputMode: ResolvedDragInputMode) {
   if (inputMode === "mouse") {

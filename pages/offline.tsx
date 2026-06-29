@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "antd";
 import Board from "../client/Board";
@@ -23,6 +23,8 @@ const OfflinePage: NextPage<{
   const settings = useClientSettingsStore();
   const playerName = name || "Player";
   const { actions, isConnected, state, socket } = useLocalGame(playerName);
+  const [isRoundEndAnimationActive, setRoundEndAnimationActive] =
+    useState(false);
 
   useEffect(() => {
     if (!name) {
@@ -92,11 +94,16 @@ const OfflinePage: NextPage<{
         )}
       >
         <ClientProvider settings={settings} state={state} socket={socket}>
-          <Header onLeaveRoom={onLeaveRoom} roomId="Offline" />
+          <Header
+            isRoundEndAnimationActive={isRoundEndAnimationActive}
+            onLeaveRoom={onLeaveRoom}
+            roomId="Offline"
+          />
           <div className={styles.boardWrapper}>
             <Board
               onUpdateHand={actions.onUpdateHand}
               executeMove={actions.executeMove}
+              onRoundEndAnimationChange={setRoundEndAnimationActive}
               roomId="Offline"
             />
           </div>
