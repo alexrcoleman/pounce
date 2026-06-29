@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import Board from "../../client/Board";
 import Head from "next/head";
@@ -27,6 +27,8 @@ const RoomPage = observer(
       roomId,
       name
     );
+    const [isRoundEndAnimationActive, setRoundEndAnimationActive] =
+      useState(false);
     const onLeaveRoom = useCallback(() => {
       router.push("/");
     }, []);
@@ -100,11 +102,16 @@ const RoomPage = observer(
             state={state}
             socket={isConnected ? socket : null}
           >
-            <Header onLeaveRoom={onLeaveRoom} roomId={roomId} />
+            <Header
+              isRoundEndAnimationActive={isRoundEndAnimationActive}
+              onLeaveRoom={onLeaveRoom}
+              roomId={roomId}
+            />
             <div className={styles.boardWrapper}>
               <Board
                 onUpdateHand={actions.onUpdateHand}
                 executeMove={actions.executeMove}
+                onRoundEndAnimationChange={setRoundEndAnimationActive}
                 roomId={roomId}
               />
             </div>

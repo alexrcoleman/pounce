@@ -27,6 +27,7 @@ import type { AIMode } from "../shared/RoomState";
 const PENDING_MOVE_SYNC_BADGE_DELAY_MS = 2000;
 
 type Props = {
+  isRoundEndAnimationActive?: boolean;
   roomId?: string | null;
   onLeaveRoom: () => void;
 };
@@ -63,70 +64,75 @@ export default observer(function Header(props: Props) {
     !isHost &&
     props.roomId != null &&
     props.roomId.toLowerCase() !== "offline";
+  const showHeaderControls = props.isRoundEndAnimationActive !== true;
   return (
     <>
-      {showRoomCode ? (
+      {showHeaderControls && showRoomCode ? (
         <div className={styles.roomCodeBadge}>
           <span>Room</span>
           <strong>{props.roomId}</strong>
         </div>
       ) : null}
-      <div
-        className={styles.floatingControls}
-        role="toolbar"
-        aria-label="Game controls"
-      >
-        <PendingMoveSyncBadgeContainer />
-        {settings.showNetworkStats ? (
-          <NetworkStatsIndicator roomId={props.roomId} />
-        ) : null}
-        {settings.showFramerate ? <FramerateIndicator /> : null}
-        {canSendReactions ? (
-          <HeaderReactionButton
-            onSelectReaction={(reactionId) =>
-              socket?.emit("send_reaction", { reactionId })
-            }
-          />
-        ) : null}
-        {canTogglePause ? (
-          <HeaderPauseButton
-            isPaused={isPaused}
-            onToggle={() => socket?.emit("set_paused", { paused: !isPaused })}
-          />
-        ) : null}
-        {board != null && board.pouncer == null ? (
-          <HeaderScoreboardButton
-            aiMode={state.roomSettings.aiMode}
-            board={board}
-          />
-        ) : null}
-        {showStuckButton ? (
-          <HeaderStuckButton
-            disabled={!canMarkStuck}
-            isStuck={isActivePlayerStuck}
-            stuckCount={stuckStatus.count}
-            stuckTotal={stuckStatus.total}
-            onToggle={() =>
-              socket?.emit("set_stuck", { stuck: !isActivePlayerStuck })
-            }
-          />
-        ) : null}
-        <DesktopOnlyTooltip title="Open settings">
-          <button
-            className={`${styles.floatingButton} ${styles.settingsButton}`}
-            onClick={() => settings.openSettings("main")}
-            aria-label="Open settings"
-            type="button"
-          >
-            <SettingOutlined
-              aria-hidden="true"
-              className={styles.settingsIcon}
-              rev={undefined}
+      {showHeaderControls ? (
+        <div
+          className={styles.floatingControls}
+          role="toolbar"
+          aria-label="Game controls"
+        >
+          <PendingMoveSyncBadgeContainer />
+          {settings.showNetworkStats ? (
+            <NetworkStatsIndicator roomId={props.roomId} />
+          ) : null}
+          {settings.showFramerate ? <FramerateIndicator /> : null}
+          {canSendReactions ? (
+            <HeaderReactionButton
+              onSelectReaction={(reactionId) =>
+                socket?.emit("send_reaction", { reactionId })
+              }
             />
-            <span className={styles.buttonLabel}>Settings</span>
-          </button>
-        </DesktopOnlyTooltip>
-      </div>
+          ) : null}
+          {canTogglePause ? (
+            <HeaderPauseButton
+              isPaused={isPaused}
+              onToggle={() =>
+                socket?.emit("set_paused", { paused: !isPaused })
+              }
+            />
+          ) : null}
+          {board != null && board.pouncer == null ? (
+            <HeaderScoreboardButton
+              aiMode={state.roomSettings.aiMode}
+              board={board}
+            />
+          ) : null}
+          {showStuckButton ? (
+            <HeaderStuckButton
+              disabled={!canMarkStuck}
+              isStuck={isActivePlayerStuck}
+              stuckCount={stuckStatus.count}
+              stuckTotal={stuckStatus.total}
+              onToggle={() =>
+                socket?.emit("set_stuck", { stuck: !isActivePlayerStuck })
+              }
+            />
+          ) : null}
+          <DesktopOnlyTooltip title="Open settings">
+            <button
+              className={`${styles.floatingButton} ${styles.settingsButton}`}
+              onClick={() => settings.openSettings("main")}
+              aria-label="Open settings"
+              type="button"
+            >
+              <SettingOutlined
+                aria-hidden="true"
+                className={styles.settingsIcon}
+                rev={undefined}
+              />
+              <span className={styles.buttonLabel}>Settings</span>
+            </button>
+          </DesktopOnlyTooltip>
+        </div>
+      ) : null}
       {settings.isSettingsOpen ? (
         <SettingsDialog
           onLeaveRoom={props.onLeaveRoom}
