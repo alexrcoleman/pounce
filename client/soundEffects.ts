@@ -56,13 +56,17 @@ export const DEFAULT_SOUND_EFFECT_VOLUME_PERCENT = 0;
 let audioContext: AudioContext | null = null;
 let soundEffectVolumeMultiplier = DEFAULT_SOUND_EFFECT_VOLUME_PERCENT / 100;
 let didRegisterAudioUnlockListeners = false;
+let didRegisterAudioLifecycleListeners = false;
 
 export function setSoundEffectVolumePercent(volumePercent: number): void {
   soundEffectVolumeMultiplier = clampVolume(volumePercent / 100);
 
   if (soundEffectVolumeMultiplier > 0) {
     registerAudioUnlockListeners();
+    registerAudioLifecycleListeners();
     runWhenIdle(preloadDecodedSoundEffects);
+  } else {
+    removeAudioUnlockListeners();
   }
 }
 
@@ -203,14 +207,11 @@ async function playWebAudioSoundEffect(
     return;
   }
 
-  const resumePromise =
-    context.state === "suspended"
-      ? context.resume().catch(ignoreAudioLoadError)
-      : Promise.resolve();
+  const resumePromise = resumeAudioContext(context);
   const buffer = await loadAudioBuffer(soundEffect);
   await resumePromise;
 
-  if (context.state === "suspended") {
+  if (!isAudioContextRunning(context)) {
     registerAudioUnlockListeners();
     return;
   }
@@ -300,6 +301,12 @@ function getAudioContext(): AudioContext | null {
   }
 
   audioContext = new AudioContextConstructor();
+  if (typeof audioContext.addEventListener === "function") {
+    audioContext.addEventListener(
+      "statechange",
+      handleAudioContextStateChange
+    );
+  }
   return audioContext;
 }
 
@@ -340,6 +347,7 @@ const AUDIO_UNLOCK_EVENTS = [
 
 function unlockAudioPlayback(): void {
   if (soundEffectVolumeMultiplier <= 0) {
+    removeAudioUnlockListeners();
     return;
   }
 
@@ -349,14 +357,13 @@ function unlockAudioPlayback(): void {
     return;
   }
 
-  const resumePromise =
-    context.state === "suspended"
-      ? context.resume().catch(ignoreAudioLoadError)
-      : Promise.resolve();
-  void resumePromise.then(() => {
-    preloadDecodedSoundEffects();
-    if (context.state === "running") {
-      removeAudioUnlockListeners();
+  if (isAudioContextRunning(context)) {
+    return;
+  }
+
+  void resumeAudioContext(context).then(() => {
+    if (isAudioContextRunning(context)) {
+      preloadDecodedSoundEffects();
     }
   });
 }
@@ -370,6 +377,82 @@ function removeAudioUnlockListeners(): void {
   AUDIO_UNLOCK_EVENTS.forEach((eventName) => {
     window.removeEventListener(eventName, unlockAudioPlayback);
   });
+}
+
+function registerAudioLifecycleListeners(): void {
+  if (typeof window === "undefined" || didRegisterAudioLifecycleListeners) {
+    return;
+  }
+
+  didRegisterAudioLifecycleListeners = true;
+  const options = { passive: true };
+  window.addEventListener("focus", handleAudioResumeOpportunity, options);
+  window.addEventListener("pageshow", handleAudioResumeOpportunity, options);
+  if (typeof document !== "undefined") {
+    document.addEventListener(
+      "visibilitychange",
+      handleAudioResumeOpportunity
+    );
+  }
+}
+
+function handleAudioContextStateChange(): void {
+  if (soundEffectVolumeMultiplier <= 0 || !audioContext) {
+    return;
+  }
+
+  if (!isAudioContextRunning(audioContext)) {
+    registerAudioUnlockListeners();
+  }
+}
+
+function handleAudioResumeOpportunity(): void {
+  if (soundEffectVolumeMultiplier <= 0 || isDocumentHidden()) {
+    return;
+  }
+
+  if (!audioContext) {
+    registerAudioUnlockListeners();
+    return;
+  }
+
+  if (isAudioContextRunning(audioContext)) {
+    return;
+  }
+
+  registerAudioUnlockListeners();
+  void resumeAudioContext(audioContext).then(() => {
+    if (audioContext && isAudioContextRunning(audioContext)) {
+      preloadDecodedSoundEffects();
+    }
+  });
+}
+
+function resumeAudioContext(context: AudioContext): Promise<void> {
+  if (!shouldResumeAudioContext(context)) {
+    return Promise.resolve();
+  }
+
+  return context.resume().catch(ignoreAudioLoadError);
+}
+
+function shouldResumeAudioContext(context: AudioContext): boolean {
+  const state = getAudioContextState(context);
+  return state !== "running" && state !== "closed";
+}
+
+function isAudioContextRunning(context: AudioContext): boolean {
+  return getAudioContextState(context) === "running";
+}
+
+function getAudioContextState(context: AudioContext): string {
+  return context.state;
+}
+
+function isDocumentHidden(): boolean {
+  return (
+    typeof document !== "undefined" && document.visibilityState === "hidden"
+  );
 }
 
 function ignoreAudioLoadError(): void {
