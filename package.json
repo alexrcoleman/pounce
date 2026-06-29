@@ -34,6 +34,7 @@
     "start-socketio": "PORT=3001 ts-node --transpile-only server/socketioMain.ts",
     "test:fair-hands": "node ./node_modules/ts-node/dist/bin.js --transpile-only shared/FairHands.test.ts",
     "test:action-ranking-policy": "ts-node --transpile-only shared/ActionRankingPolicy.test.ts",
+    "test:room-logic": "node ./node_modules/ts-node/dist/bin.js --transpile-only shared/RoomLogic.test.ts",
     "test:room-delta": "node ./node_modules/ts-node/dist/bin.js --transpile-only shared/RoomDelta.test.ts",
     "test:socket-state": "node ./node_modules/ts-node/dist/bin.js --transpile-only client/SocketState.test.ts",
     "test:pounce-rush": "ts-node --transpile-only shared/PounceRush.test.ts",

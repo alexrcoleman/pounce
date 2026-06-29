@@ -86,6 +86,7 @@ const AI_PILE_KNOWLEDGE_REACTION_MULTIPLIER = 2;
 const AI_OBSOLETE_TARGET_RECONSIDER_DELAY_RATIO = 0.45;
 const AI_OBSOLETE_TARGET_RECONSIDER_MIN_DELAY_MS = 120;
 const AI_OBSOLETE_TARGET_RECONSIDER_MAX_DELAY_MS = 650;
+const AI_OPENING_MOVE_REACTION_DELAY_RATIO = 0.25;
 const MIN_ROUND_READY_PLAYERS = 2;
 const FAIREST_DEAL_SIMULATION_TRIALS = 12;
 const FAIREST_DEAL_MAX_MOVES_PER_TRIAL = 1400;
@@ -831,12 +832,16 @@ export function startRoomGame(
 
   const startsAt = now + countdownMs;
   room.board.roundStartsAt = startsAt;
-  room.aiCooldowns = room.board.players.map(() => startsAt + Math.random());
+  room.aiCooldowns = room.board.players.map(() =>
+    getAIOpeningMoveCooldown(room, startsAt)
+  );
 }
 
 function beginRoomGame(room: RoomState, now: number): void {
   room.board.roundStartsAt = undefined;
-  room.aiCooldowns = room.board.players.map(() => now + Math.random());
+  room.aiCooldowns = room.board.players.map(() =>
+    getAIOpeningMoveCooldown(room, now)
+  );
   room.handUpdateVersions = [];
   startRoundAnalysis(room, now);
   room.aiBoard = deepClone(room.board);
@@ -862,6 +867,14 @@ export function completeRoundStartCountdown(
 
 function getRoomStartCountdownDurationMs(room: RoomState): number {
   return room.autoStart ? 0 : ROUND_START_COUNTDOWN_MS / room.timescale;
+}
+
+function getAIOpeningMoveCooldown(room: RoomState, now: number): number {
+  return (
+    now +
+    getReactionDelay(room) * AI_OPENING_MOVE_REACTION_DELAY_RATIO +
+    Math.random()
+  );
 }
 
 export function dealRoomHands(room: RoomState): boolean {
