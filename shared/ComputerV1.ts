@@ -19,6 +19,7 @@ import {
   getBoardPileDistanceToLocation,
   getPlayerLocation,
 } from "./CardLocations";
+import { getBoardPileDistanceToBoardCenter } from "./CenterPileUtils";
 
 export type AIStrategyLean = "solitaire" | "balanced" | "center";
 
@@ -90,15 +91,24 @@ class AIStrategy {
     cursorPosition: readonly [number, number]
   ): void {
     this.boardState.piles.forEach((pile, index) => {
-      const distance = getBoardPileDistanceToLocation(
+      const cursorDistance = getBoardPileDistanceToLocation(
         this.boardState,
         index,
         cursorPosition
       );
       const topCard = peek(pile);
       if (!topCard) {
+        const aceStartDistance = getBoardPileDistanceToBoardCenter(
+          this.boardState,
+          index
+        );
         for (let suitIndex = 0; suitIndex < 4; suitIndex++) {
-          this.indexCenterPileDestination(suitIndex, 1, index, distance);
+          this.indexCenterPileDestination(
+            suitIndex,
+            1,
+            index,
+            aceStartDistance
+          );
         }
         return;
       }
@@ -111,7 +121,7 @@ class AIStrategy {
         getSuitIndex(topCard.suit),
         nextValue,
         index,
-        distance
+        cursorDistance
       );
     });
   }

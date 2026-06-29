@@ -42,6 +42,7 @@ import {
   getDistance,
   getMovePileLocsDelta,
   isProductiveMove,
+  resolveAIMoveForBoard,
   resolveMoveForBoard,
   type Move,
   type MoveResult,
@@ -177,7 +178,7 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
         aiCooldowns[index] = now + getAIRetargetDelay(room);
         continue;
       }
-      const actionMove = move ? resolveMoveForBoard(board, index, move) : null;
+      const actionMove = move ? resolveAIMoveForBoard(board, index, move) : null;
       const moveResult = move
         ? executeMove(board, index, actionMove ?? move, hand, now)
         : null;
