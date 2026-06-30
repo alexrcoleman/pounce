@@ -120,7 +120,9 @@ export function resolveAIMoveForBoard(
   }
 
   const emptyPileIndex = getNearestEmptyCenterPileToBoardCenter(boardState);
-  return emptyPileIndex >= 0 ? { ...move, dest: emptyPileIndex } : move;
+  return emptyPileIndex >= 0
+    ? { type: "c2c", source: move.source, dest: emptyPileIndex }
+    : move;
 }
 
 export function getMovePileLocsDelta(

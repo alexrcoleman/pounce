@@ -134,6 +134,7 @@ assert.notStrictEqual(deckCycleFeatureIndex, -1);
     type: "c2c",
     source: { type: "pounce" },
     dest: 0,
+    position: [0.05, 0.05],
   };
   const genericResolvedMove = resolveMoveForBoard(board, 0, offCenterAceMove);
   assert.strictEqual(
@@ -147,6 +148,11 @@ assert.notStrictEqual(deckCycleFeatureIndex, -1);
     resolvedAIMove.type === "c2c" ? resolvedAIMove.dest : -1,
     2,
     "AI move resolution should retarget Aces to the most central empty pile"
+  );
+  assert.strictEqual(
+    resolvedAIMove.type === "c2c" ? resolvedAIMove.position : undefined,
+    undefined,
+    "AI Ace retargeting should not keep a field-slot position"
   );
 
   board.piles[0] = [card("spades", 1, 1)];
