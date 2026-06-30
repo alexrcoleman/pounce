@@ -37,7 +37,6 @@ import {
   RoundEndSequenceProvider,
   useRoundEndSequence,
   type RoundEndAnimationMode,
-  useRoundEndSequence,
 } from "./RoundEndSequence";
 import {
   AI_DIFFICULTY_PRESETS,

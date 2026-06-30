@@ -206,25 +206,42 @@ export function RoundEndSequenceProvider({
 
       return {
         roundKey,
-        shouldAnimate:
-          mode === "skip"
-            ? false
-            : mode === "play" || (mode === "auto" && previousBoardWasActive),
+        shouldAnimate: getShouldAnimateRoundEnd(
+          mode,
+          previousBoardWasActive
+        ),
         startedAt: getAnimationNow(),
       };
     });
   }, [board.isActive, mode, roundKey]);
 
+  const shouldStartSequence =
+    roundKey != null && sequence?.roundKey !== roundKey;
+  const pendingSequence =
+    shouldStartSequence && roundKey != null
+      ? {
+          roundKey,
+          shouldAnimate: getShouldAnimateRoundEnd(
+            mode,
+            previousBoardWasActiveRef.current
+          ),
+          startedAt: now,
+        }
+      : null;
+  const activeSequence =
+    sequence?.roundKey === roundKey ? sequence : pendingSequence;
   const shouldRunAnimation =
-    sequence?.shouldAnimate === true &&
+    activeSequence?.shouldAnimate === true &&
     (mode === "play" || !prefersReducedMotion) &&
     roundKey != null;
   const elapsedMs =
-    shouldRunAnimation && sequence ? now - sequence.startedAt : 0;
+    shouldRunAnimation && activeSequence
+      ? now - activeSequence.startedAt
+      : 0;
   const isAnimating = shouldRunAnimation && elapsedMs < TOTAL_SEQUENCE_MS;
 
   useEffect(() => {
-    if (!shouldRunAnimation || sequence == null) {
+    if (!shouldRunAnimation || activeSequence == null) {
       return;
     }
 
@@ -232,7 +249,7 @@ export function RoundEndSequenceProvider({
     const tick = () => {
       const nextNow = getAnimationNow();
       setNow(nextNow);
-      if (nextNow - sequence.startedAt < TOTAL_SEQUENCE_MS) {
+      if (nextNow - activeSequence.startedAt < TOTAL_SEQUENCE_MS) {
         frameId = window.requestAnimationFrame(tick);
       }
     };
@@ -240,7 +257,11 @@ export function RoundEndSequenceProvider({
     setNow(getAnimationNow());
     frameId = window.requestAnimationFrame(tick);
     return () => window.cancelAnimationFrame(frameId);
-  }, [sequence?.roundKey, sequence?.startedAt, shouldRunAnimation]);
+  }, [
+    activeSequence?.roundKey,
+    activeSequence?.startedAt,
+    shouldRunAnimation,
+  ]);
 
   const plan = useMemo(
     () =>
@@ -623,6 +644,16 @@ function getRoundKey(board: BoardState): string | null {
     board.pouncer,
     board.players.map((player) => player.scores.length).join("."),
   ].join(":");
+}
+
+function getShouldAnimateRoundEnd(
+  mode: RoundEndAnimationMode,
+  previousBoardWasActive: boolean
+): boolean {
+  if (mode === "skip") {
+    return false;
+  }
+  return mode === "play" || (mode === "auto" && previousBoardWasActive);
 }
 
 function getStageDuration(stageName: RoundEndPhase): number {
