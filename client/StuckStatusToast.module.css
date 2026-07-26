@@ -1,0 +1,21 @@
+.actionLabel,
+.acknowledgedLabel {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.acknowledgedLabel {
+  color: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  margin-left: var(--toast-button-margin-start);
+  margin-right: var(--toast-button-margin-end);
+  opacity: 0.9;
+}
+
+.icon {
+  font-size: 13px;
+  line-height: 1;
+}
