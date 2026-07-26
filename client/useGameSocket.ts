@@ -19,6 +19,7 @@ import { useLocalObservable } from "mobx-react-lite";
 import SocketState from "./SocketState";
 import { runInAction } from "mobx";
 import { toast } from "sonner";
+import { isConfirmedCenterPileRaceRejection } from "./centerPileRace";
 import { toastRejectedMove } from "./moveRejectionToast";
 import { showServerNoticeToast } from "./ServerNoticeToast";
 import { showRoomToast } from "./RoomToast";
@@ -146,6 +147,10 @@ export default function useGameSocket(
         optimisticallyPlayedMoveActionIds.current.delete(action.actionId);
         toastRejectedMove({
           board: state.serverBoard,
+          confirmedCenterPileRace: isConfirmedCenterPileRaceRejection(
+            action.payload,
+            ack.reason
+          ),
           move: action.payload,
           playerIndex: state.getActivePlayerIndex(),
           reason: ack.reason,
