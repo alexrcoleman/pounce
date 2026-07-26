@@ -451,6 +451,13 @@
   text-overflow: ellipsis;
 }
 
+.roundReadyStatus {
+  margin-left: auto;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
+  font-weight: 700;
+}
+
 .scores {
   position: absolute;
   inset: 0;

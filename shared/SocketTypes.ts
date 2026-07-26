@@ -84,6 +84,8 @@ export type JoinRoomAck =
       drainingUntil: number;
     };
 
+export type LeaveRoomAck = { ok: true };
+
 export type ServerToClientEvents = {
   alert: (args: { message: string }) => void;
   room_toast: (args: RoomToast) => void;
@@ -104,6 +106,7 @@ export type ClientToServerEvents = {
     },
     ack?: (args: JoinRoomAck) => void
   ) => void;
+  leave_room: (ack?: (args: LeaveRoomAck) => void) => void;
   set_ai_level: (args: { speed: number }) => void;
   set_ai_mode: (args: { mode: AIMode }) => void;
   restart_game: () => void;

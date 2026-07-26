@@ -20,7 +20,6 @@ import {
   scheduleRoomDelete,
 } from "../server/Rooms";
 import {
-  clearRoomHand,
   clearRoomStuckPlayers,
   completeRoundStartCountdown,
   dealRemainingRoomPlayers,
@@ -69,6 +68,11 @@ import {
 } from "../shared/SocketTypes";
 import { createDeckRotationToast } from "../shared/RoomToast";
 import { isAllowedReactionId } from "../shared/Reactions";
+import {
+  joinRoomPlayer,
+  leaveRoomPlayer,
+  markRoomPlayerDisconnected,
+} from "./RoomMembership";
 
 const socketData: Record<
   string,
@@ -139,7 +143,7 @@ export default function createSocketIOServer() {
   io.of("/").adapter.on("leave-room", (id, userId) => {
     if (id.startsWith("pounce:")) {
       console.log(userId + " left " + id);
-      if (markPlayerDisconnected(id, userId)) {
+      if (markRoomPlayerDisconnected(getRoom(id), userId)) {
         markRoomUpdated(id);
         broadcastUpdate(id);
         broadcastHands(id);
@@ -158,27 +162,17 @@ export default function createSocketIOServer() {
       }
       user.currentRoom = id;
       const room = getRoom(id);
-      const player =
-        user.playerSessionId != null
-          ? room.board.players.find(
-              (p) => p.playerSessionId === user.playerSessionId
-            )
-          : room.board.players.find((p) => p.socketId === userId);
-      if (!player) {
-        addPlayer(room.board, userId, user.name, user.playerSessionId);
-      } else {
-        const previousSocketId = player.socketId;
-        player.socketId = userId;
-        player.playerSessionId = user.playerSessionId ?? player.playerSessionId;
-        player.disconnected = false;
-        player.disconnectedAt = undefined;
-        player.name = user.name ?? player.name;
-        if (previousSocketId && previousSocketId !== userId) {
-          if (socketData[previousSocketId]) {
-            socketData[previousSocketId].currentRoom = undefined;
-          }
-          io.of("/").sockets.get(previousSocketId)?.leave(id);
+      const { previousSocketId } = joinRoomPlayer(
+        room,
+        userId,
+        user.name,
+        user.playerSessionId
+      );
+      if (previousSocketId && previousSocketId !== userId) {
+        if (socketData[previousSocketId]) {
+          socketData[previousSocketId].currentRoom = undefined;
         }
+        io.of("/").sockets.get(previousSocketId)?.leave(id);
       }
       console.log(
         userId + " entered " + id + " name=" + user.name
@@ -197,14 +191,26 @@ export default function createSocketIOServer() {
   io.on("connection", (socket) => {
     socketData[socket.id] = {};
     const user = socketData[socket.id];
+    const leaveCurrentRoom = async () => {
+      const roomId = user.currentRoom;
+      if (roomId == null) {
+        return;
+      }
+
+      console.log("Removing " + socket.id + " from " + roomId);
+      user.currentRoom = undefined;
+      const { changed } = leaveRoomPlayer(getRoom(roomId), socket.id);
+      await socket.leave(roomId);
+      if (changed) {
+        markRoomUpdated(roomId);
+        broadcastUpdate(roomId);
+        broadcastHands(roomId);
+      }
+    };
     socket.on("join_room", async (args, ack) => {
       console.log("join_room " + socket.id, args);
       if (args.roomId == null) {
-        if (user.currentRoom != null) {
-          console.log("Removing " + socket.id + " from " + user.currentRoom);
-          await socket.leave(user.currentRoom);
-        }
-        user.currentRoom = undefined;
+        await leaveCurrentRoom();
         ack?.({ ok: true });
         return;
       }
@@ -214,13 +220,34 @@ export default function createSocketIOServer() {
           ? args.playerSessionId
           : socket.id;
       const roomId = "pounce:" + args.roomId;
-      if (user.currentRoom != null) {
-        await socket.leave(user.currentRoom);
+      if (user.currentRoom === roomId) {
+        const { previousSocketId } = joinRoomPlayer(
+          getRoom(roomId),
+          socket.id,
+          user.name,
+          user.playerSessionId
+        );
+        if (previousSocketId && previousSocketId !== socket.id) {
+          if (socketData[previousSocketId]) {
+            socketData[previousSocketId].currentRoom = undefined;
+          }
+          io.of("/").sockets.get(previousSocketId)?.leave(roomId);
+        }
+        markRoomUpdated(roomId);
+        broadcastUpdate(roomId);
+        broadcastHands(roomId);
+      }
+      if (user.currentRoom != null && user.currentRoom !== roomId) {
+        await leaveCurrentRoom();
       }
       await socket.join(roomId);
       if (isDrainActive()) {
         socket.emit("server_notice", createDrainNotice());
       }
+      ack?.({ ok: true });
+    });
+    socket.on("leave_room", async (ack) => {
+      await leaveCurrentRoom();
       ack?.({ ok: true });
     });
     socket.on("move", (args, ack) => {
@@ -435,6 +462,9 @@ export default function createSocketIOServer() {
         return;
       }
       const room = getRoom(user.currentRoom);
+      if (!isHost(room.board, socket.id)) {
+        return;
+      }
       startRoomGame(room);
       markRoomUpdated(user.currentRoom);
       broadcastUpdate(user.currentRoom);
@@ -598,7 +628,7 @@ export default function createSocketIOServer() {
       Array.from(socket.rooms)
         .filter((roomId) => roomId.startsWith("pounce:"))
         .forEach((roomId) => {
-          if (markPlayerDisconnected(roomId, socket.id)) {
+          if (markRoomPlayerDisconnected(getRoom(roomId), socket.id)) {
             markRoomUpdated(roomId);
             broadcastUpdate(roomId);
             broadcastHands(roomId);
@@ -914,31 +944,6 @@ function respondJson(
   res.statusCode = statusCode;
   res.setHeader("content-type", "application/json; charset=utf-8");
   res.end(JSON.stringify(body));
-}
-
-function markPlayerDisconnected(roomId: string, socketId: string): boolean {
-  const room = getRoom(roomId);
-  if (!room) {
-    return false;
-  }
-
-  const playerIndex = room.board.players.findIndex(
-    (p) => p.socketId === socketId
-  );
-  if (playerIndex < 0) {
-    return false;
-  }
-
-  const player = room.board.players[playerIndex];
-  if (player.disconnected) {
-    return false;
-  }
-
-  player.disconnected = true;
-  player.disconnectedAt = Date.now();
-  player.isReadyForRound = false;
-  clearRoomHand(room, playerIndex);
-  return true;
 }
 
 function schedulePlayerCenterCursorReset(

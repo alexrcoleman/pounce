@@ -56,6 +56,7 @@ function isStuckVotingOpen(
 
 function isStuckVotingPlayer(player: PlayerState): boolean {
   return (
+    !player.disconnected &&
     player.socketId != null &&
     player.isSpectating !== true &&
     player.isWaitingForDeal !== true

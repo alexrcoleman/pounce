@@ -36,6 +36,8 @@
     "test:action-ranking-policy": "ts-node --transpile-only shared/ActionRankingPolicy.test.ts",
     "test:room-logic": "node ./node_modules/ts-node/dist/bin.js --transpile-only shared/RoomLogic.test.ts",
     "test:room-delta": "node ./node_modules/ts-node/dist/bin.js --transpile-only shared/RoomDelta.test.ts",
+    "test:room-membership": "node ./node_modules/ts-node/dist/bin.js --transpile-only server/RoomMembership.test.ts",
+    "test:player-session": "node ./node_modules/ts-node/dist/bin.js --transpile-only client/PlayerSession.test.ts",
     "test:socket-state": "node ./node_modules/ts-node/dist/bin.js --transpile-only client/SocketState.test.ts",
     "test:sound-effects": "node ./node_modules/ts-node/dist/bin.js --transpile-only client/soundEffects.test.ts",
     "test:pounce-rush": "ts-node --transpile-only shared/PounceRush.test.ts",

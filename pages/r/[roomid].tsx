@@ -23,15 +23,23 @@ const RoomPage = observer(
         ? router.query.roomid
         : null;
     const settings = useClientSettingsStore();
-    const { actions, isConnected, state, socket, error } = useGameSocket(
-      roomId,
-      name
-    );
+    const {
+      actions,
+      error,
+      isConnected,
+      leaveRoom,
+      socket,
+      state,
+    } = useGameSocket(roomId, name);
     const [isRoundEndAnimationActive, setRoundEndAnimationActive] =
       useState(false);
-    const onLeaveRoom = useCallback(() => {
-      router.push("/");
-    }, []);
+    const onLeaveRoom = useCallback(async () => {
+      const didLeave = await leaveRoom();
+      if (!didLeave) {
+        return;
+      }
+      await router.push("/");
+    }, [leaveRoom, router]);
 
     useEffect(() => {
       preloadSoundEffects();
@@ -98,6 +106,7 @@ const RoomPage = observer(
           )}
         >
           <ClientProvider
+            onLeaveRoom={onLeaveRoom}
             settings={settings}
             state={state}
             socket={isConnected ? socket : null}

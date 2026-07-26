@@ -44,7 +44,11 @@ import {
 } from "../shared/AIDifficulty";
 import RoomShare from "./RoomShare";
 import { useClientContext } from "./ClientContext";
-import { Button, Modal } from "antd";
+import { Button } from "antd";
+import {
+  confirmRoomActionWithDisconnectedPlayers,
+  getPlayersWhoLostConnection,
+} from "./disconnectedPlayers";
 import { toast } from "sonner";
 import useIsomorphicLayoutEffect from "./useIsomorphicLayoutEffect";
 import {
@@ -720,22 +724,22 @@ const PileSection = observer(function PileSection({
     socket?.emit("set_ai_level", { speed });
   };
   const handleDealHands = () => {
-    confirmRemovingInactivePlayers({
+    confirmRoomActionWithDisconnectedPlayers({
       action: "Dealing",
-      disconnectedPlayers: getDisconnectedPlayers(board),
-      okText: "Deal",
-      title: "Deal without inactive players?",
+      disconnectedPlayers: getPlayersWhoLostConnection(board),
+      okText: "Deal anyway",
+      title: "Deal while players are disconnected?",
       onConfirm: () => {
         socket?.emit("deal_hands");
       },
     });
   };
   const handleStartGame = () => {
-    confirmRemovingInactivePlayers({
+    confirmRoomActionWithDisconnectedPlayers({
       action: "Starting",
-      disconnectedPlayers: getDisconnectedPlayers(board),
-      okText: "Start game",
-      title: "Start without inactive players?",
+      disconnectedPlayers: getPlayersWhoLostConnection(board),
+      okText: "Start anyway",
+      title: "Start while players are disconnected?",
       onConfirm: () => {
         socket?.emit("start_game");
       },
@@ -873,7 +877,9 @@ const RoundReadyControl = observer(function RoundReadyControl({
 
   const activePlayerReady = activeEntry?.player.isReadyForRound === true;
   const readyPlayerCount = readyPlayers.filter(
-    (entry) => entry.player.isReadyForRound === true
+    (entry) =>
+      !entry.player.disconnected &&
+      entry.player.isReadyForRound === true
   );
   const playerLabel = readyPlayers.length === 1 ? "player" : "players";
   const ReadyIcon = activePlayerReady ? CheckSquareOutlined : BorderOutlined;
@@ -916,7 +922,8 @@ function RoundReadyTooltip({
   return (
     <div className={styles.roundReadyTooltip}>
       <div className={styles.roundReadyTooltipText}>
-        Once all players mark ready, the round will automatically start.
+        Once all players are connected and mark ready, the round will
+        automatically start.
       </div>
       <ul className={styles.roundReadyList} aria-label="Round readiness">
         {players.map(({ player, playerIndex }) => (
@@ -927,7 +934,14 @@ function RoundReadyTooltip({
               data-ready={player.isReadyForRound === true ? "true" : "false"}
               role="checkbox"
             />
-            <span className={styles.roundReadyName}>{player.name}</span>
+            <span className={styles.roundReadyName}>
+              {player.name}
+              {player.disconnected ? (
+                <span className={styles.roundReadyStatus}>
+                  Disconnected
+                </span>
+              ) : null}
+            </span>
           </li>
         ))}
       </ul>
@@ -949,7 +963,6 @@ function getRoundReadyPlayerEntries(board: BoardState): RoundReadyPlayerEntry[] 
     .map((player, playerIndex) => ({ player, playerIndex }))
     .filter(
       ({ player }) =>
-        !player.disconnected &&
         player.socketId != null &&
         player.isSpectating !== true &&
         player.isWaitingForDeal !== true
@@ -971,55 +984,6 @@ function getWaitingForDealCount(
       isPlayerWaitingForDeal(player, isSimulationMode) &&
       isPlayerUndealt(player)
   ).length;
-}
-
-function confirmRemovingInactivePlayers({
-  action,
-  disconnectedPlayers,
-  okText,
-  onConfirm,
-  title,
-}: {
-  action: string;
-  disconnectedPlayers: PlayerState[];
-  okText: string;
-  onConfirm: () => void;
-  title: string;
-}): void {
-  if (disconnectedPlayers.length === 0) {
-    onConfirm();
-    return;
-  }
-
-  Modal.confirm({
-    title,
-    content: getInactivePlayersConfirmationMessage(
-      action,
-      disconnectedPlayers
-    ),
-    okText,
-    cancelText: "Cancel",
-    onOk: () => {
-      onConfirm();
-    },
-  });
-}
-
-function getDisconnectedPlayers(board: BoardState): PlayerState[] {
-  return board.players.filter((player) => player.disconnected);
-}
-
-function getInactivePlayersConfirmationMessage(
-  action: string,
-  disconnectedPlayers: PlayerState[]
-): string {
-  const playerCount = disconnectedPlayers.length;
-  const playerLabel = playerCount === 1 ? "player" : "players";
-  const names = disconnectedPlayers
-    .map((player) => player.name || "Unnamed player")
-    .join(", ");
-
-  return `${action} will remove ${playerCount} inactive ${playerLabel} (${names}).`;
 }
 
 function isPlayerWaitingForDeal(

@@ -5,6 +5,7 @@ import type { GameSocket } from "./GameConnection";
 import type SocketState from "./SocketState";
 
 type ClientContextValue = {
+  onLeaveRoom: () => void;
   settings: ClientSettingsStore;
   socket: GameSocket | null;
   state: SocketState;
@@ -15,13 +16,14 @@ export const ClientContext =
 
 export function ClientProvider({
   children,
+  onLeaveRoom,
   settings,
   socket,
   state,
 }: ClientContextValue & { children: ReactNode }) {
   const value = React.useMemo(
-    () => ({ settings, socket, state }),
-    [settings, socket, state]
+    () => ({ onLeaveRoom, settings, socket, state }),
+    [onLeaveRoom, settings, socket, state]
   );
 
   return React.createElement(ClientContext.Provider, { value }, children);
