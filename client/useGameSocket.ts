@@ -19,9 +19,14 @@ import { useLocalObservable } from "mobx-react-lite";
 import SocketState from "./SocketState";
 import { runInAction } from "mobx";
 import { toast } from "sonner";
+import { getStuckVotingPlayerIndices } from "../shared/StuckPlayers";
 import { toastRejectedMove } from "./moveRejectionToast";
 import { showServerNoticeToast } from "./ServerNoticeToast";
 import { showRoomToast } from "./RoomToast";
+import {
+  dismissStuckStatusToast,
+  showStuckStatusToast,
+} from "./StuckStatusToast";
 import { playRoomActionSound } from "./soundEffects";
 import {
   getRoomAnalyticsMetadata,
@@ -34,7 +39,6 @@ export type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
 const PLAYER_SESSION_STORAGE_KEY = "pounce::playerSessionId";
 const DEFAULT_SOCKET_PORT = "3001";
 const RECONNECT_TOAST_ID = "room-reconnect";
-const STUCK_TOAST_ID = "room-stuck-status";
 const UNSTABLE_CONNECTION_TOAST_ID = "room-unstable-connection";
 const SOCKET_HEALTH_ENDPOINT_PATH = "/api/socketio/health";
 const INITIAL_SOCKET_WARMUP_TIMEOUT_MS = 10000;
@@ -100,23 +104,27 @@ export default function useGameSocket(
   const showServerNotice = (notice: ServerNotice) => {
     showServerNoticeToast(notice);
   };
-  const showStuckUpdate = (update: StuckUpdate) => {
+  const showStuckUpdate = (update: StuckUpdate, activeSocket: ClientSocket) => {
     if (update.rotated) {
       return;
     }
-    if (update.playerIndex === state.getActivePlayerIndex()) {
+    const activePlayerIndex = state.getActivePlayerIndex();
+    if (update.playerIndex === activePlayerIndex) {
       return;
     }
 
-    toast(
-      update.isStuck
-        ? `${update.playerName} marked stuck`
-        : `${update.playerName} cleared stuck`,
-      {
-        description: `${update.stuckCount}/${update.stuckTotal} players marked stuck`,
-        id: STUCK_TOAST_ID,
-      }
-    );
+    const isActivePlayerStuck =
+      state.stuckPlayerIndices.includes(activePlayerIndex);
+    const canMarkStuck =
+      update.isStuck &&
+      !isActivePlayerStuck &&
+      getStuckVotingPlayerIndices(state.board).includes(activePlayerIndex);
+
+    showStuckStatusToast({
+      canMarkStuck,
+      onMarkStuck: () => activeSocket.emit("set_stuck", { stuck: true }),
+      update,
+    });
   };
   const sendMoveAction = (
     activeSocket: GameSocket,
@@ -444,7 +452,7 @@ export default function useGameSocket(
       }
     });
     socket.on("server_notice", showServerNotice);
-    socket.on("stuck_update", showStuckUpdate);
+    socket.on("stuck_update", (update) => showStuckUpdate(update, socket));
     socket.on("update_hand_delta", (delta) => {
       runInAction(() => state.updateHandDelta(delta));
     });
@@ -483,6 +491,7 @@ export default function useGameSocket(
       queuedMoveActions.current = [];
       optimisticallyPlayedMoveActionIds.current.clear();
       toast.dismiss(RECONNECT_TOAST_ID);
+      dismissStuckStatusToast();
       toast.dismiss(UNSTABLE_CONNECTION_TOAST_ID);
     };
   }, []);
