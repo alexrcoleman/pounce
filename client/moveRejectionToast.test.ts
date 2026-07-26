@@ -3,10 +3,19 @@ import assert from "node:assert/strict";
 import type { BoardState, CardState, PlayerState } from "../shared/GameUtils";
 import type { Move } from "../shared/MoveHandler";
 import {
+  type CardDnDItem,
+  canHandleRememberedCenterPileDrop,
+  getActiveCenterPileIndex,
+} from "./CardDnDItem";
+import {
   getCenterPileRaceWinner,
+  getPlayableCenterPileIndices,
   isConfirmedCenterPileRaceRejection,
 } from "./centerPileRace";
-import { describeRejectedMove } from "./moveRejectionToast";
+import {
+  describeCenterPileRaceLoss,
+  describeRejectedMove,
+} from "./moveRejectionToast";
 
 const attemptedCard = card(0, 2);
 const move: Move = {
@@ -59,6 +68,72 @@ const HEART = "\u2665";
       playerIndex: 0,
       reason: "That move is no longer available.",
     }).message,
+    `Maya beat you to that pile with 2${HEART}.`
+  );
+}
+
+{
+  assert.deepEqual(
+    getPlayableCenterPileIndices([[card(0, 1)], [card(2, 4)]], attemptedCard),
+    [0]
+  );
+
+  const dragItem: CardDnDItem = {
+    source: { type: "pounce" },
+    card: attemptedCard,
+    initialClientPosition: [0, 0],
+    rememberedCenterPileIndices: [0],
+    centerPileTarget: {
+      handlerId: "center-target-0",
+      pileIndex: 0,
+    },
+  };
+  const racedPile = [card(0, 1), card(1, 2)];
+
+  assert.equal(
+    getActiveCenterPileIndex(dragItem, ["center-target-0"]),
+    0
+  );
+  assert.equal(
+    getActiveCenterPileIndex(dragItem, ["solitaire-target-0"]),
+    null
+  );
+  assert.equal(
+    canHandleRememberedCenterPileDrop(dragItem, racedPile, 0),
+    true
+  );
+  assert.equal(
+    canHandleRememberedCenterPileDrop(
+      { ...dragItem, rememberedCenterPileIndices: [] },
+      racedPile,
+      0
+    ),
+    false
+  );
+  assert.equal(
+    canHandleRememberedCenterPileDrop(
+      {
+        ...dragItem,
+        source: {
+          type: "solitaire",
+          pileIndex: 0,
+          slotIndex: 0,
+          isTopCard: false,
+        },
+      },
+      racedPile,
+      0
+    ),
+    false
+  );
+}
+
+{
+  const board = createBoard([card(0, 1), card(1, 2)]);
+  board.players[0].pounceDeck = [card(0, 7)];
+
+  assert.equal(
+    describeCenterPileRaceLoss(board, 0, attemptedCard, 0)?.message,
     `Maya beat you to that pile with 2${HEART}.`
   );
 }

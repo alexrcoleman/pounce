@@ -1,9 +1,13 @@
-import type { CardState } from "../shared/GameUtils";
+import type { BoardState, CardState } from "../shared/GameUtils";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import CardFace from "./CardFace";
 import React from "react";
-import { CardDnDItem, SourceType } from "./CardDnDItem";
+import {
+  CardDnDItem,
+  SourceType,
+  isMultiCardSolitaireDrag,
+} from "./CardDnDItem";
 import joinClasses from "./joinClasses";
 import styles from "./Card.module.css";
 import { useDrag } from "react-dnd";
@@ -20,6 +24,7 @@ import {
   getCardScreenGeometry,
   getPosition,
 } from "./cardGeometry";
+import { getPlayableCenterPileIndices } from "./centerPileRace";
 import { useRoundEndCardPresentation, useRoundEndSequence } from "./RoundEndSequence";
 
 const CLICK_DRAG_SUPPRESSION_DISTANCE_PX = 8;
@@ -225,7 +230,8 @@ const CardContentMemo = observer(function CardContent({
           }
         : {
             type: "card",
-            item,
+            item: () =>
+              createCardDragItem(item as CardDnDItem, state.board),
             collect: (monitor) => ({
               isDragging: !!monitor.isDragging(),
               // TODO: Find a way to make this work, maybe a child component which
@@ -492,6 +498,20 @@ function canDragSource(source: SourceType): boolean {
   return source.type !== "other";
 }
 
+function createCardDragItem(
+  item: CardDnDItem,
+  board: BoardState | null
+): CardDnDItem {
+  return {
+    ...item,
+    // Keep piles that were legal at pickup eligible for this drag. If an
+    // opponent advances one, its target can still handle the losing drop.
+    rememberedCenterPileIndices: isMultiCardSolitaireDrag(item)
+      ? []
+      : getPlayableCenterPileIndices(board?.piles ?? [], item.card),
+  };
+}
+
 function didPointerMoveTooFar(
   start: ClickStartPosition | null,
   event: React.MouseEvent<HTMLDivElement>
@@ -538,7 +558,6 @@ function isSameSingleCardDrag(
         dragItem.source.pileIndex === item.source.pileIndex &&
         dragItem.source.slotIndex === item.source.slotIndex
       );
-    case "field_stack":
     case "other":
       return false;
   }

@@ -30,12 +30,29 @@ type RejectionCopy = {
 const MOVE_REJECTION_TOAST_ID = "move-rejection";
 
 export function toastRejectedMove(args: RejectedMoveToastArgs) {
-  const copy = describeRejectedMove(args);
-  toast.error(copy.message, {
-    duration: 5000,
-    id: MOVE_REJECTION_TOAST_ID,
-    testId: "move-rejection-toast",
-  });
+  showMoveRejectionToast(describeRejectedMove(args));
+}
+
+export function toastCenterPileRaceLoss({
+  attemptedCard,
+  board,
+  pileIndex,
+  playerIndex,
+}: {
+  attemptedCard: CardState;
+  board: BoardState;
+  pileIndex: number;
+  playerIndex: number;
+}) {
+  const copy = describeCenterPileRaceLoss(
+    board,
+    pileIndex,
+    attemptedCard,
+    playerIndex
+  );
+  if (copy) {
+    showMoveRejectionToast(copy);
+  }
 }
 
 export function describeRejectedMove({
@@ -174,6 +191,14 @@ export function describeCenterPileRaceLoss(
   return {
     message: `${winnerName} beat you to that pile with ${formatCard(attemptedCard)}.${advancedPileCopy}`,
   };
+}
+
+function showMoveRejectionToast(copy: RejectionCopy) {
+  toast.error(copy.message, {
+    duration: 5000,
+    id: MOVE_REJECTION_TOAST_ID,
+    testId: "move-rejection-toast",
+  });
 }
 
 function describeCardToSolitaire(

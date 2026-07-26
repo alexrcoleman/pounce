@@ -1,5 +1,15 @@
+import { canPlayOnCenterPile } from "../shared/CardUtils";
 import type { CardState } from "../shared/GameUtils";
 import type { Move } from "../shared/MoveHandler";
+
+export function getPlayableCenterPileIndices(
+  piles: readonly CardState[][],
+  card: CardState
+): number[] {
+  return piles.flatMap((pile, index) =>
+    canPlayOnCenterPile(pile, card) ? [index] : []
+  );
+}
 
 export function getCenterPileRaceWinner(
   pile: readonly CardState[] | undefined,
