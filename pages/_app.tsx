@@ -1,4 +1,5 @@
 import { ConfigProvider } from "antd";
+import CloseOutlined from "@ant-design/icons/CloseOutlined";
 import { Toaster } from "sonner";
 import "../styles/globals.css";
 
@@ -94,7 +95,22 @@ function AppContent({ Component, pageProps }: AppProps) {
           <Component {...pageProps} name={name} setName={setName} />
         </PageErrorBoundary>
       </ConfigProvider>
-      <Toaster position="top-center" richColors visibleToasts={1} />
+      <Toaster
+        position="top-center"
+        richColors
+        visibleToasts={1}
+        closeButton
+        icons={{
+          close: (
+            <CloseOutlined
+              aria-hidden="true"
+              className="pounce-toast-close-icon"
+              rev={undefined}
+            />
+          ),
+        }}
+        toastOptions={{ closeButtonAriaLabel: "Dismiss notification" }}
+      />
     </>
   );
 }

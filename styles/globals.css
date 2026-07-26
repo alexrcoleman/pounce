@@ -46,6 +46,72 @@ body[data-pounce-dragging="true"] * {
   white-space: nowrap;
 }
 
+@media (min-width: 601px) {
+  body [data-sonner-toast][data-styled="true"] {
+    padding: 10px 46px 10px 12px;
+  }
+
+  body [data-sonner-toast][data-styled="true"] [data-close-button] {
+    width: 24px;
+    height: 24px;
+    left: auto;
+    right: 10px;
+    top: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    color: currentColor;
+    background: transparent !important;
+    border: 0 !important;
+    border-radius: 0;
+    line-height: 1;
+    opacity: 0.72;
+    transform: translateY(-50%);
+  }
+
+  body
+    [data-sonner-toast][data-styled="true"]
+    [data-close-button]
+    .pounce-toast-close-icon {
+    width: 12px;
+    height: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    line-height: 1;
+    vertical-align: 0;
+  }
+
+  body
+    [data-sonner-toast][data-styled="true"]
+    [data-close-button]
+    .pounce-toast-close-icon
+    svg {
+    width: 1em;
+    height: 1em;
+    display: block;
+    position: static;
+    margin: 0;
+    vertical-align: 0;
+  }
+
+  body [data-sonner-toast][data-styled="true"] [data-close-button]:hover {
+    background: transparent !important;
+    border: 0 !important;
+    opacity: 1;
+  }
+
+  body
+    [data-sonner-toast][data-styled="true"]
+    [data-close-button]:focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 2px;
+    box-shadow: none;
+  }
+}
+
 @media (max-width: 700px) {
   input,
   select,
@@ -56,13 +122,29 @@ body[data-pounce-dragging="true"] * {
 }
 
 @media (max-width: 600px) {
-  [data-sonner-toaster][data-x-position="center"] {
-    left: max(10px, env(safe-area-inset-left));
-    right: max(10px, env(safe-area-inset-right));
-    width: auto;
+  body [data-sonner-toaster][data-x-position="center"] {
+    --pounce-toast-mobile-gutter-left: max(10px, env(safe-area-inset-left));
+    --pounce-toast-mobile-gutter-right: max(10px, env(safe-area-inset-right));
+    left: var(--pounce-toast-mobile-gutter-left);
+    right: var(--pounce-toast-mobile-gutter-right);
+    width: calc(
+      100vw - var(--pounce-toast-mobile-gutter-left) -
+        var(--pounce-toast-mobile-gutter-right)
+    );
+    max-width: calc(
+      100vw - var(--pounce-toast-mobile-gutter-left) -
+        var(--pounce-toast-mobile-gutter-right)
+    );
   }
 
-  [data-sonner-toaster] [data-sonner-toast] {
-    width: auto;
+  body [data-sonner-toaster] [data-sonner-toast] {
+    left: 0;
+    right: auto;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  body [data-sonner-toast][data-styled="true"] [data-close-button] {
+    display: none;
   }
 }
