@@ -146,6 +146,10 @@ export default function useGameSocket(
         optimisticallyPlayedMoveActionIds.current.delete(action.actionId);
         toastRejectedMove({
           board: state.serverBoard,
+          confirmedCenterPileRace: isConfirmedCenterPileRaceRejection(
+            action.payload,
+            ack.reason
+          ),
           move: action.payload,
           playerIndex: state.getActivePlayerIndex(),
           reason: ack.reason,
@@ -604,6 +608,17 @@ export default function useGameSocket(
     state,
     socket,
   };
+}
+
+function isConfirmedCenterPileRaceRejection(
+  move: Move,
+  reason?: string
+): boolean {
+  return (
+    move.type === "c2c" &&
+    (reason === "That move is no longer available." ||
+      reason === "The round is already over.")
+  );
 }
 
 export type Actions = {

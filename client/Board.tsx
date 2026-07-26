@@ -69,6 +69,9 @@ import {
 } from "./BoardLayout";
 import { getPlayerLocation } from "../shared/CardLocations";
 import type { AIMode } from "../shared/RoomState";
+import { getCenterPileRaceWinner } from "./centerPileRace";
+import { toastRejectedMove } from "./moveRejectionToast";
+
 type Props = {
   executeMove: (move: Move) => void;
   onUpdateHand: (location: CursorLocation) => void;
@@ -304,6 +307,12 @@ export default observer(function Board({
   const onUpdateDragHover = onUpdateHand;
 
   const [grabbedItem, setGrabbedItem] = useState<CardState | null>(null);
+  const canInteractWithCardsRef = useRef(canInteractWithCards);
+  canInteractWithCardsRef.current = canInteractWithCards;
+  const centerPileDragRef = useRef<{
+    card: CardState;
+    hoveredPileIndex: number | null;
+  } | null>(null);
   useEffect(() => {
     if (!canInteractWithCards && grabbedItem != null) {
       socket?.emit("update_hand", { item: null });
@@ -312,13 +321,69 @@ export default observer(function Board({
   }, [canInteractWithCards, grabbedItem, socket]);
   const handleUpdateGrabbedItem = useCallback(
     (item: CardState | null, items: CardState[] | null) => {
-      const nextItem = canInteractWithCards ? item : null;
-      const nextItems = canInteractWithCards ? items : null;
+      const canInteract = canInteractWithCardsRef.current;
+      const nextItem = canInteract ? item : null;
+      const nextItems = canInteract ? items : null;
+      if (nextItem && nextItems?.length === 1) {
+        centerPileDragRef.current = {
+          card: nextItem,
+          hoveredPileIndex: null,
+        };
+      } else if (canInteract) {
+        centerPileDragRef.current = null;
+      }
       socket?.emit("update_hand", { item: nextItem, items: nextItems });
       setGrabbedItem(nextItem);
     },
-    [canInteractWithCards, socket]
+    [socket]
   );
+  const handleUpdateCenterPileTarget = useCallback(
+    (pileIndex: number | null) => {
+      if (
+        centerPileDragRef.current &&
+        (canInteractWithCardsRef.current || pileIndex != null)
+      ) {
+        centerPileDragRef.current.hoveredPileIndex = pileIndex;
+      }
+    },
+    []
+  );
+  useEffect(() => {
+    if (canInteractWithCards) {
+      return;
+    }
+
+    // A round-ending play removes drop targets immediately. Preserve the
+    // exact target that was under the pointer so that race still gets a toast.
+    const centerPileDrag = centerPileDragRef.current;
+    const hoveredPileIndex = centerPileDrag?.hoveredPileIndex;
+    const winningCard =
+      centerPileDrag &&
+      hoveredPileIndex != null &&
+      activePlayerIndex >= 0
+        ? getCenterPileRaceWinner(
+            board.piles[hoveredPileIndex],
+            centerPileDrag.card,
+            activePlayerIndex
+          )
+        : null;
+    centerPileDragRef.current = null;
+    if (!winningCard || !centerPileDrag || hoveredPileIndex == null) {
+      return;
+    }
+
+    toastRejectedMove({
+      attemptedCard: centerPileDrag.card,
+      board,
+      confirmedCenterPileRace: true,
+      move: {
+        type: "c2c",
+        source: { type: "pounce" },
+        dest: hoveredPileIndex,
+      },
+      playerIndex: activePlayerIndex,
+    });
+  }, [activePlayerIndex, board, canInteractWithCards]);
   return (
     <DndProvider
       backend={TouchBackend}
@@ -329,6 +394,7 @@ export default observer(function Board({
       <DragReporter
         boardRootRef={boardRootRef}
         onUpdateGrabbedItem={handleUpdateGrabbedItem}
+        onUpdateCenterPileTarget={handleUpdateCenterPileTarget}
       />
       <MobileDragPreviewLayer enabled easyReadCards={settings.easyReadCards} />
       <div

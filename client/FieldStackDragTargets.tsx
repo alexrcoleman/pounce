@@ -9,6 +9,8 @@ import { getBoardPileLocation } from "../shared/CardLocations";
 import FieldDragTarget from "./FieldDragTarget";
 import { FIELD_LEFT, FIELD_TOP, useBoardLayout } from "./BoardLayout";
 import { getFieldCardRotationDegrees } from "./cardGeometry";
+import { getCenterPileRaceWinner } from "./centerPileRace";
+import { toastRejectedMove } from "./moveRejectionToast";
 
 export default observer(function FieldStackDragTargets({
   state,
@@ -23,19 +25,7 @@ export default observer(function FieldStackDragTargets({
 }) {
   const executeMoveCardToCenter = useCallback(
     (item: CardDnDItem, targetPile: number, position?: [number, number]) => {
-      executeMove({
-        type: "c2c",
-        source:
-          item.source.type === "pounce"
-            ? { type: "pounce" }
-            : item.source.type === "flippedDeck"
-            ? { type: "deck" }
-            : item.source.type === "solitaire"
-            ? { type: "solitaire", index: item.source.pileIndex }
-            : { type: "deck" /* invalid */ },
-        dest: targetPile,
-        position,
-      });
+      executeMove(createCardToCenterMove(item, targetPile, position));
     },
     [executeMove]
   );
@@ -115,10 +105,30 @@ export default observer(function FieldStackDragTargets({
         return (
           <FieldStackDragTarget
             key={index}
-            card={topCard}
+            pile={pile}
+            pileIndex={index}
             stackHeight={pile.length}
             onUpdateDragTarget={onUpdateDragHover}
-            onDrop={(item) => executeMoveCardToCenter(item, index)}
+            onDrop={(item) => {
+              const move = createCardToCenterMove(item, index);
+              const playerIndex = state.getActivePlayerIndex();
+              const winner = getCenterPileRaceWinner(
+                pile,
+                item.card,
+                playerIndex
+              );
+              if (winner) {
+                toastRejectedMove({
+                  attemptedCard: item.card,
+                  board,
+                  confirmedCenterPileRace: true,
+                  move,
+                  playerIndex,
+                });
+                return;
+              }
+              executeMove(move);
+            }}
             left={left}
             top={top}
             scale={fieldScale}
@@ -134,3 +144,23 @@ export default observer(function FieldStackDragTargets({
     </>
   );
 });
+
+function createCardToCenterMove(
+  item: CardDnDItem,
+  targetPile: number,
+  position?: [number, number]
+): Extract<Move, { type: "c2c" }> {
+  return {
+    type: "c2c",
+    source:
+      item.source.type === "pounce"
+        ? { type: "pounce" }
+        : item.source.type === "flippedDeck"
+        ? { type: "deck" }
+        : item.source.type === "solitaire"
+        ? { type: "solitaire", index: item.source.pileIndex }
+        : { type: "deck" /* invalid */ },
+    dest: targetPile,
+    position,
+  };
+}

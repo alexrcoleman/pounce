@@ -13,9 +13,14 @@ export type SourceType =
   | { type: "field_stack"; index: number; isTopCard: boolean };
 
 export type CardDnDItem = {
-  source: SourceType;
+  source: Exclude<SourceType, { type: "field_stack" }>;
   card: CardState;
   initialClientPosition: [number, number];
+  centerPileTarget?: {
+    handlerId: string | symbol;
+    pileIndex: number;
+  };
+  rememberedCenterPileIndices?: number[];
 };
 
 export type FieldStackDnDItem = {
@@ -26,4 +31,23 @@ export type FieldStackDnDItem = {
 
 export function isMultiCardSolitaireDrag(item: CardDnDItem): boolean {
   return item.source.type === "solitaire" && !item.source.isTopCard;
+}
+
+export function getActiveCenterPileIndex(
+  item: unknown,
+  targetIds: readonly (string | symbol)[]
+): number | null {
+  if (
+    typeof item !== "object" ||
+    item == null ||
+    !("card" in item) ||
+    !("centerPileTarget" in item)
+  ) {
+    return null;
+  }
+
+  const target = (item as CardDnDItem).centerPileTarget;
+  return target && targetIds.includes(target.handlerId)
+    ? target.pileIndex
+    : null;
 }

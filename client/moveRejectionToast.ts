@@ -13,9 +13,12 @@ import {
   isGameOver,
 } from "../shared/GameUtils";
 import type { Move } from "../shared/MoveHandler";
+import { getCenterPileRaceWinner } from "./centerPileRace";
 
 type RejectedMoveToastArgs = {
+  attemptedCard?: CardState;
   board: BoardState | null;
+  confirmedCenterPileRace?: boolean;
   move: Move;
   playerIndex: number;
   reason?: string;
@@ -36,11 +39,13 @@ export function toastRejectedMove(args: RejectedMoveToastArgs) {
   });
 }
 
-function describeRejectedMove({
+export function describeRejectedMove({
   board,
   move,
   playerIndex,
   reason,
+  attemptedCard,
+  confirmedCenterPileRace = false,
 }: RejectedMoveToastArgs): RejectionCopy {
   if (!board) {
     return genericRejectedMove(reason);
@@ -51,6 +56,23 @@ function describeRejectedMove({
     return genericRejectedMove(reason ?? "No player was found for that move.");
   }
 
+  if (reason === "Move acknowledgement timed out") {
+    return genericRejectedMove(reason);
+  }
+
+  if (confirmedCenterPileRace && move.type === "c2c") {
+    const raceCopy = describeCenterPileRace(
+      board,
+      player,
+      playerIndex,
+      move,
+      attemptedCard
+    );
+    if (raceCopy) {
+      return raceCopy;
+    }
+  }
+
   const blockedReason = getBlockedBoardReason(board, player);
   if (blockedReason) {
     return genericRejectedMove(blockedReason);
@@ -58,7 +80,13 @@ function describeRejectedMove({
 
   switch (move.type) {
     case "c2c":
-      return describeCardToCenter(board, player, move, reason);
+      return describeCardToCenter(
+        board,
+        player,
+        move,
+        reason,
+        attemptedCard
+      );
     case "c2s":
       return describeCardToSolitaire(player, move, reason);
     case "s2s":
@@ -80,9 +108,10 @@ function describeCardToCenter(
   board: BoardState,
   player: PlayerState,
   move: Extract<Move, { type: "c2c" }>,
-  reason?: string
+  reason?: string,
+  attemptedCard?: CardState
 ): RejectionCopy {
-  const card = getCenterSourceCard(player, move.source);
+  const card = attemptedCard ?? getCenterSourceCard(player, move.source);
   if (!card) {
     return genericRejectedMove(
       `${getCenterSourceName(move.source)} is no longer available.`
@@ -115,6 +144,42 @@ function describeCardToCenter(
 
   return {
     message: `${formatCard(card)} invalid on ${formatCard(topCard)}; needs ${formatNextCenterCard(topCard)}.`,
+  };
+}
+
+function describeCenterPileRace(
+  board: BoardState,
+  player: PlayerState,
+  playerIndex: number,
+  move: Extract<Move, { type: "c2c" }>,
+  attemptedCard?: CardState
+): RejectionCopy | null {
+  const card = attemptedCard ?? getCenterSourceCard(player, move.source);
+  if (!card) {
+    return null;
+  }
+
+  const pile = board.piles[move.dest];
+  if (!pile) {
+    return null;
+  }
+  const topCard = peek(pile);
+  if (!topCard) {
+    return null;
+  }
+
+  const winningCard = getCenterPileRaceWinner(pile, card, playerIndex);
+  const winnerName = winningCard
+    ? board.players[winningCard.player]?.name.trim()
+    : "";
+  if (!winnerName) {
+    return null;
+  }
+
+  const advancedPileCopy =
+    topCard.value > card.value ? ` It's already ${formatCard(topCard)}.` : "";
+  return {
+    message: `${winnerName} beat you to that pile with ${formatCard(card)}.${advancedPileCopy}`,
   };
 }
 
