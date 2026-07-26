@@ -68,6 +68,7 @@ export type PlayerState = {
   isReadyForRound?: boolean;
   disconnected?: boolean;
   disconnectedAt?: number;
+  hasLeftRoom?: boolean;
   playerSessionId: string | null;
   socketId: string | null;
   name: string;

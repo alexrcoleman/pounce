@@ -1,6 +1,12 @@
 import { CardState, CursorLocation } from "../shared/GameUtils";
 import { Socket, io } from "socket.io-client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { isBoardAcceptingMoves, type Move } from "../shared/MoveHandler";
 import { GameSocket } from "./GameConnection";
@@ -29,9 +35,9 @@ import {
   type PendingRoomEntry,
   useStatsigLogger,
 } from "./analytics";
+import { getOrCreateBrowserPlayerSessionId } from "./PlayerSession";
 
 export type ClientSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
-const PLAYER_SESSION_STORAGE_KEY = "pounce::playerSessionId";
 const DEFAULT_SOCKET_PORT = "3001";
 const RECONNECT_TOAST_ID = "room-reconnect";
 const STUCK_TOAST_ID = "room-stuck-status";
@@ -43,6 +49,7 @@ const PING_INTERVAL_MS = 3000;
 const UNSTABLE_PING_WARNING_MS = 3000;
 const PING_TIMEOUT_MS = 5000;
 const STABLE_PING_RESET_MS = 1000;
+const LEAVE_ROOM_ACK_TIMEOUT_MS = 3000;
 
 export default function useGameSocket(
   roomId: string | null,
@@ -236,7 +243,7 @@ export default function useGameSocket(
     );
   };
   useEffect(() => {
-    const nextPlayerSessionId = getOrCreatePlayerSessionId();
+    const nextPlayerSessionId = getOrCreateBrowserPlayerSessionId();
     setPlayerSessionId(nextPlayerSessionId);
     runInAction(() => state.setPlayerSessionId(nextPlayerSessionId));
   }, [state]);
@@ -597,12 +604,22 @@ export default function useGameSocket(
     },
     [socket, state]
   );
+  const leaveRoom = useCallback(async () => {
+    const didLeave = await requestRoomLeave(socket, state.isConnected);
+    if (!didLeave) {
+      toast.error(
+        "Couldn’t leave the room. Reconnect and try again."
+      );
+    }
+    return didLeave;
+  }, [socket, state]);
   return {
     error,
     isConnected,
     actions,
     state,
     socket,
+    leaveRoom,
   };
 }
 
@@ -648,6 +665,32 @@ function getLocalSocketOrigin(): string | null {
   return `${protocol}//${socketHost}:${socketPort}`;
 }
 
+function requestRoomLeave(
+  socket: GameSocket | null,
+  isConnected: boolean
+): Promise<boolean> {
+  if (!socket || !isConnected) {
+    return Promise.resolve(false);
+  }
+
+  return new Promise((resolve) => {
+    let isSettled = false;
+    const finish = (didLeave: boolean) => {
+      if (isSettled) {
+        return;
+      }
+      isSettled = true;
+      window.clearTimeout(timeoutId);
+      resolve(didLeave);
+    };
+    const timeoutId = window.setTimeout(
+      () => finish(false),
+      LEAVE_ROOM_ACK_TIMEOUT_MS
+    );
+    socket.emit("leave_room", () => finish(true));
+  });
+}
+
 async function waitForSocketServerWarmup() {
   const deadline = Date.now() + INITIAL_SOCKET_WARMUP_TIMEOUT_MS;
   let lastError: unknown;
@@ -673,17 +716,4 @@ async function waitForSocketServerWarmup() {
 
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function getOrCreatePlayerSessionId() {
-  const existing = sessionStorage.getItem(PLAYER_SESSION_STORAGE_KEY);
-  if (existing) {
-    return existing;
-  }
-
-  const nextId =
-    window.crypto?.randomUUID?.() ??
-    `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-  sessionStorage.setItem(PLAYER_SESSION_STORAGE_KEY, nextId);
-  return nextId;
 }

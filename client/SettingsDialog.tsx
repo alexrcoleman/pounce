@@ -39,6 +39,10 @@ import {
   type DragInputModePreference,
   type ResolvedDragInputMode,
 } from "./dragInputMode";
+import {
+  getDisconnectedPlayerNames,
+  getDisconnectedPlayers,
+} from "./disconnectedPlayers";
 
 export type SettingsPage = "main" | "room" | "appearance";
 
@@ -84,8 +88,10 @@ export default observer(function SettingsDialog({
   const isHost = state.getIsHost();
   const serverAICount =
     state.board?.players.filter((p) => p.socketId == null).length ?? 0;
-  const disconnectedCount =
-    state.board?.players.filter((p) => p.disconnected).length ?? 0;
+  const disconnectedPlayers = state.board
+    ? getDisconnectedPlayers(state.board)
+    : [];
+  const disconnectedCount = disconnectedPlayers.length;
   const buildDate = useLocalBuildDate(process.env.NEXT_PUBLIC_BUILD_DATE);
   const [dragInputCapabilities, setDragInputCapabilities] =
     useState<DragInputCapabilities>(getDragInputCapabilities);
@@ -327,11 +333,30 @@ export default observer(function SettingsDialog({
                 <Button
                   disabled={isStarted || disconnectedCount === 0}
                   onClick={() => {
-                    socket?.emit("remove_disconnected_players");
-                    settings.closeSettings();
+                    Modal.confirm({
+                      title: "Kick inactive players?",
+                      content: `${getDisconnectedPlayerNames(
+                        disconnectedPlayers
+                      )} will lose ${
+                        disconnectedCount === 1
+                          ? "their seat"
+                          : "their seats"
+                      } in the room.${
+                        state.board?.isDealt
+                          ? " The current hands will be cleared and need to be dealt again."
+                          : ""
+                      }`,
+                      okText: "Kick",
+                      okButtonProps: { danger: true },
+                      cancelText: "Cancel",
+                      onOk: () => {
+                        socket?.emit("remove_disconnected_players");
+                        settings.closeSettings();
+                      },
+                    });
                   }}
                 >
-                  Clear inactive
+                  Kick inactive
                 </Button>
               </div>
             </SettingsSection>

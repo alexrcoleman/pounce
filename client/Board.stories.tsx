@@ -137,7 +137,12 @@ function BoardStoryFrame({
   );
 
   return (
-    <ClientProvider settings={settings} socket={null} state={state}>
+    <ClientProvider
+      onLeaveRoom={() => {}}
+      settings={settings}
+      socket={null}
+      state={state}
+    >
       <div
         style={{
           background: "#cd9b60",

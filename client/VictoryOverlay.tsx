@@ -4,17 +4,20 @@ import ScoresTable from "./ScoresTable";
 import { observer } from "mobx-react-lite";
 import { useClientContext } from "./ClientContext";
 import { Button, Flex, Modal } from "antd";
-import Link from "next/link";
 import styles from "./VictoryOverlay.module.css";
 import RoundAnalysisPanel from "./RoundAnalysisPanel";
 import { useEffect, useState } from "react";
 import { useRoundEndSequence } from "./RoundEndSequence";
+import {
+  confirmRoomActionWithDisconnectedPlayers,
+  getPlayersWhoLostConnection,
+} from "./disconnectedPlayers";
 
 const CONFETTI_DURATION_MS = 10_000;
 const POST_GAME_ACTION_DELAY_MS = 1_000;
 
 export default observer(function VictoryOverlay() {
-  const { state, socket } = useClientContext();
+  const { onLeaveRoom, state, socket } = useClientContext();
   const { isScoreboardVisible, wasScoreboardDelayed } = useRoundEndSequence();
   const board = state.board!;
   const isHost = state.getIsHost();
@@ -82,14 +85,27 @@ export default observer(function VictoryOverlay() {
           >
             {isAnalysisLoading ? "Analyzing" : "Game Analysis"}
           </Button>
-          <Link legacyBehavior href="/" passHref>
-            <Button disabled={arePostGameActionsLocked}>Leave Room</Button>
-          </Link>
+          <Button
+            disabled={arePostGameActionsLocked}
+            onClick={onLeaveRoom}
+          >
+            Leave Room
+          </Button>
           {isHost ? (
             <Button
               disabled={arePostGameActionsLocked}
               type="primary"
-              onClick={() => socket?.emit("deal_hands")}
+              onClick={() =>
+                confirmRoomActionWithDisconnectedPlayers({
+                  action: "Dealing",
+                  disconnectedPlayers: getPlayersWhoLostConnection(
+                    board
+                  ),
+                  okText: "Deal anyway",
+                  onConfirm: () => socket?.emit("deal_hands"),
+                  title: "Deal while players are disconnected?",
+                })
+              }
             >
               Deal hands
             </Button>

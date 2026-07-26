@@ -93,7 +93,12 @@ const OfflinePage: NextPage<{
           !settings.useAnimations && styles.hideAnimations
         )}
       >
-        <ClientProvider settings={settings} state={state} socket={socket}>
+        <ClientProvider
+          onLeaveRoom={onLeaveRoom}
+          settings={settings}
+          state={state}
+          socket={socket}
+        >
           <Header
             isRoundEndAnimationActive={isRoundEndAnimationActive}
             onLeaveRoom={onLeaveRoom}

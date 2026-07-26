@@ -81,7 +81,6 @@ export type RoomTickResult = {
   roundAnalysisSnapshots?: RoundSnapshot[] | null;
 };
 
-export const DISCONNECTED_PLAYER_TIMEOUT_MS = 5 * 60 * 1000;
 export const STUCK_BOARD_ROTATION_TICKS = 100;
 const AI_PILE_KNOWLEDGE_MIN_DURATION_MS = 3000;
 const AI_PILE_KNOWLEDGE_REACTION_MULTIPLIER = 2;
@@ -285,11 +284,6 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
         : 200 / room.aiSpeed;
       aiCooldowns[index] = now + delay / room.timescale;
     }
-  }
-
-  if (removeDisconnectedPlayers(room, now, DISCONNECTED_PLAYER_TIMEOUT_MS)) {
-    hasUpdate = true;
-    hasHandUpdate = true;
   }
 
   return {
@@ -899,7 +893,7 @@ export function startRoomGame(
     return;
   }
 
-  removeDisconnectedPlayers(room);
+  removePlayersWhoLeftRoom(room);
   if (!room.board.isDealt) {
     dealRoomHands(room);
   }
@@ -954,6 +948,29 @@ export function completeRoundStartCountdown(
   return true;
 }
 
+export function cancelRoomStartCountdown(
+  room: RoomState,
+  now = Date.now()
+): boolean {
+  if (!isRoundStartPending(room.board, now)) {
+    return false;
+  }
+
+  room.board.isActive = false;
+  room.board.isPaused = false;
+  room.board.roundStartsAt = undefined;
+  room.board.players.forEach((player) => {
+    player.currentPoints = 0;
+    player.isReadyForRound = false;
+  });
+  room.aiCooldowns = [];
+  room.hands = [];
+  room.handUpdateVersions = [];
+  room.aiBoard = deepClone(room.board);
+  resetAIVisibilityMemory(room);
+  return true;
+}
+
 function getRoomStartCountdownDurationMs(room: RoomState): number {
   return room.autoStart ? 0 : ROUND_START_COUNTDOWN_MS / room.timescale;
 }
@@ -967,7 +984,7 @@ function getAIOpeningMoveCooldown(room: RoomState, now: number): number {
 }
 
 export function dealRoomHands(room: RoomState): boolean {
-  removeDisconnectedPlayers(room);
+  removePlayersWhoLeftRoom(room);
   clearPlayersWaitingForDeal(room);
   const didDeal =
     getFairHandMode(room.settings) === "fairest"
@@ -1192,9 +1209,7 @@ export function setRoomPaused(
 }
 
 export function removeDisconnectedPlayers(
-  room: RoomState,
-  now = Date.now(),
-  timeoutMs = 0
+  room: RoomState
 ): boolean {
   if (room.board.isActive) {
     return false;
@@ -1202,14 +1217,30 @@ export function removeDisconnectedPlayers(
 
   const playerIndices = room.board.players
     .map((p, i) => ({ p, i }))
-    .filter(
-      ({ p }) =>
-        p.disconnected &&
-        (timeoutMs <= 0 ||
-          (p.disconnectedAt != null && now - p.disconnectedAt >= timeoutMs))
-    )
+    .filter(({ p }) => p.disconnected)
     .map(({ i }) => i);
 
+  return removeRoomPlayers(room, playerIndices);
+}
+
+export function removeRoomPlayer(
+  room: RoomState,
+  playerIndex: number
+): boolean {
+  if (room.board.isActive) {
+    return false;
+  }
+  return removeRoomPlayers(room, [playerIndex]);
+}
+
+function removePlayersWhoLeftRoom(room: RoomState): boolean {
+  if (room.board.isActive) {
+    return false;
+  }
+  const playerIndices = room.board.players
+    .map((player, index) => ({ player, index }))
+    .filter(({ player }) => player.hasLeftRoom === true)
+    .map(({ index }) => index);
   return removeRoomPlayers(room, playerIndices);
 }
 
@@ -1234,6 +1265,7 @@ function removeRoomPlayers(room: RoomState, playerIndices: number[]): boolean {
 
 export function resetRoom(room: RoomState): void {
   resetBoard(room.board);
+  removePlayersWhoLeftRoom(room);
   clearPlayersWaitingForDeal(room);
   room.board.players.forEach((p) => {
     p.scores = [];
@@ -1350,7 +1382,9 @@ function maybeStartReadyRound(room: RoomState, now: number): boolean {
   const readyPlayers = getRoundReadyPlayers(room.board);
   if (
     readyPlayers.length < MIN_ROUND_READY_PLAYERS ||
-    readyPlayers.some((player) => player.isReadyForRound !== true)
+    readyPlayers.some(
+      (player) => player.disconnected || player.isReadyForRound !== true
+    )
   ) {
     return false;
   }
@@ -1366,7 +1400,6 @@ function getRoundReadyPlayers(board: BoardState): PlayerState[] {
 
   return board.players.filter(
     (player) =>
-      !player.disconnected &&
       player.socketId != null &&
       player.isSpectating !== true &&
       player.isWaitingForDeal !== true

@@ -152,7 +152,14 @@ const PounceRushPage: NextPage<{
           isBoardAnimationSuppressed ? styles.suppressBoardAnimations : ""
         }`}
       >
-        <ClientProvider settings={settings} state={state} socket={socket}>
+        <ClientProvider
+          onLeaveRoom={() => {
+            void router.push("/");
+          }}
+          settings={settings}
+          state={state}
+          socket={socket}
+        >
           <div className={styles.boardLayer}>
             <Board
               executeMove={actions.executeMove}
