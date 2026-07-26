@@ -13,9 +13,11 @@ import {
   isGameOver,
 } from "../shared/GameUtils";
 import type { Move } from "../shared/MoveHandler";
+import { getCenterPileRaceWinner } from "./centerPileRace";
 
 type RejectedMoveToastArgs = {
   board: BoardState | null;
+  confirmedCenterPileRace?: boolean;
   move: Move;
   playerIndex: number;
   reason?: string;
@@ -36,11 +38,12 @@ export function toastRejectedMove(args: RejectedMoveToastArgs) {
   });
 }
 
-function describeRejectedMove({
+export function describeRejectedMove({
   board,
   move,
   playerIndex,
   reason,
+  confirmedCenterPileRace = false,
 }: RejectedMoveToastArgs): RejectionCopy {
   if (!board) {
     return genericRejectedMove(reason);
@@ -49,6 +52,25 @@ function describeRejectedMove({
   const player = board.players[playerIndex];
   if (!player) {
     return genericRejectedMove(reason ?? "No player was found for that move.");
+  }
+
+  if (reason === "Move acknowledgement timed out") {
+    return genericRejectedMove(reason);
+  }
+
+  if (confirmedCenterPileRace && move.type === "c2c") {
+    const attemptedCard = getCenterSourceCard(player, move.source);
+    const raceCopy = attemptedCard
+      ? describeCenterPileRaceLoss(
+          board,
+          move.dest,
+          attemptedCard,
+          playerIndex
+        )
+      : null;
+    if (raceCopy) {
+      return raceCopy;
+    }
   }
 
   const blockedReason = getBlockedBoardReason(board, player);
@@ -115,6 +137,42 @@ function describeCardToCenter(
 
   return {
     message: `${formatCard(card)} invalid on ${formatCard(topCard)}; needs ${formatNextCenterCard(topCard)}.`,
+  };
+}
+
+export function describeCenterPileRaceLoss(
+  board: BoardState,
+  pileIndex: number,
+  attemptedCard: CardState,
+  playerIndex: number
+): RejectionCopy | null {
+  const pile = board.piles[pileIndex];
+  if (!pile) {
+    return null;
+  }
+  const topCard = peek(pile);
+  if (!topCard) {
+    return null;
+  }
+
+  const winningCard = getCenterPileRaceWinner(
+    pile,
+    attemptedCard,
+    playerIndex
+  );
+  const winnerName = winningCard
+    ? board.players[winningCard.player]?.name.trim()
+    : "";
+  if (!winnerName) {
+    return null;
+  }
+
+  const advancedPileCopy =
+    topCard.value > attemptedCard.value
+      ? ` It's already ${formatCard(topCard)}.`
+      : "";
+  return {
+    message: `${winnerName} beat you to that pile with ${formatCard(attemptedCard)}.${advancedPileCopy}`,
   };
 }
 
