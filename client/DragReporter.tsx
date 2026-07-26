@@ -1,6 +1,9 @@
 import React, { useEffect } from "react";
 
-import { CardDnDItem } from "./CardDnDItem";
+import {
+  CardDnDItem,
+  getActiveCenterPileIndex,
+} from "./CardDnDItem";
 import { BoardState, CardState } from "../shared/GameUtils";
 import { useDragDropManager } from "react-dnd";
 import { useClientContext } from "./ClientContext";
@@ -11,42 +14,70 @@ type Props = {
     item: CardState | null,
     items: CardState[] | null
   ) => void;
+  onUpdateCenterPileTarget: (pileIndex: number | null) => void;
 };
 
 export default function DragReporter({
   boardRootRef,
   onUpdateGrabbedItem,
+  onUpdateCenterPileTarget,
 }: Props) {
   const { state } = useClientContext();
   const manager = useDragDropManager();
   useEffect(() => {
     const monitor = manager.getMonitor();
     let lastItem: unknown = null;
-    const unsub = monitor.subscribeToStateChange(() => {
+    let lastCenterPileIndex: number | null = null;
+    const reportDragState = () => {
       const item = monitor.getItem();
-      if (lastItem == item) {
+      const centerPileIndex = getActiveCenterPileIndex(
+        item,
+        monitor.getTargetIds()
+      );
+      const didItemChange = lastItem != item;
+      const didCenterPileChange =
+        lastCenterPileIndex !== centerPileIndex;
+      if (!didItemChange && !didCenterPileChange) {
         return;
       }
       lastItem = item;
-      setBoardCardDragState(
-        boardRootRef.current,
-        item != null && isCardDragItemType(monitor.getItemType())
-      );
-      setDocumentDragCursor(item != null);
-      if (item == null) {
-        onUpdateGrabbedItem(null, null);
-      } else if ("card" in item) {
-        onUpdateGrabbedItem(item.card, getDraggedCards(item, state.board));
-      } else {
-        onUpdateGrabbedItem(null, null);
+      lastCenterPileIndex = centerPileIndex;
+      if (didItemChange) {
+        setBoardCardDragState(
+          boardRootRef.current,
+          item != null && isCardDragItemType(monitor.getItemType())
+        );
+        setDocumentDragCursor(item != null);
+        if (item == null) {
+          onUpdateGrabbedItem(null, null);
+        } else if ("card" in item) {
+          onUpdateGrabbedItem(
+            item.card,
+            getDraggedCards(item, state.board)
+          );
+        } else {
+          onUpdateGrabbedItem(null, null);
+        }
       }
-    });
+      if (didCenterPileChange) {
+        onUpdateCenterPileTarget(centerPileIndex);
+      }
+    };
+    const unsubState = monitor.subscribeToStateChange(reportDragState);
+    const unsubOffset = monitor.subscribeToOffsetChange(reportDragState);
     return () => {
       setDocumentDragCursor(false);
       setBoardCardDragState(boardRootRef.current, false);
-      unsub();
+      unsubOffset();
+      unsubState();
     };
-  }, [boardRootRef, manager, onUpdateGrabbedItem, state]);
+  }, [
+    boardRootRef,
+    manager,
+    onUpdateCenterPileTarget,
+    onUpdateGrabbedItem,
+    state,
+  ]);
   return <React.Fragment />;
 }
 
