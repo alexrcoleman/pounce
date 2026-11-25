@@ -81,7 +81,11 @@
   line-height: 1.5;
 }
 
-.intro p, .card :global(.ant-btn-primary) {
+.intro p, .note {
+  color: #594d3f;
+}
+
+.card :global(.ant-btn-primary) {
   border-color: #156338;
   background: #156338;
 }
@@ -90,10 +94,6 @@
 .card :global(.ant-btn-primary:not(:disabled):focus-visible) {
   border-color: #1e7545;
   background: #1e7545;
-}
-
-.note {
-  color: #594d3f;
 }
 
 .name {
