@@ -111,7 +111,7 @@ export default observer(function SettingsDialog({
   const isOfflineRoom = props.roomId?.toLowerCase() === "offline";
   const isConnected = state.isConnected;
   const canShareRoom =
-    props.roomId != null && props.roomId.toLowerCase() !== "offline";
+    props.roomId != null && !["offline", "lan"].includes(props.roomId.toLowerCase());
   const modalTitle =
     page === "main"
       ? "Settings"

@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { DEFAULT_AI_LEVEL } from "../shared/AIDifficulty";
 import { GameSocket } from "./GameConnection";
+import type { LanPeer } from "./lanPeer";
+import { parseLanGuestMessage, parseLanHostMessage, type LanGuestMessage, type LanHostMessage } from "./lanGameMessages";
+import { isAllowedReactionId } from "../shared/Reactions";
 import SocketState from "./SocketState";
 import { useLocalObservable } from "mobx-react-lite";
 import { runInAction } from "mobx";
@@ -75,12 +78,13 @@ import {
 } from "./analytics";
 
 const LOCAL_SOCKET_ID = "local-player";
+const LAN_GUEST_ID = "lan-guest";
 const LOCAL_PLAYER_SESSION_ID = "local-player-session";
 const DEFAULT_OFFLINE_AI_COUNT = 2;
 const LOCAL_GAME_TICK_DELAY_MS = 16;
 const LOCAL_SIMULATION_TICK_DELAY_MS = 0;
 
-export default function useLocalGame(name: string | null) {
+export default function useLocalGame(name: string | null, peer?: LanPeer) {
   const state = useLocalObservable(() => new SocketState());
   const logStatsigEvent = useStatsigLogger();
   const roomRef = useRef<RoomState | null>(null);
@@ -90,6 +94,17 @@ export default function useLocalGame(name: string | null) {
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
+    if (peer?.role === "guest") {
+      const guest = connectLanGuest(peer, name || "Player", state, optimisticallyPlayedMoveActionIds.current);
+      setSocket(guest);
+      setIsConnected(true);
+      return () => {
+        guest.close();
+        state.onDisconnect();
+        optimisticallyPlayedMoveActionIds.current.clear();
+      };
+    }
+    const send = (message: LanHostMessage) => peer?.send(message);
     const room = createRoomState(0);
     roomRef.current = room;
     let isClosed = false;
@@ -105,17 +120,17 @@ export default function useLocalGame(name: string | null) {
     const emitUpdate = (time = Date.now()) => {
       const hadBoard = state.board != null;
       const wasRoundActive = state.board?.isActive === true;
-      runInAction(() => {
-        state.onUpdate({
-          board: deepClone(room.board),
-          settings: deepClone(room.settings),
-          stuckPlayerIndices: getRoomStuckPlayerIndices(room),
-          time,
-          revision: room.revision,
-          roundAnalysis: deepClone(room.lastRoundAnalysis),
-        });
-      });
-      if (hadBoard && !wasRoundActive && room.board.isActive) {
+      const update = {
+        board: deepClone(room.board),
+        settings: deepClone(room.settings),
+        stuckPlayerIndices: getRoomStuckPlayerIndices(room),
+        time,
+        revision: room.revision,
+        roundAnalysis: deepClone(room.lastRoundAnalysis),
+      };
+      state.onUpdate(update);
+      send({ kind: "board", update });
+      if (!peer && hadBoard && !wasRoundActive && room.board.isActive) {
         logStatsigEvent(
           "round_started",
           getRoomAnalyticsMetadata("offline", room.board, {
@@ -129,12 +144,10 @@ export default function useLocalGame(name: string | null) {
       room.revision += 1;
     };
     const emitHands = () => {
-      runInAction(() => {
-        state.updateHands(
-          deepClone(getRoomHands(room)),
-          room.handUpdateVersions.slice()
-        );
-      });
+      const hands = deepClone(getRoomHands(room));
+      const versions = room.handUpdateVersions.slice();
+      state.updateHands(hands, versions);
+      send({ kind: "hands", hands, versions });
     };
     const emitHandDelta = (playerIndex: number) => {
       const delta = getRoomHandDelta(room, playerIndex);
@@ -142,19 +155,20 @@ export default function useLocalGame(name: string | null) {
         return;
       }
 
-      runInAction(() => {
-        state.updateHandDelta(deepClone(delta));
-      });
+      state.updateHandDelta(deepClone(delta));
+      send({ kind: "hand", delta });
     };
     const emitHandDeltas = (playerIndices: readonly number[]) => {
       playerIndices.forEach(emitHandDelta);
     };
     const emitRoomToast = (roomToast: RoomToast) => {
       showRoomToast(roomToast);
+      send({ kind: "toast", toast: roomToast });
     };
     const emitRoomAction = (action: PendingRoomAction) => {
       const roomAction: RoomAction = { ...action, revision: room.revision };
-      const applyResult = runInAction(() => state.onRoomAction(roomAction));
+      const applyResult = state.onRoomAction(roomAction);
+      send({ kind: "action", action: roomAction });
       if (applyResult === "needs_sync") {
         emitUpdate(action.time);
         emitHands();
@@ -299,31 +313,26 @@ export default function useLocalGame(name: string | null) {
       }, 0);
     };
 
-    const localSocket: GameSocket = {
+    let nextReactionNumber = 0;
+    const createLocalSocket = (socketId: string): GameSocket => ({
       emit(event, ...args) {
         if (isClosed) {
           return;
         }
         if (event === "join_room") {
           const joinArgs = args[0] as { roomId: string; name: string };
-          runInAction(() => state.clearBoard());
-          const existingPlayer = room.board.players.find(
-            (p) => p.socketId === LOCAL_SOCKET_ID
-          );
+          if (!peer) state.clearBoard();
+          const sessionId = socketId === LAN_GUEST_ID ? LAN_GUEST_ID : LOCAL_PLAYER_SESSION_ID;
+          const existingPlayer = room.board.players.find((p) => p.socketId === socketId);
           if (existingPlayer) {
             existingPlayer.name = joinArgs.name;
-            existingPlayer.playerSessionId = LOCAL_PLAYER_SESSION_ID;
+            existingPlayer.playerSessionId = sessionId;
             existingPlayer.disconnected = false;
             existingPlayer.disconnectedAt = undefined;
           } else {
-            addPlayer(
-              room.board,
-              LOCAL_SOCKET_ID,
-              joinArgs.name,
-              LOCAL_PLAYER_SESSION_ID
-            );
+            addPlayer(room.board, socketId, joinArgs.name, sessionId);
           }
-          if (!hasJoined) {
+          if (!peer && !hasJoined) {
             hasJoined = true;
             for (let i = 0; i < DEFAULT_OFFLINE_AI_COUNT; i++) {
               addPlayer(room.board, null);
@@ -332,7 +341,7 @@ export default function useLocalGame(name: string | null) {
           markRoomUpdated();
           emitUpdate();
           emitHands();
-          if (!hasLoggedOfflineJoinRef.current) {
+          if (!peer && !hasLoggedOfflineJoinRef.current) {
             const entry = takePendingRoomEntry("offline");
             const metadata = getRoomAnalyticsMetadata("offline", room.board, {
               entry_kind: entry?.kind ?? "offline",
@@ -351,8 +360,9 @@ export default function useLocalGame(name: string | null) {
         }
 
         const playerIndex = room.board.players.findIndex(
-          (p) => p.socketId === LOCAL_SOCKET_ID
+          (p) => p.socketId === socketId
         );
+        if (playerIndex < 0) return;
         if (event === "move") {
           const envelope = args[0] as ActionEnvelope<Move>;
           const ack = args[1] as ((args: ActionAck) => void) | undefined;
@@ -549,6 +559,21 @@ export default function useLocalGame(name: string | null) {
             markRoomUpdated();
             emitUpdate();
           }
+        } else if (event === "send_reaction" && peer) {
+          const reactionId = (args[0] as { reactionId: unknown }).reactionId;
+          if (!isAllowedReactionId(reactionId)) return;
+          const player = room.board.players[playerIndex];
+          const sentAt = Date.now();
+          const reaction = {
+            eventId: socketId + ":" + ++nextReactionNumber,
+            reactionId,
+            playerIndex,
+            playerName: player.name,
+            playerColor: player.color,
+            sentAt,
+          };
+          state.addReaction(reaction);
+          send({ kind: "reaction", reaction });
         } else if (event === "update_hand") {
           if (updateRoomHand(
             room,
@@ -566,7 +591,8 @@ export default function useLocalGame(name: string | null) {
       close() {
         isClosed = true;
       },
-    };
+    });
+    const localSocket = createLocalSocket(LOCAL_SOCKET_ID);
 
     runInAction(() => {
       state.setPlayerSessionId(LOCAL_PLAYER_SESSION_ID);
@@ -581,6 +607,40 @@ export default function useLocalGame(name: string | null) {
         playerSessionId: LOCAL_PLAYER_SESSION_ID,
       });
     }
+    const guestSocket = createLocalSocket(LAN_GUEST_ID);
+    let guestJoined = false;
+    let lastGuestMove = 0;
+    const unsubscribe = peer?.subscribe((raw) => {
+      const message = parseLanGuestMessage(raw);
+      if (!message || isClosed) return;
+      if (message.kind === "join" && !guestJoined) {
+        guestJoined = true;
+        guestSocket.emit("join_room", { roomId: "lan", name: message.name, playerSessionId: LAN_GUEST_ID });
+      }
+      if (!guestJoined) return;
+      switch (message.kind) {
+        case "move": {
+          const sequence = Number(message.action.actionId.split(":")[1]);
+          if (sequence <= lastGuestMove) return;
+          lastGuestMove = sequence;
+          guestSocket.emit("move", message.action, (ack) => send({ kind: "ack", ack }));
+          break;
+        }
+        case "hand": guestSocket.emit("update_hand", message.hand); break;
+        case "ready": guestSocket.emit("set_round_ready", { ready: message.ready }); break;
+        case "stuck": guestSocket.emit("set_stuck", { stuck: message.stuck }); break;
+        case "reaction": guestSocket.emit("send_reaction", { reactionId: message.reaction }); break;
+        case "sync":
+          emitUpdate();
+          emitHands();
+          break;
+        case "ping": send({ kind: "pong", time: message.time }); break;
+        case "pong": state.setPingLatency(Date.now() - message.time); break;
+      }
+    });
+    const pingInterval = peer ? window.setInterval(() => {
+      if (guestJoined) send({ kind: "ping", time: Date.now() });
+    }, 2500) : undefined;
     let tickTimeout: number | null = null;
 
     const runRoomTick = () => {
@@ -638,6 +698,8 @@ export default function useLocalGame(name: string | null) {
 
     return () => {
       isClosed = true;
+      unsubscribe?.();
+      window.clearInterval(pingInterval);
       if (tickTimeout != null) {
         window.clearTimeout(tickTimeout);
       }
@@ -650,17 +712,17 @@ export default function useLocalGame(name: string | null) {
       runInAction(() => state.onDisconnect());
       roomRef.current = null;
     };
-  }, []);
+  }, [peer]);
 
   useEffect(() => {
-    if (socket && isConnected && name) {
+    if (!peer && socket && isConnected && name) {
       socket.emit("join_room", {
         roomId: "offline",
         name,
         playerSessionId: LOCAL_PLAYER_SESSION_ID,
       });
     }
-  }, [socket, name, isConnected]);
+  }, [socket, name, isConnected, peer]);
 
   const actions = useMemo<Actions>(
     () => ({
@@ -728,6 +790,99 @@ export default function useLocalGame(name: string | null) {
     actions,
     state,
     socket,
+  };
+}
+
+function connectLanGuest(
+  peer: LanPeer,
+  name: string,
+  state: SocketState,
+  optimisticSounds: Set<string>
+): GameSocket {
+  const pending = new Map<string, { callback: (ack: ActionAck) => void; timer: number }>();
+  const send = (message: LanGuestMessage) => peer.send(message);
+  state.onConnect(LAN_GUEST_ID);
+  state.setPlayerSessionId(LAN_GUEST_ID);
+  const unsubscribe = peer.subscribe((raw) => {
+    const message = parseLanHostMessage(raw);
+    if (!message) return;
+    switch (message.kind) {
+      case "board": state.onUpdate(message.update); break;
+      case "action": {
+        const result = state.onRoomAction(message.action);
+        if (result === "needs_sync") send({ kind: "sync" });
+        const playedOptimisticSound = optimisticSounds.delete(message.action.actionId);
+        if (result === "applied" && !playedOptimisticSound) {
+          playRoomActionSound(message.action, { activePlayerIndex: state.getActivePlayerIndex() });
+        }
+        break;
+      }
+      case "ack": {
+        const entry = pending.get(message.ack.actionId);
+        if (entry) {
+          pending.delete(message.ack.actionId);
+          window.clearTimeout(entry.timer);
+          entry.callback(message.ack);
+        }
+        break;
+      }
+      case "hands": state.updateHands(message.hands, message.versions); break;
+      case "hand": state.updateHandDelta(message.delta); break;
+      case "toast": showRoomToast(message.toast); break;
+      case "reaction": state.addReaction(message.reaction); break;
+      case "ping": send({ kind: "pong", time: message.time }); break;
+      case "pong": state.setPingLatency(Date.now() - message.time); break;
+    }
+  });
+  send({ kind: "join", name });
+  const ping = () => send({ kind: "ping", time: Date.now() });
+  ping();
+  const interval = window.setInterval(ping, 2500);
+  return {
+    emit(event, ...args) {
+      switch (event) {
+        case "move": {
+          const action = args[0] as ActionEnvelope<Move>;
+          const callback = args[1] as ((ack: ActionAck) => void) | undefined;
+          const reject = () => callback?.({
+            actionId: action.actionId, revision: state.serverRevision, ok: false,
+            reason: "Waiting for the LAN host. Try again.",
+          });
+          if (!send({ kind: "move", action })) {
+            reject();
+          } else if (callback) {
+            const timer = window.setTimeout(() => {
+              pending.delete(action.actionId);
+              reject();
+              send({ kind: "sync" });
+            }, 5000);
+            pending.set(action.actionId, { callback, timer });
+          }
+          break;
+        }
+        case "update_hand":
+          send({ kind: "hand", hand: args[0] as Extract<LanGuestMessage, { kind: "hand" }>["hand"] });
+          break;
+        case "set_round_ready":
+          send({ kind: "ready", ready: (args[0] as { ready: boolean }).ready });
+          break;
+        case "set_stuck":
+          send({ kind: "stuck", stuck: (args[0] as { stuck: boolean }).stuck });
+          break;
+        case "send_reaction": {
+          const reaction = (args[0] as { reactionId: unknown }).reactionId;
+          if (isAllowedReactionId(reaction)) send({ kind: "reaction", reaction });
+          break;
+        }
+        case "request_update": send({ kind: "sync" }); break;
+      }
+    },
+    close() {
+      window.clearInterval(interval);
+      unsubscribe();
+      pending.forEach(({ timer }) => window.clearTimeout(timer));
+      pending.clear();
+    },
   };
 }
 

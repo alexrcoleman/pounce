@@ -74,6 +74,15 @@
   letter-spacing: 0;
 }
 
+.lanLink {
+  align-self: flex-start;
+  color: #365443;
+  font-size: 14px;
+  font-weight: 750;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .form {
   width: 100%;
 }

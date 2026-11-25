@@ -1,6 +1,6 @@
-const CACHE_NAME = "pounce-offline-v14";
+const CACHE_NAME = "pounce-offline-v15";
 const GAME_ASSET_MANIFEST_URL = "/game-assets.json";
-const OFFLINE_PAGES = ["/", "/offline"];
+const OFFLINE_PAGES = ["/", "/offline", "/lan"];
 const APP_SHELL = [...OFFLINE_PAGES, GAME_ASSET_MANIFEST_URL];
 
 self.addEventListener("install", (event) => {
@@ -39,7 +39,11 @@ self.addEventListener("fetch", (event) => {
   }
 
   if (request.mode === "navigate") {
-    event.respondWith(networkFirst(request, "/offline"));
+    event.respondWith(
+      url.pathname === "/lan"
+        ? cacheFirst(request)
+        : networkFirst(request, "/offline")
+    );
     return;
   }
 

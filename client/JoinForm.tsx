@@ -311,6 +311,9 @@ export default function JoinForm({
                       Play offline
                     </Button>
                   </div>
+                  <Link className={styles.lanLink} href="/lan" onClick={saveName}>
+                    Play nearby (LAN)
+                  </Link>
                 </section>
 
                 <section className={styles.joinSection}>

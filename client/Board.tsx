@@ -830,7 +830,9 @@ const PileSection = observer(function PileSection({
                     ))}
                   </div>
                 ) : null}
-                {!isOfflineRoom ? <RoomShare roomId={roomCode} /> : null}
+                {!isOfflineRoom && roomCode.toLowerCase() !== "lan" ? (
+                  <RoomShare roomId={roomCode} />
+                ) : null}
                 <div className={styles.startActions}>
                   <Button
                     className={styles.roomSettingsButton}
