@@ -5,7 +5,6 @@ import {
   isRoundStartPending,
   type PlayerState,
   removePlayer,
-  rotateDecks,
 } from "../shared/GameUtils";
 import {
   broadcastHands,
@@ -35,6 +34,7 @@ import {
   resetRoomHandAfterDeckAdvance,
   resetRoomHandAfterCenterPlay,
   resetRoom,
+  rotateRoomDecks,
   setRoomPlayerStuck,
   setRoomFairHandMode,
   setRoomFairHandRotation,
@@ -518,7 +518,7 @@ export default function createSocketIOServer() {
       }
 
       const room = getRoom(user.currentRoom);
-      rotateDecks(room.board);
+      rotateRoomDecks(room);
       clearRoomStuckPlayers(room);
       recordRoundSnapshot(room, "manual_rotate", Date.now());
       markRoomUpdated(user.currentRoom);

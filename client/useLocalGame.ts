@@ -13,7 +13,6 @@ import {
   CursorLocation,
   addPlayer,
   removePlayer,
-  rotateDecks,
 } from "../shared/GameUtils";
 import {
   Move,
@@ -42,6 +41,7 @@ import {
   resetRoomHandAfterDeckAdvance,
   resetRoomHandAfterCenterPlay,
   resetRoom,
+  rotateRoomDecks,
   scheduleAIReactionBoard,
   setRoomPlayerStuck,
   setRoomFairHandMode,
@@ -495,7 +495,7 @@ export default function useLocalGame(name: string | null, peer?: LanPeer) {
             emitHands();
           }
         } else if (event === "rotate_decks") {
-          rotateDecks(room.board);
+          rotateRoomDecks(room);
           clearRoomStuckPlayers(room);
           recordRoundSnapshot(room, "manual_rotate", Date.now());
           markRoomUpdated();

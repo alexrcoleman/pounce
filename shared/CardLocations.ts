@@ -90,8 +90,9 @@ export function getApproximateCardLocation(
   return getPlayerFlippedDeckLocation(playerIdx, -1);
 }
 
-function cardMatches(left: CardState, right: CardState): boolean {
+function cardMatches(left: CardState | undefined, right: CardState): boolean {
   return (
+    left !== undefined &&
     left.player === right.player &&
     left.suit === right.suit &&
     left.value === right.value

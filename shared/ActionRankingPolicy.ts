@@ -12,6 +12,16 @@ import type {
   PlayerState,
 } from "./GameUtils";
 import type { Move } from "./MoveHandler";
+import {
+  CONNECTOR_FEATURE_NAMES,
+  createActionRankingConnectorContext,
+  getActionRankingConnectorFeatures,
+} from "./ActionRankingConnectorFeatures";
+import {
+  createActionRankingStrategyContext,
+  getActionRankingStrategyFeatures,
+  STRATEGY_FEATURE_NAMES,
+} from "./ActionRankingStrategyFeatures";
 
 export const ACTION_RANKING_FEATURE_NAMES = [
   "bias",
@@ -182,6 +192,8 @@ export const ACTION_RANKING_FEATURE_NAMES = [
   "stuck.moveCycleLike",
   "stuck.movePremove",
   "stuck.moveSolitaire",
+  ...STRATEGY_FEATURE_NAMES,
+  ...CONNECTOR_FEATURE_NAMES,
 ] as const;
 
 export type ActionRankingFeatureName =
@@ -204,8 +216,10 @@ const MAX_PREMOVE_CENTER_DISTANCE = 4;
 export type ActionRankingOptions = {
   includeCycle?: boolean;
   includeFlipDeck?: boolean;
+  includeFlipDeckOnReset?: boolean;
   includeWait?: boolean;
   includePremove?: boolean;
+  includePremoveForTableauPlayablePounce?: boolean;
   hands?: readonly CursorState[];
 };
 
@@ -221,6 +235,8 @@ type ActionRankingFeatureContext = {
   solitaireContext: ReturnType<typeof getOwnSolitaireContextFeatures>;
   solitaireBottomCards: ReturnType<typeof getOwnSolitaireBottomCards>;
   stuckContext: ReturnType<typeof getStuckContextFeatures>;
+  strategyContext: ReturnType<typeof createActionRankingStrategyContext>;
+  connectorContext: ReturnType<typeof createActionRankingConnectorContext>;
   ownPounceCard: CardState | undefined;
   ownCurrentPoints: number;
   ownPointDifferential: number;
@@ -271,6 +287,8 @@ export function enumerateLegalMoves(
   );
 
   if (options.includePremove) {
+    const canStagePounce = options.includePremoveForTableauPlayablePounce &&
+      !moves.some((move) => move.type === "c2c" && move.source.type === "pounce");
     const productiveMoveCards = moves
       .map((move) => getMoveCard(board, playerIndex, move))
       .filter((card): card is CardState => card != null);
@@ -282,9 +300,8 @@ export function enumerateLegalMoves(
           card != null &&
           centerDistance > 0 &&
           centerDistance <= MAX_PREMOVE_CENTER_DISTANCE &&
-          !productiveMoveCards.some((productiveCard) =>
-            cardEquals(productiveCard, card)
-          )
+          ((canStagePounce && move.source.type === "pounce" && centerDistance === 2) ||
+            !productiveMoveCards.some((productiveCard) => cardEquals(productiveCard, card)))
         );
       })
       .forEach((move) => moves.push(move));
@@ -301,7 +318,7 @@ export function enumerateLegalMoves(
   }
 
   if (options.includeFlipDeck ?? true) {
-    if (player.deck.length > 0) {
+    if (player.deck.length > 0 || (options.includeFlipDeckOnReset && player.flippedDeck.length > 0)) {
       moves.push({ type: "flip_deck" });
     }
   }
@@ -415,6 +432,8 @@ function createActionRankingFeatureContext(
     solitaireContext: getOwnSolitaireContextFeatures(board, player),
     solitaireBottomCards: getOwnSolitaireBottomCards(player),
     stuckContext: getStuckContextFeatures(board, playerIndex),
+    strategyContext: createActionRankingStrategyContext(board, playerIndex),
+    connectorContext: createActionRankingConnectorContext(board, playerIndex, options.hands),
     ownPounceCard: peek(player.pounceDeck),
     ownCurrentPoints: getCurrentPointsFromCards(player),
     ownPointDifferential: getPointDifferential(board, playerIndex),
@@ -553,8 +572,8 @@ function enumerateSolitaireToSolitaireMoves(player: PlayerState): Move[] {
   return moves;
 }
 
-function enumeratePremoveMoves(player: PlayerState): Move[] {
-  const moves: Move[] = [];
+function enumeratePremoveMoves(player: PlayerState): Extract<Move, { type: "premove" }>[] {
+  const moves: Extract<Move, { type: "premove" }>[] = [];
   addPremoveMoveForSource(moves, player, { type: "pounce" });
   addPremoveMoveForSource(moves, player, { type: "deck" });
   for (let index = 0; index < player.stacks.length; index++) {
@@ -564,7 +583,7 @@ function enumeratePremoveMoves(player: PlayerState): Move[] {
 }
 
 function addPremoveMoveForSource(
-  moves: Move[],
+  moves: Extract<Move, { type: "premove" }>[],
   player: PlayerState,
   source: Extract<Move, { type: "premove" }>["source"]
 ): void {
@@ -785,6 +804,8 @@ function buildActionRankingFeatures(
       stuckContext.noVisibleCenterMoves &&
         (move.type === "c2s" || move.type === "s2s")
     ),
+    ...getActionRankingStrategyFeatures(context.strategyContext, move),
+    ...getActionRankingConnectorFeatures(context.connectorContext, move),
   ];
 }
 

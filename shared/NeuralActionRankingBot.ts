@@ -8,9 +8,11 @@ import {
   type NeuralActionRankingModel,
 } from "./NeuralActionRankingPolicy";
 import { getAIPlayerResolvedMode, type AIMode } from "./RoomState";
+import { getPounceChampionMove, type PounceChampionRound } from "./pounceChampion/roomPolicy";
 
 let neuralAIPolicy: NeuralActionRankingPolicy | null =
   new NeuralActionRankingPolicy(championModel as NeuralActionRankingModel);
+let useBundledPounceChampion = true;
 let neuralAIMemoryByBoard = new WeakMap<
   BoardState,
   { roundKey: string; memoryByPlayer: Map<number, number[]> }
@@ -18,16 +20,22 @@ let neuralAIMemoryByBoard = new WeakMap<
 
 export function setNeuralAIModel(model: NeuralActionRankingModel): void {
   neuralAIPolicy = new NeuralActionRankingPolicy(model);
+  useBundledPounceChampion = false;
   neuralAIMemoryByBoard = new WeakMap();
 }
 
 export function clearNeuralAIModel(): void {
   neuralAIPolicy = null;
+  useBundledPounceChampion = false;
   neuralAIMemoryByBoard = new WeakMap();
 }
 
 export function hasNeuralAIModel(): boolean {
   return neuralAIPolicy != null;
+}
+
+export function usesBundledPounceChampion(): boolean {
+  return useBundledPounceChampion;
 }
 
 export function getNeuralAIMove(
@@ -63,10 +71,12 @@ export function getConfiguredAIMove(
   playerIndex: number,
   cursor: CursorState,
   hands: readonly CursorState[] | undefined,
-  mode: AIMode | undefined
+  mode: AIMode | undefined,
+  champion?: PounceChampionRound
 ): Move | undefined {
   if (getAIPlayerResolvedMode(boardState, playerIndex, mode) === "trained") {
     return (
+      (champion && getPounceChampionMove(champion, boardState, playerIndex, hands ?? [])) ??
       getNeuralAIMove(boardState, playerIndex, cursor, hands) ??
       getBasicAIMove(boardState, playerIndex, cursor)
     );

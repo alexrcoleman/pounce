@@ -1889,18 +1889,36 @@ export class NeuralActionRankingPolicy {
 
     const layerInputs: number[][] = [];
     const activations: number[][] = [];
+    const nonzeroInputs: number[] = [];
+    for (let index = 0; index < features.length; index++) {
+      if (features[index] !== 0) {
+        nonzeroInputs.push(index);
+      }
+    }
     let previousActivation = features;
 
     this.model.layerWeights.forEach((weightsForLayer, layerIndex) => {
-      const raw = weightsForLayer.map((weights, hiddenIndex) => {
-        return (
-          this.model.layerBiases[layerIndex][hiddenIndex] +
-          weights.reduce((sum, weight, inputIndex) => {
-            return sum + weight * previousActivation[inputIndex];
-          }, 0)
-        );
-      });
-      const activation = raw.map((value) => Math.tanh(value));
+      const biases = this.model.layerBiases[layerIndex];
+      const raw = new Array<number>(weightsForLayer.length);
+      const activation = new Array<number>(weightsForLayer.length);
+      const sparse = layerIndex === 0 && nonzeroInputs.length * 2 < features.length;
+      for (let hiddenIndex = 0; hiddenIndex < weightsForLayer.length; hiddenIndex++) {
+        const weights = weightsForLayer[hiddenIndex];
+        let weightedInput = 0;
+        if (sparse) {
+          for (let index = 0; index < nonzeroInputs.length; index++) {
+            const inputIndex = nonzeroInputs[index];
+            weightedInput += weights[inputIndex] * features[inputIndex];
+          }
+        } else {
+          for (let inputIndex = 0; inputIndex < weights.length; inputIndex++) {
+            weightedInput += weights[inputIndex] * previousActivation[inputIndex];
+          }
+        }
+        const value = biases[hiddenIndex] + weightedInput;
+        raw[hiddenIndex] = value;
+        activation[hiddenIndex] = Math.tanh(value);
+      }
       layerInputs.push(raw);
       activations.push(activation);
       previousActivation = activation;
@@ -2618,9 +2636,9 @@ function alignModelToCurrentFeatures(
     ACTION_RANKING_FEATURE_NAMES.map((name, index) => [name, index])
   );
   const recurrentStateSize = getModelRecurrentStateSize(model);
-  const expandedInputWeights = model.layerWeights[0].map((weights) => {
+  const expandFeatureWeights = (weights: readonly number[]) => {
     const expanded = Array.from(
-      { length: ACTION_RANKING_FEATURE_NAMES.length + recurrentStateSize },
+      { length: ACTION_RANKING_FEATURE_NAMES.length },
       () => 0
     );
     model.featureNames.forEach((name, oldIndex) => {
@@ -2629,12 +2647,14 @@ function alignModelToCurrentFeatures(
         expanded[newIndex] = weights[oldIndex] ?? 0;
       }
     });
-    for (let stateIndex = 0; stateIndex < recurrentStateSize; stateIndex++) {
-      expanded[ACTION_RANKING_FEATURE_NAMES.length + stateIndex] =
-        weights[model.featureNames.length + stateIndex] ?? 0;
-    }
     return expanded;
-  });
+  };
+  const expandedInputWeights = model.layerWeights[0].map((weights) => [
+    ...expandFeatureWeights(weights),
+    ...Array.from({ length: recurrentStateSize }, (_, index) =>
+      weights[model.featureNames.length + index] ?? 0
+    ),
+  ]);
 
   const base = {
     featureNames: ACTION_RANKING_FEATURE_NAMES.slice(),
@@ -2661,24 +2681,12 @@ function alignModelToCurrentFeatures(
     ...base,
     version: 3,
     recurrentStateSize: model.recurrentStateSize,
-    recurrentInputWeights: model.recurrentInputWeights.map((weights) => {
-      const expanded = Array.from(
-        { length: ACTION_RANKING_FEATURE_NAMES.length },
-        () => 0
-      );
-      model.featureNames.forEach((name, oldIndex) => {
-        const newIndex = currentFeatureIndex.get(name as ActionRankingFeatureName);
-        if (newIndex != null) {
-          expanded[newIndex] = weights[oldIndex] ?? 0;
-        }
-      });
-      return expanded;
-    }),
+    recurrentInputWeights: model.recurrentInputWeights.map(expandFeatureWeights),
     recurrentStateWeights: model.recurrentStateWeights.map((weights) =>
       weights.slice()
     ),
     recurrentBiases: model.recurrentBiases.slice(),
-    memoryFeatureOutputWeights: getModelMemoryFeatureOutputWeights(model),
+    memoryFeatureOutputWeights: getModelMemoryFeatureOutputWeights(model).map(expandFeatureWeights),
   };
 }
 

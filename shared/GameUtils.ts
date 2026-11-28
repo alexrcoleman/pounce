@@ -419,7 +419,10 @@ export function rotateDecks(board: BoardState) {
     player.deck.push(...player.flippedDeck.reverse());
     player.flippedDeck = [];
     player.playedDeckCardThisCycle = false;
-    player.deck.unshift(player.deck.pop() as CardState);
+    const topCard = player.deck.pop();
+    if (topCard) {
+      player.deck.unshift(topCard);
+    }
   });
 }
 

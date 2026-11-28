@@ -1,0 +1,2 @@
+# Retain the exact checkpoint bytes used by the training and replay audits.
+*.json -text whitespace=cr-at-eol

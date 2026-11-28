@@ -1,0 +1,294 @@
+{
+  "version": 1,
+  "specification": {
+    "modelSha256": "e5f20c8dedf5ae597b5f84a9f5e68060e50537938826f4738cf6153fc0146118",
+    "policy": {
+      "completed": {
+        "guard": {
+          "mode": "unblock",
+          "timingRatio": 1.1,
+          "baselineTimingRatio": 1.1,
+          "timingScale": 1,
+          "connectorMode": "waste",
+          "baselineConnector": true,
+          "baselineLearned": true,
+          "baselineProductive": false,
+          "replaceIncoming": false,
+          "useFastFlip": false,
+          "centerDenial": false,
+          "holdIncoming": false,
+          "centerTempo": 0,
+          "centerContention": 1.5,
+          "pounceUpgrade": 0,
+          "nextPlacementPrior": 0.055,
+          "stockOverrideLimit": 0,
+          "incomingModelSha256": "ee3234efd10aba9b0d5302f9c7699d4a4ea3045f87d50172122f35b89d818d1c",
+          "incomingThreshold": 0.45,
+          "readout": "more-conservative",
+          "readoutSha256": "5d7f039adb3b97089b899b64cb9040600ad4620046c9011376dd9fee1d3d88d5",
+          "policyScoresExpected": "original neural scorer"
+        },
+        "active": true,
+        "limit": {
+          "maxEstimatedMs": 900,
+          "maxRequests": 3,
+          "maxWindowMs": 1600
+        },
+        "scope": "blocked visible scoring with a stock or wait fallback"
+      },
+      "raceWindowMs": 0,
+      "strongestGuard": {
+        "mode": "unblock",
+        "timingRatio": 1.1,
+        "baselineTimingRatio": 1.1,
+        "timingScale": 1,
+        "connectorMode": "waste",
+        "baselineConnector": true,
+        "baselineLearned": true,
+        "baselineProductive": false,
+        "replaceIncoming": false,
+        "useFastFlip": false,
+        "centerDenial": false,
+        "holdIncoming": false,
+        "centerTempo": 0,
+        "centerContention": 1.5,
+        "pounceUpgrade": 0,
+        "nextPlacementPrior": 0.055,
+        "stockOverrideLimit": 0,
+        "incomingModelSha256": "ee3234efd10aba9b0d5302f9c7699d4a4ea3045f87d50172122f35b89d818d1c",
+        "incomingThreshold": 0.45,
+        "readout": "more-conservative",
+        "readoutSha256": "5d7f039adb3b97089b899b64cb9040600ad4620046c9011376dd9fee1d3d88d5",
+        "policyScoresExpected": "original neural scorer"
+      },
+      "maxAlternates": 3,
+      "maxRequests": 4,
+      "maxCarryMs": 1500,
+      "allowedRivalHeadstartMs": 80
+    },
+    "draws": 2,
+    "fields": [
+      "own bank arrival",
+      "rival bank arrival",
+      "pounce arrival",
+      "own public arrival lead",
+      "rival closest to finish",
+      "pounce count",
+      "points behind leader",
+      "bank rank",
+      "empty columns",
+      "waste source",
+      "source vacated",
+      "pounce destination occupied",
+      "rival at source",
+      "rival held",
+      "rival would unload pounce",
+      "identified competitors",
+      "raw bank score gap",
+      "rival with own direct unload"
+    ]
+  },
+  "selected": "bank-and-terminal",
+  "threshold": 0.225,
+  "model": {
+    "center": [
+      0.6993708911256917,
+      0.7476068352646614,
+      0.3447445676698627,
+      0.04823594413896971,
+      0.43956043956043966,
+      0.5975274725274726,
+      -0.13749999999999998,
+      0.46291208791208766,
+      0.1875,
+      0.32142857142857145,
+      0.25,
+      0.26785714285714285,
+      0.0,
+      0.0,
+      0.08928571428571429,
+      0.3690476190476189,
+      0.0856971717986529,
+      0.16071428571428573
+    ],
+    "scale": [
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.46702488680792914,
+      0.4330127018922193,
+      0.44284274170133003,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.35,
+      0.3672672107357704
+    ],
+    "intercept": 0.6715773809523808,
+    "weights": [
+      -0.03700283904391548,
+      -0.0595250139130243,
+      0.0207348076715706,
+      -0.022522174869108784,
+      0.17842930427156561,
+      0.002942380774418876,
+      0.17979232906703266,
+      -0.3850443839135882,
+      0.0010419834879953358,
+      -0.1912312264895776,
+      0.13480384366003334,
+      0.0017389817700214252,
+      0.0,
+      0.0,
+      -0.45819518678043963,
+      0.1621893549415444,
+      -0.027302132089219028,
+      0.16910941010678476
+    ]
+  },
+  "report": {
+    "training": {
+      "always": {
+        "deals": 128,
+        "choices": 56,
+        "eligible": 56,
+        "perRoot": {
+          "focal": 0.7351190476190477,
+          "team": 0.36160714285714285,
+          "first": 0.3452380952380954,
+          "second": 1.125,
+          "local": 0.5535714285714286,
+          "land": 0.5267857142857143,
+          "delay": 1369.1717839090513
+        },
+        "perSeatDealSupport": {
+          "mean": 0.08040364583333333,
+          "ci95": [
+            -0.04654947916666667,
+            0.20214843749999997
+          ],
+          "deals": 128
+        }
+      },
+      "terminal": {
+        "deals": 128,
+        "choices": 41,
+        "eligible": 56,
+        "perRoot": {
+          "focal": 1.146341463414634,
+          "team": 0.3780487804878049,
+          "first": 0.8292682926829268,
+          "second": 1.4634146341463412,
+          "local": 0.6422764227642276,
+          "land": 0.5853658536585366,
+          "delay": 1363.5092732963756
+        },
+        "perSeatDealSupport": {
+          "mean": 0.091796875,
+          "ci95": [
+            0.010742187499999993,
+            0.18359374999999997
+          ],
+          "deals": 128
+        }
+      },
+      "bank-and-terminal": {
+        "deals": 128,
+        "choices": 43,
+        "eligible": 56,
+        "perRoot": {
+          "focal": 1.2131782945736433,
+          "team": 0.37790697674418605,
+          "first": 0.9457364341085273,
+          "second": 1.4806201550387592,
+          "local": 0.6279069767441859,
+          "land": 0.5697674418604651,
+          "delay": 1345.6375442155386
+        },
+        "perSeatDealSupport": {
+          "mean": 0.10188802083333333,
+          "ci95": [
+            0.017578125,
+            0.1943359375
+          ],
+          "deals": 128
+        }
+      }
+    },
+    "check": {
+      "always": {
+        "deals": 72,
+        "choices": 28,
+        "eligible": 28,
+        "perRoot": {
+          "focal": 1.2261904761904763,
+          "team": -0.2857142857142857,
+          "first": 0.6547619047619048,
+          "second": 1.797619047619048,
+          "local": 0.4285714285714285,
+          "land": 0.4642857142857143,
+          "delay": 946.2518122731402
+        },
+        "perSeatDealSupport": {
+          "mean": 0.11921296296296297,
+          "ci95": [
+            -0.009259259259259257,
+            0.26446759259259256
+          ],
+          "deals": 72
+        }
+      },
+      "terminal": {
+        "deals": 72,
+        "choices": 21,
+        "eligible": 28,
+        "perRoot": {
+          "focal": 1.4047619047619047,
+          "team": -0.4166666666666667,
+          "first": 0.6190476190476191,
+          "second": 2.1904761904761907,
+          "local": 0.5714285714285714,
+          "land": 0.5238095238095238,
+          "delay": 983.995704650356
+        },
+        "perSeatDealSupport": {
+          "mean": 0.10243055555555555,
+          "ci95": [
+            -0.024305555555555542,
+            0.2471064814814815
+          ],
+          "deals": 72
+        }
+      },
+      "bank-and-terminal": {
+        "deals": 72,
+        "choices": 22,
+        "eligible": 28,
+        "perRoot": {
+          "focal": 1.5681818181818181,
+          "team": -0.3068181818181818,
+          "first": 0.7878787878787876,
+          "second": 2.3484848484848486,
+          "local": 0.5454545454545454,
+          "land": 0.5454545454545454,
+          "delay": 1001.3502436338878
+        },
+        "perSeatDealSupport": {
+          "mean": 0.11979166666666667,
+          "ci95": [
+            -0.011009837962962954,
+            0.2662037037037037
+          ],
+          "deals": 72
+        }
+      }
+    }
+  }
+}
