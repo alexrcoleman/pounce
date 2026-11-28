@@ -26,6 +26,7 @@ import {
   normalizeAILevel,
 } from "./AIDifficulty";
 import {
+  getAIPlayerResolvedMode,
   normalizeAIMode,
   type AICenterRetargetPause,
   type AIPileKnowledge,
@@ -53,7 +54,15 @@ import {
   getPlayerStackLocation,
 } from "./CardLocations";
 import { getCurrentAIDragMove } from "./ComputerV1";
-import { getConfiguredAIMove } from "./NeuralActionRankingBot";
+import { getConfiguredAIMove, usesBundledPounceChampion } from "./NeuralActionRankingBot";
+import {
+  observePounceChampionHands,
+  observePounceChampionMove,
+  observePounceHumanHand,
+  preparePounceChampionRound,
+  resetPounceChampionRound,
+  rotatePounceChampionDeck,
+} from "./pounceChampion/roomPolicy";
 import deepClone from "./deepClone";
 import { cardEquals, peek } from "./CardUtils";
 import {
@@ -113,9 +122,10 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
   let roomToast: RoomToast | null = null;
   let roundAnalysisSnapshots: RoundSnapshot[] | null = null;
   const handUpdateVersionsBefore = room.handUpdateVersions.slice();
+  const champion = preparePounceChampionRound(room, now, usesBundledPounceChampion());
 
   if (shouldAutoRotateDecks(board)) {
-    rotateDecks(board);
+    rotateRoomDecks(room);
     clearRoomStuckPlayers(room);
     recordRoundSnapshot(room, "auto_rotate", now);
     roomToast = createDeckRotationToast("auto_stuck_board");
@@ -156,6 +166,8 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       }
       const currentDragMove = getCurrentAIDragMove(board, index, hand);
       const visibleBoard = getVisibleBoard(room, index, now);
+      const championSeat = champion && getAIPlayerResolvedMode(board, index, room.settings.aiMode) === "trained"
+        ? champion : undefined;
       const move =
         currentDragMove ??
         getConfiguredAIMove(
@@ -163,7 +175,8 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
           index,
           hand,
           room.hands,
-          room.settings.aiMode
+          room.settings.aiMode,
+          championSeat
         );
 
       if (move && usesDelayedAIVisibility) {
@@ -182,6 +195,9 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
       const moveResult = move
         ? executeMove(board, index, actionMove ?? move, hand, now)
         : null;
+      if (champion && move) {
+        observePounceChampionMove(champion, index, actionMove ?? move, moveResult, championSeat != null);
+      }
       const canSendMoveDelta =
         !room.settings.simulationMode &&
         move != null &&
@@ -287,6 +303,7 @@ export function tickRoom(room: RoomState, now = Date.now()): RoomTickResult {
     }
   }
 
+  if (champion) observePounceChampionHands(champion, room, now);
   if (removeDisconnectedPlayers(room, now, DISCONNECTED_PLAYER_TIMEOUT_MS)) {
     hasUpdate = true;
     hasHandUpdate = true;
@@ -548,7 +565,7 @@ export function setRoomPlayerStuck(
     nextIsStuck && nextStatus.total > 0 && nextStatus.count >= nextStatus.total;
 
   if (shouldRotate) {
-    rotateDecks(room.board);
+    rotateRoomDecks(room);
     recordRoundSnapshot(room, "manual_rotate", now);
     clearRoomStuckPlayers(room);
   }
@@ -566,6 +583,11 @@ export function setRoomPlayerStuck(
 
 export function getReactionDelay(room: RoomState): number {
   return (2500 / room.aiSpeed + 100) / room.timescale;
+}
+
+export function rotateRoomDecks(room: RoomState): void {
+  rotatePounceChampionDeck(room);
+  rotateDecks(room.board);
 }
 
 function rememberAIMoveFocus(
@@ -869,6 +891,7 @@ function getUnknownHigherCenterCard(minTopCard: CardState): CardState {
 }
 
 function resetAIVisibilityMemory(room: RoomState): void {
+  resetPounceChampionRound(room);
   room.aiPileKnowledge = room.board.players.map(() =>
     Array(room.board.piles.length).fill(null)
   );
@@ -1497,6 +1520,7 @@ export function updateRoomHand(
   }
   if (didChange) {
     markRoomHandUpdated(room, playerIndex);
+    observePounceHumanHand(room, Date.now());
   }
   return didChange;
 }

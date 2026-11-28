@@ -14,10 +14,18 @@ Room settings expose three AI modes:
 - `Hybrid`: the first AI player uses the neural policy and remaining AI players
   use fixed AIs, which makes side-by-side comparison easier.
 
-The champion model is committed at
-`shared/models/pounce-action-ranking-cursor-champion.json` and is loaded by
-`shared/NeuralActionRankingBot.ts`. The server can still override it with
-`POUNCE_NEURAL_AI_MODEL`.
+Timed rooms with four active players use the bundled champion for trained
+seats. The room loop feeds its per-round policy delayed foundation views,
+public cursor events, and the results of native moves. The policy combines
+the format-aware scorer, fitted tactical and strategic readouts, and a scoped
+PPO checkpoint. Its assets are in `shared/models/pounceChampion/`.
+
+Other formats and fast simulation use the legacy checkpoint at
+`shared/models/pounce-action-ranking-cursor-champion.json`. An explicit
+`POUNCE_NEURAL_AI_MODEL` server override uses the supplied model.
+
+Run `node -r ts-node/register/transpile-only scripts/verifyDeployedPounceChampion.ts`
+for a seeded comparison against the legacy checkpoint through the live room loop.
 
 ## Model Shape
 
